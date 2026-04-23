@@ -151,7 +151,7 @@ DEVOLVE SOLAMENTE JSON VALIDO, sin markdown, sin texto fuera del JSON. Schema:
   "monthlyNeeded": number,      // aporte mensual en ARS necesario para alcanzar el objetivo a la tasa assumedReturn
   "feasibility": "holgado" | "ajustado" | "inviable",  // comparando monthlyNeeded vs el sobrante del usuario
   "advice": string,             // 1-2 oraciones con un consejo concreto (subir aportes, bajar gastos, alargar horizonte, ajustar objetivo)
-  "disclaimer": string          // "Esto es educativo, no asesoramiento financiero."
+  "disclaimer": string          // debe mencionar explicitamente que las proyecciones NO ajustan por la inflacion del peso ni del dolar, y que por tanto los poderes de compra futuros pueden diferir. Cerra con "Esto es educativo, no asesoramiento financiero."
 }
 
 Como elegir la estrategia:
@@ -290,7 +290,7 @@ function mockObjectives(ctx) {
     monthlyNeeded: proj.monthlyNeeded,
     feasibility,
     advice: feasibility === "holgado" ? "Vas sobrado — podes ser mas conservador o ampliar el objetivo." : feasibility === "ajustado" ? "Te da justo. Automatiza el aporte y no falles meses." : "El objetivo no entra con tu sobrante actual. Bajar gastos, subir ingresos, o alargar el horizonte.",
-    disclaimer: "Esto es educativo, no asesoramiento financiero. _(Modo demo — configura tu API key para un analisis hecho por Claude.)_"
+    disclaimer: "Esto es educativo, no asesoramiento financiero. Las proyecciones no contemplan la inflación del peso ni del dólar — los rendimientos reales pueden diferir sustancialmente. _(Modo demo — configura tu API key para un análisis hecho por SAMAS IA.)_"
   };
 }
 
@@ -315,6 +315,6 @@ function mockExpenseParse(text) {
     total: Math.round(total),
     currency,
     categories: [],
-    notes: `Modo demo: suma cruda de ${hits.length} montos detectados sin categorizar. Configura tu API key para que Claude los agrupe.`,
+    notes: `Modo demo: suma cruda de ${hits.length} montos detectados sin categorizar. Configura tu API key para que SAMAS IA los agrupe.`,
   };
 }

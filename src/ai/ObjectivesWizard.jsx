@@ -161,7 +161,7 @@ export function ObjectivesWizard({ onClose, onSave, savedPlan, C }) {
           <div style={{ flex:1 }}>
             <div style={{ fontWeight:700, fontSize:14, color:C.text }}>Objetivos con IA</div>
             <div style={{ fontSize:10, color:hasAnthropicKey()?C.green:C.gold, fontWeight:600 }}>
-              {hasAnthropicKey() ? "Claude · en vivo" : "Modo demo (sin API key)"}
+              {hasAnthropicKey() ? "SAMAS IA · en vivo" : "Modo demo (sin API key)"}
             </div>
           </div>
           {/* Currency toggle — disabled on step 4 (plan view) so it doesn't
@@ -380,7 +380,7 @@ function StepExpenses({ monthlyIncome, monthlyExpenses, setMonthlyExpenses, inve
       {pasteOpen && (
         <div style={{ marginTop:10, background:C.card, border:"1px solid "+C.border, borderRadius:12, padding:"12px" }}>
           <div style={{ fontSize:11, color:C.textMd, marginBottom:8, lineHeight:1.5 }}>
-            Pegá texto de tu resumen de tarjeta, cuenta banco, Mercado Pago, etc. Claude extrae el total y categoriza.
+            Pegá texto de tu resumen de tarjeta, cuenta banco, Mercado Pago, etc. SAMAS IA extrae el total y categoriza.
           </div>
           <textarea
             value={pasteText}
@@ -534,6 +534,9 @@ function StepGoal({ targetAmount, setTargetAmount, horizonYears, setHorizonYears
             Objetivo: {sym(currency)}{fmtNum(targetAmount)} · Cuanto mas larga la barra, mas cerca estas de tu objetivo a esa tasa.
           </div>
         )}
+        <div style={{ fontSize:10, color:C.gold, marginTop:8, lineHeight:1.5, borderTop:"1px solid "+C.border, paddingTop:8 }}>
+          ⚠︎ Proyecciones nominales. No ajustan por inflación de ARS ni USD; el poder de compra real puede ser distinto.
+        </div>
       </div>
     </div>
   );
@@ -610,8 +613,22 @@ function PlanView({ plan, invest, target, horizon, currency = "ARS", C }) {
         </div>
       )}
 
+      {/* Inflation caveat — always visible so the projections are read in
+          the right frame. The underlying fvAnnuity math is nominal; real
+          purchasing power in USD or ARS will differ. */}
+      <div style={{ marginTop:14, padding:"10px 12px", background:C.gold+"14", border:"1px solid "+C.gold+"55", borderRadius:12, fontSize:11, color:C.gold, lineHeight:1.5, display:"flex", gap:8, alignItems:"flex-start" }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink:0, marginTop:2 }}>
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <div>
+          Las proyecciones son nominales. <strong>No ajustan por inflación</strong> del peso ni del dólar, así que el poder de compra real al vencimiento puede ser distinto al monto mostrado.
+        </div>
+      </div>
+
       {/* Disclaimer */}
-      <div style={{ marginTop:16, padding:"10px 12px", background:C.card, border:"1px solid "+C.border, borderRadius:12, fontSize:10, color:C.textLt, lineHeight:1.5 }}>
+      <div style={{ marginTop:10, padding:"10px 12px", background:C.card, border:"1px solid "+C.border, borderRadius:12, fontSize:10, color:C.textLt, lineHeight:1.5 }}>
         {plan.disclaimer || "Esto es educativo, no asesoramiento financiero."}
       </div>
     </div>

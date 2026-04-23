@@ -1193,7 +1193,7 @@ function PriceAlertModal({ asset, current, onSave, onClose, C }) {
 // ============================================================
 // CONFIRM TRADE MODAL (with 2FA + email)
 // ============================================================
-function ConfirmTradeModal({ trade, onConfirm, onCancel, C }) {
+function ConfirmTradeModal({ trade, onConfirm, onCancel, C, isWeb = false }) {
   useEscapeKey(onCancel);
   const [step, setStep]       = useState("alert");   // alert | review | faceid | pin
   const [pin, setPin]         = useState("");
@@ -1351,22 +1351,29 @@ function ConfirmTradeModal({ trade, onConfirm, onCancel, C }) {
 
         {step === "review" && (
           <div>
-            <div style={{ fontSize:11, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:12, textAlign:"center" }}>ELIGE COMO VERIFICAR ESTA OPERACION</div>
+            <div style={{ fontSize:11, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:12, textAlign:"center" }}>
+              {isWeb ? "VERIFICA ESTA OPERACION CON TU PIN" : "ELIGE COMO VERIFICAR ESTA OPERACION"}
+            </div>
             <div style={{ display:"flex", gap:10, marginBottom:16 }}>
-              <button onClick={() => setStep("faceid")} style={{ flex:1, background:C.isDark?"#1A0A18":"#FFF0F8", border:"2px solid #0D1117", borderRadius:14, padding:"16px 10px", cursor:"pointer", fontFamily:"inherit", display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
-                <svg width="28" height="28" viewBox="0 0 80 80" fill="none">
-                  <ellipse cx="40" cy="36" rx="24" ry="28" stroke="#0D1117" strokeWidth="3"/>
-                  <ellipse cx="31" cy="30" rx="3.5" ry="4.5" stroke="#0D1117" strokeWidth="2.5"/>
-                  <ellipse cx="49" cy="30" rx="3.5" ry="4.5" stroke="#0D1117" strokeWidth="2.5"/>
-                  <path d="M32 50 Q40 55 48 50" stroke="#0D1117" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
-                  <path d="M8 18 L8 8 L18 8" stroke="#0D1117" strokeWidth="2.5" strokeLinecap="round"/>
-                  <path d="M62 8 L72 8 L72 18" stroke="#0D1117" strokeWidth="2.5" strokeLinecap="round"/>
-                  <path d="M8 55 L8 65 L18 65" stroke="#0D1117" strokeWidth="2.5" strokeLinecap="round"/>
-                  <path d="M62 65 L72 65 L72 55" stroke="#0D1117" strokeWidth="2.5" strokeLinecap="round"/>
-                </svg>
-                <div style={{ fontSize:13, fontWeight:700, color:C.text }}>Face ID</div>
-                <div style={{ fontSize:10, color:C.textLt }}>Rapido y seguro</div>
-              </button>
+              {/* Face ID option only on mobile — laptops don't have secure
+                  face auth exposed to the browser, so showing this on the
+                  web build is misleading. */}
+              {!isWeb && (
+                <button onClick={() => setStep("faceid")} style={{ flex:1, background:C.isDark?"#1A0A18":"#FFF0F8", border:"2px solid #0D1117", borderRadius:14, padding:"16px 10px", cursor:"pointer", fontFamily:"inherit", display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
+                  <svg width="28" height="28" viewBox="0 0 80 80" fill="none">
+                    <ellipse cx="40" cy="36" rx="24" ry="28" stroke="#0D1117" strokeWidth="3"/>
+                    <ellipse cx="31" cy="30" rx="3.5" ry="4.5" stroke="#0D1117" strokeWidth="2.5"/>
+                    <ellipse cx="49" cy="30" rx="3.5" ry="4.5" stroke="#0D1117" strokeWidth="2.5"/>
+                    <path d="M32 50 Q40 55 48 50" stroke="#0D1117" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+                    <path d="M8 18 L8 8 L18 8" stroke="#0D1117" strokeWidth="2.5" strokeLinecap="round"/>
+                    <path d="M62 8 L72 8 L72 18" stroke="#0D1117" strokeWidth="2.5" strokeLinecap="round"/>
+                    <path d="M8 55 L8 65 L18 65" stroke="#0D1117" strokeWidth="2.5" strokeLinecap="round"/>
+                    <path d="M62 65 L72 65 L72 55" stroke="#0D1117" strokeWidth="2.5" strokeLinecap="round"/>
+                  </svg>
+                  <div style={{ fontSize:13, fontWeight:700, color:C.text }}>Face ID</div>
+                  <div style={{ fontSize:10, color:C.textLt }}>Rapido y seguro</div>
+                </button>
+              )}
               <button onClick={() => setStep("pin")} style={{ flex:1, background:C.isDark?"#0A1A0A":"#F0FFF4", border:"2px solid "+C.green, borderRadius:14, padding:"16px 10px", cursor:"pointer", fontFamily:"inherit", display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                 <div style={{ fontSize:13, fontWeight:700, color:C.text }}>PIN</div>
@@ -2190,7 +2197,7 @@ function OnboardingEmptyState({ onOpenObjectives, onSelectAsset, onDeposit, C })
       <OnboardingRow
         n={1}
         title="Armar tu plan con IA"
-        body="Claude analiza ingreso y gastos y te sugiere la estrategia."
+        body="SAMAS IA analiza ingreso y gastos y te sugiere la estrategia."
         cta="Empezar"
         onClick={onOpenObjectives}
         accent={C.accent}
@@ -2361,7 +2368,7 @@ function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatch
               <span style={{ fontSize:8, fontWeight:800, background:C.accent, color:"#0D1117", borderRadius:4, padding:"1px 5px", letterSpacing:0.5 }}>NUEVO</span>
             </div>
             <div style={{ fontSize:10.5, color:C.textMd, lineHeight:1.4 }}>
-              Claude analiza tu ingreso, gastos y objetivo y te arma la estrategia.
+              SAMAS IA analiza tu ingreso, gastos y objetivo y te arma la estrategia.
             </div>
           </div>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
@@ -3324,12 +3331,15 @@ function SignupForm({ onBack, onComplete, emailjsCfg, C }) {
   );
 }
 
-function LoginScreen({ onLogin, onSignup, emailjsCfg, C }) {
+function LoginScreen({ onLogin, onSignup, emailjsCfg, C, isWeb = false }) {
   const [view, setView]       = useState("login");  // "login" | "signup"
   const [phase, setPhase]     = useState("idle");
   const [pin, setPin]         = useState("");
   const [pinErr, setPinErr]   = useState(false);
-  const [showPin, setShowPin] = useState(false);
+  // On the Web build there's no reliable face recognition available — laptop
+  // webcams don't expose any TrueDepth/Face-ID style auth — so we skip the
+  // Face ID UX entirely and default straight to the PIN entry.
+  const [showPin, setShowPin] = useState(isWeb);
   const doFaceID = () => { setPhase("scanning"); setTimeout(() => { setPhase("success"); setTimeout(onLogin, 800); }, 1800); };
   const doPin = () => { if (pin === DEMO_USER.pin) { setPhase("success"); setTimeout(onLogin, 600); } else { setPinErr(true); setPin(""); setTimeout(() => setPinErr(false), 1400); } };
   // Fresh signup → call onSignup (which resets state) rather than onLogin,
@@ -3345,7 +3355,7 @@ function LoginScreen({ onLogin, onSignup, emailjsCfg, C }) {
         <SAMASLogoLarge/>
         <div style={{ color:"rgba(255,255,255,0.3)", fontSize:11, letterSpacing:3, textTransform:"uppercase" }}>Inversiones</div>
       </div>
-      {!showPin ? (
+      {!showPin && !isWeb ? (
         <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:20 }}>
           <div style={{ position:"relative", width:160, height:160 }}>
             <div style={{ position:"absolute", inset:0, borderRadius:"50%", border:"2px solid "+(phase==="success"?"#4ADE80":phase==="scanning"?"#0D1117":"rgba(255,255,255,0.12)"), transition:"border-color 0.4s" }}/>
@@ -3386,8 +3396,8 @@ function LoginScreen({ onLogin, onSignup, emailjsCfg, C }) {
         </div>
       )}
       <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
-        {!showPin && phase==="idle" && <button onClick={() => setShowPin(true)} style={{ background:"transparent", border:"none", color:"rgba(255,255,255,0.3)", fontSize:12, cursor:"pointer", fontFamily:"inherit", textDecoration:"underline" }}>Usar PIN</button>}
-        {showPin && <button onClick={() => { setShowPin(false); setPin(""); }} style={{ background:"transparent", border:"none", color:"rgba(255,255,255,0.3)", fontSize:12, cursor:"pointer", fontFamily:"inherit", textDecoration:"underline" }}>Usar Face ID</button>}
+        {!isWeb && !showPin && phase==="idle" && <button onClick={() => setShowPin(true)} style={{ background:"transparent", border:"none", color:"rgba(255,255,255,0.3)", fontSize:12, cursor:"pointer", fontFamily:"inherit", textDecoration:"underline" }}>Usar PIN</button>}
+        {!isWeb && showPin && <button onClick={() => { setShowPin(false); setPin(""); }} style={{ background:"transparent", border:"none", color:"rgba(255,255,255,0.3)", fontSize:12, cursor:"pointer", fontFamily:"inherit", textDecoration:"underline" }}>Usar Face ID</button>}
         {phase==="idle" && (
           <div style={{ display:"flex", alignItems:"center", gap:6 }}>
             <span style={{ color:"rgba(255,255,255,0.35)", fontSize:12 }}>Sos nuevo en SAMAS?</span>
@@ -3720,7 +3730,7 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
               </svg>
             </div>
             <div>
-              <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Objetivos IA (Claude)</div>
+              <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Objetivos IA</div>
               <div style={{ fontSize:11, color: anthropicKey ? C.green : C.textLt }}>
                 {anthropicKey ? `Activo · modelo ${anthropicModel}` : "Modo demo — configura tu API key para respuestas en vivo"}
               </div>
@@ -3772,7 +3782,7 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
                   setAnthTestMsg(null);
                   try {
                     const r = await testAnthropic();
-                    setAnthTestMsg({ type:"ok", text: "OK · Claude respondio: \"" + r.slice(0, 40) + "\"" });
+                    setAnthTestMsg({ type:"ok", text: "OK · IA respondio: \"" + r.slice(0, 40) + "\"" });
                   } catch (e) {
                     setAnthTestMsg({ type:"err", text: (e?.message || "Error desconocido").slice(0, 120) });
                   } finally { setAnthTestBusy(false); }
@@ -4078,7 +4088,11 @@ function WebDashboard({ appState, handlers, C }) {
   };
   return (
     <div style={{ width:"100%", minHeight:"100vh", background:C.isDark?"#080808":"#F0E0E0", display:"flex", flexDirection:"column" }}>
-      <div style={{ background:C.isDark?"#0F0F0F":"#0D1117", height:56, display:"flex", alignItems:"center", padding:"0 24px", gap:24, borderBottom:"1px solid rgba(255,255,255,0.08)", position:"sticky", top:0, zIndex:50 }}>
+      {/* Header: keep the dark surface full-bleed, but constrain the
+          INNER header content to the same max-width as the body so brand
+          + dollar chips stay aligned with the sidebar/columns below. */}
+      <div style={{ background:C.isDark?"#0F0F0F":"#0D1117", height:56, borderBottom:"1px solid rgba(255,255,255,0.08)", position:"sticky", top:0, zIndex:50, display:"flex", justifyContent:"center" }}>
+      <div style={{ display:"flex", alignItems:"center", padding:"0 24px", gap:24, width:"100%", maxWidth:1480 }}>
         <SAMASLogo textColor="#FFFFFF"/>
         {finnhub?.live && (
           <div title={`${finnhub.count} activos en vivo (Finnhub)`} style={{ display:"flex", alignItems:"center", gap:4, background:C.accent+"22", border:"1px solid "+C.accent+"55", borderRadius:10, padding:"3px 8px" }}>
@@ -4098,7 +4112,11 @@ function WebDashboard({ appState, handlers, C }) {
           <button onClick={() => setShowProfile(true)} style={{ background:"#0D111733", border:"1.5px solid #0D111766", borderRadius:8, padding:"6px 12px", color:C.goldLt, fontWeight:800, cursor:"pointer", fontSize:12, fontFamily:"inherit" }}>{DEMO_USER.initials}</button>
         </div>
       </div>
-      <div style={{ display:"flex", flex:1 }}>
+      </div>
+      {/* Body: sidebar + center + rail. Constrained to 1480 and centered
+          so ultra-wide monitors get symmetrical margins instead of a
+          huge empty area on the right. */}
+      <div style={{ display:"flex", flex:1, width:"100%", maxWidth:1480, margin:"0 auto" }}>
         <div style={{ width:220, background:C.isDark?"#0F0F0F":"#0D1117", borderRight:"1px solid rgba(255,255,255,0.06)", padding:"20px 12px", display:"flex", flexDirection:"column", gap:4, position:"sticky", top:56, height:"calc(100vh - 56px)", overflowY:"auto" }}>
           {TABS2.map(t => (
             <button key={t.id} onClick={() => setSideTab(t.id)} style={{ background: sideTab===t.id ? "#16C78433" : "transparent", border: sideTab===t.id ? "1px solid #16C78455" : "1px solid transparent", borderRadius:10, padding:"10px 14px", display:"flex", alignItems:"center", gap:10, cursor:"pointer", fontFamily:"inherit", width:"100%", textAlign:"left" }}>
@@ -4112,9 +4130,9 @@ function WebDashboard({ appState, handlers, C }) {
             {FX.map(fx => <div key={fx.label} style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}><span style={{ fontSize:10, color:"rgba(255,255,255,0.4)" }}>{fx.label}</span><span style={{ fontSize:11, fontFamily:"monospace", fontWeight:700, color:"rgba(255,255,255,0.8)" }}>u$s{fN(Math.round(totalARS/fx.value))}</span></div>)}
           </div>
         </div>
-        <div style={{ flex:1, position:"relative", maxWidth:600 }}>
+        <div style={{ flex:1, position:"relative", minWidth:0 }}>
           {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} C={C}/>}
-          {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} C={C}/>}
+          {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} isWeb={true} C={C}/>}
           {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} finnhubKey={finnhubKey} setFinnhubKey={setFinnhubKey} finnhub={finnhub} emailjsCfg={emailjsCfg} setEmailjsCfg={setEmailjsCfg} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} anthropicModel={anthropicModel} setAnthropicModel={setAnthropicModel} C={C}/>}
           {toast && <div className="samas-slide-up" style={{ position:"fixed", top:70, left:"50%", transform:"translateX(-50%)", zIndex:99, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 20px", fontSize:13, fontWeight:700, boxShadow:"0 8px 32px rgba(0,0,0,0.3)" }}>{toast.msg}</div>}
           <div style={{ overflowY:"auto", height:"calc(100vh - 56px)" }}>{renderPage()}</div>
@@ -4345,7 +4363,7 @@ export default function SAMASApp() {
         ) : (
           <div style={{ display:"flex", justifyContent:"center", alignItems:"center", minHeight:"calc(100vh - 60px)" }}>
             <div style={{ width:375, height:760, position:"relative", borderRadius:20, overflow:"hidden" }}>
-              <LoginScreen onLogin={handleLogin} onSignup={handleSignup} emailjsCfg={emailjsCfg} C={C}/>
+              <LoginScreen onLogin={handleLogin} onSignup={handleSignup} emailjsCfg={emailjsCfg} C={C} isWeb={true}/>
             </div>
           </div>
         )
