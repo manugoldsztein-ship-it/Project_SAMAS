@@ -4,16 +4,18 @@ import { useState, useEffect, useRef } from "react";
 // THEME
 // ============================================================
 function makeTheme(dark) {
+  // Official SAMAS palette: #0D1117 navy, #16C784 green, #F7F7F5 off-white,
+  // #E5E7EB light gray, #6B7280 medium gray.
   return dark ? {
-    bg:"#0F0F0F", card:"#1A1A1A", card2:"#232323", border:"#2E2E2E",
-    navy:"#0F0F0F", text:"#F0F0F0", textMd:"#A0A0A0", textLt:"#606060",
-    red:"#E05555", green:"#1FB870", gold:"#C9A84C", goldLt:"#E8C97A",
-    accent:"#1FB870", creamDk:"#232323", isDark:true,
+    bg:"#0D1117", card:"#161B22", card2:"#1F2630", border:"#2A313C",
+    navy:"#0D1117", text:"#F7F7F5", textMd:"#9CA3AF", textLt:"#6B7280",
+    red:"#E05555", green:"#16C784", gold:"#C9A84C", goldLt:"#E8C97A",
+    accent:"#16C784", creamDk:"#1F2630", isDark:true,
   } : {
-    bg:"#FFFFFF", card:"#FFFFFF", card2:"#F7F7F7", border:"#E5E5E5",
-    navy:"#0A0A0A", text:"#0A0A0A", textMd:"#505050", textLt:"#909090",
-    red:"#D64545", green:"#1FB870", gold:"#C9A84C", goldLt:"#E8C97A",
-    accent:"#1FB870", creamDk:"#EFEFEF", isDark:false,
+    bg:"#F7F7F5", card:"#FFFFFF", card2:"#F2F2F0", border:"#E5E7EB",
+    navy:"#0D1117", text:"#0D1117", textMd:"#6B7280", textLt:"#9CA3AF",
+    red:"#D64545", green:"#16C784", gold:"#C9A84C", goldLt:"#E8C97A",
+    accent:"#16C784", creamDk:"#EAEAE6", isDark:false,
   };
 }
 
@@ -125,7 +127,7 @@ const IDEAS = [
     id:2, tag:"OPORTUNIDAD", title:"Recovery Trade Merval",
     subtitle:"Acciones argentinas con mayor upside",
     risk:"Agresivo", horizon:"3-6 meses", expReturn:"+30-50% ARS",
-    color:"#1FB870",
+    color:"#16C784",
     rationale:"Valuaciones de bancos y energia en minimos historicos. Reforma estructural y apertura cambiaria generan viento de cola para renta variable.",
     assets:[
       { ticker:"GGAL",  pct:30, reason:"Banco con mejor exposicion al ciclo" },
@@ -138,7 +140,7 @@ const IDEAS = [
     id:3, tag:"RENTA FIJA", title:"Ladder de ONs High Yield",
     subtitle:"Flujo de fondos en dolares con vencimientos escalonados",
     risk:"Moderado", horizon:"12-24 meses", expReturn:"+8-10% USD",
-    color:"#1FB870",
+    color:"#16C784",
     rationale:"Las ONs corporativas argentinas ofrecen spreads atractivos vs comparables regionales. Construccion de ladder reduce riesgo de reinversion.",
     assets:[
       { ticker:"TGS-ON",  pct:35, reason:"Vencimiento corto, menor riesgo" },
@@ -787,16 +789,16 @@ function ConfirmTradeModal({ trade, onConfirm, onCancel, C }) {
           <div>
             <div style={{ fontSize:11, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:12, textAlign:"center" }}>ELIGE COMO VERIFICAR ESTA OPERACION</div>
             <div style={{ display:"flex", gap:10, marginBottom:16 }}>
-              <button onClick={() => setStep("faceid")} style={{ flex:1, background:C.isDark?"#1A0A18":"#FFF0F8", border:"2px solid #0A0A0A", borderRadius:14, padding:"16px 10px", cursor:"pointer", fontFamily:"inherit", display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
+              <button onClick={() => setStep("faceid")} style={{ flex:1, background:C.isDark?"#1A0A18":"#FFF0F8", border:"2px solid #0D1117", borderRadius:14, padding:"16px 10px", cursor:"pointer", fontFamily:"inherit", display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
                 <svg width="28" height="28" viewBox="0 0 80 80" fill="none">
-                  <ellipse cx="40" cy="36" rx="24" ry="28" stroke="#0A0A0A" strokeWidth="3"/>
-                  <ellipse cx="31" cy="30" rx="3.5" ry="4.5" stroke="#0A0A0A" strokeWidth="2.5"/>
-                  <ellipse cx="49" cy="30" rx="3.5" ry="4.5" stroke="#0A0A0A" strokeWidth="2.5"/>
-                  <path d="M32 50 Q40 55 48 50" stroke="#0A0A0A" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
-                  <path d="M8 18 L8 8 L18 8" stroke="#0A0A0A" strokeWidth="2.5" strokeLinecap="round"/>
-                  <path d="M62 8 L72 8 L72 18" stroke="#0A0A0A" strokeWidth="2.5" strokeLinecap="round"/>
-                  <path d="M8 55 L8 65 L18 65" stroke="#0A0A0A" strokeWidth="2.5" strokeLinecap="round"/>
-                  <path d="M62 65 L72 65 L72 55" stroke="#0A0A0A" strokeWidth="2.5" strokeLinecap="round"/>
+                  <ellipse cx="40" cy="36" rx="24" ry="28" stroke="#0D1117" strokeWidth="3"/>
+                  <ellipse cx="31" cy="30" rx="3.5" ry="4.5" stroke="#0D1117" strokeWidth="2.5"/>
+                  <ellipse cx="49" cy="30" rx="3.5" ry="4.5" stroke="#0D1117" strokeWidth="2.5"/>
+                  <path d="M32 50 Q40 55 48 50" stroke="#0D1117" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+                  <path d="M8 18 L8 8 L18 8" stroke="#0D1117" strokeWidth="2.5" strokeLinecap="round"/>
+                  <path d="M62 8 L72 8 L72 18" stroke="#0D1117" strokeWidth="2.5" strokeLinecap="round"/>
+                  <path d="M8 55 L8 65 L18 65" stroke="#0D1117" strokeWidth="2.5" strokeLinecap="round"/>
+                  <path d="M62 65 L72 65 L72 55" stroke="#0D1117" strokeWidth="2.5" strokeLinecap="round"/>
                 </svg>
                 <div style={{ fontSize:13, fontWeight:700, color:C.text }}>Face ID</div>
                 <div style={{ fontSize:10, color:C.textLt }}>Rapido y seguro</div>
@@ -814,9 +816,9 @@ function ConfirmTradeModal({ trade, onConfirm, onCancel, C }) {
         {step === "faceid" && (
           <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:16 }}>
             <div style={{ position:"relative", width:140, height:140 }}>
-              <div style={{ position:"absolute", inset:0, borderRadius:"50%", border:"2px solid "+(facePhase==="success"?"#4ADE80":facePhase==="scanning"?"#0A0A0A":"rgba(255,255,255,0.12)"), transition:"border-color 0.4s" }}/>
+              <div style={{ position:"absolute", inset:0, borderRadius:"50%", border:"2px solid "+(facePhase==="success"?"#4ADE80":facePhase==="scanning"?"#0D1117":"rgba(255,255,255,0.12)"), transition:"border-color 0.4s" }}/>
               <div style={{ position:"absolute", inset:10, borderRadius:"50%", background:"rgba(255,255,255,0.03)", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
-                {facePhase === "scanning" && <div style={{ position:"absolute", left:0, right:0, height:2, background:"linear-gradient(90deg,transparent,#0A0A0A,transparent)", animation:"scanLine2 0.9s ease-in-out infinite alternate", top:"50%" }}/>}
+                {facePhase === "scanning" && <div style={{ position:"absolute", left:0, right:0, height:2, background:"linear-gradient(90deg,transparent,#0D1117,transparent)", animation:"scanLine2 0.9s ease-in-out infinite alternate", top:"50%" }}/>}
                 {facePhase !== "success" ? (
                   <svg width="60" height="60" viewBox="0 0 80 80" fill="none" style={{ opacity:facePhase==="scanning"?0.4:0.25 }}>
                     <ellipse cx="40" cy="36" rx="24" ry="28" stroke="rgba(255,255,255,0.6)" strokeWidth="2"/>
@@ -828,15 +830,15 @@ function ConfirmTradeModal({ trade, onConfirm, onCancel, C }) {
                   <svg width="48" height="48" viewBox="0 0 56 56" fill="none"><circle cx="28" cy="28" r="24" fill="rgba(74,222,128,0.15)" stroke="#4ADE80" strokeWidth="2"/><polyline points="17,28 24,36 39,20" stroke="#4ADE80" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 )}
               </div>
-              {["tl","tr","bl","br"].map(p => <div key={p} style={{ position:"absolute", top:p.startsWith("t")?-2:"auto", bottom:p.startsWith("b")?-2:"auto", left:p.endsWith("l")?-2:"auto", right:p.endsWith("r")?-2:"auto", width:16, height:16, borderTop:p.startsWith("t")?"2px solid #0A0A0A":"none", borderBottom:p.startsWith("b")?"2px solid #0A0A0A":"none", borderLeft:p.endsWith("l")?"2px solid #0A0A0A":"none", borderRight:p.endsWith("r")?"2px solid #0A0A0A":"none" }}/>)}
+              {["tl","tr","bl","br"].map(p => <div key={p} style={{ position:"absolute", top:p.startsWith("t")?-2:"auto", bottom:p.startsWith("b")?-2:"auto", left:p.endsWith("l")?-2:"auto", right:p.endsWith("r")?-2:"auto", width:16, height:16, borderTop:p.startsWith("t")?"2px solid #0D1117":"none", borderBottom:p.startsWith("b")?"2px solid #0D1117":"none", borderLeft:p.endsWith("l")?"2px solid #0D1117":"none", borderRight:p.endsWith("r")?"2px solid #0D1117":"none" }}/>)}
             </div>
-            <div style={{ fontSize:14, fontWeight:600, color:facePhase==="success"?"#4ADE80":facePhase==="scanning"?"#0A0A0A":C.textMd, textAlign:"center" }}>
+            <div style={{ fontSize:14, fontWeight:600, color:facePhase==="success"?"#4ADE80":facePhase==="scanning"?"#0D1117":C.textMd, textAlign:"center" }}>
               {facePhase==="idle"?"Toca para escanear tu rostro":facePhase==="scanning"?"Escaneando...":"Identidad verificada"}
             </div>
             {facePhase === "idle" && (
               <div style={{ display:"flex", gap:10, width:"100%" }}>
                 <button onClick={() => setStep("review")} style={{ flex:1, background:C.creamDk, border:"none", borderRadius:12, padding:"13px", fontWeight:600, fontSize:13, cursor:"pointer", color:C.textMd, fontFamily:"inherit" }}>Atras</button>
-                <button onClick={doFaceID} style={{ flex:2, background:"linear-gradient(135deg,#0A0A0A,#E080B0)", border:"none", borderRadius:12, padding:"13px", fontWeight:700, fontSize:14, cursor:"pointer", color:"#fff", fontFamily:"inherit" }}>Escanear Face ID</button>
+                <button onClick={doFaceID} style={{ flex:2, background:"linear-gradient(135deg,#0D1117,#E080B0)", border:"none", borderRadius:12, padding:"13px", fontWeight:700, fontSize:14, cursor:"pointer", color:"#fff", fontFamily:"inherit" }}>Escanear Face ID</button>
               </div>
             )}
           </div>
@@ -1322,7 +1324,7 @@ function PageIdeas({ C, showUSD, onSelectAsset, lang }) {
       {topTab === "fondos" && <PageFondos C={C} lang={lang}/>}
       {topTab === "bonos"  && <PageBonos C={C} showUSD={showUSD} lang={lang}/>}
       {topTab === "ideas"  && <>
-      <div style={{ background:C.isDark?"#0A0A0A":"#FFF5F5", borderRadius:12, border:"1px solid "+C.accent+"33", padding:"10px 13px", marginBottom:14, fontSize:11, color:C.textMd }}>
+      <div style={{ background:C.isDark?"#0D1117":"#FFF5F5", borderRadius:12, border:"1px solid "+C.accent+"33", padding:"10px 13px", marginBottom:14, fontSize:11, color:C.textMd }}>
         Estas ideas son sugerencias del equipo de research de SAMAS y no constituyen asesoramiento financiero. Consulta a tu asesor antes de invertir.
       </div>
       <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
@@ -1424,7 +1426,7 @@ function PageReportes({ C, lang }) {
   const [filter, setFilter] = useState("Todos");
   const cats = ["Todos","Estrategia","Renta Fija","Equities","Macro","Fondos","ON","Cripto"];
   const filtered = filter === "Todos" ? REPORTES : REPORTES.filter(r => r.cat === filter);
-  const catColor = { "Estrategia":"#1FB870","Renta Fija":"#2563EB","Equities":"#7C3AED","Macro":"#C9A84C","Fondos":"#1FB870","ON":"#0891B2","Cripto":"#F7931A" };
+  const catColor = { "Estrategia":"#16C784","Renta Fija":"#2563EB","Equities":"#7C3AED","Macro":"#C9A84C","Fondos":"#16C784","ON":"#0891B2","Cripto":"#F7931A" };
   return (
     <div style={{ padding:"14px 14px 20px" }}>
       <div style={{ marginBottom:16 }}>
@@ -1497,7 +1499,7 @@ function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatch
   const pal = [C.accent,"#7C3AED",C.green,C.gold,"#2563EB","#F7931A"];
   return (
     <div style={{ paddingBottom:16 }}>
-      <div style={{ background:C.isDark ? "linear-gradient(150deg,#0A0A0A 0%,#1F1F1F 100%)" : "linear-gradient(150deg,#0A0A0A 0%,#1F1F1F 100%)", margin:"14px 14px 0", borderRadius:20, padding:"20px 18px", position:"relative", overflow:"hidden" }}>
+      <div style={{ background:C.isDark ? "linear-gradient(150deg,#0D1117 0%,#1F1F1F 100%)" : "linear-gradient(150deg,#0D1117 0%,#1F1F1F 100%)", margin:"14px 14px 0", borderRadius:20, padding:"20px 18px", position:"relative", overflow:"hidden" }}>
         <div style={{ position:"absolute", right:-20, top:-20, width:120, height:120, borderRadius:"50%", background:C.accent, opacity:0.08 }}/>
         <div style={{ color:C.goldLt, fontSize:9, fontWeight:700, letterSpacing:2, textTransform:"uppercase", marginBottom:4 }}>{t("total_portfolio")}</div>
         <div style={{ color:"#fff", fontSize:30, fontWeight:700, letterSpacing:-1, marginBottom:6 }}>{showUSD ? "u$s" + fN(Math.round(tv/1247.5)) : "$" + fN(tv)}</div>
@@ -1788,51 +1790,54 @@ function TabIcon({ id, active, C, bigger }) {
 // ============================================================
 // SAMAS LOGO
 // ============================================================
-function SamasMark({ size = 56, markColor = "#0A1226", dotColor = "#1FB870" }) {
+function SamasMark({ size = 56, markColor = "#0D1117", dotColor = "#16C784" }) {
   const w = size;
   const h = size * 1.2;
-  // Two 240° arcs offset diagonally, forming an S with a visible gap mid-height.
-  // Upper stroke is a reversed-C (⊃) pinned to upper-left; lower is a C (⊂) pinned to lower-right.
+  // Each half is a horizontal bar → 180° end-cap → shorter return bar (horseshoe-on-its-side).
+  // Top tail extends right, bottom tail extends left — the asymmetry creates the S diagonal.
   return (
     <svg width={w} height={h} viewBox="0 0 100 120" fill="none" aria-label="SAMAS">
-      {/* Upper stroke — reversed C (⊃), curve on left, endpoints on right */}
+      {/* Upper stroke — long top tail, 180° curve on the left, short middle return */}
       <path
-        d="M 51 16 A 22 22 0 1 0 51 54"
+        d="M 75 17 L 28 17 A 16 16 0 0 0 28 49 L 60 49"
         stroke={markColor}
-        strokeWidth="12"
+        strokeWidth="13"
         strokeLinecap="round"
+        strokeLinejoin="round"
         fill="none"
       />
-      {/* Lower stroke — regular C (⊂), curve on right, endpoints on left */}
+      {/* Lower stroke — short middle start, 180° curve on the right, long bottom tail */}
       <path
-        d="M 49 66 A 22 22 0 1 1 49 104"
+        d="M 40 65 L 72 65 A 16 16 0 0 1 72 97 L 25 97"
         stroke={markColor}
-        strokeWidth="12"
+        strokeWidth="13"
         strokeLinecap="round"
+        strokeLinejoin="round"
         fill="none"
       />
-      {/* Green accent dot — sits inside the gap, slightly right of center */}
-      <circle cx="56" cy="60" r="9" fill={dotColor} />
+      {/* Green accent dot — dead center, overlapping both halves in the S waist */}
+      <circle cx="50" cy="57" r="9" fill={dotColor} />
     </svg>
   );
 }
 
 function SAMASLogo({ textColor = "#FFFFFF" }) {
-  // Inline wordmark uses the dark mark on dark header → render mark in light color for contrast
-  const markColor = textColor === "#FFFFFF" || textColor === "#fff" ? "#FFFFFF" : "#0A1226";
+  // Inline wordmark. Mark flips to light when text is light (dark nav), else navy.
+  const markColor = textColor === "#FFFFFF" || textColor === "#fff" ? "#FFFFFF" : "#0D1117";
   return (
-    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-      <SamasMark size={22} markColor={markColor} dotColor="#1FB870"/>
-      <span style={{ fontFamily:"DM Sans,sans-serif", fontSize:16, fontWeight:800, color:textColor, letterSpacing:2 }}>SAMAS</span>
+    <div style={{ display:"flex", alignItems:"center", gap:9 }}>
+      <SamasMark size={24} markColor={markColor} dotColor="#16C784"/>
+      <span style={{ fontFamily:"Sora,sans-serif", fontSize:16, fontWeight:600, color:textColor, letterSpacing:2 }}>SAMAS</span>
     </div>
   );
 }
 
 function SAMASLogoLarge() {
   return (
-    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:14 }}>
-      <SamasMark size={72} markColor="#FFFFFF" dotColor="#1FB870"/>
-      <div style={{ color:"#FFFFFF", fontSize:30, fontWeight:800, fontFamily:"DM Sans,sans-serif", letterSpacing:4 }}>SAMAS</div>
+    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:16 }}>
+      <SamasMark size={84} markColor="#FFFFFF" dotColor="#16C784"/>
+      <div style={{ color:"#FFFFFF", fontSize:30, fontWeight:500, fontFamily:"Sora,sans-serif", letterSpacing:6 }}>SAMAS</div>
+      <div style={{ color:"#16C784", fontSize:13, fontWeight:400, fontFamily:"Sora,sans-serif", letterSpacing:1, marginTop:-6 }}>Tu centro financiero</div>
     </div>
   );
 }
@@ -1855,7 +1860,7 @@ function OnboardingTutorial({ onClose, onComplete, setTab, setShowUSD, setShowPr
       body: "Vamos a hacer un recorrido rapido para que conozcas tu nueva app de inversiones. Dura menos de un minuto.",
       target: null,
       tabTo: "portfolio",
-      accent: "#0A0A0A",
+      accent: "#0D1117",
     },
     {
       title: "El ticker en vivo",
@@ -1871,7 +1876,7 @@ function OnboardingTutorial({ onClose, onComplete, setTab, setShowUSD, setShowPr
       target: { top:94, left:0, width:357, height:40 },
       tipSide: "below",
       tabTo: "portfolio",
-      accent: "#1FB870",
+      accent: "#16C784",
     },
     {
       title: "Toggle ARS / USD",
@@ -1895,7 +1900,7 @@ function OnboardingTutorial({ onClose, onComplete, setTab, setShowUSD, setShowPr
       target: { top:664, left:0, width:357, height:78 },
       tipSide: "above",
       tabTo: "portfolio",
-      accent: "#0A0A0A",
+      accent: "#0D1117",
     },
     {
       title: "Mercado",
@@ -1923,7 +1928,7 @@ function OnboardingTutorial({ onClose, onComplete, setTab, setShowUSD, setShowPr
       body: "Ya podes empezar a operar. Si queres volver a ver este tutorial, entra a tu perfil y toca 'Ver tutorial'.",
       target: null,
       tabTo: "portfolio",
-      accent: "#1FB870",
+      accent: "#16C784",
     },
   ];
 
@@ -2005,7 +2010,7 @@ function LoginScreen({ onLogin, C }) {
   const doFaceID = () => { setPhase("scanning"); setTimeout(() => { setPhase("success"); setTimeout(onLogin, 800); }, 1800); };
   const doPin = () => { if (pin === DEMO_USER.pin) { setPhase("success"); setTimeout(onLogin, 600); } else { setPinErr(true); setPin(""); setTimeout(() => setPinErr(false), 1400); } };
   return (
-    <div style={{ position:"absolute", inset:0, zIndex:100, background:"linear-gradient(160deg,#0A0A0A 0%,#0D2B1C 55%,#000000 100%)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"space-between", padding:"0 0 32px" }}>
+    <div style={{ position:"absolute", inset:0, zIndex:100, background:"linear-gradient(160deg,#0D1117 0%,#0D2B1C 55%,#000000 100%)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"space-between", padding:"0 0 32px" }}>
       <style>{"@keyframes scanLine{0%{top:18%}100%{top:78%}} @keyframes glow{0%,100%{box-shadow:0 0 20px rgba(192,96,144,0.3)}50%{box-shadow:0 0 40px rgba(192,96,144,0.7)}} @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}"}</style>
       <div style={{ width:"100%", paddingTop:30, paddingLeft:20, paddingRight:20, paddingBottom:8, display:"flex", justifyContent:"space-between" }}>
         <span style={{ color:"rgba(255,255,255,0.5)", fontSize:12, fontWeight:600 }}>{new Date().toLocaleTimeString("es-AR", { hour:"2-digit", minute:"2-digit" })}</span>
@@ -2017,30 +2022,30 @@ function LoginScreen({ onLogin, C }) {
       {!showPin ? (
         <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:20 }}>
           <div style={{ position:"relative", width:160, height:160 }}>
-            <div style={{ position:"absolute", inset:0, borderRadius:"50%", border:"2px solid "+(phase==="success"?"#4ADE80":phase==="scanning"?"#0A0A0A":"rgba(255,255,255,0.12)"), transition:"border-color 0.4s" }}/>
+            <div style={{ position:"absolute", inset:0, borderRadius:"50%", border:"2px solid "+(phase==="success"?"#4ADE80":phase==="scanning"?"#0D1117":"rgba(255,255,255,0.12)"), transition:"border-color 0.4s" }}/>
             <div style={{ position:"absolute", inset:10, borderRadius:"50%", background:"rgba(255,255,255,0.03)", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
-              {phase === "scanning" && <div style={{ position:"absolute", left:0, right:0, height:2, background:"linear-gradient(90deg,transparent,#0A0A0A,transparent)", animation:"scanLine 0.9s ease-in-out infinite alternate", top:"50%" }}/>}
+              {phase === "scanning" && <div style={{ position:"absolute", left:0, right:0, height:2, background:"linear-gradient(90deg,transparent,#0D1117,transparent)", animation:"scanLine 0.9s ease-in-out infinite alternate", top:"50%" }}/>}
               {phase !== "success" ? (
                 <svg width="70" height="70" viewBox="0 0 80 80" fill="none" style={{ opacity: phase==="scanning" ? 0.4 : 0.25 }}>
                   <ellipse cx="40" cy="36" rx="24" ry="28" stroke="rgba(255,255,255,0.6)" strokeWidth="2"/><ellipse cx="31" cy="30" rx="3.5" ry="4.5" stroke="rgba(255,255,255,0.6)" strokeWidth="2"/><ellipse cx="49" cy="30" rx="3.5" ry="4.5" stroke="rgba(255,255,255,0.6)" strokeWidth="2"/><path d="M40 35 L37 43 Q40 45 43 43 Z" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" fill="none"/><path d="M32 50 Q40 55 48 50" stroke="rgba(255,255,255,0.6)" strokeWidth="2" strokeLinecap="round" fill="none"/>
-                  <path d="M8 20 L8 8 L20 8" stroke="#0A0A0A" strokeWidth="2" strokeLinecap="round"/><path d="M60 8 L72 8 L72 20" stroke="#0A0A0A" strokeWidth="2" strokeLinecap="round"/><path d="M8 55 L8 67 L20 67" stroke="#0A0A0A" strokeWidth="2" strokeLinecap="round"/><path d="M60 67 L72 67 L72 55" stroke="#0A0A0A" strokeWidth="2" strokeLinecap="round"/>
+                  <path d="M8 20 L8 8 L20 8" stroke="#0D1117" strokeWidth="2" strokeLinecap="round"/><path d="M60 8 L72 8 L72 20" stroke="#0D1117" strokeWidth="2" strokeLinecap="round"/><path d="M8 55 L8 67 L20 67" stroke="#0D1117" strokeWidth="2" strokeLinecap="round"/><path d="M60 67 L72 67 L72 55" stroke="#0D1117" strokeWidth="2" strokeLinecap="round"/>
                 </svg>
               ) : (
                 <svg width="56" height="56" viewBox="0 0 56 56" fill="none"><circle cx="28" cy="28" r="24" fill="rgba(74,222,128,0.15)" stroke="#4ADE80" strokeWidth="2"/><polyline points="17,28 24,36 39,20" stroke="#4ADE80" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
               )}
             </div>
-            {["tl","tr","bl","br"].map(p => <div key={p} style={{ position:"absolute", top:p.startsWith("t")?-2:"auto", bottom:p.startsWith("b")?-2:"auto", left:p.endsWith("l")?-2:"auto", right:p.endsWith("r")?-2:"auto", width:18, height:18, borderTop:p.startsWith("t")?"2px solid #0A0A0A":"none", borderBottom:p.startsWith("b")?"2px solid #0A0A0A":"none", borderLeft:p.endsWith("l")?"2px solid #0A0A0A":"none", borderRight:p.endsWith("r")?"2px solid #0A0A0A":"none" }}/>)}
+            {["tl","tr","bl","br"].map(p => <div key={p} style={{ position:"absolute", top:p.startsWith("t")?-2:"auto", bottom:p.startsWith("b")?-2:"auto", left:p.endsWith("l")?-2:"auto", right:p.endsWith("r")?-2:"auto", width:18, height:18, borderTop:p.startsWith("t")?"2px solid #0D1117":"none", borderBottom:p.startsWith("b")?"2px solid #0D1117":"none", borderLeft:p.endsWith("l")?"2px solid #0D1117":"none", borderRight:p.endsWith("r")?"2px solid #0D1117":"none" }}/>)}
           </div>
-          <div style={{ color: phase==="success"?"#4ADE80":phase==="scanning"?"#0A0A0A":"rgba(255,255,255,0.45)", fontSize:14, fontWeight: phase!=="idle" ? 600 : 400, textAlign:"center" }}>
+          <div style={{ color: phase==="success"?"#4ADE80":phase==="scanning"?"#0D1117":"rgba(255,255,255,0.45)", fontSize:14, fontWeight: phase!=="idle" ? 600 : 400, textAlign:"center" }}>
             {phase==="idle"?"Usar Face ID para ingresar":phase==="scanning"?"Escaneando rostro...":"Identidad verificada"}
           </div>
-          {phase === "idle" && <button onClick={doFaceID} style={{ background:"linear-gradient(135deg,#0A0A0A,#E080B0)", border:"none", borderRadius:18, padding:"14px 40px", color:"#fff", fontWeight:800, fontSize:15, cursor:"pointer", fontFamily:"inherit", animation:"glow 2s ease-in-out infinite" }}>Ingresar con Face ID</button>}
+          {phase === "idle" && <button onClick={doFaceID} style={{ background:"linear-gradient(135deg,#0D1117,#E080B0)", border:"none", borderRadius:18, padding:"14px 40px", color:"#fff", fontWeight:800, fontSize:15, cursor:"pointer", fontFamily:"inherit", animation:"glow 2s ease-in-out infinite" }}>Ingresar con Face ID</button>}
         </div>
       ) : (
         <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:20, width:"100%", padding:"0 32px" }}>
           <div style={{ color:"rgba(255,255,255,0.5)", fontSize:13 }}>PIN de seguridad</div>
           <div style={{ display:"flex", gap:14 }}>
-            {[0,1,2,3].map(i => <div key={i} style={{ width:13, height:13, borderRadius:"50%", background: i < pin.length ? (pinErr?"#F87171":"#0A0A0A") : "rgba(255,255,255,0.2)", border:"1.5px solid "+(i < pin.length ? (pinErr?"#F87171":"#0A0A0A") : "rgba(255,255,255,0.3)"), transition:"all 0.15s" }}/>)}
+            {[0,1,2,3].map(i => <div key={i} style={{ width:13, height:13, borderRadius:"50%", background: i < pin.length ? (pinErr?"#F87171":"#0D1117") : "rgba(255,255,255,0.2)", border:"1.5px solid "+(i < pin.length ? (pinErr?"#F87171":"#0D1117") : "rgba(255,255,255,0.3)"), transition:"all 0.15s" }}/>)}
           </div>
           {pinErr && <div style={{ color:"#F87171", fontSize:12, fontWeight:600, marginTop:-10 }}>PIN incorrecto</div>}
           <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, width:"100%" }}>
@@ -2168,13 +2173,13 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
       <div style={{ background:C.bg, borderRadius:"20px 20px 0 0", padding:"20px 18px 28px", maxHeight:"90vh", overflowY:"auto" }}>
         <div style={{ display:"flex", justifyContent:"center", marginBottom:18 }}><div style={{ width:36, height:4, background:C.border, borderRadius:2 }}/></div>
         <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20, padding:"14px 16px", background:C.card, borderRadius:16, border:"1px solid "+C.border }}>
-          <div style={{ width:50, height:50, borderRadius:14, background:C.isDark?"#1F1F1F":"linear-gradient(135deg,#0A0A0A,#1F1F1F)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, fontWeight:800, color:C.goldLt, flexShrink:0 }}>{DEMO_USER.initials}</div>
+          <div style={{ width:50, height:50, borderRadius:14, background:C.isDark?"#1F1F1F":"linear-gradient(135deg,#0D1117,#1F1F1F)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, fontWeight:800, color:C.goldLt, flexShrink:0 }}>{DEMO_USER.initials}</div>
           <div><div style={{ fontWeight:800, fontSize:16, color:C.text }}>{DEMO_USER.name}</div><div style={{ fontSize:12, color:C.textMd, marginTop:1 }}>{DEMO_USER.email}</div><div style={{ display:"flex", alignItems:"center", gap:4, marginTop:4 }}><div style={{ width:6, height:6, borderRadius:3, background:C.green }}/><span style={{ fontSize:10, color:C.green, fontWeight:600 }}>{t("active_session")}</span></div></div>
         </div>
 
-        <button onClick={onToggleDark} style={{ width:"100%", background:isDark?"#2A1A2A":"#F5E8F5", border:"1.5px solid #0A0A0A44", borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}>
+        <button onClick={onToggleDark} style={{ width:"100%", background:isDark?"#2A1A2A":"#F5E8F5", border:"1.5px solid #0D111744", borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            <div style={{ width:36, height:36, borderRadius:10, background:"#0A0A0A22", display:"flex", alignItems:"center", justifyContent:"center" }}>{isDark ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg> : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>}</div>
+            <div style={{ width:36, height:36, borderRadius:10, background:"#0D111722", display:"flex", alignItems:"center", justifyContent:"center" }}>{isDark ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0D1117" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg> : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0D1117" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>}</div>
             <div><div style={{ fontSize:13, fontWeight:600, color:C.text }}>{isDark ? t("light_mode") : t("dark_mode")}</div><div style={{ fontSize:11, color:C.textLt }}>{isDark ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}</div></div>
           </div>
           <div style={{ width:40, height:22, borderRadius:11, background:isDark?C.accent:C.creamDk, border:"1.5px solid "+C.border, position:"relative" }}><div style={{ position:"absolute", top:2, left:isDark?18:2, width:14, height:14, borderRadius:"50%", background:isDark?"#fff":C.textLt, transition:"left 0.2s" }}/></div>
@@ -2298,13 +2303,13 @@ function MobileApp({ appState, handlers, C }) {
       {toast && <div style={{ position:"absolute", top:34, left:14, right:14, zIndex:50, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 14px", fontSize:12, fontWeight:700 }}>{toast.msg}</div>}
       {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} C={C}/>}
       {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} C={C}/>}
-      <div style={{ background:C.isDark?"#0F0F0F":"#0A0A0A", paddingTop:30, paddingBottom:8, paddingLeft:20, paddingRight:20, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0, zIndex:10 }}>
+      <div style={{ background:C.isDark?"#0F0F0F":"#0D1117", paddingTop:30, paddingBottom:8, paddingLeft:20, paddingRight:20, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0, zIndex:10 }}>
         <span style={{ color:"rgba(255,255,255,0.6)", fontSize:12, fontWeight:600 }}>{new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})}</span>
         <SAMASLogo textColor="#FFFFFF"/>
         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
           <CurrencyToggle showUSD={showUSD} onToggle={() => setShowUSD(v => !v)} C={C}/>
           <button onClick={() => setShowProfile(true)} style={{ background:"transparent", border:"none", cursor:"pointer", padding:0 }}>
-            <div style={{ width:28, height:28, borderRadius:8, background:"#0A0A0A33", border:"1.5px solid #0A0A0A66", display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:800, color:C.goldLt }}>{DEMO_USER.initials}</div>
+            <div style={{ width:28, height:28, borderRadius:8, background:"#0D111733", border:"1.5px solid #0D111766", display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:800, color:C.goldLt }}>{DEMO_USER.initials}</div>
           </button>
         </div>
       </div>
@@ -2358,24 +2363,24 @@ function WebDashboard({ appState, handlers, C }) {
   };
   return (
     <div style={{ width:"100%", minHeight:"100vh", background:C.isDark?"#080808":"#F0E0E0", display:"flex", flexDirection:"column" }}>
-      <div style={{ background:C.isDark?"#0F0F0F":"#0A0A0A", height:56, display:"flex", alignItems:"center", padding:"0 24px", gap:24, borderBottom:"1px solid rgba(255,255,255,0.08)", position:"sticky", top:0, zIndex:50 }}>
+      <div style={{ background:C.isDark?"#0F0F0F":"#0D1117", height:56, display:"flex", alignItems:"center", padding:"0 24px", gap:24, borderBottom:"1px solid rgba(255,255,255,0.08)", position:"sticky", top:0, zIndex:50 }}>
         <SAMASLogo textColor="#FFFFFF"/>
         <div style={{ flex:1 }}/>
         <div style={{ display:"flex", gap:8 }}>
           {FX.map(fx => <div key={fx.label} style={{ background:"rgba(255,255,255,0.07)", borderRadius:8, padding:"4px 10px" }}><div style={{ color:"rgba(255,255,255,0.45)", fontSize:8, fontWeight:700 }}>USD {fx.label}</div><div style={{ color:"#fff", fontSize:11, fontFamily:"monospace", fontWeight:700 }}>${fN(fx.value)}</div><div style={{ color:fx.up?"#4ADE80":"#F87171", fontSize:9 }}>{fx.up?"+":"-"}{Math.abs(fx.change).toFixed(1)}%</div></div>)}
         </div>
         <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-          <button onClick={() => setShowUSD(v => !v)} style={{ background:showUSD?"#1FB87033":"rgba(255,255,255,0.07)", border:"1px solid "+(showUSD?"#1FB87055":"transparent"), borderRadius:8, padding:"6px 10px", color:showUSD?"#E8C97A":"rgba(255,255,255,0.6)", cursor:"pointer", fontSize:12, fontFamily:"inherit", fontWeight:showUSD?700:400 }}>
+          <button onClick={() => setShowUSD(v => !v)} style={{ background:showUSD?"#16C78433":"rgba(255,255,255,0.07)", border:"1px solid "+(showUSD?"#16C78455":"transparent"), borderRadius:8, padding:"6px 10px", color:showUSD?"#E8C97A":"rgba(255,255,255,0.6)", cursor:"pointer", fontSize:12, fontFamily:"inherit", fontWeight:showUSD?700:400 }}>
             {showUSD ? "USD" : "ARS"}
           </button>
           <button onClick={() => setIsDark(d => !d)} style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:8, padding:"6px 10px", color:"rgba(255,255,255,0.6)", cursor:"pointer", fontSize:12, fontFamily:"inherit" }}>{isDark?"Modo claro":"Modo oscuro"}</button>
-          <button onClick={() => setShowProfile(true)} style={{ background:"#0A0A0A33", border:"1.5px solid #0A0A0A66", borderRadius:8, padding:"6px 12px", color:C.goldLt, fontWeight:800, cursor:"pointer", fontSize:12, fontFamily:"inherit" }}>{DEMO_USER.initials}</button>
+          <button onClick={() => setShowProfile(true)} style={{ background:"#0D111733", border:"1.5px solid #0D111766", borderRadius:8, padding:"6px 12px", color:C.goldLt, fontWeight:800, cursor:"pointer", fontSize:12, fontFamily:"inherit" }}>{DEMO_USER.initials}</button>
         </div>
       </div>
       <div style={{ display:"flex", flex:1 }}>
-        <div style={{ width:220, background:C.isDark?"#0F0F0F":"#0A0A0A", borderRight:"1px solid rgba(255,255,255,0.06)", padding:"20px 12px", display:"flex", flexDirection:"column", gap:4, position:"sticky", top:56, height:"calc(100vh - 56px)", overflowY:"auto" }}>
+        <div style={{ width:220, background:C.isDark?"#0F0F0F":"#0D1117", borderRight:"1px solid rgba(255,255,255,0.06)", padding:"20px 12px", display:"flex", flexDirection:"column", gap:4, position:"sticky", top:56, height:"calc(100vh - 56px)", overflowY:"auto" }}>
           {TABS2.map(t => (
-            <button key={t.id} onClick={() => setSideTab(t.id)} style={{ background: sideTab===t.id ? "#1FB87033" : "transparent", border: sideTab===t.id ? "1px solid #1FB87055" : "1px solid transparent", borderRadius:10, padding:"10px 14px", display:"flex", alignItems:"center", gap:10, cursor:"pointer", fontFamily:"inherit", width:"100%", textAlign:"left" }}>
+            <button key={t.id} onClick={() => setSideTab(t.id)} style={{ background: sideTab===t.id ? "#16C78433" : "transparent", border: sideTab===t.id ? "1px solid #16C78455" : "1px solid transparent", borderRadius:10, padding:"10px 14px", display:"flex", alignItems:"center", gap:10, cursor:"pointer", fontFamily:"inherit", width:"100%", textAlign:"left" }}>
               <TabIcon id={t.icon} active={sideTab===t.id} C={C}/>
               <span style={{ fontSize:13, fontWeight: sideTab===t.id ? 700 : 500, color: sideTab===t.id ? "#fff" : "rgba(255,255,255,0.5)" }}>{t.label}</span>
             </button>
@@ -2496,12 +2501,12 @@ export default function SAMASApp() {
   const outerBg = isDark ? "#080808" : "#050505";
 
   return (
-    <div style={{ minHeight:"100vh", background:outerBg, fontFamily:"DM Sans,sans-serif" }}>
-      <style>{"@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap'); *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;} ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-track{background:transparent} ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:2px}"}</style>
+    <div style={{ minHeight:"100vh", background:outerBg, fontFamily:"Sora,sans-serif" }}>
+      <style>{"@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap'); *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;} ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-track{background:transparent} ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:2px}"}</style>
 
       <div style={{ display:"flex", justifyContent:"center", gap:12, padding:"16px 0 8px", position:"sticky", top:0, zIndex:200, background:outerBg, borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
         {[["mobile","Movil"],["web","Web"]].map(([v, l]) => (
-          <button key={v} onClick={() => setViewMode(v)} style={{ background: v===viewMode ? "#1FB870" : "rgba(255,255,255,0.07)", color: v===viewMode ? "#fff" : "rgba(255,255,255,0.5)", border:"none", borderRadius:10, padding:"6px 20px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
+          <button key={v} onClick={() => setViewMode(v)} style={{ background: v===viewMode ? "#16C784" : "rgba(255,255,255,0.07)", color: v===viewMode ? "#fff" : "rgba(255,255,255,0.5)", border:"none", borderRadius:10, padding:"6px 20px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
         ))}
       </div>
 
