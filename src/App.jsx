@@ -1855,12 +1855,14 @@ function OnboardingTutorial({ onClose, onComplete, setTab, setShowUSD, setShowPr
   // target: the bounding box (top, left, width, height) of the element being highlighted
   // tooltipPos: where to place the tooltip relative to phone (top|bottom)
   const steps = [
+    // All steps use the SAMAS brand green (#16C784) as the accent so the
+    // tutorial stays on-palette against the dark modal surface.
     {
       title: "Bienvenido a SAMAS",
       body: "Vamos a hacer un recorrido rapido para que conozcas tu nueva app de inversiones. Dura menos de un minuto.",
       target: null,
       tabTo: "portfolio",
-      accent: "#0D1117",
+      accent: "#16C784",
     },
     {
       title: "El ticker en vivo",
@@ -1868,7 +1870,7 @@ function OnboardingTutorial({ onClose, onComplete, setTab, setShowUSD, setShowPr
       target: { top:66, left:0, width:357, height:28 },
       tipSide: "below",
       tabTo: "portfolio",
-      accent: C.accent,
+      accent: "#16C784",
     },
     {
       title: "Dolar MEP, CCL y Oficial",
@@ -1881,10 +1883,13 @@ function OnboardingTutorial({ onClose, onComplete, setTab, setShowUSD, setShowPr
     {
       title: "Toggle ARS / USD",
       body: "Toca este switch para ver todos los precios en dolares MEP. Todo se convierte automaticamente.",
-      target: { top:34, left:240, width:80, height:28 },
+      // CurrencyToggle sits at right of the mobile header; measured from
+      // the 357-wide inner phone frame: right padding 20, MG button 28,
+      // gap 6 → toggle right edge at x=303, width ~78 → left=225.
+      target: { top:34, left:222, width:80, height:26, radius:20 },
       tipSide: "below",
       tabTo: "portfolio",
-      accent: "#C9A84C",
+      accent: "#16C784",
     },
     {
       title: "Tu Portafolio",
@@ -1892,7 +1897,7 @@ function OnboardingTutorial({ onClose, onComplete, setTab, setShowUSD, setShowPr
       target: { top:148, left:10, width:337, height:200 },
       tipSide: "below",
       tabTo: "portfolio",
-      accent: C.accent,
+      accent: "#16C784",
     },
     {
       title: "Navegacion principal",
@@ -1900,28 +1905,28 @@ function OnboardingTutorial({ onClose, onComplete, setTab, setShowUSD, setShowPr
       target: { top:664, left:0, width:357, height:78 },
       tipSide: "above",
       tabTo: "portfolio",
-      accent: "#0D1117",
+      accent: "#16C784",
     },
     {
       title: "Mercado",
       body: "Aca encontras todas las acciones, CEDEARs, ETFs, bonos, commodities y crypto. Busca o filtra por categoria.",
       target: null,
       tabTo: "mercado",
-      accent: C.accent,
+      accent: "#16C784",
     },
     {
       title: "Noticias filtradas",
-      body: "Las noticias mas relevantes para los activos que tenes. Las de tu portafolio aparecen destacadas en dorado.",
+      body: "Las noticias mas relevantes para los activos que tenes. Las de tu portafolio aparecen destacadas en verde.",
       target: null,
       tabTo: "noticias",
-      accent: "#C9A84C",
+      accent: "#16C784",
     },
     {
       title: "Inversiones",
       body: "Ideas de carteras, obligaciones negociables, fondos comunes y bonos soberanos. Todo en un solo lugar.",
       target: null,
       tabTo: "ideas",
-      accent: "#2563EB",
+      accent: "#16C784",
     },
     {
       title: "Listo!",
@@ -1961,9 +1966,10 @@ function OnboardingTutorial({ onClose, onComplete, setTab, setShowUSD, setShowPr
     <div style={{ position:"absolute", inset:0, zIndex:150, pointerEvents:"none" }}>
       <style>{"@keyframes tutPulse{0%,100%{box-shadow:0 0 0 0 " + s.accent + "66,0 0 0 9999px rgba(0,0,0,0.72)}50%{box-shadow:0 0 0 8px " + s.accent + "33,0 0 0 9999px rgba(0,0,0,0.72)}} @keyframes tutSlide{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}"}</style>
 
-      {/* Dim overlay with cutout around target */}
+      {/* Dim overlay with cutout around target. Border-radius uses the target's
+          own radius hint so the spotlight matches pill/rect targets. */}
       {target ? (
-        <div style={{ position:"absolute", top:target.top, left:target.left, width:target.width, height:target.height, borderRadius:12, animation:"tutPulse 2s ease-in-out infinite", pointerEvents:"none", zIndex:1 }}/>
+        <div style={{ position:"absolute", top:target.top, left:target.left, width:target.width, height:target.height, borderRadius: target.radius != null ? target.radius : 12, animation:"tutPulse 2s ease-in-out infinite", pointerEvents:"none", zIndex:1 }}/>
       ) : (
         <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.72)", pointerEvents:"auto" }}/>
       )}
@@ -1978,21 +1984,21 @@ function OnboardingTutorial({ onClose, onComplete, setTab, setShowUSD, setShowPr
             ))}
           </div>
 
-          <div style={{ fontSize:9, fontWeight:800, color:s.accent, letterSpacing:2, marginBottom:4, textAlign:"center" }}>PASO {step+1} DE {steps.length}</div>
-          <div style={{ fontSize:17, fontWeight:800, color:C.text, fontFamily:"Georgia,serif", marginBottom:6, textAlign:"center", lineHeight:1.2 }}>{s.title}</div>
+          <div style={{ fontSize:9, fontWeight:700, color:s.accent, letterSpacing:2, marginBottom:6, textAlign:"center" }}>PASO {step+1} DE {steps.length}</div>
+          <div style={{ fontSize:17, fontWeight:600, color:C.text, fontFamily:"Sora,sans-serif", marginBottom:6, textAlign:"center", lineHeight:1.25 }}>{s.title}</div>
           <div style={{ fontSize:12, color:C.textMd, lineHeight:1.55, textAlign:"center", marginBottom:14 }}>{s.body}</div>
 
           <div style={{ display:"flex", gap:8 }}>
             {!isFirst && (
-              <button onClick={() => setStep(step-1)} style={{ flex:1, background:C.creamDk, color:C.textMd, border:"none", borderRadius:10, padding:"10px", fontWeight:600, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+              <button onClick={() => setStep(step-1)} style={{ flex:1, background:C.creamDk, color:C.textMd, border:"none", borderRadius:10, padding:"10px", fontWeight:500, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
                 Atras
               </button>
             )}
-            <button onClick={onClose} style={{ flex: isFirst ? 1 : 0.8, background:"transparent", color:C.textLt, border:"1.5px solid "+C.border, borderRadius:10, padding:"10px", fontWeight:600, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+            <button onClick={onClose} style={{ flex:1, background:"transparent", color:C.textLt, border:"1.5px solid "+C.border, borderRadius:10, padding:"10px", fontWeight:500, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
               Saltar
             </button>
             <button onClick={isLast ? onComplete : () => setStep(step+1)}
-              style={{ flex: isFirst ? 1.5 : 1.5, background:s.accent, color:"#fff", border:"none", borderRadius:10, padding:"10px", fontWeight:700, fontSize:13, cursor:"pointer", fontFamily:"inherit", boxShadow:"0 3px 10px "+s.accent+"55" }}>
+              style={{ flex:2, background:s.accent, color:"#fff", border:"none", borderRadius:10, padding:"10px", fontWeight:600, fontSize:13, cursor:"pointer", fontFamily:"inherit", boxShadow:"0 3px 10px "+s.accent+"55" }}>
               {isLast ? "Terminar" : "Siguiente"}
             </button>
           </div>
