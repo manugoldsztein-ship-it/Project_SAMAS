@@ -273,13 +273,17 @@ const FINNHUB_SYMBOL_OVERRIDE = {
 // Fetch /quote for every ASSET with a valid Finnhub symbol, mutate price/change
 // in place, and bump a render counter. Cheap and coarse — good enough for a
 // prototype where the prop-drilling cost would be higher than the mutation cost.
+//
+// Errors are surfaced two ways: summary error in `status.error`, and a list of
+// `{ticker, symbol, reason}` tuples in `status.failures` for debugging (also
+// logged to the browser console so users can inspect network issues).
 function useFinnhubQuotes(apiKey, mepRate) {
   const [bump, setBump] = useState(0);
-  const [status, setStatus] = useState({ live: false, count: 0, error: null, lastSync: null });
+  const [status, setStatus] = useState({ live: false, count: 0, error: null, lastSync: null, failures: [] });
 
   useEffect(() => {
     if (!apiKey) {
-      setStatus({ live: false, count: 0, error: null, lastSync: null });
+      setStatus({ live: false, count: 0, error: null, lastSync: null, failures: [] });
       return;
     }
     let cancelled = false;
@@ -293,29 +297,38 @@ function useFinnhubQuotes(apiKey, mepRate) {
 
     const fetchQuote = async (asset) => {
       const symbol = resolve(asset);
-      if (!symbol) return false;
+      if (!symbol) return { ticker: asset.ticker, ok: false, reason: "skipped (no free-tier coverage)" };
       try {
         const r = await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${encodeURIComponent(apiKey)}`);
-        if (!r.ok) return { ok: false, status: r.status };
+        if (r.status === 401 || r.status === 403) return { ticker: asset.ticker, symbol, ok: false, reason: "auth: " + r.status, authErr: true };
+        if (r.status === 429) return { ticker: asset.ticker, symbol, ok: false, reason: "rate limit (429)", rateErr: true };
+        if (!r.ok) return { ticker: asset.ticker, symbol, ok: false, reason: "http " + r.status };
         const d = await r.json();
-        if (!d || typeof d.c !== "number" || d.c === 0) return false;
+        if (!d) return { ticker: asset.ticker, symbol, ok: false, reason: "empty response" };
+        if (typeof d.c !== "number" || d.c === 0) return { ticker: asset.ticker, symbol, ok: false, reason: "no data (c=0, likely unsupported symbol)" };
         asset.price = d.c * mepRate;
         asset.change = typeof d.dp === "number" ? d.dp : 0;
         asset.up = asset.change >= 0;
-        return true;
-      } catch { return false; }
+        return { ticker: asset.ticker, symbol, ok: true };
+      } catch (e) {
+        return { ticker: asset.ticker, symbol, ok: false, reason: "network: " + (e?.message || e) };
+      }
     };
 
     const refresh = async () => {
       const results = await Promise.all(ASSETS.map(fetchQuote));
       if (cancelled) return;
-      const authErr = results.find(r => r && typeof r === "object" && r.status === 401);
-      const count = results.filter(r => r === true).length;
+      const authErr  = results.find(r => r.authErr);
+      const rateErr  = results.find(r => r.rateErr);
+      const failures = results.filter(r => !r.ok);
+      const count    = results.filter(r => r.ok).length;
+      if (failures.length) console.warn("[SAMAS/Finnhub] fetch failures:", failures);
       setStatus({
         live: count > 0,
         count,
-        error: authErr ? "API key invalida" : (count === 0 ? "Sin datos de Finnhub" : null),
+        error: authErr ? "API key invalida o sin permisos" : rateErr ? "Limite de consultas alcanzado (60/min)" : count === 0 ? "Sin datos de Finnhub" : null,
         lastSync: new Date(),
+        failures,
       });
       setBump(b => b + 1);
     };
@@ -2215,7 +2228,7 @@ function SignupForm({ onBack, onComplete, C }) {
   );
 }
 
-function LoginScreen({ onLogin, C }) {
+function LoginScreen({ onLogin, onSignup, C }) {
   const [view, setView]       = useState("login");  // "login" | "signup"
   const [phase, setPhase]     = useState("idle");
   const [pin, setPin]         = useState("");
@@ -2223,7 +2236,9 @@ function LoginScreen({ onLogin, C }) {
   const [showPin, setShowPin] = useState(false);
   const doFaceID = () => { setPhase("scanning"); setTimeout(() => { setPhase("success"); setTimeout(onLogin, 800); }, 1800); };
   const doPin = () => { if (pin === DEMO_USER.pin) { setPhase("success"); setTimeout(onLogin, 600); } else { setPinErr(true); setPin(""); setTimeout(() => setPinErr(false), 1400); } };
-  if (view === "signup") return <SignupForm onBack={() => setView("login")} onComplete={() => { setPhase("success"); setTimeout(onLogin, 400); }} C={C}/>;
+  // Fresh signup → call onSignup (which resets state) rather than onLogin,
+  // so the new account doesn't inherit the demo portfolio.
+  if (view === "signup") return <SignupForm onBack={() => setView("login")} onComplete={() => { setPhase("success"); setTimeout(onSignup || onLogin, 400); }} C={C}/>;
   return (
     <div style={{ position:"absolute", inset:0, zIndex:100, background:"linear-gradient(160deg,#0D1117 0%,#0D2B1C 55%,#000000 100%)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"space-between", padding:"0 0 32px" }}>
       <style>{"@keyframes scanLine{0%{top:18%}100%{top:78%}} @keyframes glow{0%,100%{box-shadow:0 0 20px rgba(192,96,144,0.3)}50%{box-shadow:0 0 40px rgba(192,96,144,0.7)}} @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}"}</style>
@@ -2493,8 +2508,22 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
                 Ultima sync: {new Date(finnhub.lastSync).toLocaleTimeString("es-AR")}
               </div>
             )}
+            {finnhub?.failures && finnhub.failures.length > 0 && (
+              <div style={{ marginTop:10, padding:"8px 10px", background:C.creamDk, borderRadius:10, border:"1px solid "+C.border }}>
+                <div style={{ fontSize:10, fontWeight:700, color:C.textMd, marginBottom:5, letterSpacing:0.5 }}>
+                  SIN DATOS EN VIVO ({finnhub.failures.length})
+                </div>
+                <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
+                  {finnhub.failures.map(f => (
+                    <span key={f.ticker} title={f.reason} style={{ fontSize:9, fontFamily:"monospace", fontWeight:600, background:C.bg, color:C.textMd, borderRadius:5, padding:"2px 6px", border:"1px solid "+C.border }}>
+                      {f.ticker}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             <div style={{ fontSize:10, color:C.textLt, marginTop:8, lineHeight:1.5 }}>
-              <span style={{ color:C.textMd, fontWeight:600 }}>Nota:</span> la key se guarda solo en este dispositivo (localStorage). ALUA, MIRG y BTC usan datos mock — el plan free de Finnhub no cubre BCBA ni crypto.
+              <span style={{ color:C.textMd, fontWeight:600 }}>Cobertura del plan free:</span> solo cotizacion actual (precio y cambio del dia). No hay datos historicos mas alla de hoy, ni volumen intradiario, ni candles. Para 1m / YTD / P-E se sigue usando el mock. ALUA, MIRG y BTC no estan cubiertos.
             </div>
           </div>
         )}
@@ -2554,7 +2583,7 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
 // ============================================================
 function MobileApp({ appState, handlers, C }) {
   const { loggedIn, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, finnhubKey, finnhub } = appState;
-  const { setLoggedIn, handleLogin, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, setFinnhubKey } = handlers;
+  const { setLoggedIn, handleLogin, handleSignup, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, setFinnhubKey } = handlers;
   const t = useT(lang);
   const TABS = [{ id:"portfolio",label:t("portfolio") },{ id:"mercado",label:t("mercado") },{ id:"noticias",label:t("noticias") },{ id:"ideas",label:t("inversiones") },{ id:"ordenes",label:t("ordenes") }];
   const totalARS = holdings.reduce((s, h) => { const a = ASSETS.find(x => x.ticker === h.ticker); return s + (a ? h.qty * a.price : 0); }, 0);
@@ -2575,7 +2604,7 @@ function MobileApp({ appState, handlers, C }) {
   return (
     <div style={{ width:375, height:760, background:C.bg, borderRadius:48, overflow:"hidden", boxShadow:"0 40px 80px rgba(0,0,0,0.7)", display:"flex", flexDirection:"column", border:"9px solid #0a0a0a", position:"relative", flexShrink:0 }}>
       <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:110, height:26, background:"#0a0a0a", borderRadius:"0 0 16px 16px", zIndex:30 }}/>
-      {!loggedIn && <LoginScreen onLogin={handleLogin} C={C}/>}
+      {!loggedIn && <LoginScreen onLogin={handleLogin} onSignup={handleSignup} C={C}/>}
       {showTutorial && <OnboardingTutorial onClose={finishTutorial} onComplete={finishTutorial} setTab={setTab} setShowUSD={setShowUSD} setShowProfile={setShowProfile} currentTab={tab} C={C}/>}
       {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} finnhubKey={finnhubKey} setFinnhubKey={setFinnhubKey} finnhub={finnhub} C={C}/>}
       {toast && <div style={{ position:"absolute", top:34, left:14, right:14, zIndex:50, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 14px", fontSize:12, fontWeight:700 }}>{toast.msg}</div>}
@@ -2792,11 +2821,25 @@ export default function SAMASApp() {
       setTimeout(() => setShowTutorial(true), 400);
     }
   };
+  // Fresh signup → wipe the demo user's portfolio so the new account doesn't
+  // inherit holdings, balance, orders, watchlist, or risk controls.
+  const handleSignup = () => {
+    setHoldings([]);
+    setStopLosses({});
+    setPriceAlerts({});
+    setWatchlist([]);
+    setOrders([]);
+    setBalance(100000);  // $100k ARS starter balance for a demo account
+    setSelected(null);
+    setPending(null);
+    setTab("portfolio");
+    handleLogin();
+  };
   const handleLogout = () => { setLoggedIn(false); setShowProfile(false); setTab("portfolio"); setSelected(null); setPending(null); };
   const finishTutorial = () => { setHasSeen(true); setShowTutorial(false); };
 
   const appState = { isDark, loggedIn, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, finnhubKey, finnhub };
-  const handlers = { setLoggedIn, handleLogin, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, setFinnhubKey };
+  const handlers = { setLoggedIn, handleLogin, handleSignup, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, setFinnhubKey };
 
   const outerBg = isDark ? "#080808" : "#050505";
 
@@ -2823,7 +2866,7 @@ export default function SAMASApp() {
         ) : (
           <div style={{ display:"flex", justifyContent:"center", alignItems:"center", minHeight:"calc(100vh - 60px)" }}>
             <div style={{ width:375, height:760, position:"relative", borderRadius:20, overflow:"hidden" }}>
-              <LoginScreen onLogin={handleLogin} C={C}/>
+              <LoginScreen onLogin={handleLogin} onSignup={handleSignup} C={C}/>
             </div>
           </div>
         )
