@@ -504,6 +504,104 @@ function useEscapeKey(onEscape) {
   }, [onEscape]);
 }
 
+// Light-touch haptic feedback for key actions on mobile. Silent no-op where
+// unsupported (desktop browsers, iOS Safari without gesture context, etc.).
+// Keep patterns short and subtle — not every tap should buzz.
+function haptic(type = "tap") {
+  try {
+    const v = (typeof navigator !== "undefined") && navigator.vibrate && navigator.vibrate.bind(navigator);
+    if (!v) return;
+    const PATTERNS = {
+      tap:     10,
+      confirm: [15, 40, 20],
+      error:   [40, 30, 40],
+      success: [10, 30, 10, 30, 30],
+    };
+    v(PATTERNS[type] ?? PATTERNS.tap);
+  } catch { /* ignore */ }
+}
+
+// Pretty in-app confirm dialog. Replaces the default window.confirm() which
+// is jarring and doesn't theme. Returns a component that renders null when
+// there's no pending question, and a modal card otherwise.
+//
+// Usage:
+//   const { confirm, ConfirmHost } = useConfirm(C);
+//   <ConfirmHost />
+//   async function onDelete() {
+//     if (await confirm({ title: "Borrar?", body: "...", danger: true })) {
+//       ...actually delete
+//     }
+//   }
+function useConfirm(C) {
+  const [pending, setPending] = useState(null);
+  const resolverRef = useRef(null);
+  useEscapeKey(pending ? () => { setPending(null); resolverRef.current?.(false); } : null);
+
+  function confirm({ title = "Estas seguro?", body = "", confirmLabel = "Confirmar", cancelLabel = "Cancelar", danger = false } = {}) {
+    return new Promise((resolve) => {
+      resolverRef.current = resolve;
+      setPending({ title, body, confirmLabel, cancelLabel, danger });
+    });
+  }
+
+  function respond(ok) {
+    setPending(null);
+    resolverRef.current?.(ok);
+    resolverRef.current = null;
+    haptic(ok ? "confirm" : "tap");
+  }
+
+  function ConfirmHost() {
+    if (!pending) return null;
+    const accent = pending.danger ? C.red : C.accent;
+    return (
+      <div
+        className="samas-fade"
+        onClick={() => respond(false)}
+        style={{
+          position:"absolute", inset:0, zIndex:90,
+          background:"rgba(0,0,0,0.6)",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          padding:20,
+        }}
+      >
+        <div
+          className="samas-slide-up"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            background: C.bg,
+            border: "1px solid " + C.border,
+            borderRadius: 16,
+            maxWidth: 320,
+            width: "100%",
+            padding: "18px 18px 16px",
+          }}
+        >
+          <div style={{ fontSize:15, fontWeight:800, color:C.text, marginBottom:6 }}>{pending.title}</div>
+          {pending.body && <div style={{ fontSize:12, color:C.textMd, lineHeight:1.5, marginBottom:14 }}>{pending.body}</div>}
+          <div style={{ display:"flex", gap:8 }}>
+            <button
+              onClick={() => respond(false)}
+              style={{ flex:1, background:C.creamDk, color:C.textMd, border:"1.5px solid "+C.border, borderRadius:10, padding:"10px", fontWeight:600, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}
+            >
+              {pending.cancelLabel}
+            </button>
+            <button
+              onClick={() => respond(true)}
+              style={{ flex:2, background: accent, color:"#fff", border:"none", borderRadius:10, padding:"10px", fontWeight:700, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}
+            >
+              {pending.confirmLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return { confirm, ConfirmHost };
+}
+
 
 // ============================================================
 // UTILS
@@ -1961,6 +2059,7 @@ function PageReportes({ C, lang }) {
 // from the Objetivos wizard. Compares current portfolio value against the
 // plan's target, and offers quick actions to reopen the wizard or discard.
 function PlanProgressCard({ plan, currentValue, onOpen, onClear, C }) {
+  const { confirm, ConfirmHost } = useConfirm(C);
   const profile = plan?._profile || {};
   const target  = Number(profile.targetAmount) || 0;
   const pct     = target > 0 ? Math.min(100, Math.max(0, (currentValue / target) * 100)) : 0;
@@ -1992,7 +2091,16 @@ function PlanProgressCard({ plan, currentValue, onOpen, onClear, C }) {
           </div>
         </div>
         <button
-          onClick={() => { if (window.confirm("Borrar el plan guardado?")) onClear && onClear(); }}
+          onClick={async () => {
+            const ok = await confirm({
+              title: "Borrar el plan guardado?",
+              body: "Se va a perder la estrategia y los datos del perfil. Podes armar uno nuevo despues.",
+              confirmLabel: "Borrar",
+              cancelLabel: "Cancelar",
+              danger: true,
+            });
+            if (ok) onClear && onClear();
+          }}
           aria-label="Borrar plan"
           style={{ background:"transparent", border:"none", padding:4, cursor:"pointer", color:C.textLt }}
         >
@@ -2029,6 +2137,7 @@ function PlanProgressCard({ plan, currentValue, onOpen, onClear, C }) {
       >
         Revisar mi plan
       </button>
+      <ConfirmHost/>
     </div>
   );
 }
@@ -2040,14 +2149,30 @@ function OnboardingEmptyState({ onOpenObjectives, onSelectAsset, onDeposit, C })
   // These are the most liquid names in the SAMAS seed data.
   const suggested = ["AAPL", "NVDA", "SPY"].map(t => ASSETS.find(a => a.ticker === t)).filter(Boolean);
   return (
-    <div style={{ margin:"12px 14px 0", background:C.card, border:"1px dashed "+C.border, borderRadius:14, padding:"16px 14px" }}>
-      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
-        <span style={{ fontSize:20 }}>👋</span>
-        <div style={{ fontSize:14, fontWeight:700, color:C.text }}>Arranquemos por aca</div>
+    <div
+      className="samas-slide-up"
+      style={{
+        margin:"12px 14px 0",
+        background:"linear-gradient(135deg, "+C.accent+"14, "+C.card+" 60%)",
+        border:"1px solid "+C.accent+"44",
+        borderRadius:16,
+        padding:"18px 16px 14px",
+        position:"relative",
+        overflow:"hidden",
+      }}
+    >
+      {/* Decorative glow */}
+      <div aria-hidden style={{ position:"absolute", top:-40, right:-40, width:140, height:140, borderRadius:"50%", background: C.accent, opacity:0.08, filter:"blur(20px)", pointerEvents:"none" }}/>
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4, position:"relative" }}>
+        <div style={{ width:32, height:32, borderRadius:10, background:"linear-gradient(135deg, "+C.accent+", #7C3AED)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          <span style={{ fontSize:16 }}>👋</span>
+        </div>
+        <div>
+          <div style={{ fontSize:14, fontWeight:800, color:C.text }}>Arranquemos por aca</div>
+          <div style={{ fontSize:10.5, color:C.textMd, marginTop:1 }}>Tres cosas simples para empezar</div>
+        </div>
       </div>
-      <div style={{ fontSize:11, color:C.textMd, lineHeight:1.5, marginBottom:14 }}>
-        Cuenta nueva, portafolio vacio. Tres cosas simples para empezar:
-      </div>
+      <div style={{ marginTop:14 }}/>
 
       <OnboardingRow
         n={1}
@@ -3866,7 +3991,7 @@ function MobileApp({ appState, handlers, C }) {
       {!loggedIn && <LoginScreen onLogin={handleLogin} onSignup={handleSignup} emailjsCfg={emailjsCfg} C={C}/>}
       {showTutorial && <OnboardingTutorial onClose={finishTutorial} onComplete={finishTutorial} setTab={setTab} setShowUSD={setShowUSD} setShowProfile={setShowProfile} currentTab={tab} C={C}/>}
       {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} finnhubKey={finnhubKey} setFinnhubKey={setFinnhubKey} finnhub={finnhub} emailjsCfg={emailjsCfg} setEmailjsCfg={setEmailjsCfg} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} anthropicModel={anthropicModel} setAnthropicModel={setAnthropicModel} C={C}/>}
-      {toast && <div style={{ position:"absolute", top:34, left:14, right:14, zIndex:50, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 14px", fontSize:12, fontWeight:700 }}>{toast.msg}</div>}
+      {toast && <div className="samas-slide-up" style={{ position:"absolute", top:34, left:14, right:14, zIndex:50, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 14px", fontSize:12, fontWeight:700, boxShadow:"0 10px 30px rgba(0,0,0,0.35)" }}>{toast.msg}</div>}
       {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} C={C}/>}
       {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} C={C}/>}
       {showObjectives && <ObjectivesWizard onClose={() => setShowObjectives(false)} onSave={setSavedPlan} savedPlan={savedPlan} C={C}/>}
@@ -3978,7 +4103,7 @@ function WebDashboard({ appState, handlers, C }) {
           {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} C={C}/>}
           {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} C={C}/>}
           {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} finnhubKey={finnhubKey} setFinnhubKey={setFinnhubKey} finnhub={finnhub} emailjsCfg={emailjsCfg} setEmailjsCfg={setEmailjsCfg} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} anthropicModel={anthropicModel} setAnthropicModel={setAnthropicModel} C={C}/>}
-          {toast && <div style={{ position:"fixed", top:70, left:"50%", transform:"translateX(-50%)", zIndex:99, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 20px", fontSize:13, fontWeight:700, boxShadow:"0 8px 32px rgba(0,0,0,0.3)" }}>{toast.msg}</div>}
+          {toast && <div className="samas-slide-up" style={{ position:"fixed", top:70, left:"50%", transform:"translateX(-50%)", zIndex:99, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 20px", fontSize:13, fontWeight:700, boxShadow:"0 8px 32px rgba(0,0,0,0.3)" }}>{toast.msg}</div>}
           <div style={{ overflowY:"auto", height:"calc(100vh - 56px)" }}>{renderPage()}</div>
           {showObjectives && <ObjectivesWizard onClose={() => setShowObjectives(false)} onSave={setSavedPlan} savedPlan={savedPlan} C={C}/>}
         </div>
@@ -4084,6 +4209,7 @@ export default function SAMASApp() {
     }
     sendEmailNotification({ to:DEMO_USER.email, subject:"Operacion ejecutada - " + side + " " + ticker, body:side + " " + qty + " " + ticker + " a $" + fN(price) + ". Total: $" + fN(total) + ". Fecha: " + new Date().toLocaleString("es-AR") + ". Si no reconoces esta operacion, contacta a SAMAS inmediatamente." });
     setPending(null);
+    haptic("success");
     showToast(side + " " + qty + " " + ticker + " ejecutada. Email enviado a " + DEMO_USER.email, side === "Compra" ? C.green : C.red);
   };
 
@@ -4094,8 +4220,8 @@ export default function SAMASApp() {
   const toggleWatchlist = (ticker) => {
     setWatchlist(prev => {
       const has = prev.includes(ticker);
-      if (has) { showToast("Removido de favoritos: " + ticker, C.textMd); return prev.filter(t => t !== ticker); }
-      showToast("Agregado a favoritos: " + ticker, C.gold);
+      if (has) { haptic("tap"); showToast("Removido de favoritos: " + ticker, C.textMd); return prev.filter(t => t !== ticker); }
+      haptic("tap"); showToast("Agregado a favoritos: " + ticker, C.gold);
       return [...prev, ticker];
     });
   };
@@ -4132,6 +4258,7 @@ export default function SAMASApp() {
   const handleDeposit = (amount, method) => {
     setBalance(prev => prev + amount);
     const methodLabel = method === "transfer" ? "transferencia" : method === "mp" ? "MercadoPago" : "crypto";
+    haptic("success");
     showToast(`$${fN(amount)} acreditados via ${methodLabel}`, C.green);
   };
 
@@ -4151,6 +4278,39 @@ export default function SAMASApp() {
         *::-webkit-scrollbar-thumb { background: transparent !important; }
         * { scrollbar-width: none !important; -ms-overflow-style: none !important; }
         html, body { scrollbar-width: none !important; -ms-overflow-style: none !important; }
+
+        /* Interaction polish: every interactive control gets a subtle press
+           response, and keyboard focus is always visible. "Active" scale is
+           suppressed on :disabled so greyed-out buttons don't flinch. */
+        button, [role="button"], a, input, select, textarea {
+          transition: transform .1s ease, background-color .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease;
+        }
+        button:not(:disabled):active, [role="button"]:not([aria-disabled="true"]):active {
+          transform: scale(0.975);
+        }
+        button:focus, input:focus, select:focus, textarea:focus, a:focus {
+          outline: none;
+        }
+        button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible {
+          outline: 2px solid #16C784;
+          outline-offset: 2px;
+        }
+        input[type="checkbox"], input[type="radio"] { accent-color: #16C784; }
+
+        /* Fade-in for modal overlays — apply via className="samas-modal". */
+        @keyframes samasFadeIn { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes samasSlideUp { from { transform: translateY(12px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+        .samas-fade { animation: samasFadeIn 0.18s ease both; }
+        .samas-slide-up { animation: samasSlideUp 0.22s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+        /* Skeleton pulse used for loading placeholders */
+        @keyframes samasShimmer { 0% { background-position: -200% 0 } 100% { background-position: 200% 0 } }
+        .samas-skeleton {
+          background: linear-gradient(90deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 100%);
+          background-size: 200% 100%;
+          animation: samasShimmer 1.6s linear infinite;
+          border-radius: 6px;
+        }
       `}</style>
 
       <div style={{ display:"flex", justifyContent:"center", gap:12, padding:"16px 0 8px", position:"sticky", top:0, zIndex:200, background:outerBg, borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
