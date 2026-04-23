@@ -437,21 +437,58 @@ function YahooChart({ asset, C }) {
   const [period, setPeriod] = useState("1mo");
   const [hovered, setHovered] = useState(null);
 
-  // Generate realistic price series based on asset data
+  // Synthetic price series: random walk seeded by ticker, targeting a plausible
+  // start price so the curve ends at the current `asset.price`. All percents are
+  // decimal (0.384 = +38.4%). The final pass scales values so the last point
+  // matches asset.price exactly, avoiding the "flat line" visual mismatch.
   const generateSeries = (p) => {
     const counts = { "1d":78, "5d":130, "1mo":22, "3mo":66, "6mo":130, "1y":252, "2y":504 };
     const n = counts[p] || 22;
-    const base = asset.price;
-    const vol = base * (p === "1d" ? 0.003 : p === "5d" ? 0.008 : p === "1mo" ? 0.04 : p === "3mo" ? 0.08 : p === "6mo" ? 0.14 : 0.25);
-    const trend = asset.chgYTD / 100 / (p === "1d" ? 252 : p === "5d" ? 52 : p === "1mo" ? 12 : p === "3mo" ? 4 : p === "6mo" ? 2 : 1) * n;
-    // deterministic seed from ticker
-    const seed = asset.ticker.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-    const rng = (i) => { const x = Math.sin(seed + i * 127.1) * 43758.5453; return x - Math.floor(x); };
-    let v = base / (1 + trend / n * n * 0.5);
-    return Array.from({ length: n }, (_, i) => {
-      v = v * (1 + (rng(i) - 0.48) * (vol / base) + trend / n / n);
-      return Math.max(v, base * 0.3);
-    });
+    const current = asset.price;
+
+    // Approximate period return from available asset data
+    const pct1m  = (asset.chg1m  || 0) / 100;
+    const pctYTD = (asset.chgYTD || 0) / 100;
+    const pctDay = (asset.change || 0) / 100;
+    const periodReturn = (
+      p === "1d"  ? pctDay :
+      p === "5d"  ? pctDay * 3 :
+      p === "1mo" ? pct1m :
+      p === "3mo" ? pctYTD * 0.25 :
+      p === "6mo" ? pctYTD * 0.5 :
+      p === "1y"  ? pctYTD :
+      /* 2y */      pctYTD * 1.5
+    );
+
+    // Per-step volatility (fraction of price) — tunes noise amplitude
+    const vol = (
+      p === "1d"  ? 0.003 :
+      p === "5d"  ? 0.006 :
+      p === "1mo" ? 0.012 :
+      p === "3mo" ? 0.020 :
+      p === "6mo" ? 0.028 :
+      p === "1y"  ? 0.035 :
+      /* 2y */      0.045
+    );
+
+    const startPrice = current / (1 + periodReturn);
+    const driftPerStep = periodReturn / Math.max(n - 1, 1);
+
+    // Deterministic PRNG seeded from ticker + period so charts are stable
+    const seed = (asset.ticker + p).split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+    const rng  = (i) => { const x = Math.sin(seed + i * 127.1) * 43758.5453; return x - Math.floor(x); };
+
+    const raw = [startPrice];
+    let v = startPrice;
+    for (let i = 1; i < n; i++) {
+      const noise = (rng(i) - 0.5) * vol;
+      v = v * (1 + driftPerStep + noise);
+      raw.push(v);
+    }
+    // Rescale so the final point lands exactly on current price
+    const last = raw[raw.length - 1] || current;
+    const k = current / last;
+    return raw.map(x => x * k);
   };
 
   const vals = generateSeries(period);
