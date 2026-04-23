@@ -1,4 +1,13 @@
 import { useState, useEffect, useRef } from "react";
+import { CoachChat } from "./ai/CoachChat.jsx";
+import { ObjectivesWizard } from "./ai/ObjectivesWizard.jsx";
+import { SentimentCard } from "./ai/SentimentCard.jsx";
+import {
+  loadAnthropicKey, saveAnthropicKey,
+  loadAnthropicModel, saveAnthropicModel,
+  DEFAULT_MODEL as ANTHROPIC_DEFAULT_MODEL,
+  testAnthropic,
+} from "./ai/client.js";
 
 // ============================================================
 // THEME
@@ -1683,6 +1692,7 @@ function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatch
   // Percent gain is still shown so the user sees direction without a dollar figure.
   const [hideValues, setHideValues] = useState(false);
   const [showDeposit, setShowDeposit] = useState(false);
+  const [showObjectives, setShowObjectives] = useState(false);
   const mask = "••••••";
   const enriched = holdings.map(h => {
     const a = ASSETS.find(x => x.ticker === h.ticker);
@@ -1747,6 +1757,43 @@ function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatch
       {showDeposit && (
         <DepositModal user={DEMO_USER} onClose={() => setShowDeposit(false)} onSimulate={(amt, method) => onDeposit && onDeposit(amt, method)} C={C}/>
       )}
+      {showObjectives && (
+        <ObjectivesWizard onClose={() => setShowObjectives(false)} C={C}/>
+      )}
+      {/* AI Objectives banner — entry point to the goal/risk wizard */}
+      <button
+        onClick={() => setShowObjectives(true)}
+        style={{
+          margin:"12px 14px 0",
+          width:"calc(100% - 28px)",
+          background:"linear-gradient(135deg, "+C.accent+"22, #7C3AED22)",
+          border:"1px solid "+C.accent+"55",
+          borderRadius:14,
+          padding:"12px 14px",
+          display:"flex",
+          alignItems:"center",
+          gap:12,
+          cursor:"pointer",
+          fontFamily:"inherit",
+          textAlign:"left",
+        }}
+      >
+        <div style={{ width:38, height:38, borderRadius:10, background:"linear-gradient(135deg,"+C.accent+",#7C3AED)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
+          </svg>
+        </div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2 }}>
+            <span style={{ fontSize:13, fontWeight:700, color:C.text }}>Armar mi plan con IA</span>
+            <span style={{ fontSize:8, fontWeight:800, background:C.accent, color:"#0D1117", borderRadius:4, padding:"1px 5px", letterSpacing:0.5 }}>NUEVO</span>
+          </div>
+          <div style={{ fontSize:10.5, color:C.textMd, lineHeight:1.4 }}>
+            Claude te arma un plan personalizado segun tu objetivo, horizonte y tolerancia al riesgo.
+          </div>
+        </div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
       <div style={{ margin:"12px 14px 0", background:C.card, borderRadius:14, border:"1px solid "+C.border, padding:"12px 14px" }}>
         <div style={{ fontSize:11, fontWeight:700, color:C.textMd, marginBottom:8 }}>{t("distribution")}</div>
         <div style={{ display:"flex", height:10, borderRadius:5, overflow:"hidden", gap:2 }}>{enriched.map((h, i) => <div key={h.ticker} style={{ width:((h.val/tv)*100).toFixed(1)+"%", background:pal[i%pal.length], borderRadius:2 }}/>)}</div>
@@ -1920,6 +1967,8 @@ function PageNoticias({ holdings, onSelectAsset, C, lang }) {
       <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:10, marginBottom:4 }}>
         {["Portafolio","Todos","Acciones","CEDEAR","ETF","Commodity","Crypto"].map(f => <button key={f} onClick={() => setFilter(f)} style={{ background: f===filter ? C.accent : C.card, color: f===filter ? "#fff" : C.textMd, border:"1.5px solid "+(f===filter?C.accent:C.border), borderRadius:20, padding:"5px 13px", fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap", flexShrink:0 }}>{f==="Portafolio" ? "* Portafolio" : f}</button>)}
       </div>
+      {/* AI Sentiment card — summarizes the currently-filtered feed */}
+      <SentimentCard posts={shown.map(n => ({ title: n.title, body: n.body }))} C={C}/>
       {shown.length === 0 && <div style={{ textAlign:"center", padding:"40px 0", color:C.textLt }}>No hay noticias para este filtro</div>}
       <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
         {shown.slice(0,30).map((n, idx) => {
@@ -2792,7 +2841,7 @@ function DevicesPage({ onBack, C }) {
   );
 }
 
-function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, finnhubKey, setFinnhubKey, finnhub, emailjsCfg, setEmailjsCfg, C }) {
+function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, finnhubKey, setFinnhubKey, finnhub, emailjsCfg, setEmailjsCfg, anthropicKey, setAnthropicKey, anthropicModel, setAnthropicModel, C }) {
   const [confirm, setConfirm]       = useState(false);
   const [show2FA, setShow2FA]       = useState(false);
   const [twoFAEnabled, set2FA]      = useState(false);
@@ -2808,6 +2857,12 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
   const [emailKey, setEmailKey]     = useState(emailjsCfg?.publicKey || "");
   const [emailTestMsg, setEmailTestMsg] = useState(null);
   const [emailTestBusy, setEmailTestBusy] = useState(false);
+  // Anthropic (Claude) — mirrors the Finnhub expand/save UX
+  const [showAI, setShowAI] = useState(false);
+  const [anthInput, setAnthInput] = useState(anthropicKey || "");
+  const [anthModelInput, setAnthModelInput] = useState(anthropicModel || ANTHROPIC_DEFAULT_MODEL);
+  const [anthTestMsg, setAnthTestMsg] = useState(null);
+  const [anthTestBusy, setAnthTestBusy] = useState(false);
   const t = useT(lang);
 
   if (showDevices) {
@@ -2945,6 +3000,98 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
           </div>
         )}
 
+        {/* Anthropic (Claude) AI — BYOK, same UX as Finnhub */}
+        <button onClick={() => setShowAI(v => !v)} style={{ width:"100%", background: anthropicKey ? C.green+"18" : C.creamDk, border:"1.5px solid "+(anthropicKey?C.green+"44":C.border), borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ width:36, height:36, borderRadius:10, background:(anthropicKey?C.green:C.accent)+"22", display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={anthropicKey?C.green:C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2a5 5 0 0 1 5 5v1a5 5 0 0 1-5 5 5 5 0 0 1-5-5V7a5 5 0 0 1 5-5z"/>
+                <path d="M19 13v1a7 7 0 0 1-14 0v-1"/>
+                <path d="M12 19v3"/>
+              </svg>
+            </div>
+            <div>
+              <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Coach IA (Claude)</div>
+              <div style={{ fontSize:11, color: anthropicKey ? C.green : C.textLt }}>
+                {anthropicKey ? `Activo · modelo ${anthropicModel}` : "Modo demo — configura tu API key para respuestas en vivo"}
+              </div>
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: showAI ? "rotate(90deg)" : "rotate(0deg)", transition:"transform 0.2s" }}><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+        {showAI && (
+          <div style={{ background:C.card, borderRadius:12, border:"1px solid "+C.border, padding:"14px", marginBottom:8 }}>
+            <div style={{ fontSize:11, color:C.textMd, lineHeight:1.5, marginBottom:10 }}>
+              Habilita el <strong style={{ color:C.text }}>Coach IA</strong>, <strong style={{ color:C.text }}>Objetivos personalizados</strong> y el <strong style={{ color:C.text }}>analisis de sentimiento</strong> de noticias. Sacas tu API key en <span style={{ color:C.accent, fontWeight:600 }}>console.anthropic.com</span>. La key queda solo en tu navegador y se manda directo a Anthropic.
+            </div>
+
+            <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:6 }}>API KEY</div>
+            <input
+              value={anthInput}
+              onChange={e => setAnthInput(e.target.value.trim())}
+              placeholder="sk-ant-api03-..."
+              type="password"
+              autoComplete="off"
+              style={{ background:C.bg, border:"1.5px solid "+C.border, borderRadius:10, padding:"10px 12px", fontSize:12, fontFamily:"monospace", color:C.text, outline:"none", width:"100%", boxSizing:"border-box", marginBottom:10 }}
+            />
+
+            <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:6 }}>MODELO</div>
+            <select
+              value={anthModelInput}
+              onChange={e => setAnthModelInput(e.target.value)}
+              style={{ background:C.bg, border:"1.5px solid "+C.border, borderRadius:10, padding:"10px 12px", fontSize:12, color:C.text, outline:"none", width:"100%", boxSizing:"border-box", marginBottom:10, fontFamily:"inherit" }}
+            >
+              <option value="claude-sonnet-4-6">claude-sonnet-4-6 (recomendado)</option>
+              <option value="claude-opus-4-6">claude-opus-4-6 (mas preciso, mas caro)</option>
+              <option value="claude-haiku-4-5-20251001">claude-haiku-4-5 (rapido y barato)</option>
+            </select>
+
+            <div style={{ display:"flex", gap:8 }}>
+              <button
+                onClick={() => { setAnthropicKey(anthInput || null); setAnthropicModel(anthModelInput); setAnthTestMsg({ type: anthInput ? "ok" : "info", text: anthInput ? "Key guardada en este navegador" : "Key eliminada — volvimos a modo demo" }); }}
+                disabled={!anthInput && !anthropicKey}
+                style={{ flex:2, background: anthInput ? C.accent : C.creamDk, color: anthInput ? "#fff" : C.textLt, border:"none", borderRadius:10, padding:"10px", fontWeight:600, fontSize:12, cursor: anthInput || anthropicKey ? "pointer" : "not-allowed", fontFamily:"inherit" }}>
+                {anthropicKey === anthInput && anthropicKey ? "Guardada" : "Guardar"}
+              </button>
+              <button
+                onClick={async () => {
+                  if (!anthInput) { setAnthTestMsg({ type:"err", text:"Pega una API key primero" }); return; }
+                  // Save-then-test so the helper reads the latest value from storage
+                  setAnthropicKey(anthInput);
+                  setAnthropicModel(anthModelInput);
+                  setAnthTestBusy(true);
+                  setAnthTestMsg(null);
+                  try {
+                    const r = await testAnthropic();
+                    setAnthTestMsg({ type:"ok", text: "OK · Claude respondio: \"" + r.slice(0, 40) + "\"" });
+                  } catch (e) {
+                    setAnthTestMsg({ type:"err", text: (e?.message || "Error desconocido").slice(0, 120) });
+                  } finally { setAnthTestBusy(false); }
+                }}
+                disabled={anthTestBusy}
+                style={{ flex:1, background:"transparent", color:C.textMd, border:"1.5px solid "+C.border, borderRadius:10, padding:"10px", fontWeight:500, fontSize:12, cursor: anthTestBusy ? "not-allowed" : "pointer", fontFamily:"inherit" }}>
+                {anthTestBusy ? "…" : "Probar"}
+              </button>
+              {anthropicKey && (
+                <button
+                  onClick={() => { setAnthropicKey(null); setAnthInput(""); setAnthTestMsg({ type:"info", text:"Key eliminada — volvimos a modo demo" }); }}
+                  style={{ flex:1, background:"transparent", color:C.textMd, border:"1.5px solid "+C.border, borderRadius:10, padding:"10px", fontWeight:500, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                  Quitar
+                </button>
+              )}
+            </div>
+
+            {anthTestMsg && (
+              <div style={{ marginTop:10, padding:"8px 10px", borderRadius:8, fontSize:11, background: anthTestMsg.type === "ok" ? C.green+"22" : anthTestMsg.type === "err" ? C.red+"22" : C.creamDk, color: anthTestMsg.type === "ok" ? C.green : anthTestMsg.type === "err" ? C.red : C.textMd, border:"1px solid "+(anthTestMsg.type === "ok" ? C.green+"55" : anthTestMsg.type === "err" ? C.red+"55" : C.border) }}>
+                {anthTestMsg.text}
+              </div>
+            )}
+            <div style={{ fontSize:10, color:C.textLt, marginTop:10, lineHeight:1.5 }}>
+              <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" style={{ color:C.accent, fontWeight:600 }}>Crear API key →</a> · La key se manda con el header <span style={{ fontFamily:"monospace" }}>anthropic-dangerous-direct-browser-access</span>. Si preferis no exponerla al navegador, revisa las instrucciones del proxy en el README.
+            </div>
+          </div>
+        )}
+
         {/* EmailJS — transactional email for signup confirmation */}
         <button onClick={() => setShowEmail(v => !v)} style={{ width:"100%", background: emailjsCfg ? C.green+"18" : C.creamDk, border:"1.5px solid "+(emailjsCfg?C.green+"44":C.border), borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
@@ -3064,8 +3211,8 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
 // MOBILE PHONE WRAPPER
 // ============================================================
 function MobileApp({ appState, handlers, C }) {
-  const { loggedIn, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, finnhubKey, finnhub, emailjsCfg } = appState;
-  const { setLoggedIn, handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, setFinnhubKey, setEmailjsCfg } = handlers;
+  const { loggedIn, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel } = appState;
+  const { setLoggedIn, handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel } = handlers;
   const t = useT(lang);
   const TABS = [{ id:"portfolio",label:t("portfolio") },{ id:"mercado",label:t("mercado") },{ id:"noticias",label:t("noticias") },{ id:"ideas",label:t("inversiones") },{ id:"ordenes",label:t("ordenes") }];
   const totalARS = holdings.reduce((s, h) => { const a = ASSETS.find(x => x.ticker === h.ticker); return s + (a ? h.qty * a.price : 0); }, 0);
@@ -3088,7 +3235,7 @@ function MobileApp({ appState, handlers, C }) {
       <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:110, height:26, background:"#0a0a0a", borderRadius:"0 0 16px 16px", zIndex:30 }}/>
       {!loggedIn && <LoginScreen onLogin={handleLogin} onSignup={handleSignup} emailjsCfg={emailjsCfg} C={C}/>}
       {showTutorial && <OnboardingTutorial onClose={finishTutorial} onComplete={finishTutorial} setTab={setTab} setShowUSD={setShowUSD} setShowProfile={setShowProfile} currentTab={tab} C={C}/>}
-      {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} finnhubKey={finnhubKey} setFinnhubKey={setFinnhubKey} finnhub={finnhub} emailjsCfg={emailjsCfg} setEmailjsCfg={setEmailjsCfg} C={C}/>}
+      {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} finnhubKey={finnhubKey} setFinnhubKey={setFinnhubKey} finnhub={finnhub} emailjsCfg={emailjsCfg} setEmailjsCfg={setEmailjsCfg} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} anthropicModel={anthropicModel} setAnthropicModel={setAnthropicModel} C={C}/>}
       {toast && <div style={{ position:"absolute", top:34, left:14, right:14, zIndex:50, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 14px", fontSize:12, fontWeight:700 }}>{toast.msg}</div>}
       {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} C={C}/>}
       {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} C={C}/>}
@@ -3113,6 +3260,7 @@ function MobileApp({ appState, handlers, C }) {
       <TickerBanner C={C}/>
       <FXStrip C={C} totalARS={totalARS}/>
       <div style={{ flex:1, overflowY:"auto", paddingBottom:84 }}>{renderPage()}</div>
+      {loggedIn && <CoachChat holdings={holdings} assets={ASSETS} C={C} lang={lang}/>}
       <div style={{ position:"absolute", bottom:0, left:0, right:0, background:C.isDark?"#0F0F0F":C.card, borderTop:"1px solid "+C.border, display:"flex", height:78, zIndex:20, paddingTop:6, paddingBottom:4 }}>
         {TABS.map(t => {
           const active = tab === t.id;
@@ -3136,8 +3284,8 @@ function MobileApp({ appState, handlers, C }) {
 // WEB DASHBOARD LAYOUT
 // ============================================================
 function WebDashboard({ appState, handlers, C }) {
-  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, showProfile, showUSD, showTutorial, lang, watchlist, finnhubKey, finnhub, emailjsCfg } = appState;
-  const { setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, setShowProfile, setIsDark, setShowUSD, setLang, finishTutorial, toggleWatchlist, setFinnhubKey, setEmailjsCfg, handleDeposit } = handlers;
+  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, showProfile, showUSD, showTutorial, lang, watchlist, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel } = appState;
+  const { setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, setShowProfile, setIsDark, setShowUSD, setLang, finishTutorial, toggleWatchlist, setFinnhubKey, setEmailjsCfg, handleDeposit, setAnthropicKey, setAnthropicModel } = handlers;
   const [sideTab, setSideTab] = useState("portfolio");
   const t = useT(lang);
   const TABS2 = [{ id:"portfolio",label:t("portfolio"),icon:"portfolio" },{ id:"mercado",label:t("mercado"),icon:"mercado" },{ id:"noticias",label:t("noticias"),icon:"noticias" },{ id:"ideas",label:t("inversiones"),icon:"ideas" },{ id:"bonos",label:t("bonos"),icon:"bonos" },{ id:"ordenes",label:t("ordenes"),icon:"ordenes" },{ id:"reportes",label:t("reportes"),icon:"reportes" }];
@@ -3197,9 +3345,10 @@ function WebDashboard({ appState, handlers, C }) {
         <div style={{ flex:1, position:"relative", maxWidth:600 }}>
           {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} C={C}/>}
           {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} C={C}/>}
-          {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} finnhubKey={finnhubKey} setFinnhubKey={setFinnhubKey} finnhub={finnhub} emailjsCfg={emailjsCfg} setEmailjsCfg={setEmailjsCfg} C={C}/>}
+          {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} finnhubKey={finnhubKey} setFinnhubKey={setFinnhubKey} finnhub={finnhub} emailjsCfg={emailjsCfg} setEmailjsCfg={setEmailjsCfg} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} anthropicModel={anthropicModel} setAnthropicModel={setAnthropicModel} C={C}/>}
           {toast && <div style={{ position:"fixed", top:70, left:"50%", transform:"translateX(-50%)", zIndex:99, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 20px", fontSize:13, fontWeight:700, boxShadow:"0 8px 32px rgba(0,0,0,0.3)" }}>{toast.msg}</div>}
           <div style={{ overflowY:"auto", height:"calc(100vh - 56px)" }}>{renderPage()}</div>
+          <CoachChat holdings={holdings} assets={ASSETS} C={C} lang={lang}/>
         </div>
         <div style={{ width:320, background:C.card, borderLeft:"1px solid "+C.border, padding:"20px 16px", position:"sticky", top:56, height:"calc(100vh - 56px)", overflowY:"auto" }}>
           <div style={{ fontWeight:700, fontSize:14, color:C.text, marginBottom:16 }}>Mercado en vivo</div>
@@ -3245,6 +3394,10 @@ export default function SAMASApp() {
   const [viewMode, setViewMode]       = useState("mobile");
   const [finnhubKey, setFinnhubKey]   = useState(() => loadKey());
   const [emailjsCfg, setEmailjsCfg]   = useState(() => loadEmailjsConfig());
+  // Anthropic (Claude) — BYOK. Same pattern as Finnhub: localStorage-backed,
+  // user pastes their own key in the Profile sheet.
+  const [anthropicKey, setAnthropicKey] = useState(() => loadAnthropicKey());
+  const [anthropicModel, setAnthropicModelState] = useState(() => loadAnthropicModel());
 
   const C = makeTheme(isDark);
 
@@ -3255,6 +3408,9 @@ export default function SAMASApp() {
   // Persist the key whenever it changes
   useEffect(() => { saveKey(finnhubKey); }, [finnhubKey]);
   useEffect(() => { saveEmailjsConfig(emailjsCfg); }, [emailjsCfg]);
+  useEffect(() => { saveAnthropicKey(anthropicKey); }, [anthropicKey]);
+  useEffect(() => { saveAnthropicModel(anthropicModel); }, [anthropicModel]);
+  const setAnthropicModel = (m) => setAnthropicModelState(m || ANTHROPIC_DEFAULT_MODEL);
 
   useEffect(() => {
     const handler = () => setShowTutorial(true);
@@ -3329,8 +3485,8 @@ export default function SAMASApp() {
     showToast(`$${fN(amount)} acreditados via ${methodLabel}`, C.green);
   };
 
-  const appState = { isDark, loggedIn, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, finnhubKey, finnhub, emailjsCfg };
-  const handlers = { setLoggedIn, handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, setFinnhubKey, setEmailjsCfg };
+  const appState = { isDark, loggedIn, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel };
+  const handlers = { setLoggedIn, handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel };
 
   const outerBg = isDark ? "#080808" : "#050505";
 
