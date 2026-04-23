@@ -1788,17 +1788,31 @@ function TabIcon({ id, active, C, bigger }) {
 // ============================================================
 // SAMAS LOGO
 // ============================================================
-function SamasMark({ size = 32, markColor = "#0A1226", dotColor = "#1FB870" }) {
+function SamasMark({ size = 56, markColor = "#0A1226", dotColor = "#1FB870" }) {
   const w = size;
-  const h = size * 1.18;
+  const h = size * 1.2;
+  // Two 240° arcs offset diagonally, forming an S with a visible gap mid-height.
+  // Upper stroke is a reversed-C (⊃) pinned to upper-left; lower is a C (⊂) pinned to lower-right.
   return (
-    <svg width={w} height={h} viewBox="0 0 40 48" fill="none" aria-label="SAMAS">
-      {/* S — upper curve: from upper-right, looping left, down to mid-left */}
-      <path d="M 33 11 A 11 11 0 1 0 19 24" stroke={markColor} strokeWidth="6" strokeLinecap="round" fill="none"/>
-      {/* S — lower curve: from mid-right, looping right, down to bottom-left */}
-      <path d="M 19 24 A 11 11 0 1 1 9 37" stroke={markColor} strokeWidth="6" strokeLinecap="round" fill="none"/>
-      {/* green accent dot */}
-      <circle cx="24" cy="26" r="4.5" fill={dotColor}/>
+    <svg width={w} height={h} viewBox="0 0 100 120" fill="none" aria-label="SAMAS">
+      {/* Upper stroke — reversed C (⊃), curve on left, endpoints on right */}
+      <path
+        d="M 51 16 A 22 22 0 1 0 51 54"
+        stroke={markColor}
+        strokeWidth="12"
+        strokeLinecap="round"
+        fill="none"
+      />
+      {/* Lower stroke — regular C (⊂), curve on right, endpoints on left */}
+      <path
+        d="M 49 66 A 22 22 0 1 1 49 104"
+        stroke={markColor}
+        strokeWidth="12"
+        strokeLinecap="round"
+        fill="none"
+      />
+      {/* Green accent dot — sits inside the gap, slightly right of center */}
+      <circle cx="56" cy="60" r="9" fill={dotColor} />
     </svg>
   );
 }
@@ -2403,7 +2417,7 @@ function WebDashboard({ appState, handlers, C }) {
 // MAIN APP
 // ============================================================
 export default function SAMASApp() {
-  const [isDark, setIsDark]           = useState(false);
+  const [isDark, setIsDark]           = useState(true);
   const [loggedIn, setLoggedIn]       = useState(false);
   const [hasSeenTutorial, setHasSeen] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
