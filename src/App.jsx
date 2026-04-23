@@ -3026,6 +3026,10 @@ function loadNewsEndpoint() {
 function PageNoticias({ holdings, onSelectAsset, C, lang }) {
   const t = useT(lang);
   const [filter, setFilter] = useState("Portafolio");
+  // Sort order. "recientes" = original CNBC-ish order we already have;
+  // "relevancia" = prioritize items that touch a ticker in the user's
+  // portfolio, then ticker count, then original order.
+  const [sort, setSort]     = useState("relevancia");
   const [news, setNews]     = useState(NEWS);
   const [status, setStatus] = useState("demo");  // "demo" | "loading" | "ok" | "error"
   const portT = holdings.map(h => h.ticker);
@@ -3061,17 +3065,100 @@ function PageNoticias({ holdings, onSelectAsset, C, lang }) {
       .finally(() => clearTimeout(timeoutId));
     return () => { clearTimeout(timeoutId); ac.abort(); };
   };
-  const shown = filter === "Portafolio" ? news.filter(n => n.tickers.some(t => portT.includes(t))) : filter === "Todos" ? news : news.filter(n => n.cat === filter);
+  // Filter the news first, then sort. "relevancia" pushes the items that
+  // mention a ticker in the user's portfolio to the top; ties broken by
+  // ticker count (more mentioned = higher) and then original position.
+  let shown = filter === "Portafolio"
+    ? news.filter(n => n.tickers.some(t => portT.includes(t)))
+    : filter === "Todos"
+      ? news
+      : news.filter(n => n.cat === filter);
+  if (sort === "relevancia" && portT.length > 0) {
+    const score = (n) => {
+      const portfolioHits = (n.tickers || []).filter(t => portT.includes(t)).length;
+      return portfolioHits * 100 + (n.tickers || []).length;
+    };
+    shown = [...shown].sort((a, b) => score(b) - score(a));
+  }
+  const hasHoldings = portT.length > 0;
+
   return (
     <div style={{ padding:"14px 14px 20px" }}>
       <div style={{ marginBottom:12, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
         <div><div style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:2 }}>{t("news_title")}</div><div style={{ fontSize:10, color: status==="ok" ? C.green : status==="error" ? C.red : C.textLt }}>{status==="loading" ? t("news_loading") : status==="ok" ? t("news_live") : status==="error" ? t("news_demo") : t("news_demo")}</div></div>
         <button onClick={fetchN} style={{ background:C.creamDk, border:"1px solid "+C.border, borderRadius:8, padding:"5px 10px", fontSize:11, cursor:"pointer", color:C.textMd, fontFamily:"inherit" }}>Refresh</button>
       </div>
-      <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:10, marginBottom:4 }}>
-        {["Portafolio","Todos","Acciones","CEDEAR","ETF","Commodity","Crypto"].map(f => <button key={f} onClick={() => setFilter(f)} style={{ background: f===filter ? C.accent : C.card, color: f===filter ? "#fff" : C.textMd, border:"1.5px solid "+(f===filter?C.accent:C.border), borderRadius:20, padding:"5px 13px", fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap", flexShrink:0 }}>{f==="Portafolio" ? "* Portafolio" : f}</button>)}
+
+      {/* Promoted "Mi cartera" pill — distinct from the category pills
+          so the portfolio filter reads as a first-class option instead of
+          one among many. Shows active-holdings count so empty portfolios
+          get honest feedback instead of a silently empty list. */}
+      {hasHoldings && (
+        <button
+          onClick={() => setFilter(filter === "Portafolio" ? "Todos" : "Portafolio")}
+          style={{
+            width:"100%",
+            background: filter === "Portafolio" ? "linear-gradient(135deg, "+C.gold+"33, "+C.accent+"22)" : C.card,
+            border: "1.5px solid " + (filter === "Portafolio" ? C.gold + "66" : C.border),
+            borderRadius: 12,
+            padding: "10px 12px",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            textAlign: "left",
+            marginBottom: 10,
+          }}
+        >
+          <div style={{ width:30, height:30, borderRadius:8, background: C.gold + "22", color: C.gold, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          </div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:12.5, fontWeight:700, color:C.text }}>Solo mi cartera</div>
+            <div style={{ fontSize:10, color:C.textMd }}>Noticias que tocan tus {portT.length} {portT.length === 1 ? "activo" : "activos"}</div>
+          </div>
+          <div style={{ width:34, height:20, borderRadius:10, background: filter === "Portafolio" ? C.gold : C.creamDk, position:"relative", flexShrink:0, border:"1.5px solid "+(filter === "Portafolio" ? C.gold : C.border), transition:"background 0.2s" }}>
+            <div style={{ position:"absolute", top:1, left: filter === "Portafolio" ? 15 : 1, width:14, height:14, borderRadius:"50%", background:"#fff", transition:"left 0.2s" }}/>
+          </div>
+        </button>
+      )}
+
+      {/* Category filter + sort row */}
+      <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:6, marginBottom:4 }}>
+        {["Todos","Acciones","CEDEAR","ETF","Commodity","Crypto"].map(f => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            style={{ background: f===filter ? C.accent : C.card, color: f===filter ? "#fff" : C.textMd, border:"1.5px solid "+(f===filter?C.accent:C.border), borderRadius:20, padding:"5px 13px", fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap", flexShrink:0 }}
+          >
+            {f}
+          </button>
+        ))}
       </div>
-      {shown.length === 0 && <div style={{ textAlign:"center", padding:"40px 0", color:C.textLt }}>No hay noticias para este filtro</div>}
+      <div style={{ display:"flex", gap:6, fontSize:10, color:C.textLt, marginBottom:8 }}>
+        <span style={{ fontWeight:700, letterSpacing:0.5 }}>Orden:</span>
+        {[["relevancia","Relevancia a mi cartera"], ["recientes","Más recientes"]].map(([k, label]) => (
+          <button
+            key={k}
+            onClick={() => setSort(k)}
+            style={{ background:"transparent", border:"none", padding:0, cursor:"pointer", fontFamily:"inherit", fontSize:10, fontWeight: sort === k ? 800 : 500, color: sort === k ? C.accent : C.textMd, textDecoration: sort === k ? "underline" : "none", textUnderlineOffset:3 }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Empty states — distinguishable between "no news for filter" and
+          "you haven't traded yet so there's nothing personalized". */}
+      {shown.length === 0 && filter === "Portafolio" && (
+        <div style={{ textAlign:"center", padding:"24px 12px", background:C.card, border:"1px dashed "+C.border, borderRadius:12, color:C.textLt, fontSize:11, lineHeight:1.5 }}>
+          {hasHoldings
+            ? "Ninguna de las noticias de hoy toca tus activos. Cambiá el filtro o volvé en un rato."
+            : <>No tenés posiciones aún. Comprá algún activo en <strong style={{ color:C.text }}>Mercado</strong> para ver noticias personalizadas acá.</>}
+        </div>
+      )}
+      {shown.length === 0 && filter !== "Portafolio" && <div style={{ textAlign:"center", padding:"40px 0", color:C.textLt }}>No hay noticias para este filtro</div>}
       <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
         {shown.slice(0,30).map((n, idx) => {
           const related = ASSETS.filter(a => n.tickers.includes(a.ticker));
