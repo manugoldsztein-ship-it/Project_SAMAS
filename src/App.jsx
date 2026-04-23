@@ -1496,7 +1496,7 @@ function AssetDetail({ asset, holding, stopLoss, priceAlert, balance, isInWatchl
               </div>
             </div>
             <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-              <button onClick={() => onToggleWatchlist(asset.ticker)} title={isInWatchlist ? "Quitar de favoritos" : "Agregar a favoritos"}
+              <button onClick={() => onToggleWatchlist(asset.ticker)} title={isInWatchlist ? "Quitar de watchlist" : "Agregar a watchlist"}
                 style={{ background:isInWatchlist?C.gold+"22":"transparent", border:"1.5px solid "+(isInWatchlist?C.gold+"66":C.border), borderRadius:10, cursor:"pointer", padding:"6px 8px", display:"flex", alignItems:"center", gap:4, fontFamily:"inherit" }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill={isInWatchlist?C.gold:"none"} stroke={isInWatchlist?C.gold:C.textMd} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
               </button>
@@ -2445,8 +2445,16 @@ function PageWatchlist({ watchlists, onCreate, onRename, onRemove, onRemoveTicke
   const [editName, setEditName]   = useState("");
   const [creating, setCreating]   = useState(false);
   const [newName, setNewName]     = useState("");
+  // Per-list collapsed state, persisted so your choice sticks across
+  // sessions. All lists start expanded; toggle via the header chevron or
+  // anywhere on the list's title row that isn't a button.
+  const [collapsed, setCollapsed] = usePersistedState("samas_watchlist_collapsed", {});
+  const toggleCollapsed = (id) => setCollapsed(prev => ({ ...prev, [id]: !prev[id] }));
   const lists = Array.isArray(watchlists) ? watchlists : [];
   const total = lists.reduce((s, l) => s + (l.tickers?.length || 0), 0);
+  const expandAll = () => setCollapsed({});
+  const collapseAll = () => setCollapsed(Object.fromEntries(lists.map(l => [l.id, true])));
+  const anyCollapsed = lists.some(l => collapsed[l.id]);
 
   function submitCreate() {
     const name = newName.trim();
@@ -2464,21 +2472,31 @@ function PageWatchlist({ watchlists, onCreate, onRename, onRemove, onRemoveTicke
   return (
     <div style={{ padding:"14px 14px 20px" }}>
       {/* Header */}
-      <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"space-between", marginBottom:14 }}>
-        <div>
+      <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"space-between", marginBottom:14, gap:10 }}>
+        <div style={{ minWidth:0 }}>
           <div style={{ fontSize:18, fontWeight:800, color:C.text, display:"flex", alignItems:"center", gap:8 }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill={C.gold} stroke={C.gold} strokeWidth="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-            Favoritos
+            Watchlist
           </div>
           <div style={{ fontSize:10.5, color:C.textMd, marginTop:2 }}>{lists.length} {lists.length === 1 ? "lista" : "listas"} · {total} activos</div>
         </div>
-        <button
-          onClick={() => { setCreating(true); }}
-          style={{ background:C.accent, color:"#fff", border:"none", borderRadius:10, padding:"7px 12px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:5 }}
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Nueva lista
-        </button>
+        <div style={{ display:"flex", gap:6, alignItems:"center", flexShrink:0 }}>
+          {lists.length > 1 && (
+            <button
+              onClick={anyCollapsed ? expandAll : collapseAll}
+              style={{ background:"transparent", color:C.textMd, border:"1px solid "+C.border, borderRadius:10, padding:"7px 10px", fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}
+            >
+              {anyCollapsed ? "Expandir" : "Colapsar"}
+            </button>
+          )}
+          <button
+            onClick={() => { setCreating(true); }}
+            style={{ background:C.accent, color:"#fff", border:"none", borderRadius:10, padding:"7px 12px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:5 }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Nueva lista
+          </button>
+        </div>
       </div>
 
       {/* Inline "create list" row */}
@@ -2503,7 +2521,7 @@ function PageWatchlist({ watchlists, onCreate, onRename, onRemove, onRemoveTicke
         <div style={{ background:C.card, borderRadius:14, border:"1.5px dashed "+C.border, padding:"28px 18px", textAlign:"center" }}>
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom:8 }}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
           <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:4 }}>Aún no tenés listas</div>
-          <div style={{ fontSize:11, color:C.textLt, lineHeight:1.5 }}>Creá una para organizar tus activos favoritos por tema (tech, energía, dolarizado, etc).</div>
+          <div style={{ fontSize:11, color:C.textLt, lineHeight:1.5 }}>Creá una para organizar tus activos por tema (tech, energía, dolarizado, etc).</div>
         </div>
       )}
 
@@ -2511,10 +2529,16 @@ function PageWatchlist({ watchlists, onCreate, onRename, onRemove, onRemoveTicke
         {lists.map((list, idx) => {
           const tickers = list.tickers || [];
           const isEditing = editingId === list.id;
+          const isCollapsed = !!collapsed[list.id];
           return (
             <div key={list.id} style={{ background:C.card, border:"1px solid "+C.border, borderRadius:14, overflow:"hidden" }}>
-              {/* List header */}
-              <div style={{ display:"flex", alignItems:"center", gap:8, padding:"12px 14px", borderBottom: tickers.length ? "1px solid "+C.border+"66" : "none" }}>
+              {/* List header — clickable anywhere outside the action buttons
+                  to toggle collapse. Chevron on the right shows current
+                  state and rotates when expanded. */}
+              <div
+                onClick={(e) => { if (!isEditing) toggleCollapsed(list.id); }}
+                style={{ display:"flex", alignItems:"center", gap:8, padding:"12px 14px", borderBottom: !isCollapsed && tickers.length ? "1px solid "+C.border+"66" : "none", cursor: isEditing ? "default" : "pointer", userSelect: "none" }}
+              >
                 <div style={{ width:28, height:28, borderRadius:8, background:C.gold+"22", color:C.gold, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
                 </div>
@@ -2524,8 +2548,9 @@ function PageWatchlist({ watchlists, onCreate, onRename, onRemove, onRemoveTicke
                       autoFocus
                       value={editName}
                       maxLength={40}
+                      onClick={(e) => e.stopPropagation()}
                       onChange={e => setEditName(e.target.value)}
-                      onKeyDown={e => { if (e.key === "Enter") submitRename(); if (e.key === "Escape") { setEditingId(null); setEditName(""); } }}
+                      onKeyDown={e => { e.stopPropagation(); if (e.key === "Enter") submitRename(); if (e.key === "Escape") { setEditingId(null); setEditName(""); } }}
                       onBlur={submitRename}
                       style={{ width:"100%", background:C.bg, border:"1.5px solid "+C.accent+"66", borderRadius:8, padding:"5px 8px", fontSize:13, fontWeight:700, color:C.text, outline:"none", fontFamily:"inherit" }}
                     />
@@ -2539,7 +2564,7 @@ function PageWatchlist({ watchlists, onCreate, onRename, onRemove, onRemoveTicke
                 {!isEditing && (
                   <>
                     <button
-                      onClick={() => { setEditingId(list.id); setEditName(list.name); }}
+                      onClick={(e) => { e.stopPropagation(); setEditingId(list.id); setEditName(list.name); }}
                       title="Renombrar"
                       style={{ background:"transparent", border:"none", padding:5, color:C.textMd, cursor:"pointer" }}
                     >
@@ -2547,19 +2572,22 @@ function PageWatchlist({ watchlists, onCreate, onRename, onRemove, onRemoveTicke
                     </button>
                     {lists.length > 1 && (
                       <button
-                        onClick={() => { if (window.confirm("Borrar la lista \""+list.name+"\"?")) onRemove && onRemove(list.id); }}
+                        onClick={(e) => { e.stopPropagation(); if (window.confirm("Borrar la lista \""+list.name+"\"?")) onRemove && onRemove(list.id); }}
                         title="Borrar lista"
                         style={{ background:"transparent", border:"none", padding:5, color:C.red, cursor:"pointer" }}
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14H7L5 6"/><path d="M10 11v6M14 11v6"/></svg>
                       </button>
                     )}
+                    <div style={{ color: C.textMd, padding: 2, marginLeft: 2, transform: isCollapsed ? "rotate(0deg)" : "rotate(180deg)", transition: "transform 0.2s" }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                    </div>
                   </>
                 )}
               </div>
 
-              {/* Tickers */}
-              {tickers.length === 0 ? (
+              {/* Tickers — hidden when the list is collapsed. */}
+              {!isCollapsed && (tickers.length === 0 ? (
                 <div style={{ padding:"16px", textAlign:"center", fontSize:10.5, color:C.textLt, lineHeight:1.5 }}>
                   Lista vacía. Tocá la estrella en cualquier activo para agregarlo.
                 </div>
@@ -2590,7 +2618,7 @@ function PageWatchlist({ watchlists, onCreate, onRename, onRemove, onRemoveTicke
                     </button>
                   </div>
                 );
-              })}
+              }))}
             </div>
           );
         })}
@@ -4118,7 +4146,7 @@ function MobileApp({ appState, handlers, C }) {
   // of the visible region on some scroll offsets).
   const [showObjectives, setShowObjectives] = useState(false);
   const t = useT(lang);
-  const TABS = [{ id:"portfolio",label:t("portfolio") },{ id:"mercado",label:t("mercado") },{ id:"favoritos",label:"Favoritos" },{ id:"noticias",label:t("noticias") },{ id:"ordenes",label:t("ordenes") }];
+  const TABS = [{ id:"portfolio",label:t("portfolio") },{ id:"mercado",label:t("mercado") },{ id:"favoritos",label:"Watchlist" },{ id:"noticias",label:t("noticias") },{ id:"ordenes",label:t("ordenes") }];
   const totalARS = holdings.reduce((s, h) => { const a = ASSETS.find(x => x.ticker === h.ticker); return s + (a ? h.qty * a.price : 0); }, 0);
   const newsBadge = NEWS.filter(n => n.tickers.some(t => holdings.map(h => h.ticker).includes(t))).length;
   const getH = t => holdings.find(h => h.ticker === t);
@@ -4196,7 +4224,7 @@ function WebDashboard({ appState, handlers, C }) {
   // MobileApp — keeps the overlay out of the page's scroll container.
   const [showObjectives, setShowObjectives] = useState(false);
   const t = useT(lang);
-  const TABS2 = [{ id:"portfolio",label:t("portfolio"),icon:"portfolio" },{ id:"mercado",label:t("mercado"),icon:"mercado" },{ id:"favoritos",label:"Favoritos",icon:"favoritos" },{ id:"noticias",label:t("noticias"),icon:"noticias" },{ id:"ideas",label:t("inversiones"),icon:"ideas" },{ id:"bonos",label:t("bonos"),icon:"bonos" },{ id:"ordenes",label:t("ordenes"),icon:"ordenes" },{ id:"reportes",label:t("reportes"),icon:"reportes" }];
+  const TABS2 = [{ id:"portfolio",label:t("portfolio"),icon:"portfolio" },{ id:"mercado",label:t("mercado"),icon:"mercado" },{ id:"favoritos",label:"Watchlist",icon:"favoritos" },{ id:"noticias",label:t("noticias"),icon:"noticias" },{ id:"ideas",label:t("inversiones"),icon:"ideas" },{ id:"bonos",label:t("bonos"),icon:"bonos" },{ id:"ordenes",label:t("ordenes"),icon:"ordenes" },{ id:"reportes",label:t("reportes"),icon:"reportes" }];
   const totalARS = holdings.reduce((s, h) => { const a = ASSETS.find(x => x.ticker === h.ticker); return s + (a ? h.qty * a.price : 0); }, 0);
   const getH = t => holdings.find(h => h.ticker === t);
   const getSL = t => stopLosses[t] || null;
@@ -4317,11 +4345,11 @@ export default function SAMASApp() {
       if (legacy) {
         const tickers = JSON.parse(legacy);
         if (Array.isArray(tickers) && tickers.length) {
-          return [{ id: "default", name: "Mis Favoritos", tickers }];
+          return [{ id: "default", name: "Mi Watchlist", tickers }];
         }
       }
     } catch {}
-    return [{ id: "default", name: "Mis Favoritos", tickers: ["SPY","BTC","GGAL"] }];
+    return [{ id: "default", name: "Mi Watchlist", tickers: ["SPY","BTC","GGAL"] }];
   })());
   // Flattened set of tickers across ALL lists — consumed by AssetDetail
   // to decide whether to render a filled star. Derived, not stored.
@@ -4405,15 +4433,15 @@ export default function SAMASApp() {
   const toggleWatchlist = (ticker) => {
     setWatchlists(prev => {
       if (!prev || !prev.length) {
-        haptic("tap"); showToast("Agregado a favoritos: " + ticker, C.gold);
-        return [{ id: "default", name: "Mis Favoritos", tickers: [ticker] }];
+        haptic("tap"); showToast("Agregado a watchlist:" + ticker, C.gold);
+        return [{ id: "default", name: "Mi Watchlist", tickers: [ticker] }];
       }
       const has = prev.some(l => (l.tickers || []).includes(ticker));
       if (has) {
-        haptic("tap"); showToast("Removido de favoritos: " + ticker, C.textMd);
+        haptic("tap"); showToast("Removido de watchlist:" + ticker, C.textMd);
         return prev.map(l => ({ ...l, tickers: (l.tickers || []).filter(t => t !== ticker) }));
       }
-      haptic("tap"); showToast("Agregado a favoritos: " + ticker, C.gold);
+      haptic("tap"); showToast("Agregado a watchlist:" + ticker, C.gold);
       return prev.map((l, i) => i === 0 ? { ...l, tickers: [...(l.tickers || []), ticker] } : l);
     });
   };
@@ -4463,7 +4491,7 @@ export default function SAMASApp() {
     setHoldings([]);
     setStopLosses({});
     setPriceAlerts({});
-    setWatchlists([{ id: "default", name: "Mis Favoritos", tickers: [] }]);
+    setWatchlists([{ id: "default", name: "Mi Watchlist", tickers: [] }]);
     setOrders([]);
     setBalance(100000);  // $100k ARS starter balance for a demo account
     setSavedPlan(null);  // new user, no plan yet
