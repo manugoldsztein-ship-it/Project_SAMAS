@@ -703,16 +703,30 @@ function StatCard({ label, value, sub, C }) {
 function CurrencyInput({ value, onChange, currency = "ARS", C }) {
   const prefix = currency === "USD" ? "u$s" : "$";
   const leftPad = currency === "USD" ? 40 : 26;
+  // Show the raw number while typing so we don't fight the user's cursor.
+  // When the value is 0 we render empty + use a placeholder — avoids the
+  // classic "0432323" bug where typing appends to a stray leading zero.
+  // Using type="text" + inputMode="numeric" gives us full control over
+  // what gets into state (number inputs strip leading zeros inconsistently
+  // across browsers and have other quirks with spinners/scientific entry).
+  const display = value > 0 ? String(value) : "";
   return (
     <div style={{ position:"relative" }}>
-      <span style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", color:C.textLt, fontSize:14, fontWeight:600 }}>{prefix}</span>
+      <span style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", color:C.textLt, fontSize:14, fontWeight:600, pointerEvents:"none" }}>{prefix}</span>
       <input
-        type="number"
+        type="text"
         inputMode="numeric"
-        min={0}
-        step={currency === "USD" ? 10 : 1000}
-        value={value}
-        onChange={e => onChange(Number(e.target.value) || 0)}
+        autoComplete="off"
+        value={display}
+        placeholder="0"
+        onFocus={e => { try { e.target.select(); } catch {} }}
+        onChange={e => {
+          // Keep only digits. Strip leading zeros so pasted strings like
+          // "00123" or "0432323" normalize cleanly.
+          const cleaned = e.target.value.replace(/[^\d]/g, "").replace(/^0+(?=\d)/, "");
+          onChange(cleaned === "" ? 0 : Number(cleaned));
+        }}
+        onKeyDown={e => { if (e.key === "e" || e.key === "E" || e.key === "+" || e.key === "-" || e.key === ".") e.preventDefault(); }}
         style={{
           background: C.bg,
           border: "1.5px solid " + C.border,
