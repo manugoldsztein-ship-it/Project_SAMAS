@@ -125,7 +125,7 @@ Tu rol:
 - NO inventes cotizaciones actuales. Si el usuario pregunta por precios, decile que mire la pestana Mercado.
 - Responde en el idioma que uso el usuario en su ultimo mensaje.`;
 
-const OBJECTIVES_SYSTEM = `Sos "SAMAS Coach". Tu tarea es armar un plan de inversion personalizado dentro de la app SAMAS para el perfil que te van a pasar.
+const OBJECTIVES_SYSTEM = `Sos "SAMAS Coach". Te van a pasar la situacion financiera mensual del usuario (ingresos, gastos, sobrante), un objetivo concreto (monto + anios), y una proyeccion de cuanto va a acumular si invierte ese sobrante a distintas tasas. Tu tarea: ELEGIR la estrategia (conservadora / moderada / agresiva) y explicar brevemente por que.
 
 SAMAS opera estas categorias de activos (usa solo estas en la asignacion):
 - "Acciones" (acciones argentinas)
@@ -139,22 +139,26 @@ SAMAS opera estas categorias de activos (usa solo estas en la asignacion):
 
 DEVOLVE SOLAMENTE JSON VALIDO, sin markdown, sin texto fuera del JSON. Schema:
 {
-  "summary": string,           // 1-2 oraciones en espanol
-  "monthlyContribution": number, // sugerido mensual en ARS
+  "strategy": "conservadora" | "moderada" | "agresiva",
+  "rationale": string,          // 2-3 oraciones en espanol explicando POR QUE esa estrategia, citando el gap entre objetivo y proyeccion, el horizonte y la capacidad mensual
+  "assumedReturn": number,      // tasa anual esperada (decimal, ej 0.08 para 8%)
   "allocation": [{ "name": string, "percent": number }], // usar solo las categorias de arriba, percents enteros que sumen 100
-  "milestones": string[],      // 3-5 hitos cortos en espanol
-  "principles": string[],      // 3-5 principios cortos en espanol
-  "disclaimer": string         // "Esto es educativo, no asesoramiento financiero."
+  "monthlyNeeded": number,      // aporte mensual en ARS necesario para alcanzar el objetivo a la tasa assumedReturn
+  "feasibility": "holgado" | "ajustado" | "inviable",  // comparando monthlyNeeded vs el sobrante del usuario
+  "advice": string,             // 1-2 oraciones con un consejo concreto (subir aportes, bajar gastos, alargar horizonte, ajustar objetivo)
+  "disclaimer": string          // "Esto es educativo, no asesoramiento financiero."
 }
 
+Como elegir la estrategia:
+- Horizonte corto (<3 anios) o gap pequeno: conservadora (mas FCI money market, Bonos, ON, Cash; menos Acciones/CEDEAR/Crypto).
+- Horizonte medio (3-7 anios) o gap moderado: moderada (mix balanceado).
+- Horizonte largo (7+ anios) o gap grande: agresiva (mas CEDEAR/ETF/Crypto, menos renta fija).
+- Si el objetivo es claramente inviable con la capacidad actual, igual elegi la estrategia mas adecuada y marca feasibility "inviable" con advice claro.
+
 Reglas:
-- Los porcentajes deben ser enteros y sumar 100.
-- El plan debe reflejar el horizonte, la tolerancia al riesgo y la capacidad mensual del usuario.
-- Perfil conservador: mas FCI money market, bonos en dolares, cash; menos Acciones/CEDEAR/Crypto.
-- Perfil moderado: mix balanceado.
-- Perfil agresivo: mas CEDEAR/ETF/Crypto, menos renta fija.
-- No recomiendes tickers especificos en "allocation.name" — solo categorias.
-- Principios breves y universales (horizonte largo, diversificacion, costos bajos, no market timing).`;
+- Porcentajes enteros que suman 100.
+- No recomendes tickers especificos en allocation.name — solo categorias.
+- Tono claro, directo, rioplatense.`;
 
 const SENTIMENT_SYSTEM = `Sos el analizador de sentimiento del feed de noticias de SAMAS. Recibis una lista de titulares de mercado. Devolves SOLAMENTE JSON valido, sin markdown, sin texto fuera del JSON. Schema:
 {
@@ -191,28 +195,70 @@ export async function callCoachChat(messages, { portfolio } = {}) {
 }
 
 /**
- * Personalized investment plan. `profile` → plan JSON object.
+ * Compound interest helpers — the math is client-side so the AI only has
+ * to pick the strategy. `fvAnnuity` returns the future value of investing
+ * `monthly` per month for `years` at annual rate `r` (decimal). `pmtForGoal`
+ * returns the monthly contribution needed to reach a target in that time.
+ */
+export function fvAnnuity(monthly, years, annualRate) {
+  const n = Math.max(0, Math.round(years * 12));
+  if (n === 0) return 0;
+  const m = annualRate / 12;
+  if (m === 0) return monthly * n;
+  return monthly * (Math.pow(1 + m, n) - 1) / m;
+}
+export function pmtForGoal(target, years, annualRate) {
+  const n = Math.max(1, Math.round(years * 12));
+  const m = annualRate / 12;
+  if (m === 0) return target / n;
+  return target * m / (Math.pow(1 + m, n) - 1);
+}
+
+/**
+ * Strategy picker. Input = monthly income/expenses/goal/horizon. The
+ * compound-interest projections are computed here and passed to Claude,
+ * which picks the strategy and explains why.
  */
 export async function callObjectives(profile) {
+  const income   = Number(profile.monthlyIncome)   || 0;
+  const expenses = Number(profile.monthlyExpenses) || 0;
+  const invest   = Math.max(0, income - expenses);
+  const target   = Number(profile.targetAmount)    || 0;
+  const horizon  = Math.max(0.5, Number(profile.horizonYears) || 0);
+
+  // Project what happens if the user invests their current surplus at
+  // representative rates. The AI can reference these numbers directly.
+  const rates = [0.06, 0.09, 0.12];
+  const projections = rates.map(r => ({
+    annualRate: r,
+    finalAmount: Math.round(fvAnnuity(invest, horizon, r)),
+    monthlyNeeded: Math.round(pmtForGoal(target, horizon, r)),
+  }));
+
   const userPrompt = [
-    "Arma un plan de inversion personalizado para este perfil:",
-    `- Edad: ${profile.age || "sin especificar"}`,
-    `- Ingreso mensual (ARS): ${profile.income || "sin especificar"}`,
-    `- Ahorros actuales (ARS): ${profile.savings || "sin especificar"}`,
-    `- Capacidad mensual de inversion (ARS): ${profile.monthlyCapacity || "sin especificar"}`,
-    `- Tolerancia al riesgo: ${profile.risk || "moderado"}`,
-    `- Horizonte (anios): ${profile.horizonYears || "sin especificar"}`,
-    `- Objetivo: ${profile.goal || "crecer capital a largo plazo"}`,
-    "",
-    "Devolve solo JSON."
+    "Decidi la estrategia para este usuario.",
+    `- Ingreso mensual (ARS): ${income}`,
+    `- Gastos mensuales (ARS): ${expenses}`,
+    `- Sobrante invertible mensual (ARS): ${invest}`,
+    `- Objetivo: acumular ${target} ARS en ${horizon} anios`,
+    ``,
+    `Proyecciones (invirtiendo el sobrante de ${invest} ARS/mes durante ${horizon} anios):`,
+    ...projections.map(p => `  - a ${(p.annualRate * 100).toFixed(0)}% anual: acumula ~${p.finalAmount} ARS; para llegar al objetivo necesitarias aportar ~${p.monthlyNeeded} ARS/mes a esa tasa`),
+    ``,
+    `Devolve solo JSON.`,
   ].join("\n");
-  if (!hasAnthropicKey()) return mockObjectives(profile);
+
+  const fallback = () => ({ ...mockObjectives({ income, expenses, invest, target, horizon, projections }), _projections: projections, _invest: invest, _profile: profile });
+
+  if (!hasAnthropicKey()) return fallback();
   const raw = await callAnthropic({
     system: OBJECTIVES_SYSTEM,
     messages: [{ role: "user", content: userPrompt }],
     maxTokens: 900,
   });
-  return parseJson(raw) || mockObjectives(profile);
+  const parsed = parseJson(raw);
+  if (!parsed) return fallback();
+  return { ...parsed, _projections: projections, _invest: invest, _profile: profile };
 }
 
 /**
@@ -259,29 +305,29 @@ function mockCoach(messages) {
   return tag("Lo pensaria en tres palancas: horizonte temporal, tolerancia al riesgo y consistencia del aporte mensual. Cual de las tres es tu limite mas fuerte hoy?");
 }
 
-function mockObjectives(profile) {
-  const risk = profile.risk || "moderado";
-  const base = {
-    conservador:  { Acciones: 5,  CEDEAR: 10, ETF: 10, Bonos: 35, ON: 15, FCI: 20, Crypto: 0,  Cash: 5 },
-    moderado:     { Acciones: 10, CEDEAR: 20, ETF: 20, Bonos: 15, ON: 15, FCI: 15, Crypto: 2,  Cash: 3 },
-    agresivo:     { Acciones: 15, CEDEAR: 30, ETF: 25, Bonos: 5,  ON: 10, FCI: 5,  Crypto: 7,  Cash: 3 },
-  }[risk] || {};
-  const allocation = Object.entries(base).map(([name, percent]) => ({ name, percent }));
+function mockObjectives(ctx) {
+  // Pick strategy based on horizon and gap (same heuristic Claude uses)
+  const { horizon = 5, invest = 0, projections = [] } = ctx;
+  const strategy = horizon >= 7 ? "agresiva" : horizon <= 3 ? "conservadora" : "moderada";
+  const assumedReturn = { conservadora: 0.06, moderada: 0.09, agresiva: 0.12 }[strategy];
+  const allocations = {
+    conservadora: { Acciones: 5,  CEDEAR: 10, ETF: 10, Bonos: 30, ON: 15, FCI: 25, Crypto: 0, Cash: 5 },
+    moderada:     { Acciones: 10, CEDEAR: 25, ETF: 20, Bonos: 15, ON: 12, FCI: 12, Crypto: 3, Cash: 3 },
+    agresiva:     { Acciones: 15, CEDEAR: 32, ETF: 25, Bonos: 5,  ON: 10, FCI: 5,  Crypto: 5, Cash: 3 },
+  };
+  const allocation = Object.entries(allocations[strategy]).map(([name, percent]) => ({ name, percent }));
+  // Find monthlyNeeded from projections at the chosen rate
+  const proj = projections.find(p => Math.abs(p.annualRate - assumedReturn) < 0.001) || projections[1] || { monthlyNeeded: invest };
+  const feasibility = invest === 0 ? "inviable" : proj.monthlyNeeded <= invest * 1.05 ? "holgado" : proj.monthlyNeeded <= invest * 1.5 ? "ajustado" : "inviable";
   return {
-    summary: `Plan ${risk} de largo plazo para tu horizonte y capacidad de aporte mensual.`,
-    monthlyContribution: profile.monthlyCapacity || 50000,
+    strategy,
+    rationale: `Con un horizonte de ${horizon} anios y tu sobrante actual, la estrategia ${strategy} balancea el crecimiento esperado con el riesgo que te conviene asumir.`,
+    assumedReturn,
     allocation,
-    milestones: [
-      "Construi un fondo de emergencia de 3 meses antes de subir aportes",
-      "Automatiza el aporte mensual para sacar la emocion de la ecuacion",
-      "Revisa la asignacion cada 12 meses, no cada dia"
-    ],
-    principles: [
-      "El tiempo en el mercado le gana al timing",
-      "Costos bajos se componen igual que los retornos",
-      "Diversificar es la unica comida gratis"
-    ],
-    disclaimer: "Esto es educativo, no asesoramiento financiero. _(Modo demo — configura tu API key para un plan hecho por Claude.)_"
+    monthlyNeeded: proj.monthlyNeeded,
+    feasibility,
+    advice: feasibility === "holgado" ? "Vas sobrado — podes ser mas conservador o ampliar el objetivo." : feasibility === "ajustado" ? "Te da justo. Automatiza el aporte y no falles meses." : "El objetivo no entra con tu sobrante actual. Bajar gastos, subir ingresos, o alargar el horizonte.",
+    disclaimer: "Esto es educativo, no asesoramiento financiero. _(Modo demo — configura tu API key para un analisis hecho por Claude.)_"
   };
 }
 

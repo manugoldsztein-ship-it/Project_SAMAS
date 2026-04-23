@@ -204,6 +204,7 @@ const LANGUAGES = [
   { code:"ja", label:"日本語",     flag:"JA" },
   { code:"he", label:"עברית",     flag:"HE" },
   { code:"ar", label:"العربية",   flag:"AR" },
+  { code:"ko", label:"한국어",     flag:"KO" },
 ];
 
 // Languages that render right-to-left. Used to flip `dir` on the document
@@ -409,6 +410,24 @@ const TRANSLATIONS = {
     order_history:"السجل", no_orders:"لم تتداول بعد", executed:"مُنفّذ",
     open_devices:"الأجهزة المتصلة", remote_logout:"إغلاق جميع الجلسات الأخرى", device_active:"نشط", device_active_now:"جهاز نشط الآن",
   },
+  ko: {
+    portfolio:"포트폴리오", mercado:"시장", noticias:"뉴스", inversiones:"투자", ordenes:"주문", bonos:"채권", reportes:"리포트",
+    search:"종목 검색...", buy:"매수", sell:"매도", cancel:"취소", confirm:"확인", close:"닫기", edit:"편집", save:"저장", activate:"활성화", delete:"삭제", back:"뒤로", next:"다음", skip:"건너뛰기", finish:"완료",
+    total_portfolio:"총 자산", invested:"투자 원금", gain:"수익", available:"사용 가능", distribution:"비중", positions:"보유 종목",
+    categories:"카테고리", all:"전체", stocks:"주식",
+    profile:"프로필", dark_mode:"다크 모드", light_mode:"라이트 모드", dark_mode_sub:"다크 테마로 전환", light_mode_sub:"라이트 테마로 전환", devices:"디바이스", devices_sub:"4개의 활성 세션", tutorial:"튜토리얼 보기", tutorial_sub:"앱 둘러보기", twofa:"2단계 인증", twofa_sub:"권장 - 보안 강화", twofa_active:"활성화됨 - 인증 앱", logout:"로그아웃", active_session:"활성 세션", language:"언어",
+    settings:"설정",
+    ideas_title:"투자 아이디어", ideas_sub:"SAMAS 팀이 추천하는 포트폴리오", inv_title:"투자", inv_sub:"아이디어, 상품 및 펀드",
+    trend_title:"오늘의 트렌드", trend_sub:"오늘 가장 많이 움직인 종목", trend_gainers:"상승 상위", trend_losers:"하락 상위",
+    news_title:"뉴스", news_live:"CNBC 라이브", news_demo:"데모 데이터", news_loading:"로드 중...", news_refresh:"새로고침", news_empty:"해당 필터에 대한 뉴스가 없습니다",
+    on_title:"회사채", on_sub:"고품질 아르헨티나 회사채",
+    fondos_title:"펀드", fondos_sub:"전문 투자 펀드",
+    bonos_title:"국채", bonos_sub:"아르헨티나 공공 부채",
+    reports_title:"리서치 리포트", reports_sub:"SAMAS 팀의 독점 분석 및 리포트", featured:"추천", download_pdf:"PDF 다운로드", download:"다운로드", pages:"페이지",
+    market_no_results:"결과 없음",
+    order_history:"기록", no_orders:"아직 거래하지 않았습니다", executed:"체결됨",
+    open_devices:"연결된 디바이스", remote_logout:"다른 모든 세션 종료", device_active:"활성", device_active_now:"현재 활성 디바이스",
+  },
 };
 
 function useT(lang) {
@@ -487,11 +506,20 @@ function useFinnhubQuotes(apiKey, mepRate) {
       const rateErr  = results.find(r => r.rateErr);
       const failures = results.filter(r => !r.ok);
       const count    = results.filter(r => r.ok).length;
-      if (failures.length) console.warn("[SAMAS/Finnhub] fetch failures:", failures);
+      // Readable log — some mobile / in-app consoles stringify object args
+      // as "[object Object]" which hides the actual reason. Inline it.
+      if (failures.length) {
+        const lines = failures.map(f => `  ${f.ticker} (${f.symbol || "-"}): ${f.reason || "unknown"}`).join("\n");
+        console.warn(`[SAMAS/Finnhub] ${failures.length} fetch failures:\n${lines}`);
+      }
+      // Pick the most common non-skip reason to surface in the UI when the
+      // blanket "Sin datos de Finnhub" fallback fires.
+      const firstRealFailure = failures.find(f => !/^skipped/i.test(f.reason || ""));
+      const headline = firstRealFailure?.reason ? ` — ${firstRealFailure.reason.slice(0, 60)}` : "";
       setStatus({
         live: count > 0,
         count,
-        error: authErr ? "API key invalida o sin permisos" : rateErr ? "Limite de consultas alcanzado (60/min)" : count === 0 ? "Sin datos de Finnhub" : null,
+        error: authErr ? "API key invalida o sin permisos" : rateErr ? "Limite de consultas alcanzado (60/min)" : count === 0 ? ("Sin datos de Finnhub" + headline) : null,
         lastSync: new Date(),
         failures,
       });
@@ -798,18 +826,16 @@ function Spark({ up, color, w=50, h=24 }) {
 // ============================================================
 // EMAIL NOTIFICATION (simulated)
 // ============================================================
+// Fire-and-forget trade notification. Routes through the user's configured
+// EmailJS credentials if present; otherwise logs only (no network call).
+// Previously this fired a request with placeholder credentials on every
+// trade, which always 4xx'd and leaked fake service ids to EmailJS.
 function sendEmailNotification({ to, subject, body }) {
   console.log("EMAIL to " + to + " | Subject: " + subject + " | Body: " + body);
-  fetch("https://api.emailjs.com/api/v1.0/email/send", {
-    method: "POST",
-    headers: { "Content-Type":"application/json" },
-    body: JSON.stringify({
-      service_id:  "samas_service",
-      template_id: "samas_trade",
-      user_id:     "public_key_placeholder",
-      template_params: { to_email:to, subject, message: body }
-    })
-  }).catch(() => {});
+  const cfg = loadEmailjsConfig();
+  if (!cfg) return;  // no real credentials → don't spam EmailJS
+  sendViaEmailjs(cfg, { to, subject, message: body, code: "" })
+    .catch(err => console.warn("[SAMAS/email] send failed:", err?.message || err));
 }
 
 // ============================================================
@@ -909,7 +935,7 @@ function PriceInputPanel({ asset, accentColor, suggestions, inputMode, setInputM
       ) : (
         <div style={{ position:"relative", marginBottom:10 }}>
           <span style={{ position:"absolute", left:13, top:"50%", transform:"translateY(-50%)", color:C.textMd, fontSize:15 }}>$</span>
-          <input type="number" value={price} onChange={e => setPrice(e.target.value)}
+          <input type="number" min="0" inputMode="decimal" value={price} onChange={e => setPrice(e.target.value.replace(/^-/, ""))}
             style={{ background:C.card, border:"1.5px solid " + C.border, borderRadius:12, padding:"12px 12px 12px 28px", fontSize:16, fontFamily:"monospace", fontWeight:700, color:C.text, outline:"none", width:"100%", boxSizing:"border-box" }}/>
         </div>
       )}
@@ -1249,7 +1275,10 @@ function AssetDetail({ asset, holding, stopLoss, priceAlert, balance, isInWatchl
   const qtyNum    = parseInt(qty) || 0;
   const maxSell   = holding ? holding.qty : 0;
   const totalCost = qtyNum * asset.price;
-  const maxBuy    = Math.floor(balance / asset.price);
+  // Guard against zero/undefined price (can happen transiently while a
+  // live-data fetch is in flight). Without this, maxBuy becomes Infinity
+  // and the "Max" button hydrates the input with an unusable value.
+  const maxBuy    = asset.price > 0 ? Math.floor(balance / asset.price) : 0;
   const sellErr   = mode === "sell" && qtyNum > maxSell && qtyNum > 0 ? "Solo tienes " + maxSell + " unidades" : null;
   const buyErr    = mode === "buy"  && qtyNum > 0 && totalCost > balance ? "Saldo insuficiente. Max: " + maxBuy + " u" : null;
   const canGo     = qtyNum > 0 && !sellErr && !buyErr;
@@ -1366,7 +1395,7 @@ function AssetDetail({ asset, holding, stopLoss, priceAlert, balance, isInWatchl
                 {mode === "sell" && <div style={{ fontSize:10, color:C.textLt }}>Disponible: <strong>{maxSell}</strong></div>}
                 {mode === "buy"  && <div style={{ fontSize:10, color:C.textLt }}>Saldo: <strong>${fN(balance)}</strong></div>}
               </div>
-              <input type="number" value={qty} onChange={e => setQty(e.target.value)} placeholder="0"
+              <input type="number" min="0" inputMode="numeric" value={qty} onChange={e => setQty(e.target.value.replace(/^-/, ""))} placeholder="0"
                 style={{ background:C.bg, border:"1.5px solid "+(sellErr||buyErr?C.red:C.border), borderRadius:10, padding:"12px", fontSize:16, fontFamily:"monospace", fontWeight:700, color:C.text, outline:"none", width:"100%", boxSizing:"border-box", marginBottom:6 }}/>
               {sellErr && <div style={{ color:C.red, fontSize:12, fontWeight:600, marginBottom:8 }}>{sellErr}</div>}
               {buyErr  && <div style={{ color:C.red, fontSize:12, fontWeight:600, marginBottom:8 }}>{buyErr}</div>}
@@ -1842,19 +1871,21 @@ function PageReportes({ C, lang }) {
   );
 }
 
-function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatchlist, onSelectAsset, onDeposit, C, showUSD, lang }) {
+function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatchlist, onSelectAsset, onDeposit, onOpenObjectives, C, showUSD, lang }) {
   const t = useT(lang);
   // Privacy toggle: when true, amounts in the hero card are replaced with dots.
   // Percent gain is still shown so the user sees direction without a dollar figure.
   const [hideValues, setHideValues] = useState(false);
   const [showDeposit, setShowDeposit] = useState(false);
-  const [showObjectives, setShowObjectives] = useState(false);
   const mask = "••••••";
   const enriched = holdings.map(h => {
     const a = ASSETS.find(x => x.ticker === h.ticker);
     if (!a) return null;
     const val = h.qty * a.price, cost = h.qty * h.avg;
-    return { ...h, a, val, cost, gAbs:val-cost, gPct:((a.price-h.avg)/h.avg)*100 };
+    // Guard: holding.avg could be 0 on a malformed record, which would
+    // produce NaN% and break the colored gain chip downstream.
+    const gPct = h.avg > 0 ? ((a.price - h.avg) / h.avg) * 100 : 0;
+    return { ...h, a, val, cost, gAbs:val-cost, gPct };
   }).filter(Boolean);
   const tv = enriched.reduce((s, h) => s + h.val, 0);
   const tc = enriched.reduce((s, h) => s + h.cost, 0);
@@ -1913,12 +1944,12 @@ function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatch
       {showDeposit && (
         <DepositModal user={DEMO_USER} onClose={() => setShowDeposit(false)} onSimulate={(amt, method) => onDeposit && onDeposit(amt, method)} C={C}/>
       )}
-      {showObjectives && (
-        <ObjectivesWizard onClose={() => setShowObjectives(false)} C={C}/>
-      )}
-      {/* AI Objectives banner — entry point to the goal/risk wizard */}
+      {/* AI Objectives banner — entry point to the goal/risk wizard.
+          Modal itself is hoisted to MobileApp/WebDashboard level so its
+          absolute-positioned backdrop isn't clipped by this page's
+          scroll container. */}
       <button
-        onClick={() => setShowObjectives(true)}
+        onClick={() => onOpenObjectives && onOpenObjectives()}
         style={{
           margin:"12px 14px 0",
           width:"calc(100% - 28px)",
@@ -2099,25 +2130,59 @@ function PageMercado({ onSelectAsset, C, showUSD, lang }) {
 // ============================================================
 // PAGE: NOTICIAS
 // ============================================================
+// Optional news proxy — read from localStorage at runtime. If the user has
+// not configured one, we skip the fetch entirely and stay on seeded data
+// instead of hammering a hardcoded localhost URL that won't exist in a
+// deployed single-file bundle.
+function loadNewsEndpoint() {
+  try {
+    return (typeof localStorage !== "undefined" && localStorage.getItem("samas_news_endpoint")) || "";
+  } catch { return ""; }
+}
+
 function PageNoticias({ holdings, onSelectAsset, C, lang }) {
   const t = useT(lang);
   const [filter, setFilter] = useState("Portafolio");
   const [news, setNews]     = useState(NEWS);
-  const [status, setStatus] = useState("idle");
+  const [status, setStatus] = useState("demo");  // "demo" | "loading" | "ok" | "error"
   const portT = holdings.map(h => h.ticker);
+  // Track the in-flight request so we can cancel it if the page unmounts
+  // before it resolves (previously an unmount during a slow fetch would
+  // try to setState on a dead component).
   const fetchN = () => {
+    const endpoint = loadNewsEndpoint();
+    if (!endpoint) {
+      // No proxy configured — keep seeded demo data, don't make a network
+      // call to a hardcoded localhost URL.
+      setNews(NEWS);
+      setStatus("demo");
+      return () => {};
+    }
+    const ac = new AbortController();
+    const timeoutId = setTimeout(() => ac.abort(), 6000);
     setStatus("loading");
-    fetch("http://localhost:5001/api/news/all", { signal: AbortSignal.timeout(6000) })
-      .then(r => r.json()).then(d => {
-        const items = (d.items||[]).map((it,i) => { const title = it.headline||it.title||""; const tickers = ASSETS.filter(a=>title.toLowerCase().includes(a.ticker.toLowerCase())).map(a=>a.ticker); return { id:i, tickers, cat:"Mercado", src:"CNBC", time:"Reciente", title, body:it.description||it.summary||"", url:it.url||"#" }; }).filter(x=>x.title);
-        setNews(items.length > 0 ? items : NEWS); setStatus("ok");
-      }).catch(() => { setNews(NEWS); setStatus("error"); });
+    fetch(endpoint, { signal: ac.signal })
+      .then(r => r.json())
+      .then(d => {
+        const items = (d.items || [])
+          .map((it, i) => {
+            const title = it.headline || it.title || "";
+            const tickers = ASSETS.filter(a => title.toLowerCase().includes(a.ticker.toLowerCase())).map(a => a.ticker);
+            return { id: i, tickers, cat: "Mercado", src: "CNBC", time: "Reciente", title, body: it.description || it.summary || "", url: it.url || "#" };
+          })
+          .filter(x => x.title);
+        setNews(items.length > 0 ? items : NEWS);
+        setStatus(items.length > 0 ? "ok" : "demo");
+      })
+      .catch(() => { setNews(NEWS); setStatus("error"); })
+      .finally(() => clearTimeout(timeoutId));
+    return () => { clearTimeout(timeoutId); ac.abort(); };
   };
   const shown = filter === "Portafolio" ? news.filter(n => n.tickers.some(t => portT.includes(t))) : filter === "Todos" ? news : news.filter(n => n.cat === filter);
   return (
     <div style={{ padding:"14px 14px 20px" }}>
       <div style={{ marginBottom:12, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <div><div style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:2 }}>{t("news_title")}</div><div style={{ fontSize:10, color: status==="ok" ? C.green : status==="error" ? C.red : C.textLt }}>{status==="loading" ? "Cargando..." : status==="ok" ? "CNBC en vivo" : status==="error" ? "Datos demo" : ""}</div></div>
+        <div><div style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:2 }}>{t("news_title")}</div><div style={{ fontSize:10, color: status==="ok" ? C.green : status==="error" ? C.red : C.textLt }}>{status==="loading" ? t("news_loading") : status==="ok" ? t("news_live") : status==="error" ? t("news_demo") : t("news_demo")}</div></div>
         <button onClick={fetchN} style={{ background:C.creamDk, border:"1px solid "+C.border, borderRadius:8, padding:"5px 10px", fontSize:11, cursor:"pointer", color:C.textMd, fontFamily:"inherit" }}>Refresh</button>
       </div>
       <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:10, marginBottom:4 }}>
@@ -3369,6 +3434,11 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
 function MobileApp({ appState, handlers, C }) {
   const { loggedIn, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel } = appState;
   const { setLoggedIn, handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel } = handlers;
+  // Modal state hoisted out of PagePortfolio so the wizard's absolute
+  // overlay covers the full phone frame (otherwise it was clipped by the
+  // page's overflow:auto scroll container — the X button could fall out
+  // of the visible region on some scroll offsets).
+  const [showObjectives, setShowObjectives] = useState(false);
   const t = useT(lang);
   const TABS = [{ id:"portfolio",label:t("portfolio") },{ id:"mercado",label:t("mercado") },{ id:"noticias",label:t("noticias") },{ id:"ideas",label:t("inversiones") },{ id:"ordenes",label:t("ordenes") }];
   const totalARS = holdings.reduce((s, h) => { const a = ASSETS.find(x => x.ticker === h.ticker); return s + (a ? h.qty * a.price : 0); }, 0);
@@ -3378,12 +3448,12 @@ function MobileApp({ appState, handlers, C }) {
   const getA  = t => priceAlerts[t] || null;
   const renderPage = () => {
     switch (tab) {
-      case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} onDeposit={handleDeposit} C={C} showUSD={showUSD} lang={lang}/>;
+      case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} C={C} showUSD={showUSD} lang={lang}/>;
       case "mercado":    return <PageMercado onSelectAsset={setSelected} C={C} showUSD={showUSD} lang={lang}/>;
       case "noticias":   return <PageNoticias holdings={holdings} onSelectAsset={setSelected} C={C} lang={lang}/>;
       case "ideas":      return <PageIdeas C={C} showUSD={showUSD} onSelectAsset={setSelected} lang={lang}/>;
       case "ordenes":    return <PageOrdenes orders={orders} C={C} lang={lang}/>;
-      default:           return <PagePortfolio watchlist={watchlist} onToggleWatchlist={toggleWatchlist} holdings={holdings} stopLosses={stopLosses} balance={balance} onSelectAsset={setSelected} onDeposit={handleDeposit} C={C}/>;
+      default:           return <PagePortfolio watchlist={watchlist} onToggleWatchlist={toggleWatchlist} holdings={holdings} stopLosses={stopLosses} balance={balance} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} C={C} showUSD={showUSD} lang={lang}/>;
     }
   };
   return (
@@ -3395,6 +3465,7 @@ function MobileApp({ appState, handlers, C }) {
       {toast && <div style={{ position:"absolute", top:34, left:14, right:14, zIndex:50, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 14px", fontSize:12, fontWeight:700 }}>{toast.msg}</div>}
       {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} C={C}/>}
       {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} C={C}/>}
+      {showObjectives && <ObjectivesWizard onClose={() => setShowObjectives(false)} C={C}/>}
       <div style={{ background:C.isDark?"#0F0F0F":"#0D1117", paddingTop:30, paddingBottom:8, paddingLeft:20, paddingRight:20, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0, zIndex:10 }}>
         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
           <span style={{ color:"rgba(255,255,255,0.6)", fontSize:12, fontWeight:600 }}>{new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})}</span>
@@ -3443,6 +3514,9 @@ function WebDashboard({ appState, handlers, C }) {
   const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, showProfile, showUSD, showTutorial, lang, watchlist, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel } = appState;
   const { setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, setShowProfile, setIsDark, setShowUSD, setLang, finishTutorial, toggleWatchlist, setFinnhubKey, setEmailjsCfg, handleDeposit, setAnthropicKey, setAnthropicModel } = handlers;
   const [sideTab, setSideTab] = useState("portfolio");
+  // Objectives modal lives at dashboard level for the same reason as in
+  // MobileApp — keeps the overlay out of the page's scroll container.
+  const [showObjectives, setShowObjectives] = useState(false);
   const t = useT(lang);
   const TABS2 = [{ id:"portfolio",label:t("portfolio"),icon:"portfolio" },{ id:"mercado",label:t("mercado"),icon:"mercado" },{ id:"noticias",label:t("noticias"),icon:"noticias" },{ id:"ideas",label:t("inversiones"),icon:"ideas" },{ id:"bonos",label:t("bonos"),icon:"bonos" },{ id:"ordenes",label:t("ordenes"),icon:"ordenes" },{ id:"reportes",label:t("reportes"),icon:"reportes" }];
   const totalARS = holdings.reduce((s, h) => { const a = ASSETS.find(x => x.ticker === h.ticker); return s + (a ? h.qty * a.price : 0); }, 0);
@@ -3451,15 +3525,14 @@ function WebDashboard({ appState, handlers, C }) {
   const getA  = t => priceAlerts[t] || null;
   const renderPage = () => {
     switch (sideTab) {
-      case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} onDeposit={handleDeposit} C={C} showUSD={showUSD} lang={lang}/>;
+      case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} C={C} showUSD={showUSD} lang={lang}/>;
       case "mercado":    return <PageMercado onSelectAsset={setSelected} C={C} showUSD={showUSD} lang={lang}/>;
       case "noticias":   return <PageNoticias holdings={holdings} onSelectAsset={setSelected} C={C} lang={lang}/>;
       case "ideas":      return <PageIdeas C={C} showUSD={showUSD} onSelectAsset={setSelected} lang={lang}/>;
       case "bonos":      return <PageBonos C={C} showUSD={showUSD} lang={lang}/>;
-      case "trending":   return <PageTrending onSelectAsset={setSelected} C={C} lang={lang}/>;
       case "ordenes":    return <PageOrdenes orders={orders} C={C} lang={lang}/>;
       case "reportes":   return <PageReportes C={C} lang={lang}/>;
-      default:           return <PagePortfolio watchlist={watchlist} onToggleWatchlist={toggleWatchlist} holdings={holdings} stopLosses={stopLosses} balance={balance} onSelectAsset={setSelected} onDeposit={handleDeposit} C={C}/>;
+      default:           return <PagePortfolio watchlist={watchlist} onToggleWatchlist={toggleWatchlist} holdings={holdings} stopLosses={stopLosses} balance={balance} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} C={C} showUSD={showUSD} lang={lang}/>;
     }
   };
   return (
@@ -3505,6 +3578,7 @@ function WebDashboard({ appState, handlers, C }) {
           {toast && <div style={{ position:"fixed", top:70, left:"50%", transform:"translateX(-50%)", zIndex:99, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 20px", fontSize:13, fontWeight:700, boxShadow:"0 8px 32px rgba(0,0,0,0.3)" }}>{toast.msg}</div>}
           <div style={{ overflowY:"auto", height:"calc(100vh - 56px)" }}>{renderPage()}</div>
           <CoachChat holdings={holdings} assets={ASSETS} C={C} lang={lang}/>
+          {showObjectives && <ObjectivesWizard onClose={() => setShowObjectives(false)} C={C}/>}
         </div>
         <div style={{ width:320, background:C.card, borderLeft:"1px solid "+C.border, padding:"20px 16px", position:"sticky", top:56, height:"calc(100vh - 56px)", overflowY:"auto" }}>
           <div style={{ fontWeight:700, fontSize:14, color:C.text, marginBottom:16 }}>Mercado en vivo</div>

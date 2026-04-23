@@ -1,38 +1,17 @@
-import { useState } from "react";
-import { callObjectives, hasAnthropicKey } from "./client.js";
+import { useMemo, useState } from "react";
+import { callObjectives, fvAnnuity, hasAnthropicKey } from "./client.js";
 
 // ============================================================
-// OBJETIVOS WIZARD (AI)
+// OBJETIVOS WIZARD (AI) — spec v2
 // ============================================================
-// 4-step wizard that collects goal / horizon / risk / monthly capacity,
-// asks Claude for a personalized plan, and renders the result as a
-// category-by-category allocation that maps 1:1 onto SAMAS's asset
-// classes (Acciones, CEDEAR, ETF, Bonos, ON, FCI, Crypto, Cash).
-//
-// Entry point lives on PagePortfolio as a banner button.
-
-const GOALS = [
-  { id: "retire",    label: "Jubilacion",                icon: "🌅" },
-  { id: "house",     label: "Comprar casa",              icon: "🏠" },
-  { id: "freedom",   label: "Libertad financiera",       icon: "🔓" },
-  { id: "education", label: "Educacion hijos/a",         icon: "🎓" },
-  { id: "emergency", label: "Fondo de emergencia",       icon: "🛟" },
-  { id: "wealth",    label: "Crecer capital",            icon: "📈" },
-];
-
-const RISKS = [
-  { id: "conservador", label: "Conservador", desc: "Prefiero no perder" },
-  { id: "moderado",    label: "Moderado",    desc: "Equilibrio riesgo/retorno" },
-  { id: "agresivo",    label: "Agresivo",    desc: "Busco maximizar retorno" },
-];
-
-const HORIZONS = [
-  { id: 1,  label: "1 anio" },
-  { id: 3,  label: "3 anios" },
-  { id: 5,  label: "5 anios" },
-  { id: 10, label: "10 anios" },
-  { id: 20, label: "20+ anios" },
-];
+// Flujo fijado por producto:
+//   1. Ingresos mensuales
+//   2. Gastos mensuales  (la app calcula el sobrante invertible en vivo)
+//   3. Objetivo: monto + horizonte en anios
+//   4. Resultado: proyeccion de interes compuesto + Claude elige la
+//      estrategia (conservadora / moderada / agresiva) y la explica.
+// La app hace la aritmetica de interes compuesto; Claude solo decide la
+// estrategia y arma la asignacion contra las categorias SAMAS.
 
 const CATEGORY_COLORS = {
   Acciones: "#16C784",
@@ -45,36 +24,53 @@ const CATEGORY_COLORS = {
   Cash:     "#6B7280",
 };
 
+const STRATEGY_COLORS = {
+  conservadora: "#0EA5E9",
+  moderada:     "#C9A84C",
+  agresiva:     "#F7931A",
+};
+
+const HORIZON_PRESETS = [1, 3, 5, 10, 20];
+
+function fmtARS(n) {
+  return Math.round(Number(n) || 0).toLocaleString("es-AR");
+}
+
 export function ObjectivesWizard({ onClose, C }) {
   const [step, setStep] = useState(1);
-  const [profile, setProfile] = useState({
-    goal: "retire",
-    horizonYears: 10,
-    risk: "moderado",
-    monthlyCapacity: 50000,
-  });
+  const [monthlyIncome, setMonthlyIncome]     = useState(500000);
+  const [monthlyExpenses, setMonthlyExpenses] = useState(350000);
+  const [targetAmount, setTargetAmount]       = useState(10000000);
+  const [horizonYears, setHorizonYears]       = useState(10);
   const [plan, setPlan] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr]   = useState(null);
+
+  const invest = Math.max(0, (Number(monthlyIncome) || 0) - (Number(monthlyExpenses) || 0));
+  const savingsRate = (Number(monthlyIncome) || 0) > 0 ? invest / monthlyIncome : 0;
+
+  // Live compound-interest preview on step 3 so the user sees feasibility
+  // before waiting on the AI round-trip.
+  const preview = useMemo(() => {
+    const rates = [0.06, 0.09, 0.12];
+    return rates.map(r => ({
+      rate: r,
+      final: fvAnnuity(invest, horizonYears, r),
+    }));
+  }, [invest, horizonYears]);
 
   async function generate() {
     setBusy(true);
     setErr(null);
     try {
-      const p = await callObjectives(profile);
-      // Defensive normalization so the renderer stays simple.
-      const allocation = Array.isArray(p?.allocation)
-        ? p.allocation.filter(x => x && typeof x.name === "string" && typeof x.percent === "number")
-        : [];
-      setPlan({
-        summary: p?.summary || "Plan personalizado generado.",
-        monthlyContribution: Number(p?.monthlyContribution) || profile.monthlyCapacity || 0,
-        allocation,
-        milestones: Array.isArray(p?.milestones) ? p.milestones : [],
-        principles: Array.isArray(p?.principles) ? p.principles : [],
-        disclaimer: p?.disclaimer || "Esto es educativo, no asesoramiento financiero.",
+      const p = await callObjectives({
+        monthlyIncome,
+        monthlyExpenses,
+        targetAmount,
+        horizonYears,
       });
-      setStep(5);
+      setPlan(p);
+      setStep(4);
     } catch (e) {
       setErr(e?.message || "Error al generar el plan");
     } finally {
@@ -82,11 +78,17 @@ export function ObjectivesWizard({ onClose, C }) {
     }
   }
 
+  function reset() {
+    setPlan(null);
+    setStep(1);
+    setErr(null);
+  }
+
   return (
     <div style={{ position:"absolute", inset:0, zIndex:45, background:"rgba(0,0,0,0.6)", display:"flex", flexDirection:"column" }}>
       <div onClick={onClose} style={{ flex:1 }}/>
       <div style={{ background:C.bg, borderRadius:"22px 22px 0 0", maxHeight:"92%", display:"flex", flexDirection:"column", border:"1px solid "+C.border, borderBottom:"none", overflow:"hidden" }}>
-        {/* Handle */}
+        {/* Drag handle */}
         <div style={{ display:"flex", justifyContent:"center", padding:"10px 0 4px" }}>
           <div style={{ width:36, height:4, background:C.border, borderRadius:2 }}/>
         </div>
@@ -106,83 +108,101 @@ export function ObjectivesWizard({ onClose, C }) {
               {hasAnthropicKey() ? "Claude · en vivo" : "Modo demo (sin API key)"}
             </div>
           </div>
-          <button onClick={onClose} style={{ background:"transparent", border:"none", cursor:"pointer", padding:4, color:C.textMd }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <button onClick={onClose} aria-label="Cerrar" style={{ background:"transparent", border:"none", cursor:"pointer", padding:4, color:C.textMd }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
           </button>
         </div>
 
         {/* Progress */}
-        {step < 5 && (
+        {step < 4 && (
           <div style={{ padding:"10px 16px 0", display:"flex", gap:4 }}>
-            {[1,2,3,4].map(s => (
+            {[1, 2, 3].map(s => (
               <div key={s} style={{ flex:1, height:4, borderRadius:2, background: s <= step ? C.accent : C.creamDk }}/>
             ))}
           </div>
         )}
 
-        <div style={{ flex:1, overflowY:"auto", padding:"14px 16px 8px" }}>
+        {/* Body */}
+        <div style={{ flex:1, overflowY:"auto", padding:"16px" }}>
           {step === 1 && (
-            <StepCards
-              title="Cual es tu objetivo principal?"
-              options={GOALS}
-              selected={profile.goal}
-              onSelect={v => setProfile(p => ({ ...p, goal: v }))}
+            <StepIncome
+              monthlyIncome={monthlyIncome}
+              setMonthlyIncome={setMonthlyIncome}
               C={C}
             />
           )}
           {step === 2 && (
-            <StepCards
-              title="En que horizonte lo queres?"
-              options={HORIZONS.map(h => ({ id: h.id, label: h.label, icon: "⏳" }))}
-              selected={profile.horizonYears}
-              onSelect={v => setProfile(p => ({ ...p, horizonYears: v }))}
+            <StepExpenses
+              monthlyIncome={monthlyIncome}
+              monthlyExpenses={monthlyExpenses}
+              setMonthlyExpenses={setMonthlyExpenses}
+              invest={invest}
+              savingsRate={savingsRate}
               C={C}
             />
           )}
           {step === 3 && (
-            <StepCards
-              title="Cual es tu tolerancia al riesgo?"
-              options={RISKS.map(r => ({ id: r.id, label: r.label, desc: r.desc, icon: r.id === "conservador" ? "🐢" : r.id === "moderado" ? "⚖️" : "🚀" }))}
-              selected={profile.risk}
-              onSelect={v => setProfile(p => ({ ...p, risk: v }))}
+            <StepGoal
+              targetAmount={targetAmount}
+              setTargetAmount={setTargetAmount}
+              horizonYears={horizonYears}
+              setHorizonYears={setHorizonYears}
+              invest={invest}
+              preview={preview}
               C={C}
             />
           )}
-          {step === 4 && (
-            <StepCapacity profile={profile} setProfile={setProfile} C={C}/>
+          {step === 4 && plan && (
+            <PlanView
+              plan={plan}
+              invest={invest}
+              target={targetAmount}
+              horizon={horizonYears}
+              C={C}
+            />
           )}
-          {step === 5 && plan && (
-            <PlanView plan={plan} profile={profile} C={C}/>
+          {err && (
+            <div style={{ marginTop:10, background:C.red+"18", border:"1px solid "+C.red+"44", color:C.red, borderRadius:10, padding:"8px 10px", fontSize:11 }}>
+              {err}
+            </div>
           )}
-          {err && <div style={{ marginTop:10, background:C.red+"18", border:"1px solid "+C.red+"44", color:C.red, borderRadius:10, padding:"8px 10px", fontSize:11 }}>{err}</div>}
         </div>
 
         {/* Footer */}
         <div style={{ padding:"10px 16px 14px", borderTop:"1px solid "+C.border, display:"flex", gap:8, background:C.bg }}>
-          {step > 1 && step < 5 && (
+          {step > 1 && step < 4 && (
             <button onClick={() => setStep(s => s - 1)} style={{ flex:1, background:C.creamDk, color:C.textMd, border:"1.5px solid "+C.border, borderRadius:12, padding:"11px", fontWeight:600, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
               Atras
             </button>
           )}
-          {step < 4 && (
-            <button onClick={() => setStep(s => s + 1)} style={{ flex:2, background:C.accent, color:"#fff", border:"none", borderRadius:12, padding:"11px", fontWeight:700, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
+          {step < 3 && (
+            <button
+              onClick={() => setStep(s => s + 1)}
+              disabled={step === 2 && invest <= 0}
+              style={{
+                flex:2,
+                background: step === 2 && invest <= 0 ? C.creamDk : C.accent,
+                color: step === 2 && invest <= 0 ? C.textLt : "#fff",
+                border:"none", borderRadius:12, padding:"11px", fontWeight:700, fontSize:13,
+                cursor: step === 2 && invest <= 0 ? "not-allowed" : "pointer", fontFamily:"inherit"
+              }}>
               Siguiente
             </button>
           )}
-          {step === 4 && (
-            <button onClick={generate} disabled={busy} style={{ flex:2, background: busy ? C.creamDk : C.accent, color: busy ? C.textLt : "#fff", border:"none", borderRadius:12, padding:"11px", fontWeight:700, fontSize:13, cursor: busy ? "not-allowed" : "pointer", fontFamily:"inherit" }}>
-              {busy ? "Pensando…" : "Generar plan"}
+          {step === 3 && (
+            <button onClick={generate} disabled={busy || invest <= 0 || targetAmount <= 0} style={{ flex:2, background: busy || invest <= 0 || targetAmount <= 0 ? C.creamDk : C.accent, color: busy || invest <= 0 || targetAmount <= 0 ? C.textLt : "#fff", border:"none", borderRadius:12, padding:"11px", fontWeight:700, fontSize:13, cursor: busy || invest <= 0 || targetAmount <= 0 ? "not-allowed" : "pointer", fontFamily:"inherit" }}>
+              {busy ? "Pensando…" : "Elegir estrategia con IA"}
             </button>
           )}
-          {step === 5 && (
+          {step === 4 && (
             <>
-              <button onClick={() => { setPlan(null); setStep(1); }} style={{ flex:1, background:C.creamDk, color:C.textMd, border:"1.5px solid "+C.border, borderRadius:12, padding:"11px", fontWeight:600, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
+              <button onClick={reset} style={{ flex:1, background:C.creamDk, color:C.textMd, border:"1.5px solid "+C.border, borderRadius:12, padding:"11px", fontWeight:600, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
                 Nuevo
               </button>
               <button onClick={onClose} style={{ flex:2, background:C.accent, color:"#fff", border:"none", borderRadius:12, padding:"11px", fontWeight:700, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
-                Guardar y cerrar
+                Cerrar
               </button>
             </>
           )}
@@ -192,182 +212,260 @@ export function ObjectivesWizard({ onClose, C }) {
   );
 }
 
-// ---- sub-components --------------------------------------------------------
+// ------- steps -------------------------------------------------------------
 
-function StepCards({ title, options, selected, onSelect, C }) {
+function StepIncome({ monthlyIncome, setMonthlyIncome, C }) {
   return (
     <div>
-      <div style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:12 }}>{title}</div>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-        {options.map(o => {
-          const active = selected === o.id;
+      <div style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:4 }}>Cuanto cobras por mes?</div>
+      <div style={{ fontSize:12, color:C.textMd, marginBottom:16, lineHeight:1.5 }}>Ingreso mensual neto en pesos argentinos. Sueldo, freelance, todo junto.</div>
+      <CurrencyInput value={monthlyIncome} onChange={setMonthlyIncome} C={C}/>
+      <div style={{ marginTop:14, padding:"10px 12px", background:C.card, border:"1px dashed "+C.border, borderRadius:12, fontSize:11, color:C.textMd, lineHeight:1.5 }}>
+        Los datos quedan solo en tu navegador. No los guardamos en ningun servidor.
+      </div>
+    </div>
+  );
+}
+
+function StepExpenses({ monthlyIncome, monthlyExpenses, setMonthlyExpenses, invest, savingsRate, C }) {
+  const over = monthlyExpenses > monthlyIncome;
+  return (
+    <div>
+      <div style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:4 }}>Cuanto gastas por mes?</div>
+      <div style={{ fontSize:12, color:C.textMd, marginBottom:16, lineHeight:1.5 }}>Sumale alquiler, expensas, comida, transporte, suscripciones, gustitos — todo lo que se te va.</div>
+      <CurrencyInput value={monthlyExpenses} onChange={setMonthlyExpenses} C={C}/>
+
+      {/* Live breakdown */}
+      <div style={{ marginTop:18, background:C.card, borderRadius:14, border:"1px solid "+C.border, padding:"14px" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+          <span style={{ fontSize:11, fontWeight:700, color:C.textMd, textTransform:"uppercase", letterSpacing:1 }}>Sobrante invertible</span>
+          {!over && invest > 0 && (
+            <span style={{ fontSize:10, fontWeight:700, color:C.accent, background:C.accent+"22", borderRadius:6, padding:"2px 7px" }}>
+              {(savingsRate * 100).toFixed(1)}% de tus ingresos
+            </span>
+          )}
+        </div>
+
+        {/* Visual bar */}
+        <div style={{ display:"flex", height:10, borderRadius:5, overflow:"hidden", background:C.creamDk, marginBottom:10 }}>
+          <div style={{ width: monthlyIncome ? Math.min(100, (monthlyExpenses / monthlyIncome) * 100) + "%" : "0%", background: over ? C.red : C.textLt, transition:"width 0.2s" }}/>
+          {!over && <div style={{ flex:1, background: invest > 0 ? C.accent : "transparent" }}/>}
+        </div>
+
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", gap:10 }}>
+          <div>
+            <div style={{ fontSize:26, fontWeight:800, color: over ? C.red : (invest > 0 ? C.accent : C.textLt), fontFamily:"monospace" }}>
+              ${fmtARS(invest)}
+            </div>
+            <div style={{ fontSize:10, color:C.textLt, marginTop:2 }}>podes destinar a inversion cada mes</div>
+          </div>
+          <div style={{ textAlign:"right", fontSize:11, color:C.textLt, lineHeight:1.5 }}>
+            Ingreso ${fmtARS(monthlyIncome)}<br/>
+            Gasto  ${fmtARS(monthlyExpenses)}
+          </div>
+        </div>
+
+        {over && (
+          <div style={{ marginTop:12, background:C.red+"22", border:"1px solid "+C.red+"55", color:C.red, borderRadius:10, padding:"8px 10px", fontSize:11, lineHeight:1.5 }}>
+            Tus gastos superan los ingresos — no hay margen para invertir con estos numeros. Revisa gastos antes de seguir.
+          </div>
+        )}
+        {!over && invest === 0 && (
+          <div style={{ marginTop:12, background:C.gold+"22", border:"1px solid "+C.gold+"55", color:C.gold, borderRadius:10, padding:"8px 10px", fontSize:11, lineHeight:1.5 }}>
+            Gastas todo lo que ganas. Incluso $5.000 por mes es mejor que cero — probalo.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StepGoal({ targetAmount, setTargetAmount, horizonYears, setHorizonYears, invest, preview, C }) {
+  return (
+    <div>
+      <div style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:4 }}>Cual es tu objetivo?</div>
+      <div style={{ fontSize:12, color:C.textMd, marginBottom:16, lineHeight:1.5 }}>Monto a acumular y en cuanto tiempo. La IA va a ver si te da con tu sobrante actual y elegir la estrategia.</div>
+
+      <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, textTransform:"uppercase", marginBottom:6 }}>Monto objetivo (ARS)</div>
+      <CurrencyInput value={targetAmount} onChange={setTargetAmount} C={C}/>
+
+      <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, textTransform:"uppercase", marginTop:14, marginBottom:8 }}>Horizonte</div>
+      <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:10 }}>
+        {HORIZON_PRESETS.map(h => {
+          const active = horizonYears === h;
           return (
             <button
-              key={String(o.id)}
-              onClick={() => onSelect(o.id)}
+              key={h}
+              onClick={() => setHorizonYears(h)}
               style={{
+                flex: "1 1 30%",
                 background: active ? C.accent + "18" : C.card,
                 border: "1.5px solid " + (active ? C.accent : C.border),
-                borderRadius: 14,
-                padding: "12px 10px",
-                textAlign: "left",
+                color: active ? C.accent : C.text,
+                borderRadius: 12,
+                padding: "10px 8px",
+                fontSize: 13,
+                fontWeight: 700,
                 cursor: "pointer",
                 fontFamily: "inherit",
-                transition: "all 0.15s",
-              }}
-            >
-              <div style={{ fontSize:22, marginBottom:4 }}>{o.icon}</div>
-              <div style={{ fontSize:13, fontWeight:700, color: active ? C.accent : C.text, marginBottom: o.desc ? 2 : 0 }}>{o.label}</div>
-              {o.desc && <div style={{ fontSize:10, color:C.textLt }}>{o.desc}</div>}
+                textAlign: "center",
+              }}>
+              {h} {h === 1 ? "anio" : "anios"}
             </button>
           );
         })}
       </div>
-    </div>
-  );
-}
 
-function StepCapacity({ profile, setProfile, C }) {
-  return (
-    <div>
-      <div style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:12 }}>Tu capacidad y contexto</div>
-
-      <Field label="Capacidad mensual de inversion (ARS)" C={C}>
-        <input
-          type="number"
-          min={0}
-          step={1000}
-          value={profile.monthlyCapacity}
-          onChange={e => setProfile(p => ({ ...p, monthlyCapacity: Number(e.target.value) || 0 }))}
-          style={inputStyle(C)}
-        />
-      </Field>
-      <Field label="Ingreso mensual aprox. (ARS) — opcional" C={C}>
-        <input
-          type="number"
-          min={0}
-          step={10000}
-          value={profile.income || ""}
-          placeholder="Opcional"
-          onChange={e => setProfile(p => ({ ...p, income: Number(e.target.value) || 0 }))}
-          style={inputStyle(C)}
-        />
-      </Field>
-      <Field label="Ahorros actuales (ARS) — opcional" C={C}>
-        <input
-          type="number"
-          min={0}
-          step={10000}
-          value={profile.savings || ""}
-          placeholder="Opcional"
-          onChange={e => setProfile(p => ({ ...p, savings: Number(e.target.value) || 0 }))}
-          style={inputStyle(C)}
-        />
-      </Field>
-      <Field label="Tu edad — opcional" C={C}>
-        <input
-          type="number"
-          min={0}
-          max={100}
-          value={profile.age || ""}
-          placeholder="Opcional"
-          onChange={e => setProfile(p => ({ ...p, age: Number(e.target.value) || 0 }))}
-          style={inputStyle(C)}
-        />
-      </Field>
-
-      <div style={{ marginTop:12, padding:"10px 12px", background:C.card, border:"1px dashed "+C.border, borderRadius:12, fontSize:11, color:C.textMd, lineHeight:1.5 }}>
-        Cuanta mas informacion das, mas calibrado es el plan. Nada se guarda fuera de tu navegador.
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, children, C }) {
-  return (
-    <div style={{ marginBottom:10 }}>
-      <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:5, textTransform:"uppercase" }}>{label}</div>
-      {children}
-    </div>
-  );
-}
-
-function inputStyle(C) {
-  return {
-    background: C.bg,
-    border: "1.5px solid " + C.border,
-    borderRadius: 10,
-    padding: "10px 12px",
-    fontSize: 14,
-    fontFamily: "Sora,sans-serif",
-    color: C.text,
-    outline: "none",
-    width: "100%",
-    boxSizing: "border-box",
-  };
-}
-
-function PlanView({ plan, profile, C }) {
-  const total = plan.allocation.reduce((s, a) => s + a.percent, 0) || 1;
-  return (
-    <div>
-      <div style={{ fontSize:11, fontWeight:700, color:C.accent, letterSpacing:1, marginBottom:6, textTransform:"uppercase" }}>Tu plan</div>
-      <div style={{ fontSize:14, color:C.text, lineHeight:1.5, marginBottom:12 }}>{plan.summary}</div>
-
-      {/* Monthly contribution */}
-      <div style={{ background:C.card, border:"1px solid "+C.border, borderRadius:14, padding:"12px 14px", marginBottom:12, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <div>
-          <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, textTransform:"uppercase" }}>Aporte mensual sugerido</div>
-          <div style={{ fontSize:20, fontWeight:800, color:C.text, fontFamily:"monospace", marginTop:2 }}>${Math.round(plan.monthlyContribution).toLocaleString("es-AR")}</div>
+      {/* Live compound-interest preview */}
+      <div style={{ marginTop:14, background:C.card, borderRadius:14, border:"1px solid "+C.border, padding:"14px" }}>
+        <div style={{ fontSize:11, fontWeight:700, color:C.textMd, letterSpacing:1, textTransform:"uppercase", marginBottom:6 }}>
+          Si invertis ${fmtARS(invest)}/mes durante {horizonYears} anios
         </div>
-        <div style={{ background:C.accent+"22", color:C.accent, borderRadius:10, padding:"6px 10px", fontSize:10, fontWeight:700, textTransform:"uppercase" }}>{profile.risk}</div>
-      </div>
-
-      {/* Allocation bar */}
-      <div style={{ fontSize:11, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:6, textTransform:"uppercase" }}>Asignacion</div>
-      <div style={{ display:"flex", height:12, borderRadius:6, overflow:"hidden", marginBottom:8, background:C.creamDk }}>
-        {plan.allocation.map((a, i) => (
-          <div key={i} title={`${a.name} ${a.percent}%`} style={{ width:((a.percent/total)*100)+"%", background: CATEGORY_COLORS[a.name] || "#6B7280" }}/>
-        ))}
-      </div>
-      <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:14 }}>
-        {plan.allocation.map((a, i) => (
-          <div key={i} style={{ display:"flex", alignItems:"center", gap:5, background:C.card, border:"1px solid "+C.border, borderRadius:10, padding:"4px 9px" }}>
-            <div style={{ width:9, height:9, borderRadius:2, background: CATEGORY_COLORS[a.name] || "#6B7280" }}/>
-            <span style={{ fontSize:11, color:C.text, fontWeight:600 }}>{a.name}</span>
-            <span style={{ fontSize:11, color:C.textMd, fontFamily:"monospace" }}>{a.percent}%</span>
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {preview.map(p => {
+            const reaches = p.final >= targetAmount && targetAmount > 0;
+            const pct = targetAmount > 0 ? Math.min(100, (p.final / targetAmount) * 100) : 0;
+            return (
+              <div key={p.rate}>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:4 }}>
+                  <span style={{ color:C.text, fontWeight:600 }}>
+                    {(p.rate * 100).toFixed(0)}% anual
+                    {reaches && <span style={{ marginLeft:6, fontSize:10, fontWeight:800, color:C.green, background:C.green+"22", padding:"1px 5px", borderRadius:4 }}>llega</span>}
+                  </span>
+                  <span style={{ color:C.text, fontFamily:"monospace", fontWeight:700 }}>${fmtARS(p.final)}</span>
+                </div>
+                <div style={{ height:6, background:C.creamDk, borderRadius:3, overflow:"hidden" }}>
+                  <div style={{ width: pct + "%", height:"100%", background: reaches ? C.green : C.accent, transition:"width 0.2s" }}/>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {targetAmount > 0 && (
+          <div style={{ fontSize:10, color:C.textLt, marginTop:10, lineHeight:1.5 }}>
+            Objetivo: ${fmtARS(targetAmount)} · Cuanto mas larga la barra, mas cerca estas de tu objetivo a esa tasa.
           </div>
-        ))}
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ------- plan view ---------------------------------------------------------
+
+function PlanView({ plan, invest, target, horizon, C }) {
+  const stratColor = STRATEGY_COLORS[plan.strategy] || C.accent;
+  const feasColor =
+    plan.feasibility === "holgado"  ? C.green :
+    plan.feasibility === "ajustado" ? C.gold  :
+    plan.feasibility === "inviable" ? C.red   : C.textMd;
+  const alloc = Array.isArray(plan.allocation) ? plan.allocation : [];
+  const total = alloc.reduce((s, a) => s + (Number(a.percent) || 0), 0) || 1;
+
+  return (
+    <div>
+      {/* Strategy hero */}
+      <div style={{ background: stratColor + "18", border: "1px solid " + stratColor + "55", borderRadius: 14, padding: "14px" }}>
+        <div style={{ fontSize:11, fontWeight:700, color:stratColor, letterSpacing:1, textTransform:"uppercase", marginBottom:4 }}>Tu estrategia</div>
+        <div style={{ fontSize:24, fontWeight:800, color:C.text, textTransform:"capitalize", marginBottom:6 }}>{plan.strategy || "—"}</div>
+        <div style={{ fontSize:12, color:C.text, lineHeight:1.5 }}>{plan.rationale}</div>
       </div>
 
-      {/* Milestones */}
-      {plan.milestones.length > 0 && (
-        <>
-          <div style={{ fontSize:11, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:6, textTransform:"uppercase" }}>Hitos</div>
-          <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:14 }}>
-            {plan.milestones.map((m, i) => (
-              <div key={i} style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
-                <div style={{ width:18, height:18, borderRadius:9, background:C.accent+"22", color:C.accent, fontSize:11, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{i+1}</div>
-                <div style={{ fontSize:12, color:C.text, lineHeight:1.5 }}>{m}</div>
+      {/* Numbers row */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:12 }}>
+        <StatCard label="Retorno asumido" value={`${((plan.assumedReturn || 0) * 100).toFixed(1)}%`} sub="anual" C={C}/>
+        <StatCard label="Aporte necesario" value={`$${fmtARS(plan.monthlyNeeded)}`} sub="mensual" C={C}/>
+      </div>
+
+      {/* Feasibility */}
+      <div style={{ marginTop:12, background:C.card, border:"1px solid "+C.border, borderRadius:14, padding:"12px 14px" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+          <span style={{ fontSize:11, fontWeight:700, color:C.textMd, letterSpacing:1, textTransform:"uppercase" }}>Viabilidad</span>
+          <span style={{ fontSize:10, fontWeight:800, color: feasColor, background: feasColor + "22", borderRadius:6, padding:"3px 8px", textTransform:"uppercase", letterSpacing:1 }}>
+            {plan.feasibility || "—"}
+          </span>
+        </div>
+        <div style={{ display:"flex", height:8, borderRadius:4, overflow:"hidden", background:C.creamDk, marginBottom:8 }}>
+          <div style={{
+            width: Math.min(100, (invest / Math.max(1, plan.monthlyNeeded || 1)) * 100) + "%",
+            background: feasColor, transition:"width 0.2s",
+          }}/>
+        </div>
+        <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:C.textLt }}>
+          <span>Tenes ${fmtARS(invest)}/mes</span>
+          <span>Necesitas ${fmtARS(plan.monthlyNeeded)}/mes</span>
+        </div>
+        {plan.advice && (
+          <div style={{ marginTop:10, fontSize:12, color:C.text, lineHeight:1.5 }}>{plan.advice}</div>
+        )}
+      </div>
+
+      {/* Allocation */}
+      {alloc.length > 0 && (
+        <div style={{ marginTop:14 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:C.textMd, letterSpacing:1, textTransform:"uppercase", marginBottom:6 }}>Asignacion sugerida</div>
+          <div style={{ display:"flex", height:12, borderRadius:6, overflow:"hidden", marginBottom:8, background:C.creamDk }}>
+            {alloc.map((a, i) => (
+              <div key={i} title={`${a.name} ${a.percent}%`} style={{ width: ((a.percent / total) * 100) + "%", background: CATEGORY_COLORS[a.name] || "#6B7280" }}/>
+            ))}
+          </div>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+            {alloc.map((a, i) => (
+              <div key={i} style={{ display:"flex", alignItems:"center", gap:5, background:C.card, border:"1px solid "+C.border, borderRadius:10, padding:"4px 9px" }}>
+                <div style={{ width:9, height:9, borderRadius:2, background: CATEGORY_COLORS[a.name] || "#6B7280" }}/>
+                <span style={{ fontSize:11, color:C.text, fontWeight:600 }}>{a.name}</span>
+                <span style={{ fontSize:11, color:C.textMd, fontFamily:"monospace" }}>{a.percent}%</span>
               </div>
             ))}
           </div>
-        </>
+        </div>
       )}
 
-      {/* Principles */}
-      {plan.principles.length > 0 && (
-        <>
-          <div style={{ fontSize:11, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:6, textTransform:"uppercase" }}>Principios</div>
-          <ul style={{ margin:0, paddingLeft:18, color:C.text, fontSize:12, lineHeight:1.6 }}>
-            {plan.principles.map((p, i) => <li key={i}>{p}</li>)}
-          </ul>
-        </>
-      )}
-
+      {/* Disclaimer */}
       <div style={{ marginTop:16, padding:"10px 12px", background:C.card, border:"1px solid "+C.border, borderRadius:12, fontSize:10, color:C.textLt, lineHeight:1.5 }}>
-        {plan.disclaimer}
+        {plan.disclaimer || "Esto es educativo, no asesoramiento financiero."}
       </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, sub, C }) {
+  return (
+    <div style={{ background:C.card, border:"1px solid "+C.border, borderRadius:14, padding:"11px 13px" }}>
+      <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, textTransform:"uppercase" }}>{label}</div>
+      <div style={{ fontSize:18, fontWeight:800, color:C.text, fontFamily:"monospace", marginTop:4 }}>{value}</div>
+      {sub && <div style={{ fontSize:10, color:C.textLt, marginTop:2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+// ------- shared inputs -----------------------------------------------------
+
+function CurrencyInput({ value, onChange, C }) {
+  return (
+    <div style={{ position:"relative" }}>
+      <span style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", color:C.textLt, fontSize:16, fontWeight:600 }}>$</span>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={0}
+        step={1000}
+        value={value}
+        onChange={e => onChange(Number(e.target.value) || 0)}
+        style={{
+          background: C.bg,
+          border: "1.5px solid " + C.border,
+          borderRadius: 12,
+          padding: "14px 14px 14px 26px",
+          fontSize: 18,
+          fontFamily: "Sora,sans-serif",
+          fontWeight: 700,
+          color: C.text,
+          outline: "none",
+          width: "100%",
+          boxSizing: "border-box",
+        }}
+      />
     </div>
   );
 }
