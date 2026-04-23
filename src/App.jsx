@@ -506,6 +506,64 @@ function useEscapeKey(onEscape) {
   }, [onEscape]);
 }
 
+// Fire a browser notification if the user has granted permission. No-op
+// otherwise. Also requests permission on first attempt (once per session).
+function samasNotify(title, body, opts = {}) {
+  try {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    const permission = Notification.permission;
+    if (permission === "denied") return;
+    if (permission === "default") {
+      // Ask on the next tick; we'll rely on the user granting it to make
+      // future notifications work. No need to block on this one.
+      Notification.requestPermission().catch(() => {});
+      return;
+    }
+    // Permission is "granted".
+    const n = new Notification(title, { body, icon: opts.icon, silent: opts.silent });
+    setTimeout(() => { try { n.close(); } catch {} }, 6000);
+  } catch { /* ignore */ }
+}
+
+// Simple two-key navigation: press "g" then one of { p, m, w, n, o } to
+// jump between tabs. Vim-style. Ignores keypresses when the user is
+// typing in an input / textarea. Also supports "?" to show a small hint.
+function useKeyboardShortcuts(setTab) {
+  useEffect(() => {
+    let gPressed = false;
+    let gTimer = null;
+    const isEditable = (el) => {
+      if (!el) return false;
+      const tag = (el.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return true;
+      if (el.isContentEditable) return true;
+      return false;
+    };
+    const onKey = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (isEditable(e.target)) return;
+      const k = e.key.toLowerCase();
+      if (gPressed) {
+        const map = { p: "portfolio", m: "mercado", w: "favoritos", n: "noticias", o: "ordenes" };
+        if (map[k] && setTab) {
+          setTab(map[k]);
+          e.preventDefault();
+        }
+        gPressed = false;
+        clearTimeout(gTimer);
+        return;
+      }
+      if (k === "g") {
+        gPressed = true;
+        clearTimeout(gTimer);
+        gTimer = setTimeout(() => { gPressed = false; }, 900);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => { window.removeEventListener("keydown", onKey); clearTimeout(gTimer); };
+  }, [setTab]);
+}
+
 // Light-touch haptic feedback for key actions on mobile. Silent no-op where
 // unsupported (desktop browsers, iOS Safari without gesture context, etc.).
 // Keep patterns short and subtle — not every tap should buzz.
@@ -1461,6 +1519,77 @@ function ConfirmTradeModal({ trade, onConfirm, onCancel, C, isWeb = false }) {
 // ============================================================
 // ASSET DETAIL
 // ============================================================
+// "What if" simulator for a single asset. Lets the user pick an amount and
+// a lookback window (1w / 1m / 6m / YTD), and shows what a purchase back
+// then would be worth today based on the asset's seeded change percentages.
+// Small, self-contained, no network.
+function WhatIfPanel({ asset, C }) {
+  const [amount, setAmount] = useState(100000);
+  const [range, setRange]   = useState("1m");
+  // Derive return % for each window from the seeded fields. 1w = 1/4 of 1m
+  // as a crude approximation; 6m = chgYTD * 0.5 (monthly rate squashed);
+  // YTD uses chgYTD directly.
+  const ranges = [
+    { key: "1w",  label: "1 sem", pct: (asset.chg1m || 0) / 4 },
+    { key: "1m",  label: "1 mes", pct: asset.chg1m || 0 },
+    { key: "6m",  label: "6 m",   pct: (asset.chgYTD || 0) * 0.6 },
+    { key: "ytd", label: "YTD",   pct: asset.chgYTD || 0 },
+  ];
+  const sel = ranges.find(r => r.key === range) || ranges[1];
+  const projected = amount * (1 + sel.pct / 100);
+  const delta     = projected - amount;
+  const up        = delta >= 0;
+  return (
+    <div style={{ background:C.card, border:"1px solid "+C.border, borderRadius:12, padding:"11px 13px", marginTop:10 }}>
+      <div style={{ fontSize:9, fontWeight:700, color:C.textLt, letterSpacing:1, textTransform:"uppercase", marginBottom:8 }}>
+        Qué hubiera pasado si compraba…
+      </div>
+      <div style={{ display:"flex", gap:6, marginBottom:10 }}>
+        {ranges.map(r => {
+          const active = range === r.key;
+          return (
+            <button
+              key={r.key}
+              onClick={() => setRange(r.key)}
+              style={{ flex:1, background: active ? C.accent + "22" : C.bg, border: "1.5px solid " + (active ? C.accent : C.border), borderRadius:8, padding:"6px 4px", fontSize:10, fontWeight:700, color: active ? C.accent : C.textMd, cursor:"pointer", fontFamily:"inherit" }}
+            >
+              {r.label}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ fontSize:9, fontWeight:700, color:C.textMd, letterSpacing:1, textTransform:"uppercase", marginBottom:4 }}>Monto (ARS)</div>
+      <div style={{ position:"relative", marginBottom:10 }}>
+        <span style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:C.textLt, fontSize:13, fontWeight:600, pointerEvents:"none" }}>$</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          value={amount > 0 ? String(amount) : ""}
+          placeholder="0"
+          onFocus={e => { try { e.target.select(); } catch {} }}
+          onChange={e => {
+            const cleaned = e.target.value.replace(/[^\d]/g, "").replace(/^0+(?=\d)/, "");
+            setAmount(cleaned === "" ? 0 : Number(cleaned));
+          }}
+          style={{ background:C.bg, border:"1.5px solid "+C.border, borderRadius:10, padding:"10px 12px 10px 22px", fontSize:14, fontFamily:"Sora,sans-serif", fontWeight:700, color:C.text, outline:"none", width:"100%", boxSizing:"border-box" }}
+        />
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+        <div style={{ background:C.bg, border:"1px solid "+C.border, borderRadius:10, padding:"8px 10px" }}>
+          <div style={{ fontSize:9, color:C.textLt, fontWeight:700 }}>HOY VALDRÍA</div>
+          <div style={{ fontSize:14, fontWeight:800, color:C.text, fontFamily:"monospace" }}>${fN(Math.round(projected))}</div>
+        </div>
+        <div style={{ background: up ? C.green + "18" : C.red + "18", border:"1px solid " + (up ? C.green + "44" : C.red + "44"), borderRadius:10, padding:"8px 10px" }}>
+          <div style={{ fontSize:9, color: up ? C.green : C.red, fontWeight:700 }}>{up ? "GANANCIA" : "PÉRDIDA"}</div>
+          <div style={{ fontSize:14, fontWeight:800, color: up ? C.green : C.red, fontFamily:"monospace" }}>
+            {up ? "+" : "-"}${fN(Math.round(Math.abs(delta)))} ({sel.pct >= 0 ? "+" : ""}{sel.pct.toFixed(1)}%)
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AssetDetail({ asset, holding, stopLoss, priceAlert, balance, isInWatchlist, onToggleWatchlist, onClose, onTrade, onSetStopLoss, onSetAlert, C }) {
   useEscapeKey(onClose);
   const [mode, setMode]           = useState(null);
@@ -1527,6 +1656,11 @@ function AssetDetail({ asset, holding, stopLoss, priceAlert, balance, isInWatchl
           </div>
 
           <YahooChart asset={asset} C={C}/>
+
+          {/* What-if: pick an amount and a time window, show the simulated
+              gain/loss at the seeded chg1m/chgYTD deltas. Pure math, no
+              network. Lets users poke at 'qué hubiera pasado si compraba'. */}
+          <WhatIfPanel asset={asset} C={C}/>
 
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:10, marginTop:10 }}>
             {[["Volumen",asset.vol],["Mkt Cap",asset.mktCap],["Max 52s","$"+fN(asset.hi52)],["Min 52s","$"+fN(asset.lo52)], ...(asset.pe ? [["P/E",asset.pe+"x"]] : [])].map(([l, v]) => (
@@ -2087,6 +2221,106 @@ function PageReportes({ C, lang }) {
 // Progress card shown on the portfolio page once the user has saved a plan
 // from the Objetivos wizard. Compares current portfolio value against the
 // plan's target, and offers quick actions to reopen the wizard or discard.
+// Inline SVG sparkline of the last N days of portfolio total. Accepts the
+// persisted portfolioHistory array and highlights the current value.
+function PortfolioSparkline({ history, width = 280, height = 56, stroke = "#16C784", fill = "rgba(22,199,132,0.14)" }) {
+  if (!Array.isArray(history) || history.length < 2) return null;
+  const values = history.map(p => Number(p.value) || 0);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const step = (width - 4) / Math.max(1, values.length - 1);
+  const pts = values.map((v, i) => {
+    const x = 2 + i * step;
+    const y = 2 + (height - 4) * (1 - (v - min) / range);
+    return [x, y];
+  });
+  const linePath = pts.map(([x, y], i) => (i === 0 ? "M" : "L") + x.toFixed(1) + "," + y.toFixed(1)).join(" ");
+  const areaPath = linePath + ` L${width - 2},${height - 1} L2,${height - 1} Z`;
+  const lastX = pts[pts.length - 1][0];
+  const lastY = pts[pts.length - 1][1];
+  const isUp = values[values.length - 1] >= values[0];
+  const color = isUp ? stroke : "#F87171";
+  const areaColor = isUp ? fill : "rgba(248,113,113,0.14)";
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: "block" }} aria-hidden="true">
+      <defs>
+        <linearGradient id="spkFade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.35"/>
+          <stop offset="100%" stopColor={color} stopOpacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d={areaPath} fill="url(#spkFade)"/>
+      <path d={linePath} fill="none" stroke={color} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round"/>
+      <circle cx={lastX} cy={lastY} r="2.5" fill={color}/>
+    </svg>
+  );
+}
+
+// Modal that lets the user program a monthly auto-contribution (or clear
+// an existing one). Amount is persisted; the parent applies it on mount
+// when a calendar month has passed since lastApplied.
+function RecurringAporteModal({ current, onSave, onClose, C }) {
+  useEscapeKey(onClose);
+  const [amount, setAmount] = useState(current?.amount || 50000);
+  return (
+    <div className="samas-fade" style={{ position:"absolute", inset:0, zIndex:45, background:"rgba(0,0,0,0.6)", display:"flex", flexDirection:"column", justifyContent:"flex-end" }}>
+      <div onClick={onClose} style={{ flex:1 }}/>
+      <div className="samas-slide-up" style={{ background:C.bg, borderRadius:"20px 20px 0 0", padding:"18px 18px 20px", border:"1px solid "+C.border, borderBottom:"none" }}>
+        <div style={{ display:"flex", justifyContent:"center", marginBottom:12 }}><div style={{ width:36, height:4, background:C.border, borderRadius:2 }}/></div>
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+          <div style={{ width:34, height:34, borderRadius:10, background:C.accent+"22", color:C.accent, display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <div>
+            <div style={{ fontSize:15, fontWeight:800, color:C.text }}>Aporte mensual automático</div>
+            <div style={{ fontSize:11, color:C.textMd }}>Acredita el monto elegido a tu saldo el día 1 de cada mes.</div>
+          </div>
+        </div>
+        <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, textTransform:"uppercase", marginTop:14, marginBottom:6 }}>Monto (ARS)</div>
+        <div style={{ position:"relative", marginBottom:14 }}>
+          <span style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", color:C.textLt, fontSize:14, fontWeight:600, pointerEvents:"none" }}>$</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            autoFocus
+            value={amount > 0 ? String(amount) : ""}
+            placeholder="0"
+            onFocus={e => { try { e.target.select(); } catch {} }}
+            onChange={e => {
+              const cleaned = e.target.value.replace(/[^\d]/g, "").replace(/^0+(?=\d)/, "");
+              setAmount(cleaned === "" ? 0 : Number(cleaned));
+            }}
+            style={{ background:C.bg, border:"1.5px solid "+C.border, borderRadius:12, padding:"12px 12px 12px 28px", fontSize:18, fontFamily:"Sora,sans-serif", fontWeight:700, color:C.text, outline:"none", width:"100%", boxSizing:"border-box" }}
+          />
+        </div>
+        <div style={{ display:"flex", gap:8 }}>
+          {current && (
+            <button
+              onClick={() => { onSave(null); onClose(); }}
+              style={{ flex:1, background:C.red+"18", color:C.red, border:"1.5px solid "+C.red+"44", borderRadius:12, padding:"11px", fontWeight:700, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}
+            >
+              Cancelar aporte
+            </button>
+          )}
+          <button
+            onClick={() => {
+              if (amount <= 0) return onClose();
+              const today = new Date().toISOString().slice(0, 10);
+              onSave({ amount, lastApplied: current?.lastApplied || today });
+              onClose();
+            }}
+            disabled={amount <= 0}
+            style={{ flex:2, background: amount <= 0 ? C.creamDk : C.accent, color: amount <= 0 ? C.textLt : "#fff", border:"none", borderRadius:12, padding:"11px", fontWeight:700, fontSize:13, cursor: amount <= 0 ? "not-allowed" : "pointer", fontFamily:"inherit" }}
+          >
+            {current ? "Actualizar" : "Programar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PlanProgressCard({ plan, currentValue, onOpen, onClear, C }) {
   const { confirm, ConfirmHost } = useConfirm(C);
   const profile = plan?._profile || {};
@@ -2271,12 +2505,13 @@ function OnboardingRow({ n, title, body, cta, onClick, accent, children, C }) {
   );
 }
 
-function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatchlist, onSelectAsset, onDeposit, onOpenObjectives, savedPlan, onClearPlan, C, showUSD, lang }) {
+function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatchlist, onSelectAsset, onDeposit, onOpenObjectives, savedPlan, onClearPlan, portfolioHistory, recurringAporte, onSetRecurring, C, showUSD, lang }) {
   const t = useT(lang);
   // Privacy toggle: when true, amounts in the hero card are replaced with dots.
   // Percent gain is still shown so the user sees direction without a dollar figure.
   const [hideValues, setHideValues] = useState(false);
   const [showDeposit, setShowDeposit] = useState(false);
+  const [showRecurring, setShowRecurring] = useState(false);
   const mask = "••••••";
   const enriched = holdings.map(h => {
     const a = ASSETS.find(x => x.ticker === h.ticker);
@@ -2319,7 +2554,12 @@ function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatch
             </svg>
           )}
         </button>
-        <div style={{ color:C.goldLt, fontSize:9, fontWeight:700, letterSpacing:2, textTransform:"uppercase", marginBottom:4 }}>{t("total_portfolio")}</div>
+        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
+          <div style={{ color:C.goldLt, fontSize:9, fontWeight:700, letterSpacing:2, textTransform:"uppercase" }}>{t("total_portfolio")}</div>
+          {/* Persistent SIMULADOR badge so no one mistakes this for a real
+              broker account. Small, unobtrusive but always visible. */}
+          <span title="Los saldos, órdenes y ganancias son simulados" style={{ background:"rgba(255,255,255,0.10)", border:"1px solid rgba(255,255,255,0.18)", color:"rgba(255,255,255,0.7)", fontSize:8, fontWeight:800, letterSpacing:1, padding:"2px 6px", borderRadius:5 }}>SIMULADOR</span>
+        </div>
         <div style={{ color:"#fff", fontSize:30, fontWeight:700, letterSpacing:-1, marginBottom:6, fontFamily: hideValues ? "monospace" : "inherit" }}>{fmtAmt(tv)}</div>
         <div style={{ display:"flex", gap:16, flexWrap:"wrap" }}>
           <div><div style={{ color:"rgba(255,255,255,0.5)", fontSize:9, textTransform:"uppercase", letterSpacing:1 }}>{t("invested")}</div><div style={{ color:"#fff", fontWeight:600, fontSize:13, fontFamily:"monospace" }}>{fmtAmt(tc)}</div></div>
@@ -2329,6 +2569,28 @@ function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatch
         <div style={{ marginTop:10, display:"flex", gap:8 }}>
           {FX.map(fx => <div key={fx.label} style={{ background:"rgba(255,255,255,0.1)", borderRadius:8, padding:"4px 10px" }}><div style={{ color:"rgba(255,255,255,0.5)", fontSize:8, fontWeight:700 }}>USD {fx.label}</div><div style={{ color:"#fff", fontSize:12, fontFamily:"monospace", fontWeight:700 }}>{hideValues ? mask : "u$s"+fN(Math.round(tv/fx.value))}</div></div>)}
         </div>
+        {/* Portfolio-value sparkline — shows last ~30 days of history.
+            Hidden when the user flipped the privacy eye off, same as the
+            numeric values. */}
+        {!hideValues && portfolioHistory && portfolioHistory.length > 1 && (
+          <div style={{ marginTop:14, background:"rgba(255,255,255,0.04)", borderRadius:12, padding:"8px 10px 6px", border:"1px solid rgba(255,255,255,0.06)" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
+              <span style={{ color:"rgba(255,255,255,0.5)", fontSize:8, fontWeight:700, letterSpacing:1, textTransform:"uppercase" }}>Últimos {portfolioHistory.length} días</span>
+              {(() => {
+                const start = portfolioHistory[0]?.value || 0;
+                const end   = portfolioHistory[portfolioHistory.length - 1]?.value || 0;
+                const pct   = start > 0 ? ((end - start) / start) * 100 : 0;
+                const up    = end >= start;
+                return (
+                  <span style={{ fontSize:10, fontWeight:700, color: up ? "#4ADE80" : "#F87171", fontFamily:"monospace" }}>
+                    {up ? "+" : "-"}{Math.abs(pct).toFixed(1)}%
+                  </span>
+                );
+              })()}
+            </div>
+            <PortfolioSparkline history={portfolioHistory} width={320} height={48}/>
+          </div>
+        )}
         {/* Fund / withdraw actions */}
         <div style={{ marginTop:14, display:"flex", gap:8 }}>
           <button onClick={() => setShowDeposit(true)} style={{ flex:1, background:C.accent, color:"#fff", border:"none", borderRadius:11, padding:"11px", fontWeight:600, fontSize:13, fontFamily:"Sora,sans-serif", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
@@ -2340,7 +2602,32 @@ function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatch
             Retirar
           </button>
         </div>
+        {/* Recurring monthly aporte shortcut. Shows either a configure CTA
+            or the current programmed amount with a click-to-edit. */}
+        <button
+          onClick={() => setShowRecurring(true)}
+          style={{
+            marginTop:10, width:"100%",
+            background: recurringAporte ? "rgba(74,222,128,0.12)" : "rgba(255,255,255,0.05)",
+            border: "1px solid " + (recurringAporte ? "rgba(74,222,128,0.35)" : "rgba(255,255,255,0.1)"),
+            borderRadius: 11,
+            padding: "9px 12px",
+            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+            cursor: "pointer", fontFamily: "inherit",
+          }}
+        >
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={recurringAporte ? "#4ADE80" : "rgba(255,255,255,0.5)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span style={{ fontSize:12, fontWeight:600, color:recurringAporte ? "#4ADE80" : "rgba(255,255,255,0.7)" }}>
+              {recurringAporte ? `Aporte mensual: $${fN(recurringAporte.amount)}` : "Programar aporte mensual"}
+            </span>
+          </div>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
       </div>
+      {showRecurring && (
+        <RecurringAporteModal current={recurringAporte} onSave={onSetRecurring} onClose={() => setShowRecurring(false)} C={C}/>
+      )}
       {showDeposit && (
         <DepositModal user={DEMO_USER} onClose={() => setShowDeposit(false)} onSimulate={(amt, method) => onDeposit && onDeposit(amt, method)} C={C}/>
       )}
@@ -4161,8 +4448,8 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
 // MOBILE PHONE WRAPPER
 // ============================================================
 function MobileApp({ appState, handlers, C }) {
-  const { loggedIn, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan } = appState;
-  const { setLoggedIn, handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan } = handlers;
+  const { loggedIn, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte } = appState;
+  const { setLoggedIn, handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte } = handlers;
   // Modal state hoisted out of PagePortfolio so the wizard's absolute
   // overlay covers the full phone frame (otherwise it was clipped by the
   // page's overflow:auto scroll container — the X button could fall out
@@ -4177,13 +4464,13 @@ function MobileApp({ appState, handlers, C }) {
   const getA  = t => priceAlerts[t] || null;
   const renderPage = () => {
     switch (tab) {
-      case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} C={C} showUSD={showUSD} lang={lang}/>;
+      case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} portfolioHistory={portfolioHistory} recurringAporte={recurringAporte} onSetRecurring={setRecurringAporte} C={C} showUSD={showUSD} lang={lang}/>;
       case "mercado":    return <PageMercado onSelectAsset={setSelected} C={C} showUSD={showUSD} lang={lang}/>;
       case "favoritos":  return <PageWatchlist watchlists={watchlists} onCreate={createWatchlist} onRename={renameWatchlist} onRemove={removeWatchlist} onRemoveTicker={removeFromWatchlist} onSelectAsset={setSelected} C={C} showUSD={showUSD}/>;
       case "noticias":   return <PageNoticias holdings={holdings} onSelectAsset={setSelected} C={C} lang={lang}/>;
       case "ideas":      return <PageIdeas C={C} showUSD={showUSD} onSelectAsset={setSelected} lang={lang}/>;
       case "ordenes":    return <PageOrdenes orders={orders} C={C} lang={lang}/>;
-      default:           return <PagePortfolio watchlist={watchlist} onToggleWatchlist={toggleWatchlist} holdings={holdings} stopLosses={stopLosses} balance={balance} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} C={C} showUSD={showUSD} lang={lang}/>;
+      default:           return <PagePortfolio watchlist={watchlist} onToggleWatchlist={toggleWatchlist} holdings={holdings} stopLosses={stopLosses} balance={balance} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} portfolioHistory={portfolioHistory} recurringAporte={recurringAporte} onSetRecurring={setRecurringAporte} C={C} showUSD={showUSD} lang={lang}/>;
     }
   };
   return (
@@ -4240,8 +4527,8 @@ function MobileApp({ appState, handlers, C }) {
 // WEB DASHBOARD LAYOUT
 // ============================================================
 function WebDashboard({ appState, handlers, C }) {
-  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, showProfile, showUSD, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan } = appState;
-  const { setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, setShowProfile, setIsDark, setShowUSD, setLang, finishTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setFinnhubKey, setEmailjsCfg, handleDeposit, setAnthropicKey, setAnthropicModel, setSavedPlan } = handlers;
+  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, showProfile, showUSD, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte } = appState;
+  const { setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, setShowProfile, setIsDark, setShowUSD, setLang, finishTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setFinnhubKey, setEmailjsCfg, handleDeposit, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte } = handlers;
   const [sideTab, setSideTab] = useState("portfolio");
   // Objectives modal lives at dashboard level for the same reason as in
   // MobileApp — keeps the overlay out of the page's scroll container.
@@ -4254,7 +4541,7 @@ function WebDashboard({ appState, handlers, C }) {
   const getA  = t => priceAlerts[t] || null;
   const renderPage = () => {
     switch (sideTab) {
-      case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} C={C} showUSD={showUSD} lang={lang}/>;
+      case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} portfolioHistory={portfolioHistory} recurringAporte={recurringAporte} onSetRecurring={setRecurringAporte} C={C} showUSD={showUSD} lang={lang}/>;
       case "mercado":    return <PageMercado onSelectAsset={setSelected} C={C} showUSD={showUSD} lang={lang}/>;
       case "favoritos":  return <PageWatchlist watchlists={watchlists} onCreate={createWatchlist} onRename={renameWatchlist} onRemove={removeWatchlist} onRemoveTicker={removeFromWatchlist} onSelectAsset={setSelected} C={C} showUSD={showUSD}/>;
       case "noticias":   return <PageNoticias holdings={holdings} onSelectAsset={setSelected} C={C} lang={lang}/>;
@@ -4262,7 +4549,7 @@ function WebDashboard({ appState, handlers, C }) {
       case "bonos":      return <PageBonos C={C} showUSD={showUSD} lang={lang}/>;
       case "ordenes":    return <PageOrdenes orders={orders} C={C} lang={lang}/>;
       case "reportes":   return <PageReportes C={C} lang={lang}/>;
-      default:           return <PagePortfolio watchlist={watchlist} onToggleWatchlist={toggleWatchlist} holdings={holdings} stopLosses={stopLosses} balance={balance} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} C={C} showUSD={showUSD} lang={lang}/>;
+      default:           return <PagePortfolio watchlist={watchlist} onToggleWatchlist={toggleWatchlist} holdings={holdings} stopLosses={stopLosses} balance={balance} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} portfolioHistory={portfolioHistory} recurringAporte={recurringAporte} onSetRecurring={setRecurringAporte} C={C} showUSD={showUSD} lang={lang}/>;
     }
   };
   return (
@@ -4386,6 +4673,13 @@ export default function SAMASApp() {
   // used to generate it + timestamp). Persisted so users can return to
   // their plan, and the Portfolio page can render progress against it.
   const [savedPlan, setSavedPlan]     = usePersistedState("samas_plan", null);
+  // Time-series snapshots of total portfolio value, one per day, so we can
+  // render a sparkline on the hero card. Bootstrapped with a synthetic
+  // 30-day backfill on first load so new accounts don't see a flat line.
+  const [portfolioHistory, setPortfolioHistory] = usePersistedState("samas_portfolio_history", null);
+  // Programmed monthly auto-contribution. Shape: { amount, lastApplied }
+  // where lastApplied is an ISO date. Null = not configured.
+  const [recurringAporte, setRecurringAporte] = usePersistedState("samas_recurring_aporte", null);
   const [pendingTrade, setPending]    = useState(null);
   const [toast, setToast]             = useState(null);
   const [viewMode, setViewMode]       = usePersistedState("samas_view_mode", "mobile");
@@ -4409,6 +4703,8 @@ export default function SAMASApp() {
   useEffect(() => { saveAnthropicModel(anthropicModel); }, [anthropicModel]);
   const setAnthropicModel = (m) => setAnthropicModelState(m || ANTHROPIC_DEFAULT_MODEL);
 
+  useKeyboardShortcuts(setTab);
+
   // RTL support — flip the document direction for Hebrew / Arabic so that
   // text, form fields, and mirrored icons read naturally. Everything else
   // is positioned with flexbox which adapts to dir="rtl" automatically.
@@ -4418,6 +4714,78 @@ export default function SAMASApp() {
       document.documentElement.lang = lang;
     }
   }, [lang]);
+
+  // Current total holdings value in ARS (same number the hero card shows
+  // as "CARTERA TOTAL"). Derived fresh every render so the sparkline +
+  // snapshot logic stay in sync with trades.
+  const totalARS = holdings.reduce((s, h) => {
+    const a = ASSETS.find(x => x.ticker === h.ticker);
+    return s + (a ? h.qty * a.price : 0);
+  }, 0);
+
+  // Backfill a synthetic 30-day history on first load so the sparkline has
+  // something interesting to show right away. The walk is seeded from today's
+  // total and drifts with small +/- percent deltas. Purely for demo feel.
+  useEffect(() => {
+    if (portfolioHistory && portfolioHistory.length) return;   // already seeded
+    const today = new Date();
+    const start = new Date(today);
+    start.setDate(start.getDate() - 29);
+    const points = [];
+    const base = Math.max(totalARS, 1);
+    // Random walk ending at base. Use a tiny PRNG so the shape is consistent
+    // once seeded (re-seeding on each load would cause flicker).
+    let v = base * 0.85 + Math.random() * base * 0.05;
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const iso = d.toISOString().slice(0, 10);
+      const drift = (Math.random() - 0.48) * 0.025;            // slight upward bias
+      v = v * (1 + drift);
+      // Snap the final point to exactly today's total so the graph ends where
+      // the user's current value actually is.
+      if (i === 29) v = base;
+      points.push({ date: iso, value: Math.round(v) });
+    }
+    setPortfolioHistory(points);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Append a new snapshot for today whenever the total materially changes
+  // and we're on a fresh day vs. the last snapshot. Dedupe: one per date.
+  useEffect(() => {
+    if (!portfolioHistory) return;
+    const todayIso = new Date().toISOString().slice(0, 10);
+    setPortfolioHistory(prev => {
+      if (!prev || !prev.length) return prev;
+      const last = prev[prev.length - 1];
+      if (last.date === todayIso) {
+        // Update today's value in place (no duplicate rows).
+        if (last.value === Math.round(totalARS)) return prev;
+        return [...prev.slice(0, -1), { date: todayIso, value: Math.round(totalARS) }];
+      }
+      // New day, append.
+      return [...prev, { date: todayIso, value: Math.round(totalARS) }].slice(-120);   // cap at 4 months
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalARS]);
+
+  // Apply the recurring aporte if one is configured and a calendar month has
+  // passed since lastApplied. Runs on every mount; cheap.
+  useEffect(() => {
+    if (!recurringAporte || !recurringAporte.amount || !recurringAporte.lastApplied) return;
+    const now = new Date();
+    const last = new Date(recurringAporte.lastApplied);
+    const monthsElapsed = (now.getFullYear() - last.getFullYear()) * 12 + (now.getMonth() - last.getMonth());
+    if (monthsElapsed < 1) return;
+    // Apply as many months as we missed (at most 6, so we don't turbo-deposit
+    // after a long absence).
+    const toApply = Math.min(monthsElapsed, 6);
+    setBalance(b => b + recurringAporte.amount * toApply);
+    setRecurringAporte(prev => ({ ...prev, lastApplied: now.toISOString().slice(0, 10) }));
+    showToast(`Aporte automático: $${fN(recurringAporte.amount * toApply)} acreditado (${toApply} ${toApply === 1 ? "mes" : "meses"})`, C.green);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const handler = () => setShowTutorial(true);
@@ -4448,7 +4816,11 @@ export default function SAMASApp() {
 
   const handleSetSL = (ticker, price) => {
     if (price === null) { setStopLosses(prev => { const n={...prev}; delete n[ticker]; return n; }); showToast("Stop Loss eliminado para " + ticker, C.textMd); }
-    else { setStopLosses(prev => ({...prev,[ticker]:price})); showToast("Stop Loss activado: " + ticker + " a $" + fN(price), C.red); }
+    else {
+      setStopLosses(prev => ({...prev,[ticker]:price}));
+      showToast("Stop Loss activado: " + ticker + " a $" + fN(price), C.red);
+      samasNotify(`Stop Loss activado · ${ticker}`, `Te avisamos si baja de $${fN(price)}.`);
+    }
   };
     // Star toggle — operates across lists. If the ticker is in ANY list, we
   // remove it from all. Otherwise we add it to the first (default) list.
@@ -4499,7 +4871,12 @@ export default function SAMASApp() {
   };
   const handleSetAlert = (ticker, alert) => {
     if (alert === null) { setPriceAlerts(prev => { const n={...prev}; delete n[ticker]; return n; }); showToast("Alerta eliminada para " + ticker, C.textMd); }
-    else { setPriceAlerts(prev => ({...prev,[ticker]:alert})); showToast("Alerta: " + ticker + " " + (alert.direction==="above"?"sube a":"baja a") + " $" + fN(alert.price), C.gold); }
+    else {
+      setPriceAlerts(prev => ({...prev,[ticker]:alert}));
+      const dir = alert.direction === "above" ? "sube a" : "baja a";
+      showToast("Alerta: " + ticker + " " + dir + " $" + fN(alert.price), C.gold);
+      samasNotify(`Alerta programada · ${ticker}`, `Te avisamos cuando ${dir} $${fN(alert.price)}.`);
+    }
   };
   const handleLogin = () => {
     setLoggedIn(true);
@@ -4534,8 +4911,8 @@ export default function SAMASApp() {
     showToast(`$${fN(amount)} acreditados via ${methodLabel}`, C.green);
   };
 
-  const appState = { isDark, loggedIn, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan };
-  const handlers = { setLoggedIn, handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan };
+  const appState = { isDark, loggedIn, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte };
+  const handlers = { setLoggedIn, handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte };
 
   const outerBg = isDark ? "#080808" : "#050505";
 

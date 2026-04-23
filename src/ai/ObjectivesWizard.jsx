@@ -462,7 +462,73 @@ function PlanView({ plan, target, horizon, currency = "ARS", C }) {
       <div style={{ marginTop:10, padding:"10px 12px", background:C.card, border:"1px solid "+C.border, borderRadius:12, fontSize:10, color:C.textLt, lineHeight:1.5 }}>
         {plan.disclaimer || "Esto es educativo, no asesoramiento financiero."}
       </div>
+
+      {/* Copy-to-clipboard for offline sharing. The output is markdown so
+          it pastes cleanly into Notion, WhatsApp, Notes, etc. */}
+      <CopyPlanButton plan={plan} target={target} horizon={horizon} currency={currency} monthlyNeeded={monthlyNeeded} C={C}/>
     </div>
+  );
+}
+
+function CopyPlanButton({ plan, target, horizon, currency, monthlyNeeded, C }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    const lines = [
+      `# Mi plan SAMAS`,
+      ``,
+      `**Perfil:** ${plan.strategy || "—"}`,
+      `**Objetivo:** ${sym(currency)}${fmtNum(target)} en ${horizon} ${horizon === 1 ? "año" : "años"}`,
+      `**Retorno asumido:** ${((plan.assumedReturn || 0) * 100).toFixed(1)}% anual`,
+      `**Aporte mensual necesario:** ${sym(currency)}${fmtNum(monthlyNeeded)}`,
+      ``,
+      `## Razonamiento`,
+      plan.rationale || "",
+      ``,
+    ];
+    if (Array.isArray(plan.allocation) && plan.allocation.length) {
+      lines.push(`## Asignación sugerida`);
+      plan.allocation.forEach(a => lines.push(`- ${a.name}: ${a.percent}%`));
+      lines.push("");
+    }
+    if (plan.difficulty && plan.difficulty !== "normal") {
+      lines.push(`## Dificultad`);
+      lines.push(plan.difficulty === "muy_exigente" ? "Muy exigente — la tenés jodida, le vas a tener que meter nazi." : "Exigente — hay que ponerle pero se puede.");
+      lines.push("");
+    }
+    lines.push(`---`);
+    lines.push(plan.disclaimer || "Esto es educativo, no asesoramiento financiero.");
+    const text = lines.join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // Fallback: create a temp textarea (works on older browsers / file://)
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch {}
+      document.body.removeChild(ta);
+    }
+  }
+  return (
+    <button
+      onClick={copy}
+      style={{ marginTop:10, width:"100%", background: copied ? C.green + "18" : "transparent", border: "1.5px dashed " + (copied ? C.green + "55" : C.border), color: copied ? C.green : C.textMd, borderRadius:10, padding:"10px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}
+    >
+      {copied ? (
+        <>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Copiado al portapapeles
+        </>
+      ) : (
+        <>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copiar plan (markdown)
+        </>
+      )}
+    </button>
   );
 }
 
