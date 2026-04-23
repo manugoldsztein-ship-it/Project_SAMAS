@@ -10,7 +10,7 @@ Social Feed / Forum: A community space inspired by Threads, Twitter, and WallStr
 
 Trump Accounts: Specific tracking or integration related to high-profile political/financial accounts.
 
-Multi-language Support: Localization for Spanish, English, Portuguese, Italian, French, German, Chinese, Russian, Japanese, Hebrew, and Arabic.
+Multi-language Support: Localization for Spanish, English, Portuguese, Italian, French, German, Chinese, Russian, Japanese, Hebrew, and Arabic. [Most of these are done, need to implement a few more]
 
 ## AI & Personalization
 AI Implementation: General integration of artificial intelligence across the platform.
@@ -22,7 +22,7 @@ User Acquisition: Using the forum/social features as a "hook" to drive app downl
 
 Ad Revenue: Implementing an ad frequency similar to Twitter/X to monetize "passive" users who only visit to browse the forums.
 
-Brand Identity: Pending tasks for final Name and Logo design.
+Brand Identity: Pending tasks for final Name and Logo design. [Name is there, missing logo]
 
 ## Technical & Security
 Cybersecurity: General focus on platform security and data protection.
