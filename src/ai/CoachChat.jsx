@@ -24,11 +24,22 @@ export function CoachChat({ holdings = [], assets = [], C, lang = "es" }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr]   = useState(null);
   const listRef = useRef(null);
+  // Ignore late async results if the user closed the panel mid-fetch.
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
 
   // Auto-scroll the chat list as new messages come in.
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages, busy]);
+
+  // Escape-to-close — only active while the panel is open.
+  useEffect(() => {
+    if (!open) return;
+    const fn = (e) => { if (e.key === "Escape") { e.stopPropagation(); setOpen(false); } };
+    window.addEventListener("keydown", fn);
+    return () => window.removeEventListener("keydown", fn);
+  }, [open]);
 
   // Build a compact portfolio snapshot the coach can reference.
   const portfolioCtx = holdings.map(h => {
@@ -59,16 +70,21 @@ export function CoachChat({ holdings = [], assets = [], C, lang = "es" }) {
     setInput("");
     setBusy(true);
     try {
-      const reply = await callCoachChat(next, { portfolio: portfolioCtx });
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Timeout: Claude tardo mas de 25s")), 25000)
+      );
+      const reply = await Promise.race([callCoachChat(next, { portfolio: portfolioCtx }), timeout]);
+      if (!mountedRef.current) return;
       setMessages(m => [...m, { role: "assistant", content: reply }]);
     } catch (e) {
+      if (!mountedRef.current) return;
       const msg = e?.message === "NO_KEY"
         ? "Configurar API key en Perfil → Coach IA para usar respuestas reales."
         : (e?.message || "Error al contactar a Claude.");
       setErr(msg);
       setMessages(m => [...m, { role: "assistant", content: "Se me trabo la conexion. " + msg }]);
     } finally {
-      setBusy(false);
+      if (mountedRef.current) setBusy(false);
     }
   }
 

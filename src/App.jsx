@@ -434,6 +434,18 @@ function useT(lang) {
   return (key) => (TRANSLATIONS[lang] && TRANSLATIONS[lang][key]) || TRANSLATIONS.es[key] || key;
 }
 
+// Global Escape-to-close helper. Pass the handler that should fire when the
+// user presses Esc while the modal is open. Null/undefined handler = no-op.
+// Kept tiny and dependency-lean so every modal can adopt it without fuss.
+function useEscapeKey(onEscape) {
+  useEffect(() => {
+    if (!onEscape) return;
+    const fn = (e) => { if (e.key === "Escape") { e.stopPropagation(); onEscape(); } };
+    window.addEventListener("keydown", fn);
+    return () => window.removeEventListener("keydown", fn);
+  }, [onEscape]);
+}
+
 
 // ============================================================
 // UTILS
@@ -903,7 +915,11 @@ function FXStrip({ C, totalARS }) {
 // PRICE INPUT PANEL
 // ============================================================
 function PriceInputPanel({ asset, accentColor, suggestions, inputMode, setInputMode, price, setPrice, direction, C }) {
-  const pctVal = price && parseInt(price) > 0 ? (((parseInt(price) - asset.price) / asset.price) * 100).toFixed(1) : null;
+  // Guard the divisor — if asset.price transiently hits 0 during a live
+  // feed outage, the pct label would otherwise read "Infinity%".
+  const pctVal = price && parseInt(price) > 0 && asset.price > 0
+    ? (((parseInt(price) - asset.price) / asset.price) * 100).toFixed(1)
+    : null;
   const valid  = price && parseInt(price) > 0 && (direction === "below" ? parseInt(price) < asset.price : parseInt(price) > asset.price);
   return (
     <div>
@@ -935,7 +951,9 @@ function PriceInputPanel({ asset, accentColor, suggestions, inputMode, setInputM
       ) : (
         <div style={{ position:"relative", marginBottom:10 }}>
           <span style={{ position:"absolute", left:13, top:"50%", transform:"translateY(-50%)", color:C.textMd, fontSize:15 }}>$</span>
-          <input type="number" min="0" inputMode="decimal" value={price} onChange={e => setPrice(e.target.value.replace(/^-/, ""))}
+          <input type="text" inputMode="decimal" value={price}
+            onChange={e => setPrice(e.target.value.replace(/[^\d.]/g, ""))}
+            onKeyDown={e => { if (e.key === "e" || e.key === "E" || e.key === "+" || e.key === "-") e.preventDefault(); }}
             style={{ background:C.card, border:"1.5px solid " + C.border, borderRadius:12, padding:"12px 12px 12px 28px", fontSize:16, fontFamily:"monospace", fontWeight:700, color:C.text, outline:"none", width:"100%", boxSizing:"border-box" }}/>
         </div>
       )}
@@ -954,6 +972,7 @@ function PriceInputPanel({ asset, accentColor, suggestions, inputMode, setInputM
 // STOP LOSS MODAL
 // ============================================================
 function StopLossModal({ asset, current, onSave, onClose, C }) {
+  useEscapeKey(onClose);
   const [price, setPrice]         = useState(current ? String(current) : "");
   const [inputMode, setInputMode] = useState("pct");
   const sug = [{ label:"-5%", pct:-5 }, { label:"-10%", pct:-10 }, { label:"-15%", pct:-15 }];
@@ -981,6 +1000,7 @@ function StopLossModal({ asset, current, onSave, onClose, C }) {
 // PRICE ALERT MODAL
 // ============================================================
 function PriceAlertModal({ asset, current, onSave, onClose, C }) {
+  useEscapeKey(onClose);
   const [price, setPrice]         = useState(current ? String(current.price) : "");
   const [inputMode, setInputMode] = useState("pct");
   const [dir, setDir]             = useState(current ? current.direction : "above");
@@ -1014,6 +1034,7 @@ function PriceAlertModal({ asset, current, onSave, onClose, C }) {
 // CONFIRM TRADE MODAL (with 2FA + email)
 // ============================================================
 function ConfirmTradeModal({ trade, onConfirm, onCancel, C }) {
+  useEscapeKey(onCancel);
   const [step, setStep]       = useState("alert");   // alert | review | faceid | pin
   const [pin, setPin]         = useState("");
   const [pinErr, setPinErr]   = useState(false);
@@ -1265,6 +1286,7 @@ function ConfirmTradeModal({ trade, onConfirm, onCancel, C }) {
 // ASSET DETAIL
 // ============================================================
 function AssetDetail({ asset, holding, stopLoss, priceAlert, balance, isInWatchlist, onToggleWatchlist, onClose, onTrade, onSetStopLoss, onSetAlert, C }) {
+  useEscapeKey(onClose);
   const [mode, setMode]           = useState(null);
   const [qty, setQty]             = useState("");
   const [done, setDone]           = useState(false);
@@ -1395,7 +1417,10 @@ function AssetDetail({ asset, holding, stopLoss, priceAlert, balance, isInWatchl
                 {mode === "sell" && <div style={{ fontSize:10, color:C.textLt }}>Disponible: <strong>{maxSell}</strong></div>}
                 {mode === "buy"  && <div style={{ fontSize:10, color:C.textLt }}>Saldo: <strong>${fN(balance)}</strong></div>}
               </div>
-              <input type="number" min="0" inputMode="numeric" value={qty} onChange={e => setQty(e.target.value.replace(/^-/, ""))} placeholder="0"
+              <input type="text" inputMode="numeric" value={qty}
+                onChange={e => setQty(e.target.value.replace(/[^\d]/g, ""))}
+                onKeyDown={e => { if (e.key === "e" || e.key === "E" || e.key === "+" || e.key === "-" || e.key === ".") e.preventDefault(); }}
+                placeholder="0"
                 style={{ background:C.bg, border:"1.5px solid "+(sellErr||buyErr?C.red:C.border), borderRadius:10, padding:"12px", fontSize:16, fontFamily:"monospace", fontWeight:700, color:C.text, outline:"none", width:"100%", boxSizing:"border-box", marginBottom:6 }}/>
               {sellErr && <div style={{ color:C.red, fontSize:12, fontWeight:600, marginBottom:8 }}>{sellErr}</div>}
               {buyErr  && <div style={{ color:C.red, fontSize:12, fontWeight:600, marginBottom:8 }}>{buyErr}</div>}
@@ -1665,7 +1690,7 @@ function PageBonos({ C, showUSD, lang }) {
                 <div style={{ fontSize:11, color:C.textMd }}>{b.name}</div>
               </div>
               <div style={{ textAlign:"right", flexShrink:0 }}>
-                <div style={{ fontSize:15, fontWeight:800, color:C.text, fontFamily:"monospace" }}>{b.currency==="USD" ? "u$s"+b.price : "$"+fN(Math.round(b.price*1247.5))}</div>
+                <div style={{ fontSize:15, fontWeight:800, color:C.text, fontFamily:"monospace" }}>{b.currency==="USD" ? "u$s"+b.price : "$"+fN(Math.round(b.price))}</div>
                 {b.ytm && <div style={{ fontSize:11, color:C.green, fontWeight:700 }}>TIR {b.ytm}%</div>}
               </div>
             </div>
@@ -1983,8 +2008,16 @@ function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatch
       </button>
       <div style={{ margin:"12px 14px 0", background:C.card, borderRadius:14, border:"1px solid "+C.border, padding:"12px 14px" }}>
         <div style={{ fontSize:11, fontWeight:700, color:C.textMd, marginBottom:8 }}>{t("distribution")}</div>
-        <div style={{ display:"flex", height:10, borderRadius:5, overflow:"hidden", gap:2 }}>{enriched.map((h, i) => <div key={h.ticker} style={{ width:((h.val/tv)*100).toFixed(1)+"%", background:pal[i%pal.length], borderRadius:2 }}/>)}</div>
-        <div style={{ display:"flex", flexWrap:"wrap", gap:"6px 14px", marginTop:8 }}>{enriched.map((h, i) => <div key={h.ticker} style={{ display:"flex", alignItems:"center", gap:4 }}><div style={{ width:8, height:8, borderRadius:2, background:pal[i%pal.length] }}/><span style={{ fontSize:10, color:C.textMd }}>{h.ticker} {((h.val/tv)*100).toFixed(0)}%</span></div>)}</div>
+        <div style={{ display:"flex", height:10, borderRadius:5, overflow:"hidden", gap:2 }}>{enriched.map((h, i) => {
+          // Guard: tv can be 0 if all holdings momentarily have a 0 price
+          // (e.g. during a Finnhub outage). Avoid NaN%/Infinity% widths.
+          const pct = tv > 0 ? (h.val / tv) * 100 : 0;
+          return <div key={h.ticker} style={{ width: pct.toFixed(1) + "%", background:pal[i%pal.length], borderRadius:2 }}/>;
+        })}</div>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:"6px 14px", marginTop:8 }}>{enriched.map((h, i) => {
+          const pct = tv > 0 ? (h.val / tv) * 100 : 0;
+          return <div key={h.ticker} style={{ display:"flex", alignItems:"center", gap:4 }}><div style={{ width:8, height:8, borderRadius:2, background:pal[i%pal.length] }}/><span style={{ fontSize:10, color:C.textMd }}>{h.ticker} {pct.toFixed(0)}%</span></div>;
+        })}</div>
       </div>
       <div style={{ padding:"12px 14px 0" }}>
         <div style={{ fontSize:11, fontWeight:700, color:C.textMd, marginBottom:8 }}>{t("positions")}</div>
@@ -2071,7 +2104,11 @@ function PageMercado({ onSelectAsset, C, showUSD, lang }) {
     ticker:    b.ticker,
     name:      b.name,
     cat:       "Bonos",
-    price:     b.currency === "USD" ? Math.round(b.price * 1247.5) : Math.round(b.price * 1247.5),
+    // USD-denominated bonds quote paridad in USD → convert to ARS at MEP.
+    // ARS-denominated bonds (CER, LEDES) quote paridad already in pesos
+    // and should not be re-multiplied. Previously both branches applied
+    // the same multiplication, double-inflating ARS bond prices.
+    price:     b.currency === "USD" ? Math.round(b.price * 1247.5) : Math.round(b.price),
     change:    0,
     chg1m:     0,
     chgYTD:    0,
@@ -2355,6 +2392,7 @@ function SAMASLogoLarge() {
 // ============================================================
 function OnboardingTutorial({ onClose, onComplete, setTab, setShowUSD, setShowProfile, currentTab, C }) {
   const [step, setStep] = useState(0);
+  useEscapeKey(onClose);
 
   // Each step points to a specific UI element in the mobile phone frame (375x760)
   // target: the bounding box (top, left, width, height) of the element being highlighted
@@ -2442,14 +2480,16 @@ function OnboardingTutorial({ onClose, onComplete, setTab, setShowUSD, setShowPr
     },
   ];
 
-  // When step changes, navigate to the corresponding tab automatically
+  // When step changes, navigate to the corresponding tab automatically.
+  // Guard against out-of-bounds step indexes — e.g. if a future edit makes
+  // the wizard advance past the last entry, the previous direct index
+  // access would crash here instead of failing gracefully.
   useEffect(() => {
-    if (steps[step].tabTo && setTab) {
-      setTab(steps[step].tabTo);
-    }
+    const current = steps[step];
+    if (current && current.tabTo && setTab) setTab(current.tabTo);
   }, [step]);
 
-  const s = steps[step];
+  const s = steps[step] || steps[steps.length - 1];
   const isLast = step === steps.length - 1;
   const isFirst = step === 0;
 
@@ -2526,6 +2566,7 @@ function genCode() {
 // alias, address) and a unique reference code so an eventual backend can
 // match incoming transfers to this account.
 function DepositModal({ user, onClose, onSimulate, C }) {
+  useEscapeKey(onClose);
   const [method, setMethod] = useState("transfer");
   const [copied, setCopied] = useState(null);
   const [showSim, setShowSim] = useState(false);
@@ -3063,6 +3104,7 @@ function DevicesPage({ onBack, C }) {
 }
 
 function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, finnhubKey, setFinnhubKey, finnhub, emailjsCfg, setEmailjsCfg, anthropicKey, setAnthropicKey, anthropicModel, setAnthropicModel, C }) {
+  useEscapeKey(onClose);
   const [confirm, setConfirm]       = useState(false);
   const [show2FA, setShow2FA]       = useState(false);
   const [twoFAEnabled, set2FA]      = useState(false);

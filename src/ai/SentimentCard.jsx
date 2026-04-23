@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { callSentiment, hasAnthropicKey } from "./client.js";
 
+const ANALYZE_TIMEOUT_MS = 20000;
+
 // ============================================================
 // NEWS SENTIMENT CARD
 // ============================================================
@@ -26,19 +28,30 @@ export function SentimentCard({ posts = [], C }) {
     signature.current = posts.slice(0, 15).map(p => (p.title || "").slice(0, 40)).join("|");
   }, [posts]);
 
+  // Track mount state so a slow Claude response can't setState on a dead
+  // component, and wrap the call in a timeout promise so the spinner
+  // doesn't hang forever if the API stalls.
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
+
   async function analyze() {
-    if (!posts.length) return;
+    if (!posts.length || loading) return;
     setLoading(true);
     setErr(null);
     try {
-      const s = await callSentiment(posts);
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Timeout: Claude tardo mas de " + (ANALYZE_TIMEOUT_MS / 1000) + "s")), ANALYZE_TIMEOUT_MS)
+      );
+      const s = await Promise.race([callSentiment(posts), timeout]);
+      if (!mountedRef.current) return;
       setData(s);
       setStamp(new Date());
       setOpen(true);
     } catch (e) {
+      if (!mountedRef.current) return;
       setErr(e?.message || "Error al analizar el feed");
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }
 

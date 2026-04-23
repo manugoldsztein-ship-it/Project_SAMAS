@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { callObjectives, fvAnnuity, hasAnthropicKey } from "./client.js";
 
 // ============================================================
@@ -46,6 +46,21 @@ export function ObjectivesWizard({ onClose, C }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr]   = useState(null);
 
+  // Track mount state so we can safely ignore late async results if the
+  // user closed the wizard mid-fetch.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  // Escape key closes the wizard.
+  useEffect(() => {
+    const fn = (e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
+    window.addEventListener("keydown", fn);
+    return () => window.removeEventListener("keydown", fn);
+  }, [onClose]);
+
   const invest = Math.max(0, (Number(monthlyIncome) || 0) - (Number(monthlyExpenses) || 0));
   const savingsRate = (Number(monthlyIncome) || 0) > 0 ? invest / monthlyIncome : 0;
 
@@ -60,6 +75,9 @@ export function ObjectivesWizard({ onClose, C }) {
   }, [invest, horizonYears]);
 
   async function generate() {
+    if (busy) return;                          // prevent double-submit
+    if (horizonYears <= 0) { setErr("El horizonte debe ser mayor a 0"); return; }
+    if (targetAmount <= 0) { setErr("El objetivo debe ser mayor a 0"); return; }
     setBusy(true);
     setErr(null);
     try {
@@ -69,12 +87,14 @@ export function ObjectivesWizard({ onClose, C }) {
         targetAmount,
         horizonYears,
       });
+      if (!mountedRef.current) return;         // late result after close — discard
       setPlan(p);
       setStep(4);
     } catch (e) {
+      if (!mountedRef.current) return;
       setErr(e?.message || "Error al generar el plan");
     } finally {
-      setBusy(false);
+      if (mountedRef.current) setBusy(false);
     }
   }
 
