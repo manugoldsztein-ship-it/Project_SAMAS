@@ -29,4 +29,6 @@ Cybersecurity: General focus on platform security and data protection.
 
 Differentiation: A focus on how to make the platform stand out from existing competitors (USP).
 
+## Other Comments
+
 // I'm Retep and I am evil
