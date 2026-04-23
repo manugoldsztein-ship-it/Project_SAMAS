@@ -1487,6 +1487,10 @@ function PageReportes({ C, lang }) {
 
 function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatchlist, onSelectAsset, C, showUSD, lang }) {
   const t = useT(lang);
+  // Privacy toggle: when true, amounts in the hero card are replaced with dots.
+  // Percent gain is still shown so the user sees direction without a dollar figure.
+  const [hideValues, setHideValues] = useState(false);
+  const mask = "••••••";
   const enriched = holdings.map(h => {
     const a = ASSETS.find(x => x.ticker === h.ticker);
     if (!a) return null;
@@ -1497,19 +1501,43 @@ function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatch
   const tc = enriched.reduce((s, h) => s + h.cost, 0);
   const gA = tv - tc;
   const pal = [C.accent,"#7C3AED",C.green,C.gold,"#2563EB","#F7931A"];
+  const fmtAmt = (amount) => hideValues ? mask : (showUSD ? "u$s" + fN(Math.round(amount/1247.5)) : "$" + fN(amount));
   return (
     <div style={{ paddingBottom:16 }}>
       <div style={{ background:C.isDark ? "linear-gradient(150deg,#0D1117 0%,#1F1F1F 100%)" : "linear-gradient(150deg,#0D1117 0%,#1F1F1F 100%)", margin:"14px 14px 0", borderRadius:20, padding:"20px 18px", position:"relative", overflow:"hidden" }}>
         <div style={{ position:"absolute", right:-20, top:-20, width:120, height:120, borderRadius:"50%", background:C.accent, opacity:0.08 }}/>
+        {/* Privacy toggle — eye icon sits top-right of the hero card */}
+        <button
+          onClick={() => setHideValues(v => !v)}
+          aria-label={hideValues ? "Mostrar valores" : "Ocultar valores"}
+          title={hideValues ? "Mostrar valores" : "Ocultar valores"}
+          style={{ position:"absolute", top:14, right:14, zIndex:2, background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:10, width:34, height:34, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", padding:0 }}
+        >
+          {hideValues ? (
+            /* eye-off */
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+              <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+              <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
+              <line x1="1" y1="1" x2="23" y2="23"/>
+            </svg>
+          ) : (
+            /* eye */
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          )}
+        </button>
         <div style={{ color:C.goldLt, fontSize:9, fontWeight:700, letterSpacing:2, textTransform:"uppercase", marginBottom:4 }}>{t("total_portfolio")}</div>
-        <div style={{ color:"#fff", fontSize:30, fontWeight:700, letterSpacing:-1, marginBottom:6 }}>{showUSD ? "u$s" + fN(Math.round(tv/1247.5)) : "$" + fN(tv)}</div>
+        <div style={{ color:"#fff", fontSize:30, fontWeight:700, letterSpacing:-1, marginBottom:6, fontFamily: hideValues ? "monospace" : "inherit" }}>{fmtAmt(tv)}</div>
         <div style={{ display:"flex", gap:16, flexWrap:"wrap" }}>
-          <div><div style={{ color:"rgba(255,255,255,0.5)", fontSize:9, textTransform:"uppercase", letterSpacing:1 }}>{t("invested")}</div><div style={{ color:"#fff", fontWeight:600, fontSize:13, fontFamily:"monospace" }}>{showUSD ? "u$s" + fN(Math.round(tc/1247.5)) : "$" + fN(tc)}</div></div>
-          <div><div style={{ color:"rgba(255,255,255,0.5)", fontSize:9, textTransform:"uppercase", letterSpacing:1 }}>{t("gain")}</div><div style={{ color: gA >= 0 ? C.green : C.red, fontWeight:700, fontSize:14 }}>{gA >= 0 ? "+" : "-"}{showUSD ? "u$s" + fN(Math.round(Math.abs(gA)/1247.5)) : "$" + fN(Math.abs(gA))} ({gA >= 0 ? "+" : ""}{((gA/tc)*100).toFixed(1)}%)</div></div>
-          <div><div style={{ color:"rgba(255,255,255,0.5)", fontSize:9, textTransform:"uppercase", letterSpacing:1 }}>{t("available")}</div><div style={{ color: balance > 0 ? "#4ADE80" : "#F87171", fontWeight:700, fontSize:14, fontFamily:"monospace" }}>{showUSD ? "u$s" + fN(Math.round(balance/1247.5)) : "$" + fN(balance)}</div></div>
+          <div><div style={{ color:"rgba(255,255,255,0.5)", fontSize:9, textTransform:"uppercase", letterSpacing:1 }}>{t("invested")}</div><div style={{ color:"#fff", fontWeight:600, fontSize:13, fontFamily:"monospace" }}>{fmtAmt(tc)}</div></div>
+          <div><div style={{ color:"rgba(255,255,255,0.5)", fontSize:9, textTransform:"uppercase", letterSpacing:1 }}>{t("gain")}</div><div style={{ color: gA >= 0 ? C.green : C.red, fontWeight:700, fontSize:14 }}>{hideValues ? mask : (gA >= 0 ? "+" : "-") + (showUSD ? "u$s" + fN(Math.round(Math.abs(gA)/1247.5)) : "$" + fN(Math.abs(gA)))} ({gA >= 0 ? "+" : ""}{((gA/tc)*100).toFixed(1)}%)</div></div>
+          <div><div style={{ color:"rgba(255,255,255,0.5)", fontSize:9, textTransform:"uppercase", letterSpacing:1 }}>{t("available")}</div><div style={{ color: balance > 0 ? "#4ADE80" : "#F87171", fontWeight:700, fontSize:14, fontFamily:"monospace" }}>{fmtAmt(balance)}</div></div>
         </div>
         <div style={{ marginTop:10, display:"flex", gap:8 }}>
-          {FX.map(fx => <div key={fx.label} style={{ background:"rgba(255,255,255,0.1)", borderRadius:8, padding:"4px 10px" }}><div style={{ color:"rgba(255,255,255,0.5)", fontSize:8, fontWeight:700 }}>USD {fx.label}</div><div style={{ color:"#fff", fontSize:12, fontFamily:"monospace", fontWeight:700 }}>u$s{fN(Math.round(tv/fx.value))}</div></div>)}
+          {FX.map(fx => <div key={fx.label} style={{ background:"rgba(255,255,255,0.1)", borderRadius:8, padding:"4px 10px" }}><div style={{ color:"rgba(255,255,255,0.5)", fontSize:8, fontWeight:700 }}>USD {fx.label}</div><div style={{ color:"#fff", fontSize:12, fontFamily:"monospace", fontWeight:700 }}>{hideValues ? mask : "u$s"+fN(Math.round(tv/fx.value))}</div></div>)}
         </div>
       </div>
       <div style={{ margin:"12px 14px 0", background:C.card, borderRadius:14, border:"1px solid "+C.border, padding:"12px 14px" }}>
@@ -1792,31 +1820,31 @@ function TabIcon({ id, active, C, bigger }) {
 // ============================================================
 function SamasMark({ size = 56, markColor = "#0D1117", dotColor = "#16C784" }) {
   const w = size;
-  const h = size * 1.2;
-  // Each half is a horizontal bar → 180° end-cap → shorter return bar (horseshoe-on-its-side).
-  // Top tail extends right, bottom tail extends left — the asymmetry creates the S diagonal.
+  const h = size * 1.15;
+  // Each half: short horizontal tail → 180° semicircle → shorter horizontal return.
+  // Upper cap pair both extend right; lower pair both extend left → diagonal S flow.
   return (
-    <svg width={w} height={h} viewBox="0 0 100 120" fill="none" aria-label="SAMAS">
-      {/* Upper stroke — long top tail, 180° curve on the left, short middle return */}
+    <svg width={w} height={h} viewBox="0 0 100 115" fill="none" aria-label="SAMAS">
+      {/* Upper reversed-C: top tail length 32, bottom tail length 21, semicircle r=16 on left */}
       <path
-        d="M 75 17 L 28 17 A 16 16 0 0 0 28 49 L 60 49"
+        d="M 67 17 L 35 17 A 16 16 0 0 0 35 49 L 56 49"
         stroke={markColor}
         strokeWidth="13"
         strokeLinecap="round"
         strokeLinejoin="round"
         fill="none"
       />
-      {/* Lower stroke — short middle start, 180° curve on the right, long bottom tail */}
+      {/* Lower regular-C: top tail length 21, bottom tail length 32, semicircle r=16 on right */}
       <path
-        d="M 40 65 L 72 65 A 16 16 0 0 1 72 97 L 25 97"
+        d="M 44 65 L 65 65 A 16 16 0 0 1 65 97 L 33 97"
         stroke={markColor}
         strokeWidth="13"
         strokeLinecap="round"
         strokeLinejoin="round"
         fill="none"
       />
-      {/* Green accent dot — dead center, overlapping both halves in the S waist */}
-      <circle cx="50" cy="57" r="9" fill={dotColor} />
+      {/* Green núcleo dot — slightly right of center, in the S waist */}
+      <circle cx="52" cy="60" r="9" fill={dotColor} />
     </svg>
   );
 }
