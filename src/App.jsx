@@ -346,6 +346,57 @@ function loadKey() { try { return typeof localStorage !== "undefined" ? localSto
 function saveKey(k) { try { if (k) localStorage.setItem("samas_finnhub_key", k); else localStorage.removeItem("samas_finnhub_key"); } catch {} }
 
 // ============================================================
+// EMAILJS (signup confirmation emails, client-side)
+// ============================================================
+// EmailJS is a client-side email service (emailjs.com) designed for static
+// apps with no backend. The "public key" is safe to expose in client code —
+// domain restrictions can be enforced in the EmailJS dashboard.
+//
+// Expected template variables: {{to_email}}, {{to_name}}, {{code}}, {{app_name}}
+// Free tier: 200 emails/month, 2 req/sec.
+function loadEmailjsConfig() {
+  try {
+    const raw = typeof localStorage !== "undefined" ? localStorage.getItem("samas_emailjs_config") : null;
+    const cfg = raw ? JSON.parse(raw) : null;
+    return cfg && cfg.serviceId && cfg.templateId && cfg.publicKey ? cfg : null;
+  } catch { return null; }
+}
+function saveEmailjsConfig(cfg) {
+  try {
+    if (cfg && cfg.serviceId && cfg.templateId && cfg.publicKey) {
+      localStorage.setItem("samas_emailjs_config", JSON.stringify(cfg));
+    } else {
+      localStorage.removeItem("samas_emailjs_config");
+    }
+  } catch {}
+}
+async function sendViaEmailjs(cfg, params) {
+  const res = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      service_id: cfg.serviceId,
+      template_id: cfg.templateId,
+      user_id: cfg.publicKey,
+      template_params: {
+        to_email: params.to,
+        to_name: params.name || "",
+        code: params.code,
+        app_name: "SAMAS",
+        subject: params.subject || "Confirma tu cuenta SAMAS",
+        message: params.message || "",
+      },
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    const tail = body ? ` — ${body.slice(0, 140)}` : "";
+    throw new Error(`EmailJS ${res.status}${tail}`);
+  }
+  return true;
+}
+
+// ============================================================
 // COMPANY LOGO with fallback
 // ============================================================
 // Brand colors and symbols for each asset
@@ -1626,11 +1677,12 @@ function PageReportes({ C, lang }) {
   );
 }
 
-function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatchlist, onSelectAsset, C, showUSD, lang }) {
+function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatchlist, onSelectAsset, onDeposit, C, showUSD, lang }) {
   const t = useT(lang);
   // Privacy toggle: when true, amounts in the hero card are replaced with dots.
   // Percent gain is still shown so the user sees direction without a dollar figure.
   const [hideValues, setHideValues] = useState(false);
+  const [showDeposit, setShowDeposit] = useState(false);
   const mask = "••••••";
   const enriched = holdings.map(h => {
     const a = ASSETS.find(x => x.ticker === h.ticker);
@@ -1680,7 +1732,21 @@ function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatch
         <div style={{ marginTop:10, display:"flex", gap:8 }}>
           {FX.map(fx => <div key={fx.label} style={{ background:"rgba(255,255,255,0.1)", borderRadius:8, padding:"4px 10px" }}><div style={{ color:"rgba(255,255,255,0.5)", fontSize:8, fontWeight:700 }}>USD {fx.label}</div><div style={{ color:"#fff", fontSize:12, fontFamily:"monospace", fontWeight:700 }}>{hideValues ? mask : "u$s"+fN(Math.round(tv/fx.value))}</div></div>)}
         </div>
+        {/* Fund / withdraw actions */}
+        <div style={{ marginTop:14, display:"flex", gap:8 }}>
+          <button onClick={() => setShowDeposit(true)} style={{ flex:1, background:C.accent, color:"#fff", border:"none", borderRadius:11, padding:"11px", fontWeight:600, fontSize:13, fontFamily:"Sora,sans-serif", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Depositar
+          </button>
+          <button disabled style={{ flex:1, background:"rgba(255,255,255,0.08)", color:"rgba(255,255,255,0.5)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:11, padding:"11px", fontWeight:600, fontSize:13, fontFamily:"Sora,sans-serif", cursor:"not-allowed", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }} title="Proximamente">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+            Retirar
+          </button>
+        </div>
       </div>
+      {showDeposit && (
+        <DepositModal balance={balance} onClose={() => setShowDeposit(false)} onConfirm={(amt, method) => onDeposit && onDeposit(amt, method)} C={C}/>
+      )}
       <div style={{ margin:"12px 14px 0", background:C.card, borderRadius:14, border:"1px solid "+C.border, padding:"12px 14px" }}>
         <div style={{ fontSize:11, fontWeight:700, color:C.textMd, marginBottom:8 }}>{t("distribution")}</div>
         <div style={{ display:"flex", height:10, borderRadius:5, overflow:"hidden", gap:2 }}>{enriched.map((h, i) => <div key={h.ticker} style={{ width:((h.val/tv)*100).toFixed(1)+"%", background:pal[i%pal.length], borderRadius:2 }}/>)}</div>
@@ -2182,7 +2248,145 @@ function genCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-function SignupForm({ onBack, onComplete, C }) {
+// ============================================================
+// DEPOSIT MODAL (demo — no real payment gateway)
+// ============================================================
+function DepositModal({ balance, onClose, onConfirm, C }) {
+  const [amount, setAmount]   = useState("");
+  const [method, setMethod]   = useState("transfer");
+  const [processing, setProcessing] = useState(false);
+  const amt = parseInt(amount.replace(/\D/g, ""), 10) || 0;
+  const MIN = 1000;
+  const valid = amt >= MIN;
+
+  const methods = [
+    { id: "transfer", label: "Transferencia bancaria", desc: "CBU / CVU · Acreditacion 24hs hábiles", badge: "Sin comision",
+      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M3 12h18"/><path d="M12 2l3 6H9l3-6z"/></svg> },
+    { id: "mp",       label: "MercadoPago",            desc: "Débito / saldo en cuenta · Instantáneo", badge: "1.5% + IVA",
+      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg> },
+    { id: "crypto",   label: "Criptomonedas (USDT)",   desc: "Red TRC-20 · ~10 min de confirmación", badge: "0.5%",
+      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M8 10h8M8 14h8"/></svg> },
+  ];
+  const selected = methods.find(m => m.id === method);
+
+  // Demo-only "account details" that would come from the selected gateway
+  const details = {
+    transfer: [
+      { label: "CBU",   value: "0000003100010012345678" },
+      { label: "Alias", value: "SAMAS.WALLET.DEMO" },
+      { label: "Titular", value: "SAMAS S.A. – CUIT 30-12345678-9" },
+    ],
+    mp: [
+      { label: "Link de pago", value: "mercadopago.com.ar/samas/wallet" },
+    ],
+    crypto: [
+      { label: "Address USDT",  value: "TR7NHqjeKQxGTCi8q8ZY4pL5SomeFakeAddress" },
+      { label: "Red",           value: "TRC-20 (solo USDT)" },
+    ],
+  };
+
+  const chips = [10000, 50000, 100000, 500000];
+
+  const confirm = () => {
+    if (!valid || processing) return;
+    setProcessing(true);
+    // Simulated latency so the button feels like it's actually hitting a payment API
+    setTimeout(() => {
+      onConfirm(amt, method);
+      setProcessing(false);
+      onClose();
+    }, 900);
+  };
+
+  return (
+    <div style={{ position:"absolute", inset:0, zIndex:60, display:"flex", flexDirection:"column", background:"rgba(0,0,0,0.55)" }}>
+      <div onClick={processing ? undefined : onClose} style={{ flex:1 }}/>
+      <div style={{ background:C.bg, borderRadius:"20px 20px 0 0", padding:"18px 18px 22px", maxHeight:"92vh", overflowY:"auto" }}>
+        <div style={{ display:"flex", justifyContent:"center", marginBottom:14 }}><div style={{ width:36, height:4, background:C.border, borderRadius:2 }}/></div>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+          <div>
+            <div style={{ fontSize:18, fontWeight:600, color:C.text, fontFamily:"Sora,sans-serif" }}>Depositar fondos</div>
+            <div style={{ fontSize:11, color:C.textLt, marginTop:2 }}>Saldo actual: <span style={{ color:C.text, fontWeight:600, fontFamily:"monospace" }}>${fN(balance)}</span></div>
+          </div>
+          <button onClick={onClose} disabled={processing} style={{ background:C.creamDk, border:"none", borderRadius:10, width:32, height:32, display:"flex", alignItems:"center", justifyContent:"center", cursor: processing ? "not-allowed" : "pointer" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.textMd} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        {/* Amount input */}
+        <div style={{ background:C.card, border:"1.5px solid "+(valid?C.accent+"55":C.border), borderRadius:14, padding:"14px 16px", marginBottom:10, transition:"border 0.2s" }}>
+          <div style={{ fontSize:10, fontWeight:700, color:C.textLt, letterSpacing:1, marginBottom:4 }}>MONTO A DEPOSITAR</div>
+          <div style={{ display:"flex", alignItems:"baseline", gap:4 }}>
+            <span style={{ fontSize:26, fontWeight:700, color:C.textMd }}>$</span>
+            <input
+              value={amount ? fN(amt) : ""}
+              onChange={e => setAmount(e.target.value.replace(/\D/g, "").slice(0, 10))}
+              placeholder="0"
+              inputMode="numeric"
+              autoFocus
+              style={{ background:"transparent", border:"none", fontSize:26, fontWeight:700, color:C.text, outline:"none", width:"100%", fontFamily:"Sora,sans-serif", padding:0 }}
+            />
+          </div>
+          {amount && !valid && <div style={{ fontSize:11, color:C.red, marginTop:4 }}>Minimo ${fN(MIN)}</div>}
+        </div>
+
+        {/* Quick amount chips */}
+        <div style={{ display:"flex", gap:6, marginBottom:16, overflowX:"auto", paddingBottom:2 }}>
+          {chips.map(c => (
+            <button key={c} onClick={() => setAmount(String(c))}
+              style={{ background: amt === c ? C.accent : C.creamDk, color: amt === c ? "#fff" : C.textMd, border:"none", borderRadius:20, padding:"6px 14px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap", flexShrink:0 }}>
+              +${fN(c)}
+            </button>
+          ))}
+        </div>
+
+        {/* Method selector */}
+        <div style={{ fontSize:10, fontWeight:700, color:C.textLt, letterSpacing:1, marginBottom:8 }}>METODO DE PAGO</div>
+        <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:14 }}>
+          {methods.map(m => (
+            <button key={m.id} onClick={() => setMethod(m.id)}
+              style={{ background: m.id === method ? C.accent + "18" : C.card, border:"1.5px solid "+(m.id === method ? C.accent + "66" : C.border), borderRadius:12, padding:"12px 14px", display:"flex", alignItems:"center", gap:12, cursor:"pointer", fontFamily:"inherit", textAlign:"left", color:C.text }}>
+              <div style={{ width:36, height:36, borderRadius:10, background: m.id === method ? C.accent + "33" : C.creamDk, display:"flex", alignItems:"center", justifyContent:"center", color: m.id === method ? C.accent : C.textMd, flexShrink:0 }}>{m.icon}</div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                  <span style={{ fontSize:13, fontWeight:600, color:C.text }}>{m.label}</span>
+                  <span style={{ fontSize:9, fontWeight:700, color:C.accent, background:C.accent+"22", borderRadius:5, padding:"1px 6px" }}>{m.badge}</span>
+                </div>
+                <div style={{ fontSize:11, color:C.textLt, marginTop:2 }}>{m.desc}</div>
+              </div>
+              <div style={{ width:18, height:18, borderRadius:"50%", border:"1.5px solid "+(m.id === method ? C.accent : C.border), display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                {m.id === method && <div style={{ width:10, height:10, borderRadius:"50%", background:C.accent }}/>}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Destination details */}
+        <div style={{ background:C.creamDk, borderRadius:12, padding:"12px 14px", marginBottom:16 }}>
+          <div style={{ fontSize:10, fontWeight:700, color:C.textLt, letterSpacing:1, marginBottom:6 }}>DATOS PARA EL {method === "transfer" ? "DEPOSITO" : method === "mp" ? "PAGO" : "ENVIO"}</div>
+          {details[method].map(d => (
+            <div key={d.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4, gap:10 }}>
+              <span style={{ fontSize:11, color:C.textMd, flexShrink:0 }}>{d.label}</span>
+              <span style={{ fontSize:11, fontFamily:"monospace", fontWeight:600, color:C.text, textAlign:"right", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{d.value}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* CTA */}
+        <button onClick={confirm} disabled={!valid || processing}
+          style={{ width:"100%", background: valid ? C.accent : C.creamDk, color: valid ? "#fff" : C.textLt, border:"none", borderRadius:14, padding:"14px", fontWeight:700, fontSize:14, cursor: valid && !processing ? "pointer" : "not-allowed", fontFamily:"inherit", letterSpacing:0.5 }}>
+          {processing ? "Procesando…" : valid ? `Depositar $${fN(amt)}` : "Ingresa un monto"}
+        </button>
+
+        <div style={{ fontSize:10, color:C.textLt, marginTop:10, textAlign:"center", lineHeight:1.5 }}>
+          <strong style={{ color:C.textMd }}>Demo:</strong> no se procesa ningun pago real. El saldo se actualiza localmente.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SignupForm({ onBack, onComplete, emailjsCfg, C }) {
   // Stages: "form" → "confirm" → onComplete()
   const [stage, setStage]       = useState("form");
   const [name, setName]         = useState("");
@@ -2195,6 +2399,7 @@ function SignupForm({ onBack, onComplete, C }) {
   // Email confirmation state
   const [emailCode, setEmailCode] = useState("");        // code user types in
   const [sentCode, setSentCode]   = useState(null);      // code "sent" to email
+  const [sentVia, setSentVia]     = useState("demo");    // "emailjs" | "demo"
   const [resendCooldown, setResendCooldown] = useState(0);
 
   // Validation
@@ -2208,19 +2413,27 @@ function SignupForm({ onBack, onComplete, C }) {
 
   const fieldStyle = { background:"rgba(255,255,255,0.06)", border:"1.5px solid rgba(255,255,255,0.12)", borderRadius:12, padding:"12px 14px", fontSize:14, fontFamily:"Sora,sans-serif", color:"#fff", outline:"none", width:"100%", boxSizing:"border-box" };
 
-  // Simulate sending a verification email. The real sendEmailNotification is a
-  // console.log stub so we just log — no SMTP backend wired up.
-  const sendConfirmationEmail = (addr) => {
+  // Send a verification email. Uses EmailJS if configured (emailjs.com), else
+  // falls back to the console.log stub and shows the code inline for the demo.
+  const sendConfirmationEmail = async (addr, userName) => {
     const code = genCode();
     setSentCode(code);
-    sendEmailNotification({
-      to: addr,
-      subject: "Confirma tu cuenta SAMAS",
-      body: `Tu codigo de confirmacion es: ${code}. Expira en 10 minutos. Si no creaste esta cuenta, ignora este email.`,
-    });
-    // Start resend cooldown (30s)
     setResendCooldown(30);
-    return code;
+    const body = `Tu codigo de confirmacion es: ${code}. Expira en 10 minutos. Si no creaste esta cuenta, ignora este email.`;
+    sendEmailNotification({ to: addr, subject: "Confirma tu cuenta SAMAS", body });
+    if (emailjsCfg) {
+      try {
+        await sendViaEmailjs(emailjsCfg, { to: addr, name: userName, code, message: body });
+        setSentVia("emailjs");
+        return { ok: true, code };
+      } catch (e) {
+        console.error("[SAMAS/EmailJS] send failed:", e);
+        setSentVia("demo");
+        return { ok: false, code, error: e?.message || "Error enviando email" };
+      }
+    }
+    setSentVia("demo");
+    return { ok: true, code };
   };
 
   // Cooldown tick
@@ -2230,7 +2443,7 @@ function SignupForm({ onBack, onComplete, C }) {
     return () => clearTimeout(id);
   }, [resendCooldown]);
 
-  const submitForm = () => {
+  const submitForm = async () => {
     if (!allOk) {
       setErr(
         !nameOk ? "Ingresa nombre y apellido" :
@@ -2243,13 +2456,13 @@ function SignupForm({ onBack, onComplete, C }) {
     }
     setBusy(true);
     setErr(null);
-    // Simulated network latency
-    setTimeout(() => {
-      sendConfirmationEmail(email);
-      setBusy(false);
-      setStage("confirm");
-      setEmailCode("");
-    }, 600);
+    const result = await sendConfirmationEmail(email, name);
+    setBusy(false);
+    if (result.error) {
+      setErr("No pudimos enviar el email (" + result.error + "). Usamos modo demo: codigo abajo.");
+    }
+    setStage("confirm");
+    setEmailCode("");
   };
 
   const submitCode = () => {
@@ -2270,11 +2483,12 @@ function SignupForm({ onBack, onComplete, C }) {
     }, 500);
   };
 
-  const resend = () => {
+  const resend = async () => {
     if (resendCooldown > 0) return;
-    sendConfirmationEmail(email);
     setEmailCode("");
     setErr(null);
+    const result = await sendConfirmationEmail(email, name);
+    if (result.error) setErr("Reenvio fallo: " + result.error);
   };
 
   // ----- FORM STAGE -----
@@ -2390,13 +2604,20 @@ function SignupForm({ onBack, onComplete, C }) {
           </button>
         </div>
 
-        {/* Demo-only hint — stand-in for a real email backend. Safe to remove
-            once we wire an actual transactional sender. */}
-        {sentCode && (
-          <div style={{ marginTop:24, padding:"10px 14px", background:"rgba(201,168,76,0.15)", border:"1px dashed rgba(201,168,76,0.45)", borderRadius:10, color:"#E8C97A", fontSize:11 }}>
-            <strong>Demo:</strong> el codigo es <span style={{ fontFamily:"monospace", fontSize:14, fontWeight:700, letterSpacing:2 }}>{sentCode}</span>
+        {/* Status / demo hint. If EmailJS succeeded, show a confirmation pill;
+            otherwise fall back to the demo-code hint so the user can still
+            complete signup without a real email backend. */}
+        {sentVia === "emailjs" ? (
+          <div style={{ marginTop:20, padding:"8px 12px", background:"rgba(22,199,132,0.12)", border:"1px solid rgba(22,199,132,0.35)", borderRadius:10, color:"#16C784", fontSize:11, display:"flex", alignItems:"center", gap:8 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16C784" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Email enviado a tu casilla. Revisa spam si no llega.
           </div>
-        )}
+        ) : sentCode ? (
+          <div style={{ marginTop:24, padding:"10px 14px", background:"rgba(201,168,76,0.15)", border:"1px dashed rgba(201,168,76,0.45)", borderRadius:10, color:"#E8C97A", fontSize:11 }}>
+            <strong>Modo demo:</strong> el codigo es <span style={{ fontFamily:"monospace", fontSize:14, fontWeight:700, letterSpacing:2 }}>{sentCode}</span>
+            <div style={{ fontSize:10, color:"rgba(232,201,122,0.7)", marginTop:4 }}>Configura EmailJS en el perfil para recibir emails reales.</div>
+          </div>
+        ) : null}
       </div>
 
       <div style={{ marginTop:20 }}>
@@ -2409,7 +2630,7 @@ function SignupForm({ onBack, onComplete, C }) {
   );
 }
 
-function LoginScreen({ onLogin, onSignup, C }) {
+function LoginScreen({ onLogin, onSignup, emailjsCfg, C }) {
   const [view, setView]       = useState("login");  // "login" | "signup"
   const [phase, setPhase]     = useState("idle");
   const [pin, setPin]         = useState("");
@@ -2419,7 +2640,7 @@ function LoginScreen({ onLogin, onSignup, C }) {
   const doPin = () => { if (pin === DEMO_USER.pin) { setPhase("success"); setTimeout(onLogin, 600); } else { setPinErr(true); setPin(""); setTimeout(() => setPinErr(false), 1400); } };
   // Fresh signup → call onSignup (which resets state) rather than onLogin,
   // so the new account doesn't inherit the demo portfolio.
-  if (view === "signup") return <SignupForm onBack={() => setView("login")} onComplete={() => { setPhase("success"); setTimeout(onSignup || onLogin, 400); }} C={C}/>;
+  if (view === "signup") return <SignupForm onBack={() => setView("login")} onComplete={() => { setPhase("success"); setTimeout(onSignup || onLogin, 400); }} emailjsCfg={emailjsCfg} C={C}/>;
   return (
     <div style={{ position:"absolute", inset:0, zIndex:100, background:"linear-gradient(160deg,#0D1117 0%,#0D2B1C 55%,#000000 100%)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"space-between", padding:"0 0 32px" }}>
       <style>{"@keyframes scanLine{0%{top:18%}100%{top:78%}} @keyframes glow{0%,100%{box-shadow:0 0 20px rgba(192,96,144,0.3)}50%{box-shadow:0 0 40px rgba(192,96,144,0.7)}} @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}"}</style>
@@ -2562,7 +2783,7 @@ function DevicesPage({ onBack, C }) {
   );
 }
 
-function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, finnhubKey, setFinnhubKey, finnhub, C }) {
+function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, finnhubKey, setFinnhubKey, finnhub, emailjsCfg, setEmailjsCfg, C }) {
   const [confirm, setConfirm]       = useState(false);
   const [show2FA, setShow2FA]       = useState(false);
   const [twoFAEnabled, set2FA]      = useState(false);
@@ -2572,6 +2793,12 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
   const [showLang, setShowLang]     = useState(false);
   const [showFinnhub, setShowFinnhub] = useState(false);
   const [finnhubInput, setFinnhubInput] = useState(finnhubKey || "");
+  const [showEmail, setShowEmail]   = useState(false);
+  const [emailSvc, setEmailSvc]     = useState(emailjsCfg?.serviceId || "");
+  const [emailTpl, setEmailTpl]     = useState(emailjsCfg?.templateId || "");
+  const [emailKey, setEmailKey]     = useState(emailjsCfg?.publicKey || "");
+  const [emailTestMsg, setEmailTestMsg] = useState(null);
+  const [emailTestBusy, setEmailTestBusy] = useState(false);
   const t = useT(lang);
 
   if (showDevices) {
@@ -2709,6 +2936,71 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
           </div>
         )}
 
+        {/* EmailJS — transactional email for signup confirmation */}
+        <button onClick={() => setShowEmail(v => !v)} style={{ width:"100%", background: emailjsCfg ? C.green+"18" : C.creamDk, border:"1.5px solid "+(emailjsCfg?C.green+"44":C.border), borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ width:36, height:36, borderRadius:10, background:(emailjsCfg?C.green:C.accent)+"22", display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={emailjsCfg?C.green:C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            </div>
+            <div>
+              <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Envio de emails (EmailJS)</div>
+              <div style={{ fontSize:11, color: emailjsCfg ? C.green : C.textLt }}>
+                {emailjsCfg ? "Configurado — emails reales al registrarse" : "Sin configurar — modo demo con codigo en pantalla"}
+              </div>
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: showEmail ? "rotate(90deg)" : "rotate(0deg)", transition:"transform 0.2s" }}><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+        {showEmail && (
+          <div style={{ background:C.card, borderRadius:12, border:"1px solid "+C.border, padding:"14px", marginBottom:8 }}>
+            <div style={{ fontSize:11, color:C.textMd, lineHeight:1.5, marginBottom:10 }}>
+              Usamos <span style={{ color:C.accent, fontWeight:600 }}>emailjs.com</span> para mandar emails desde el cliente sin backend. Creas una cuenta gratis, conectas tu Gmail/Outlook y crear un template con las variables <span style={{ fontFamily:"monospace", background:C.creamDk, padding:"1px 4px", borderRadius:3 }}>{"{{to_email}}"}</span>, <span style={{ fontFamily:"monospace", background:C.creamDk, padding:"1px 4px", borderRadius:3 }}>{"{{code}}"}</span>, <span style={{ fontFamily:"monospace", background:C.creamDk, padding:"1px 4px", borderRadius:3 }}>{"{{to_name}}"}</span>.
+            </div>
+            <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:5 }}>SERVICE ID</div>
+            <input value={emailSvc} onChange={e => setEmailSvc(e.target.value.trim())} placeholder="service_xxxxxx" autoComplete="off" style={{ background:C.bg, border:"1.5px solid "+C.border, borderRadius:10, padding:"9px 11px", fontSize:12, fontFamily:"monospace", color:C.text, outline:"none", width:"100%", boxSizing:"border-box", marginBottom:8 }}/>
+            <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:5 }}>TEMPLATE ID</div>
+            <input value={emailTpl} onChange={e => setEmailTpl(e.target.value.trim())} placeholder="template_xxxxxx" autoComplete="off" style={{ background:C.bg, border:"1.5px solid "+C.border, borderRadius:10, padding:"9px 11px", fontSize:12, fontFamily:"monospace", color:C.text, outline:"none", width:"100%", boxSizing:"border-box", marginBottom:8 }}/>
+            <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:5 }}>PUBLIC KEY</div>
+            <input value={emailKey} onChange={e => setEmailKey(e.target.value.trim())} placeholder="xxxxxxxxxxxxxxxxxxx" autoComplete="off" style={{ background:C.bg, border:"1.5px solid "+C.border, borderRadius:10, padding:"9px 11px", fontSize:12, fontFamily:"monospace", color:C.text, outline:"none", width:"100%", boxSizing:"border-box", marginBottom:10 }}/>
+            <div style={{ display:"flex", gap:8 }}>
+              <button
+                onClick={() => {
+                  const cfg = emailSvc && emailTpl && emailKey ? { serviceId: emailSvc, templateId: emailTpl, publicKey: emailKey } : null;
+                  setEmailjsCfg(cfg);
+                  setEmailTestMsg(cfg ? { type: "ok", text: "Configuracion guardada" } : { type: "info", text: "Configuracion eliminada" });
+                }}
+                style={{ flex:2, background: (emailSvc && emailTpl && emailKey) ? C.accent : C.creamDk, color: (emailSvc && emailTpl && emailKey) ? "#fff" : C.textLt, border:"none", borderRadius:10, padding:"10px", fontWeight:600, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                Guardar
+              </button>
+              <button
+                onClick={async () => {
+                  const cfg = { serviceId: emailSvc, templateId: emailTpl, publicKey: emailKey };
+                  if (!cfg.serviceId || !cfg.templateId || !cfg.publicKey) { setEmailTestMsg({ type:"err", text:"Completa los 3 campos" }); return; }
+                  setEmailTestBusy(true);
+                  setEmailTestMsg(null);
+                  try {
+                    await sendViaEmailjs(cfg, { to: DEMO_USER.email, name: DEMO_USER.name, code: "TEST12", message: "Este es un email de prueba desde SAMAS." });
+                    setEmailTestMsg({ type: "ok", text: "Email de prueba enviado a " + DEMO_USER.email });
+                  } catch (e) {
+                    setEmailTestMsg({ type: "err", text: (e?.message || "Error desconocido").slice(0, 120) });
+                  } finally { setEmailTestBusy(false); }
+                }}
+                disabled={emailTestBusy}
+                style={{ flex:1, background:"transparent", color:C.textMd, border:"1.5px solid "+C.border, borderRadius:10, padding:"10px", fontWeight:500, fontSize:12, cursor: emailTestBusy ? "not-allowed" : "pointer", fontFamily:"inherit" }}>
+                {emailTestBusy ? "…" : "Test"}
+              </button>
+            </div>
+            {emailTestMsg && (
+              <div style={{ marginTop:10, padding:"8px 10px", borderRadius:8, fontSize:11, background: emailTestMsg.type === "ok" ? C.green+"22" : emailTestMsg.type === "err" ? C.red+"22" : C.creamDk, color: emailTestMsg.type === "ok" ? C.green : emailTestMsg.type === "err" ? C.red : C.textMd, border:"1px solid "+(emailTestMsg.type === "ok" ? C.green+"55" : emailTestMsg.type === "err" ? C.red+"55" : C.border) }}>
+                {emailTestMsg.text}
+              </div>
+            )}
+            <div style={{ fontSize:10, color:C.textLt, marginTop:10, lineHeight:1.5 }}>
+              <a href="https://www.emailjs.com" target="_blank" rel="noopener" style={{ color:C.accent, fontWeight:600 }}>Abrir EmailJS →</a> · Free tier: 200 emails/mes. La public key es segura de exponer (las restricciones van en el dashboard por dominio).
+            </div>
+          </div>
+        )}
+
         <button onClick={() => setShow2FA(v => !v)} style={{ width:"100%", background: twoFAEnabled ? C.green+"18" : C.creamDk, border:"1.5px solid "+(twoFAEnabled?C.green+"44":C.border), borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <div style={{ width:36, height:36, borderRadius:10, background:(twoFAEnabled?C.green:C.accent)+"22", display:"flex", alignItems:"center", justifyContent:"center" }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={twoFAEnabled?C.green:C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
@@ -2763,8 +3055,8 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
 // MOBILE PHONE WRAPPER
 // ============================================================
 function MobileApp({ appState, handlers, C }) {
-  const { loggedIn, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, finnhubKey, finnhub } = appState;
-  const { setLoggedIn, handleLogin, handleSignup, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, setFinnhubKey } = handlers;
+  const { loggedIn, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, finnhubKey, finnhub, emailjsCfg } = appState;
+  const { setLoggedIn, handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, setFinnhubKey, setEmailjsCfg } = handlers;
   const t = useT(lang);
   const TABS = [{ id:"portfolio",label:t("portfolio") },{ id:"mercado",label:t("mercado") },{ id:"noticias",label:t("noticias") },{ id:"ideas",label:t("inversiones") },{ id:"ordenes",label:t("ordenes") }];
   const totalARS = holdings.reduce((s, h) => { const a = ASSETS.find(x => x.ticker === h.ticker); return s + (a ? h.qty * a.price : 0); }, 0);
@@ -2774,20 +3066,20 @@ function MobileApp({ appState, handlers, C }) {
   const getA  = t => priceAlerts[t] || null;
   const renderPage = () => {
     switch (tab) {
-      case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} C={C} showUSD={showUSD} lang={lang}/>;
+      case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} onDeposit={handleDeposit} C={C} showUSD={showUSD} lang={lang}/>;
       case "mercado":    return <PageMercado onSelectAsset={setSelected} C={C} showUSD={showUSD} lang={lang}/>;
       case "noticias":   return <PageNoticias holdings={holdings} onSelectAsset={setSelected} C={C} lang={lang}/>;
       case "ideas":      return <PageIdeas C={C} showUSD={showUSD} onSelectAsset={setSelected} lang={lang}/>;
       case "ordenes":    return <PageOrdenes orders={orders} C={C} lang={lang}/>;
-      default:           return <PagePortfolio watchlist={watchlist} onToggleWatchlist={toggleWatchlist} holdings={holdings} stopLosses={stopLosses} balance={balance} onSelectAsset={setSelected} C={C}/>;
+      default:           return <PagePortfolio watchlist={watchlist} onToggleWatchlist={toggleWatchlist} holdings={holdings} stopLosses={stopLosses} balance={balance} onSelectAsset={setSelected} onDeposit={handleDeposit} C={C}/>;
     }
   };
   return (
     <div style={{ width:375, height:760, background:C.bg, borderRadius:48, overflow:"hidden", boxShadow:"0 40px 80px rgba(0,0,0,0.7)", display:"flex", flexDirection:"column", border:"9px solid #0a0a0a", position:"relative", flexShrink:0 }}>
       <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:110, height:26, background:"#0a0a0a", borderRadius:"0 0 16px 16px", zIndex:30 }}/>
-      {!loggedIn && <LoginScreen onLogin={handleLogin} onSignup={handleSignup} C={C}/>}
+      {!loggedIn && <LoginScreen onLogin={handleLogin} onSignup={handleSignup} emailjsCfg={emailjsCfg} C={C}/>}
       {showTutorial && <OnboardingTutorial onClose={finishTutorial} onComplete={finishTutorial} setTab={setTab} setShowUSD={setShowUSD} setShowProfile={setShowProfile} currentTab={tab} C={C}/>}
-      {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} finnhubKey={finnhubKey} setFinnhubKey={setFinnhubKey} finnhub={finnhub} C={C}/>}
+      {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} finnhubKey={finnhubKey} setFinnhubKey={setFinnhubKey} finnhub={finnhub} emailjsCfg={emailjsCfg} setEmailjsCfg={setEmailjsCfg} C={C}/>}
       {toast && <div style={{ position:"absolute", top:34, left:14, right:14, zIndex:50, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 14px", fontSize:12, fontWeight:700 }}>{toast.msg}</div>}
       {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} C={C}/>}
       {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} C={C}/>}
@@ -2835,8 +3127,8 @@ function MobileApp({ appState, handlers, C }) {
 // WEB DASHBOARD LAYOUT
 // ============================================================
 function WebDashboard({ appState, handlers, C }) {
-  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, showProfile, showUSD, showTutorial, lang, watchlist, finnhubKey, finnhub } = appState;
-  const { setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, setShowProfile, setIsDark, setShowUSD, setLang, finishTutorial, toggleWatchlist, setFinnhubKey } = handlers;
+  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, showProfile, showUSD, showTutorial, lang, watchlist, finnhubKey, finnhub, emailjsCfg } = appState;
+  const { setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, setShowProfile, setIsDark, setShowUSD, setLang, finishTutorial, toggleWatchlist, setFinnhubKey, setEmailjsCfg, handleDeposit } = handlers;
   const [sideTab, setSideTab] = useState("portfolio");
   const t = useT(lang);
   const TABS2 = [{ id:"portfolio",label:t("portfolio"),icon:"portfolio" },{ id:"mercado",label:t("mercado"),icon:"mercado" },{ id:"noticias",label:t("noticias"),icon:"noticias" },{ id:"ideas",label:t("inversiones"),icon:"ideas" },{ id:"bonos",label:t("bonos"),icon:"bonos" },{ id:"ordenes",label:t("ordenes"),icon:"ordenes" },{ id:"reportes",label:t("reportes"),icon:"reportes" }];
@@ -2846,7 +3138,7 @@ function WebDashboard({ appState, handlers, C }) {
   const getA  = t => priceAlerts[t] || null;
   const renderPage = () => {
     switch (sideTab) {
-      case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} C={C} showUSD={showUSD} lang={lang}/>;
+      case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} onDeposit={handleDeposit} C={C} showUSD={showUSD} lang={lang}/>;
       case "mercado":    return <PageMercado onSelectAsset={setSelected} C={C} showUSD={showUSD} lang={lang}/>;
       case "noticias":   return <PageNoticias holdings={holdings} onSelectAsset={setSelected} C={C} lang={lang}/>;
       case "ideas":      return <PageIdeas C={C} showUSD={showUSD} onSelectAsset={setSelected} lang={lang}/>;
@@ -2854,7 +3146,7 @@ function WebDashboard({ appState, handlers, C }) {
       case "trending":   return <PageTrending onSelectAsset={setSelected} C={C} lang={lang}/>;
       case "ordenes":    return <PageOrdenes orders={orders} C={C} lang={lang}/>;
       case "reportes":   return <PageReportes C={C} lang={lang}/>;
-      default:           return <PagePortfolio watchlist={watchlist} onToggleWatchlist={toggleWatchlist} holdings={holdings} stopLosses={stopLosses} balance={balance} onSelectAsset={setSelected} C={C}/>;
+      default:           return <PagePortfolio watchlist={watchlist} onToggleWatchlist={toggleWatchlist} holdings={holdings} stopLosses={stopLosses} balance={balance} onSelectAsset={setSelected} onDeposit={handleDeposit} C={C}/>;
     }
   };
   return (
@@ -2896,7 +3188,7 @@ function WebDashboard({ appState, handlers, C }) {
         <div style={{ flex:1, position:"relative", maxWidth:600 }}>
           {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} C={C}/>}
           {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} C={C}/>}
-          {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} finnhubKey={finnhubKey} setFinnhubKey={setFinnhubKey} finnhub={finnhub} C={C}/>}
+          {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} finnhubKey={finnhubKey} setFinnhubKey={setFinnhubKey} finnhub={finnhub} emailjsCfg={emailjsCfg} setEmailjsCfg={setEmailjsCfg} C={C}/>}
           {toast && <div style={{ position:"fixed", top:70, left:"50%", transform:"translateX(-50%)", zIndex:99, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 20px", fontSize:13, fontWeight:700, boxShadow:"0 8px 32px rgba(0,0,0,0.3)" }}>{toast.msg}</div>}
           <div style={{ overflowY:"auto", height:"calc(100vh - 56px)" }}>{renderPage()}</div>
         </div>
@@ -2943,6 +3235,7 @@ export default function SAMASApp() {
   const [toast, setToast]             = useState(null);
   const [viewMode, setViewMode]       = useState("mobile");
   const [finnhubKey, setFinnhubKey]   = useState(() => loadKey());
+  const [emailjsCfg, setEmailjsCfg]   = useState(() => loadEmailjsConfig());
 
   const C = makeTheme(isDark);
 
@@ -2952,6 +3245,7 @@ export default function SAMASApp() {
 
   // Persist the key whenever it changes
   useEffect(() => { saveKey(finnhubKey); }, [finnhubKey]);
+  useEffect(() => { saveEmailjsConfig(emailjsCfg); }, [emailjsCfg]);
 
   useEffect(() => {
     const handler = () => setShowTutorial(true);
@@ -3019,8 +3313,15 @@ export default function SAMASApp() {
   const handleLogout = () => { setLoggedIn(false); setShowProfile(false); setTab("portfolio"); setSelected(null); setPending(null); };
   const finishTutorial = () => { setHasSeen(true); setShowTutorial(false); };
 
-  const appState = { isDark, loggedIn, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, finnhubKey, finnhub };
-  const handlers = { setLoggedIn, handleLogin, handleSignup, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, setFinnhubKey };
+  // Demo deposit — no payment gateway. Adds to balance and shows confirmation.
+  const handleDeposit = (amount, method) => {
+    setBalance(prev => prev + amount);
+    const methodLabel = method === "transfer" ? "transferencia" : method === "mp" ? "MercadoPago" : "crypto";
+    showToast(`$${fN(amount)} acreditados via ${methodLabel}`, C.green);
+  };
+
+  const appState = { isDark, loggedIn, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, finnhubKey, finnhub, emailjsCfg };
+  const handlers = { setLoggedIn, handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, setFinnhubKey, setEmailjsCfg };
 
   const outerBg = isDark ? "#080808" : "#050505";
 
@@ -3047,7 +3348,7 @@ export default function SAMASApp() {
         ) : (
           <div style={{ display:"flex", justifyContent:"center", alignItems:"center", minHeight:"calc(100vh - 60px)" }}>
             <div style={{ width:375, height:760, position:"relative", borderRadius:20, overflow:"hidden" }}>
-              <LoginScreen onLogin={handleLogin} onSignup={handleSignup} C={C}/>
+              <LoginScreen onLogin={handleLogin} onSignup={handleSignup} emailjsCfg={emailjsCfg} C={C}/>
             </div>
           </div>
         )
