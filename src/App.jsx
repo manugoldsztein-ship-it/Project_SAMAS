@@ -162,7 +162,23 @@ const IDEAS = [
   },
 ];
 
-const DEMO_USER = { name:"Manuel Goldsztein", email:"manuel@samas.com.ar", initials:"MG", pin:"4821", totpSecret:"COHENABC123" };
+// Default demo user. Properties are overwritten on signup (see SignupForm) and
+// persisted to localStorage so subsequent sessions keep the created account.
+const DEMO_USER = { name:"Manuel Goldsztein", email:"manuel@samas.com.ar", initials:"MG", pin:"4821", totpSecret:"SAMASABC123" };
+try {
+  if (typeof localStorage !== "undefined") {
+    const saved = JSON.parse(localStorage.getItem("samas_user") || "null");
+    if (saved && typeof saved === "object") Object.assign(DEMO_USER, saved);
+  }
+} catch {}
+
+function initialsFrom(name) {
+  return name.trim().split(/\s+/).map(w => w[0] || "").join("").slice(0, 2).toUpperCase();
+}
+function registerUser({ name, email, pin }) {
+  Object.assign(DEMO_USER, { name: name.trim(), email: email.trim().toLowerCase(), initials: initialsFrom(name), pin });
+  try { localStorage.setItem("samas_user", JSON.stringify(DEMO_USER)); } catch {}
+}
 
 // ============================================================
 // LANGUAGES / i18n
@@ -2111,13 +2127,103 @@ function OnboardingTutorial({ onClose, onComplete, setTab, setShowUSD, setShowPr
   );
 }
 
+function SignupForm({ onBack, onComplete, C }) {
+  const [name, setName]         = useState("");
+  const [email, setEmail]       = useState("");
+  const [password, setPassword] = useState("");
+  const [pin, setPin]           = useState("");
+  const [err, setErr]           = useState(null);
+  const [busy, setBusy]         = useState(false);
+
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const nameOk  = name.trim().split(/\s+/).length >= 2;
+  const pwdOk   = password.length >= 6;
+  const pinOk   = /^\d{4}$/.test(pin);
+  const allOk   = nameOk && emailOk && pwdOk && pinOk;
+
+  const submit = () => {
+    if (!allOk) {
+      setErr(!nameOk ? "Ingresa nombre y apellido" : !emailOk ? "Email invalido" : !pwdOk ? "Contrasena minima 6 caracteres" : "PIN: 4 digitos");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    // Simulated latency so the CTA feels like a real account creation step
+    setTimeout(() => {
+      registerUser({ name, email, pin });
+      onComplete();
+    }, 700);
+  };
+
+  const fieldStyle = { background:"rgba(255,255,255,0.06)", border:"1.5px solid rgba(255,255,255,0.12)", borderRadius:12, padding:"12px 14px", fontSize:14, fontFamily:"Sora,sans-serif", color:"#fff", outline:"none", width:"100%", boxSizing:"border-box" };
+
+  return (
+    <div style={{ position:"absolute", inset:0, zIndex:100, background:"linear-gradient(160deg,#0D1117 0%,#0D2B1C 55%,#000000 100%)", display:"flex", flexDirection:"column", padding:"32px 24px 24px", overflowY:"auto" }}>
+      <style>{"@keyframes fadeInUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}"}</style>
+      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
+        <button onClick={onBack} aria-label="Volver" style={{ background:"rgba(255,255,255,0.08)", border:"none", borderRadius:10, width:36, height:36, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <SamasMark size={34} markColor="#FFFFFF" dotColor="#16C784"/>
+        <div style={{ color:"#fff", fontSize:16, fontWeight:600, letterSpacing:3, fontFamily:"Sora,sans-serif" }}>SAMAS</div>
+      </div>
+
+      <div style={{ animation:"fadeInUp 0.4s ease-out", flex:1 }}>
+        <div style={{ color:"#FFFFFF", fontSize:22, fontWeight:600, fontFamily:"Sora,sans-serif", marginBottom:6 }}>Crear cuenta</div>
+        <div style={{ color:"#16C784", fontSize:12, marginBottom:22 }}>Tu centro financiero, en un minuto.</div>
+
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          <div>
+            <div style={{ fontSize:10, fontWeight:600, color:"rgba(255,255,255,0.5)", letterSpacing:1, marginBottom:6, textTransform:"uppercase" }}>Nombre completo</div>
+            <input value={name} onChange={e => { setName(e.target.value); setErr(null); }} placeholder="Manuel Goldsztein" autoComplete="name" style={fieldStyle}/>
+          </div>
+          <div>
+            <div style={{ fontSize:10, fontWeight:600, color:"rgba(255,255,255,0.5)", letterSpacing:1, marginBottom:6, textTransform:"uppercase" }}>Email</div>
+            <input value={email} onChange={e => { setEmail(e.target.value); setErr(null); }} placeholder="tu@email.com" type="email" autoComplete="email" style={fieldStyle}/>
+          </div>
+          <div>
+            <div style={{ fontSize:10, fontWeight:600, color:"rgba(255,255,255,0.5)", letterSpacing:1, marginBottom:6, textTransform:"uppercase" }}>Contrasena</div>
+            <input value={password} onChange={e => { setPassword(e.target.value); setErr(null); }} placeholder="Minimo 6 caracteres" type="password" autoComplete="new-password" style={fieldStyle}/>
+          </div>
+          <div>
+            <div style={{ fontSize:10, fontWeight:600, color:"rgba(255,255,255,0.5)", letterSpacing:1, marginBottom:6, textTransform:"uppercase" }}>PIN de 4 digitos</div>
+            <input value={pin} onChange={e => { setPin(e.target.value.replace(/\D/g,"").slice(0,4)); setErr(null); }} placeholder="● ● ● ●" inputMode="numeric" maxLength={4} style={{ ...fieldStyle, letterSpacing:8, textAlign:"center", fontFamily:"monospace" }}/>
+          </div>
+        </div>
+
+        {err && (
+          <div style={{ marginTop:14, background:"rgba(248,113,113,0.15)", border:"1px solid rgba(248,113,113,0.35)", borderRadius:10, padding:"10px 12px", color:"#FCA5A5", fontSize:12 }}>
+            {err}
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop:20 }}>
+        <button onClick={submit} disabled={busy}
+          style={{ width:"100%", background: allOk ? "#16C784" : "rgba(255,255,255,0.1)", color: allOk ? "#0D1117" : "rgba(255,255,255,0.4)", border:"none", borderRadius:14, padding:"14px", fontWeight:700, fontSize:14, cursor: allOk && !busy ? "pointer" : "not-allowed", fontFamily:"Sora,sans-serif", letterSpacing:1, transition:"background 0.2s" }}>
+          {busy ? "Creando cuenta…" : "Crear mi cuenta"}
+        </button>
+        <div style={{ marginTop:14, textAlign:"center" }}>
+          <span style={{ color:"rgba(255,255,255,0.45)", fontSize:12 }}>Ya tenes cuenta? </span>
+          <button onClick={onBack} style={{ background:"transparent", border:"none", color:"#16C784", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit", padding:0 }}>Iniciar sesion</button>
+        </div>
+        <div style={{ marginTop:14, fontSize:10, color:"rgba(255,255,255,0.3)", textAlign:"center", lineHeight:1.5 }}>
+          Al crear la cuenta aceptas los <span style={{ color:"rgba(255,255,255,0.5)", textDecoration:"underline" }}>Terminos</span> y la <span style={{ color:"rgba(255,255,255,0.5)", textDecoration:"underline" }}>Politica de privacidad</span>.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LoginScreen({ onLogin, C }) {
+  const [view, setView]       = useState("login");  // "login" | "signup"
   const [phase, setPhase]     = useState("idle");
   const [pin, setPin]         = useState("");
   const [pinErr, setPinErr]   = useState(false);
   const [showPin, setShowPin] = useState(false);
   const doFaceID = () => { setPhase("scanning"); setTimeout(() => { setPhase("success"); setTimeout(onLogin, 800); }, 1800); };
   const doPin = () => { if (pin === DEMO_USER.pin) { setPhase("success"); setTimeout(onLogin, 600); } else { setPinErr(true); setPin(""); setTimeout(() => setPinErr(false), 1400); } };
+  if (view === "signup") return <SignupForm onBack={() => setView("login")} onComplete={() => { setPhase("success"); setTimeout(onLogin, 400); }} C={C}/>;
   return (
     <div style={{ position:"absolute", inset:0, zIndex:100, background:"linear-gradient(160deg,#0D1117 0%,#0D2B1C 55%,#000000 100%)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"space-between", padding:"0 0 32px" }}>
       <style>{"@keyframes scanLine{0%{top:18%}100%{top:78%}} @keyframes glow{0%,100%{box-shadow:0 0 20px rgba(192,96,144,0.3)}50%{box-shadow:0 0 40px rgba(192,96,144,0.7)}} @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}"}</style>
@@ -2171,6 +2277,12 @@ function LoginScreen({ onLogin, C }) {
       <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
         {!showPin && phase==="idle" && <button onClick={() => setShowPin(true)} style={{ background:"transparent", border:"none", color:"rgba(255,255,255,0.3)", fontSize:12, cursor:"pointer", fontFamily:"inherit", textDecoration:"underline" }}>Usar PIN</button>}
         {showPin && <button onClick={() => { setShowPin(false); setPin(""); }} style={{ background:"transparent", border:"none", color:"rgba(255,255,255,0.3)", fontSize:12, cursor:"pointer", fontFamily:"inherit", textDecoration:"underline" }}>Usar Face ID</button>}
+        {phase==="idle" && (
+          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            <span style={{ color:"rgba(255,255,255,0.35)", fontSize:12 }}>Sos nuevo en SAMAS?</span>
+            <button onClick={() => setView("signup")} style={{ background:"transparent", border:"none", color:"#16C784", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Crear cuenta</button>
+          </div>
+        )}
         <div style={{ color:"rgba(255,255,255,0.15)", fontSize:10, letterSpacing:1 }}>samas.com.ar v2.5.0</div>
       </div>
     </div>
