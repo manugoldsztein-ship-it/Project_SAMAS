@@ -2,11 +2,23 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>SAMAS — Client Demo</title>
+    <meta name="description" content="SAMAS — simulador, cotizaciones y plan de inversion con IA." />
+    <meta name="theme-color" content="#0D1117" />
+    <!-- iOS add-to-home-screen: ask the browser to hide chrome and keep a
+         native-like standalone appearance. No service worker is used since
+         the app is a vite-plugin-singlefile build (already self-contained). -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="SAMAS" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E📈%3C/text%3E%3C/svg%3E" />
     <style>
       html, body, #root { margin: 0; padding: 0; min-height: 100%; }
-      body { background: #050505; }
+      html { -webkit-text-size-adjust: 100%; }
+      body { background: #050505; overscroll-behavior-y: contain; }
     </style>
   </head>
   <body>

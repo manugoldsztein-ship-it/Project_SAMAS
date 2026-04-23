@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 // AI surface is intentionally narrow: one wizard that does compound interest
 // projection + income/expenses breakdown + strategy pick. No general chat,
 // no sentiment analysis — per product spec the AI's only job is that flow.
@@ -433,6 +433,63 @@ const TRANSLATIONS = {
 
 function useT(lang) {
   return (key) => (TRANSLATIONS[lang] && TRANSLATIONS[lang][key]) || TRANSLATIONS.es[key] || key;
+}
+
+// usePersistedState — drop-in useState that mirrors value to localStorage.
+// If the key is present on mount, initial value is taken from storage; on
+// every update the value is re-serialized. Wrapped in try/catch so the app
+// still works in private-browsing or environments without localStorage.
+function usePersistedState(key, initialValue) {
+  const [value, setValue] = useState(() => {
+    try {
+      if (typeof localStorage === "undefined") return initialValue;
+      const raw = localStorage.getItem(key);
+      if (raw === null || raw === undefined) return initialValue;
+      return JSON.parse(raw);
+    } catch {
+      return initialValue;
+    }
+  });
+  useEffect(() => {
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem(key, JSON.stringify(value));
+      }
+    } catch {}
+  }, [key, value]);
+  return [value, setValue];
+}
+
+// Error boundary so one broken component doesn't take down the whole app.
+// React functional components can't catch errors — this has to be a class.
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) {
+    console.error("[SAMAS] component crash:", error, info?.componentStack);
+  }
+  reset = () => this.setState({ error: null });
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", padding:20, background:"#080808", color:"#F7F7F5", fontFamily:"Sora,sans-serif" }}>
+          <div style={{ maxWidth:420, textAlign:"center" }}>
+            <div style={{ fontSize:48, marginBottom:12 }}>⚠️</div>
+            <h2 style={{ fontSize:20, fontWeight:700, marginBottom:10 }}>Algo se rompio</h2>
+            <p style={{ fontSize:14, color:"#9CA3AF", lineHeight:1.5, marginBottom:20 }}>
+              Se cayo una parte de la app. Tus datos en localStorage siguen a salvo. Proba reintentar; si sigue fallando, recarga la pagina.
+            </p>
+            <pre style={{ background:"#161B22", border:"1px solid #2A313C", borderRadius:10, padding:"10px 12px", fontSize:11, color:"#E05555", whiteSpace:"pre-wrap", wordBreak:"break-word", textAlign:"left", marginBottom:20, maxHeight:140, overflowY:"auto" }}>{String(this.state.error?.message || this.state.error)}</pre>
+            <div style={{ display:"flex", gap:10, justifyContent:"center" }}>
+              <button onClick={this.reset} style={{ background:"#16C784", color:"#fff", border:"none", borderRadius:10, padding:"10px 18px", fontWeight:700, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>Reintentar</button>
+              <button onClick={() => window.location.reload()} style={{ background:"transparent", color:"#9CA3AF", border:"1px solid #2A313C", borderRadius:10, padding:"10px 18px", fontWeight:600, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>Recargar</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 // Global Escape-to-close helper. Pass the handler that should fire when the
@@ -1691,7 +1748,10 @@ function PageBonos({ C, showUSD, lang }) {
                 <div style={{ fontSize:11, color:C.textMd }}>{b.name}</div>
               </div>
               <div style={{ textAlign:"right", flexShrink:0 }}>
-                <div style={{ fontSize:15, fontWeight:800, color:C.text, fontFamily:"monospace" }}>{b.currency==="USD" ? "u$s"+b.price : "$"+fN(Math.round(b.price))}</div>
+                <div style={{ fontSize:15, fontWeight:800, color:C.text, fontFamily:"monospace" }}>
+                  {b.currency==="USD" ? "u$s"+b.price : b.price.toFixed(1)}
+                  {b.currency!=="USD" && <span style={{ fontSize:9, color:C.textLt, fontWeight:600, marginLeft:4 }}>par</span>}
+                </div>
                 {b.ytm && <div style={{ fontSize:11, color:C.green, fontWeight:700 }}>TIR {b.ytm}%</div>}
               </div>
             </div>
@@ -1897,7 +1957,167 @@ function PageReportes({ C, lang }) {
   );
 }
 
-function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatchlist, onSelectAsset, onDeposit, onOpenObjectives, C, showUSD, lang }) {
+// Progress card shown on the portfolio page once the user has saved a plan
+// from the Objetivos wizard. Compares current portfolio value against the
+// plan's target, and offers quick actions to reopen the wizard or discard.
+function PlanProgressCard({ plan, currentValue, onOpen, onClear, C }) {
+  const profile = plan?._profile || {};
+  const target  = Number(profile.targetAmount) || 0;
+  const pct     = target > 0 ? Math.min(100, Math.max(0, (currentValue / target) * 100)) : 0;
+  const strat   = plan?.strategy || "moderada";
+  const stratColor =
+    strat === "conservadora" ? "#0EA5E9" :
+    strat === "agresiva"     ? "#F7931A" :
+    "#C9A84C";
+  // Saved-at timestamp (if stored) → "hace X dias"
+  const savedAt = plan?._savedAt ? new Date(plan._savedAt) : null;
+  const daysAgo = savedAt ? Math.max(0, Math.floor((Date.now() - savedAt.getTime()) / 86400000)) : null;
+  return (
+    <div style={{ margin:"12px 14px 0", background:"linear-gradient(135deg, "+stratColor+"18, #7C3AED12)", border:"1px solid "+stratColor+"55", borderRadius:14, padding:"14px" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+        <div style={{ width:34, height:34, borderRadius:10, background:"linear-gradient(135deg,"+stratColor+",#7C3AED)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
+          </svg>
+        </div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:stratColor, letterSpacing:1, textTransform:"uppercase" }}>Mi plan</div>
+          <div style={{ fontSize:13, fontWeight:700, color:C.text, textTransform:"capitalize" }}>
+            Estrategia {strat}
+            {daysAgo !== null && (
+              <span style={{ fontSize:10, fontWeight:500, color:C.textLt, marginLeft:6 }}>
+                · {daysAgo === 0 ? "hoy" : daysAgo === 1 ? "ayer" : "hace " + daysAgo + " dias"}
+              </span>
+            )}
+          </div>
+        </div>
+        <button
+          onClick={() => { if (window.confirm("Borrar el plan guardado?")) onClear && onClear(); }}
+          aria-label="Borrar plan"
+          style={{ background:"transparent", border:"none", padding:4, cursor:"pointer", color:C.textLt }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14H7L5 6"/><path d="M10 11v6M14 11v6"/>
+          </svg>
+        </button>
+      </div>
+
+      {target > 0 && (
+        <>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:C.textMd, marginBottom:5 }}>
+            <span>${Math.round(currentValue).toLocaleString("es-AR")}</span>
+            <span style={{ fontWeight:700, color:stratColor }}>{pct.toFixed(1)}%</span>
+            <span>${Math.round(target).toLocaleString("es-AR")}</span>
+          </div>
+          <div style={{ height:8, borderRadius:4, background:C.creamDk, overflow:"hidden", marginBottom:12 }}>
+            <div style={{ width: pct + "%", height:"100%", background: stratColor, transition:"width 0.3s" }}/>
+          </div>
+        </>
+      )}
+
+      <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:12 }}>
+        {(plan.allocation || []).slice(0, 6).map((a, i) => (
+          <span key={i} style={{ fontSize:10, color:C.text, background:C.card, border:"1px solid "+C.border, borderRadius:8, padding:"3px 7px", fontWeight:600 }}>
+            {a.name} <span style={{ color:C.textMd, fontFamily:"monospace" }}>{a.percent}%</span>
+          </span>
+        ))}
+      </div>
+
+      <button
+        onClick={() => onOpen && onOpen()}
+        style={{ width:"100%", background:stratColor, color:"#fff", border:"none", borderRadius:10, padding:"9px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}
+      >
+        Revisar mi plan
+      </button>
+    </div>
+  );
+}
+
+// Empty-state onboarding card shown on a fresh portfolio (no holdings, no
+// saved plan). Three CTAs guide the user into the three core flows.
+function OnboardingEmptyState({ onOpenObjectives, onSelectAsset, onDeposit, C }) {
+  // Pick a couple of recognizable CEDEAR tickers as the "pick one" nudge.
+  // These are the most liquid names in the SAMAS seed data.
+  const suggested = ["AAPL", "NVDA", "SPY"].map(t => ASSETS.find(a => a.ticker === t)).filter(Boolean);
+  return (
+    <div style={{ margin:"12px 14px 0", background:C.card, border:"1px dashed "+C.border, borderRadius:14, padding:"16px 14px" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+        <span style={{ fontSize:20 }}>👋</span>
+        <div style={{ fontSize:14, fontWeight:700, color:C.text }}>Arranquemos por aca</div>
+      </div>
+      <div style={{ fontSize:11, color:C.textMd, lineHeight:1.5, marginBottom:14 }}>
+        Cuenta nueva, portafolio vacio. Tres cosas simples para empezar:
+      </div>
+
+      <OnboardingRow
+        n={1}
+        title="Armar tu plan con IA"
+        body="Claude analiza ingreso y gastos y te sugiere la estrategia."
+        cta="Empezar"
+        onClick={onOpenObjectives}
+        accent={C.accent}
+        C={C}
+      />
+
+      <OnboardingRow
+        n={2}
+        title="Tu primera compra simulada"
+        body="Tocá un activo conocido y probá el flujo de orden."
+        cta={null}
+        C={C}
+      >
+        <div style={{ display:"flex", gap:6, marginTop:8, flexWrap:"wrap" }}>
+          {suggested.map(a => (
+            <button
+              key={a.ticker}
+              onClick={() => onSelectAsset && onSelectAsset(a)}
+              style={{ background:C.bg, border:"1.5px solid "+C.border, borderRadius:10, padding:"6px 10px", display:"flex", alignItems:"center", gap:6, cursor:"pointer", fontFamily:"inherit" }}
+            >
+              <AssetLogo asset={a} size={20} C={C}/>
+              <span style={{ fontSize:11, fontWeight:700, color:C.text }}>{a.ticker}</span>
+              <span style={{ fontSize:10, fontWeight:700, color: a.up ? C.green : C.red }}>
+                {a.up ? "+" : "-"}{Math.abs(a.change).toFixed(1)}%
+              </span>
+            </button>
+          ))}
+        </div>
+      </OnboardingRow>
+
+      <OnboardingRow
+        n={3}
+        title="Fondear tu cuenta"
+        body="Simulá un deposito para tener saldo antes de operar."
+        cta="Depositar"
+        onClick={onDeposit}
+        accent={C.gold}
+        C={C}
+      />
+    </div>
+  );
+}
+
+function OnboardingRow({ n, title, body, cta, onClick, accent, children, C }) {
+  return (
+    <div style={{ display:"flex", alignItems:"flex-start", gap:10, padding:"10px 0", borderTop:"1px solid "+C.border }}>
+      <div style={{ width:22, height:22, borderRadius:11, background:(accent || C.accent)+"22", color:accent || C.accent, fontSize:11, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, marginTop:2 }}>{n}</div>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontSize:12.5, fontWeight:700, color:C.text, marginBottom:2 }}>{title}</div>
+        <div style={{ fontSize:10.5, color:C.textMd, lineHeight:1.5 }}>{body}</div>
+        {children}
+      </div>
+      {cta && (
+        <button
+          onClick={onClick}
+          style={{ background:accent || C.accent, color:"#fff", border:"none", borderRadius:9, padding:"6px 11px", fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"inherit", flexShrink:0, alignSelf:"center" }}
+        >
+          {cta}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatchlist, onSelectAsset, onDeposit, onOpenObjectives, savedPlan, onClearPlan, C, showUSD, lang }) {
   const t = useT(lang);
   // Privacy toggle: when true, amounts in the hero card are replaced with dots.
   // Percent gain is still shown so the user sees direction without a dollar figure.
@@ -1970,43 +2190,60 @@ function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatch
       {showDeposit && (
         <DepositModal user={DEMO_USER} onClose={() => setShowDeposit(false)} onSimulate={(amt, method) => onDeposit && onDeposit(amt, method)} C={C}/>
       )}
-      {/* AI Objectives banner — entry point to the goal/risk wizard.
-          Modal itself is hoisted to MobileApp/WebDashboard level so its
-          absolute-positioned backdrop isn't clipped by this page's
-          scroll container. */}
-      <button
-        onClick={() => onOpenObjectives && onOpenObjectives()}
-        style={{
-          margin:"12px 14px 0",
-          width:"calc(100% - 28px)",
-          background:"linear-gradient(135deg, "+C.accent+"22, #7C3AED22)",
-          border:"1px solid "+C.accent+"55",
-          borderRadius:14,
-          padding:"12px 14px",
-          display:"flex",
-          alignItems:"center",
-          gap:12,
-          cursor:"pointer",
-          fontFamily:"inherit",
-          textAlign:"left",
-        }}
-      >
-        <div style={{ width:38, height:38, borderRadius:10, background:"linear-gradient(135deg,"+C.accent+",#7C3AED)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
-          </svg>
-        </div>
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2 }}>
-            <span style={{ fontSize:13, fontWeight:700, color:C.text }}>Armar mi plan con IA</span>
-            <span style={{ fontSize:8, fontWeight:800, background:C.accent, color:"#0D1117", borderRadius:4, padding:"1px 5px", letterSpacing:0.5 }}>NUEVO</span>
+      {/* AI Objectives: banner when there's no saved plan, progress card
+          when there is one. Modal itself is hoisted to MobileApp /
+          WebDashboard level so its absolute-positioned backdrop isn't
+          clipped by this page's scroll container. */}
+      {!savedPlan && (
+        <button
+          onClick={() => onOpenObjectives && onOpenObjectives()}
+          style={{
+            margin:"12px 14px 0",
+            width:"calc(100% - 28px)",
+            background:"linear-gradient(135deg, "+C.accent+"22, #7C3AED22)",
+            border:"1px solid "+C.accent+"55",
+            borderRadius:14,
+            padding:"12px 14px",
+            display:"flex",
+            alignItems:"center",
+            gap:12,
+            cursor:"pointer",
+            fontFamily:"inherit",
+            textAlign:"left",
+          }}
+        >
+          <div style={{ width:38, height:38, borderRadius:10, background:"linear-gradient(135deg,"+C.accent+",#7C3AED)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
+            </svg>
           </div>
-          <div style={{ fontSize:10.5, color:C.textMd, lineHeight:1.4 }}>
-            Claude te arma un plan personalizado segun tu objetivo, horizonte y tolerancia al riesgo.
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2 }}>
+              <span style={{ fontSize:13, fontWeight:700, color:C.text }}>Armar mi plan con IA</span>
+              <span style={{ fontSize:8, fontWeight:800, background:C.accent, color:"#0D1117", borderRadius:4, padding:"1px 5px", letterSpacing:0.5 }}>NUEVO</span>
+            </div>
+            <div style={{ fontSize:10.5, color:C.textMd, lineHeight:1.4 }}>
+              Claude analiza tu ingreso, gastos y objetivo y te arma la estrategia.
+            </div>
           </div>
-        </div>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-      </button>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      )}
+      {savedPlan && (
+        <PlanProgressCard plan={savedPlan} currentValue={tv} onOpen={onOpenObjectives} onClear={onClearPlan} C={C}/>
+      )}
+
+      {/* Onboarding for fresh accounts: no holdings, no orders, no plan.
+          Nudges the user toward the three core actions. Disappears as soon
+          as any of them happens. */}
+      {enriched.length === 0 && !savedPlan && (
+        <OnboardingEmptyState
+          onOpenObjectives={onOpenObjectives}
+          onSelectAsset={onSelectAsset}
+          onDeposit={() => setShowDeposit(true)}
+          C={C}
+        />
+      )}
       <div style={{ margin:"12px 14px 0", background:C.card, borderRadius:14, border:"1px solid "+C.border, padding:"12px 14px" }}>
         <div style={{ fontSize:11, fontWeight:700, color:C.textMd, marginBottom:8 }}>{t("distribution")}</div>
         <div style={{ display:"flex", height:10, borderRadius:5, overflow:"hidden", gap:2 }}>{enriched.map((h, i) => {
@@ -3491,6 +3728,59 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
           </div>
         )}
 
+        {/* Export data — dump all localStorage-backed SAMAS keys as JSON */}
+        <button
+          onClick={() => {
+            try {
+              const snapshot = {
+                exportedAt: new Date().toISOString(),
+                version: 1,
+                keys: {},
+              };
+              const KEYS = [
+                "samas_holdings", "samas_orders", "samas_balance",
+                "samas_watchlist", "samas_stop_losses", "samas_price_alerts",
+                "samas_ui_dark", "samas_lang", "samas_show_usd",
+                "samas_view_mode", "samas_seen_tutorial", "samas_plan",
+              ];
+              KEYS.forEach(k => {
+                try {
+                  const v = localStorage.getItem(k);
+                  if (v !== null) snapshot.keys[k] = JSON.parse(v);
+                } catch { /* skip bad keys */ }
+              });
+              const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `samas-export-${new Date().toISOString().slice(0,10)}.json`;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+            } catch (e) {
+              console.error("[SAMAS] export failed:", e);
+              alert("No se pudo exportar: " + (e?.message || "error desconocido"));
+            }
+          }}
+          style={{ width:"100%", background:C.creamDk, border:"1.5px solid "+C.border, borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}
+        >
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ width:36, height:36, borderRadius:10, background:"#2563EB22", display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+            </div>
+            <div>
+              <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Exportar mis datos</div>
+              <div style={{ fontSize:11, color:C.textLt }}>Descarga holdings, ordenes y plan como JSON</div>
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+
         <button onClick={() => setShow2FA(v => !v)} style={{ width:"100%", background: twoFAEnabled ? C.green+"18" : C.creamDk, border:"1.5px solid "+(twoFAEnabled?C.green+"44":C.border), borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <div style={{ width:36, height:36, borderRadius:10, background:(twoFAEnabled?C.green:C.accent)+"22", display:"flex", alignItems:"center", justifyContent:"center" }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={twoFAEnabled?C.green:C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
@@ -3546,8 +3836,8 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
 // MOBILE PHONE WRAPPER
 // ============================================================
 function MobileApp({ appState, handlers, C }) {
-  const { loggedIn, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel } = appState;
-  const { setLoggedIn, handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel } = handlers;
+  const { loggedIn, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan } = appState;
+  const { setLoggedIn, handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan } = handlers;
   // Modal state hoisted out of PagePortfolio so the wizard's absolute
   // overlay covers the full phone frame (otherwise it was clipped by the
   // page's overflow:auto scroll container — the X button could fall out
@@ -3562,12 +3852,12 @@ function MobileApp({ appState, handlers, C }) {
   const getA  = t => priceAlerts[t] || null;
   const renderPage = () => {
     switch (tab) {
-      case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} C={C} showUSD={showUSD} lang={lang}/>;
+      case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} C={C} showUSD={showUSD} lang={lang}/>;
       case "mercado":    return <PageMercado onSelectAsset={setSelected} C={C} showUSD={showUSD} lang={lang}/>;
       case "noticias":   return <PageNoticias holdings={holdings} onSelectAsset={setSelected} C={C} lang={lang}/>;
       case "ideas":      return <PageIdeas C={C} showUSD={showUSD} onSelectAsset={setSelected} lang={lang}/>;
       case "ordenes":    return <PageOrdenes orders={orders} C={C} lang={lang}/>;
-      default:           return <PagePortfolio watchlist={watchlist} onToggleWatchlist={toggleWatchlist} holdings={holdings} stopLosses={stopLosses} balance={balance} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} C={C} showUSD={showUSD} lang={lang}/>;
+      default:           return <PagePortfolio watchlist={watchlist} onToggleWatchlist={toggleWatchlist} holdings={holdings} stopLosses={stopLosses} balance={balance} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} C={C} showUSD={showUSD} lang={lang}/>;
     }
   };
   return (
@@ -3579,7 +3869,7 @@ function MobileApp({ appState, handlers, C }) {
       {toast && <div style={{ position:"absolute", top:34, left:14, right:14, zIndex:50, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 14px", fontSize:12, fontWeight:700 }}>{toast.msg}</div>}
       {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} C={C}/>}
       {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} C={C}/>}
-      {showObjectives && <ObjectivesWizard onClose={() => setShowObjectives(false)} C={C}/>}
+      {showObjectives && <ObjectivesWizard onClose={() => setShowObjectives(false)} onSave={setSavedPlan} savedPlan={savedPlan} C={C}/>}
       <div style={{ background:C.isDark?"#0F0F0F":"#0D1117", paddingTop:30, paddingBottom:8, paddingLeft:20, paddingRight:20, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0, zIndex:10 }}>
         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
           <span style={{ color:"rgba(255,255,255,0.6)", fontSize:12, fontWeight:600 }}>{new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})}</span>
@@ -3624,8 +3914,8 @@ function MobileApp({ appState, handlers, C }) {
 // WEB DASHBOARD LAYOUT
 // ============================================================
 function WebDashboard({ appState, handlers, C }) {
-  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, showProfile, showUSD, showTutorial, lang, watchlist, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel } = appState;
-  const { setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, setShowProfile, setIsDark, setShowUSD, setLang, finishTutorial, toggleWatchlist, setFinnhubKey, setEmailjsCfg, handleDeposit, setAnthropicKey, setAnthropicModel } = handlers;
+  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, showProfile, showUSD, showTutorial, lang, watchlist, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan } = appState;
+  const { setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, setShowProfile, setIsDark, setShowUSD, setLang, finishTutorial, toggleWatchlist, setFinnhubKey, setEmailjsCfg, handleDeposit, setAnthropicKey, setAnthropicModel, setSavedPlan } = handlers;
   const [sideTab, setSideTab] = useState("portfolio");
   // Objectives modal lives at dashboard level for the same reason as in
   // MobileApp — keeps the overlay out of the page's scroll container.
@@ -3638,14 +3928,14 @@ function WebDashboard({ appState, handlers, C }) {
   const getA  = t => priceAlerts[t] || null;
   const renderPage = () => {
     switch (sideTab) {
-      case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} C={C} showUSD={showUSD} lang={lang}/>;
+      case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} C={C} showUSD={showUSD} lang={lang}/>;
       case "mercado":    return <PageMercado onSelectAsset={setSelected} C={C} showUSD={showUSD} lang={lang}/>;
       case "noticias":   return <PageNoticias holdings={holdings} onSelectAsset={setSelected} C={C} lang={lang}/>;
       case "ideas":      return <PageIdeas C={C} showUSD={showUSD} onSelectAsset={setSelected} lang={lang}/>;
       case "bonos":      return <PageBonos C={C} showUSD={showUSD} lang={lang}/>;
       case "ordenes":    return <PageOrdenes orders={orders} C={C} lang={lang}/>;
       case "reportes":   return <PageReportes C={C} lang={lang}/>;
-      default:           return <PagePortfolio watchlist={watchlist} onToggleWatchlist={toggleWatchlist} holdings={holdings} stopLosses={stopLosses} balance={balance} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} C={C} showUSD={showUSD} lang={lang}/>;
+      default:           return <PagePortfolio watchlist={watchlist} onToggleWatchlist={toggleWatchlist} holdings={holdings} stopLosses={stopLosses} balance={balance} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} C={C} showUSD={showUSD} lang={lang}/>;
     }
   };
   return (
@@ -3690,7 +3980,7 @@ function WebDashboard({ appState, handlers, C }) {
           {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} finnhubKey={finnhubKey} setFinnhubKey={setFinnhubKey} finnhub={finnhub} emailjsCfg={emailjsCfg} setEmailjsCfg={setEmailjsCfg} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} anthropicModel={anthropicModel} setAnthropicModel={setAnthropicModel} C={C}/>}
           {toast && <div style={{ position:"fixed", top:70, left:"50%", transform:"translateX(-50%)", zIndex:99, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 20px", fontSize:13, fontWeight:700, boxShadow:"0 8px 32px rgba(0,0,0,0.3)" }}>{toast.msg}</div>}
           <div style={{ overflowY:"auto", height:"calc(100vh - 56px)" }}>{renderPage()}</div>
-          {showObjectives && <ObjectivesWizard onClose={() => setShowObjectives(false)} C={C}/>}
+          {showObjectives && <ObjectivesWizard onClose={() => setShowObjectives(false)} onSave={setSavedPlan} savedPlan={savedPlan} C={C}/>}
         </div>
         <div style={{ width:320, background:C.card, borderLeft:"1px solid "+C.border, padding:"20px 16px", position:"sticky", top:56, height:"calc(100vh - 56px)", overflowY:"auto" }}>
           <div style={{ fontWeight:700, fontSize:14, color:C.text, marginBottom:16 }}>Mercado en vivo</div>
@@ -3716,24 +4006,31 @@ function WebDashboard({ appState, handlers, C }) {
 // MAIN APP
 // ============================================================
 export default function SAMASApp() {
-  const [isDark, setIsDark]           = useState(true);
-  const [loggedIn, setLoggedIn]       = useState(false);
-  const [hasSeenTutorial, setHasSeen] = useState(false);
+  // Preferences + simulator state are persisted to localStorage. Only the
+  // truly ephemeral state (modals, toasts, current tab, pending trade) lives
+  // in memory — everything a user would expect to survive a reload is saved.
+  const [isDark, setIsDark]           = usePersistedState("samas_ui_dark", true);
+  const [loggedIn, setLoggedIn]       = useState(false);  // session — not persisted
+  const [hasSeenTutorial, setHasSeen] = usePersistedState("samas_seen_tutorial", false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [tab, setTab]                 = useState("portfolio");
-  const [showUSD, setShowUSD]         = useState(false);
-  const [lang, setLang]               = useState("es");
-  const [selectedAsset, setSelected] = useState(null);
-  const [orders, setOrders]           = useState([]);
-  const [holdings, setHoldings]       = useState(INIT_HOLDINGS);
-  const [stopLosses, setStopLosses]   = useState({});
-  const [priceAlerts, setPriceAlerts] = useState({});
-  const [watchlist, setWatchlist]     = useState(["SPY","BTC","GGAL"]);
-  const [balance, setBalance]         = useState(50000);
+  const [showUSD, setShowUSD]         = usePersistedState("samas_show_usd", false);
+  const [lang, setLang]               = usePersistedState("samas_lang", "es");
+  const [selectedAsset, setSelected]  = useState(null);
+  const [orders, setOrders]           = usePersistedState("samas_orders", []);
+  const [holdings, setHoldings]       = usePersistedState("samas_holdings", INIT_HOLDINGS);
+  const [stopLosses, setStopLosses]   = usePersistedState("samas_stop_losses", {});
+  const [priceAlerts, setPriceAlerts] = usePersistedState("samas_price_alerts", {});
+  const [watchlist, setWatchlist]     = usePersistedState("samas_watchlist", ["SPY","BTC","GGAL"]);
+  const [balance, setBalance]         = usePersistedState("samas_balance", 50000);
+  // Saved plan from the Objetivos wizard (strategy + allocation + profile
+  // used to generate it + timestamp). Persisted so users can return to
+  // their plan, and the Portfolio page can render progress against it.
+  const [savedPlan, setSavedPlan]     = usePersistedState("samas_plan", null);
   const [pendingTrade, setPending]    = useState(null);
   const [toast, setToast]             = useState(null);
-  const [viewMode, setViewMode]       = useState("mobile");
+  const [viewMode, setViewMode]       = usePersistedState("samas_view_mode", "mobile");
   const [finnhubKey, setFinnhubKey]   = useState(() => loadKey());
   const [emailjsCfg, setEmailjsCfg]   = useState(() => loadEmailjsConfig());
   // Anthropic (Claude) — BYOK. Same pattern as Finnhub: localStorage-backed,
@@ -3822,6 +4119,7 @@ export default function SAMASApp() {
     setWatchlist([]);
     setOrders([]);
     setBalance(100000);  // $100k ARS starter balance for a demo account
+    setSavedPlan(null);  // new user, no plan yet
     setSelected(null);
     setPending(null);
     setTab("portfolio");
@@ -3837,8 +4135,8 @@ export default function SAMASApp() {
     showToast(`$${fN(amount)} acreditados via ${methodLabel}`, C.green);
   };
 
-  const appState = { isDark, loggedIn, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel };
-  const handlers = { setLoggedIn, handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel };
+  const appState = { isDark, loggedIn, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan };
+  const handlers = { setLoggedIn, handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan };
 
   const outerBg = isDark ? "#080808" : "#050505";
 
@@ -3854,14 +4152,14 @@ export default function SAMASApp() {
 
       {viewMode === "mobile" ? (
         <div style={{ display:"flex", justifyContent:"center", padding:"20px" }}>
-          <MobileApp appState={appState} handlers={handlers} C={C}/>
+          <ErrorBoundary><MobileApp appState={appState} handlers={handlers} C={C}/></ErrorBoundary>
           <div style={{ position:"fixed", bottom:16, left:"50%", transform:"translateX(-50%)", background:"rgba(255,255,255,0.05)", backdropFilter:"blur(10px)", borderRadius:20, padding:"7px 18px", color:"rgba(255,255,255,0.35)", fontSize:11, border:"1px solid rgba(255,255,255,0.07)", whiteSpace:"nowrap" }}>
             Face ID / PIN demo: <strong style={{ color:"rgba(255,255,255,0.6)" }}>4821</strong>
           </div>
         </div>
       ) : (
         loggedIn ? (
-          <WebDashboard appState={appState} handlers={handlers} C={C}/>
+          <ErrorBoundary><WebDashboard appState={appState} handlers={handlers} C={C}/></ErrorBoundary>
         ) : (
           <div style={{ display:"flex", justifyContent:"center", alignItems:"center", minHeight:"calc(100vh - 60px)" }}>
             <div style={{ width:375, height:760, position:"relative", borderRadius:20, overflow:"hidden" }}>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { callObjectives, fvAnnuity, hasAnthropicKey } from "./client.js";
+import { callObjectives, callExpenseParser, fvAnnuity, hasAnthropicKey } from "./client.js";
 
 // ============================================================
 // OBJETIVOS WIZARD (AI) — spec v2
@@ -32,17 +32,41 @@ const STRATEGY_COLORS = {
 
 const HORIZON_PRESETS = [1, 3, 5, 10, 20];
 
-function fmtARS(n) {
+function fmtNum(n) {
   return Math.round(Number(n) || 0).toLocaleString("es-AR");
 }
+function sym(currency) { return currency === "USD" ? "u$s" : "$"; }
+// Back-compat alias used by PlanView below (ARS-biased wording).
+const fmtARS = fmtNum;
 
-export function ObjectivesWizard({ onClose, C }) {
-  const [step, setStep] = useState(1);
-  const [monthlyIncome, setMonthlyIncome]     = useState(500000);
-  const [monthlyExpenses, setMonthlyExpenses] = useState(350000);
-  const [targetAmount, setTargetAmount]       = useState(10000000);
-  const [horizonYears, setHorizonYears]       = useState(10);
-  const [plan, setPlan] = useState(null);
+export function ObjectivesWizard({ onClose, onSave, savedPlan, C }) {
+  // When reopening with an existing plan, prefill the form with the values
+  // that produced it so the user can tweak + regenerate without retyping.
+  const prior = savedPlan?._profile || null;
+  const [currency, setCurrency] = useState(prior?.currency ?? "ARS");
+  const [step, setStep] = useState(savedPlan ? 4 : 1);
+  // Sensible defaults per currency; only applied on fresh wizard (no prior).
+  const dft = currency === "USD"
+    ? { income: 1500, expenses: 1000, target: 50000, horizon: 10 }
+    : { income: 500000, expenses: 350000, target: 10000000, horizon: 10 };
+  const [monthlyIncome, setMonthlyIncome]     = useState(prior?.monthlyIncome   ?? dft.income);
+  const [monthlyExpenses, setMonthlyExpenses] = useState(prior?.monthlyExpenses ?? dft.expenses);
+  const [targetAmount, setTargetAmount]       = useState(prior?.targetAmount    ?? dft.target);
+  const [horizonYears, setHorizonYears]       = useState(prior?.horizonYears    ?? dft.horizon);
+  // Keep input defaults in sync when the user flips the currency toggle
+  // before typing their own numbers. We only swap if the user is still on
+  // the previous currency's defaults (i.e. hasn't customized).
+  useEffect(() => {
+    const wasArs = monthlyIncome === 500000 && monthlyExpenses === 350000 && targetAmount === 10000000;
+    const wasUsd = monthlyIncome === 1500   && monthlyExpenses === 1000   && targetAmount === 50000;
+    if (currency === "USD" && wasArs) {
+      setMonthlyIncome(1500); setMonthlyExpenses(1000); setTargetAmount(50000);
+    } else if (currency === "ARS" && wasUsd) {
+      setMonthlyIncome(500000); setMonthlyExpenses(350000); setTargetAmount(10000000);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currency]);
+  const [plan, setPlan] = useState(savedPlan || null);
   const [busy, setBusy] = useState(false);
   const [err, setErr]   = useState(null);
 
@@ -86,10 +110,16 @@ export function ObjectivesWizard({ onClose, C }) {
         monthlyExpenses,
         targetAmount,
         horizonYears,
+        currency,
       });
       if (!mountedRef.current) return;         // late result after close — discard
-      setPlan(p);
+      // Stamp the plan so we can show "hace X dias" on the progress card.
+      const stamped = { ...p, _savedAt: Date.now() };
+      setPlan(stamped);
       setStep(4);
+      // Persist automatically so the user doesn't lose the plan if they
+      // close without hitting "Cerrar" (most people just swipe away).
+      if (onSave) onSave(stamped);
     } catch (e) {
       if (!mountedRef.current) return;
       setErr(e?.message || "Error al generar el plan");
@@ -128,6 +158,26 @@ export function ObjectivesWizard({ onClose, C }) {
               {hasAnthropicKey() ? "Claude · en vivo" : "Modo demo (sin API key)"}
             </div>
           </div>
+          {/* Currency toggle — disabled on step 4 (plan view) so it doesn't
+              look like you can change the plan's currency after the fact. */}
+          {step < 4 && (
+            <div style={{ display:"flex", background:C.creamDk, border:"1px solid "+C.border, borderRadius:10, padding:2, marginRight:6 }}>
+              {["ARS", "USD"].map(code => (
+                <button
+                  key={code}
+                  onClick={() => setCurrency(code)}
+                  style={{
+                    background: currency === code ? C.accent : "transparent",
+                    color:      currency === code ? "#fff" : C.textMd,
+                    border:"none", borderRadius:8, padding:"5px 9px",
+                    fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+                  }}
+                >
+                  {code}
+                </button>
+              ))}
+            </div>
+          )}
           <button onClick={onClose} aria-label="Cerrar" style={{ background:"transparent", border:"none", cursor:"pointer", padding:4, color:C.textMd }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -150,6 +200,7 @@ export function ObjectivesWizard({ onClose, C }) {
             <StepIncome
               monthlyIncome={monthlyIncome}
               setMonthlyIncome={setMonthlyIncome}
+              currency={currency}
               C={C}
             />
           )}
@@ -160,6 +211,7 @@ export function ObjectivesWizard({ onClose, C }) {
               setMonthlyExpenses={setMonthlyExpenses}
               invest={invest}
               savingsRate={savingsRate}
+              currency={currency}
               C={C}
             />
           )}
@@ -171,6 +223,7 @@ export function ObjectivesWizard({ onClose, C }) {
               setHorizonYears={setHorizonYears}
               invest={invest}
               preview={preview}
+              currency={currency}
               C={C}
             />
           )}
@@ -180,6 +233,7 @@ export function ObjectivesWizard({ onClose, C }) {
               invest={invest}
               target={targetAmount}
               horizon={horizonYears}
+              currency={currency}
               C={C}
             />
           )}
@@ -219,10 +273,10 @@ export function ObjectivesWizard({ onClose, C }) {
           {step === 4 && (
             <>
               <button onClick={reset} style={{ flex:1, background:C.creamDk, color:C.textMd, border:"1.5px solid "+C.border, borderRadius:12, padding:"11px", fontWeight:600, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
-                Nuevo
+                Regenerar
               </button>
               <button onClick={onClose} style={{ flex:2, background:C.accent, color:"#fff", border:"none", borderRadius:12, padding:"11px", fontWeight:700, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
-                Cerrar
+                Listo
               </button>
             </>
           )}
@@ -234,12 +288,14 @@ export function ObjectivesWizard({ onClose, C }) {
 
 // ------- steps -------------------------------------------------------------
 
-function StepIncome({ monthlyIncome, setMonthlyIncome, C }) {
+function StepIncome({ monthlyIncome, setMonthlyIncome, currency, C }) {
   return (
     <div>
       <div style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:4 }}>Cuanto cobras por mes?</div>
-      <div style={{ fontSize:12, color:C.textMd, marginBottom:16, lineHeight:1.5 }}>Ingreso mensual neto en pesos argentinos. Sueldo, freelance, todo junto.</div>
-      <CurrencyInput value={monthlyIncome} onChange={setMonthlyIncome} C={C}/>
+      <div style={{ fontSize:12, color:C.textMd, marginBottom:16, lineHeight:1.5 }}>
+        Ingreso mensual neto en {currency === "USD" ? "dolares" : "pesos argentinos"}. Sueldo, freelance, todo junto.
+      </div>
+      <CurrencyInput value={monthlyIncome} onChange={setMonthlyIncome} currency={currency} C={C}/>
       <div style={{ marginTop:14, padding:"10px 12px", background:C.card, border:"1px dashed "+C.border, borderRadius:12, fontSize:11, color:C.textMd, lineHeight:1.5 }}>
         Los datos quedan solo en tu navegador. No los guardamos en ningun servidor.
       </div>
@@ -247,13 +303,108 @@ function StepIncome({ monthlyIncome, setMonthlyIncome, C }) {
   );
 }
 
-function StepExpenses({ monthlyIncome, monthlyExpenses, setMonthlyExpenses, invest, savingsRate, C }) {
+function StepExpenses({ monthlyIncome, monthlyExpenses, setMonthlyExpenses, invest, savingsRate, currency, C }) {
   const over = monthlyExpenses > monthlyIncome;
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  const [parseBusy, setParseBusy] = useState(false);
+  const [parseResult, setParseResult] = useState(null);
+  const [parseErr, setParseErr] = useState(null);
+
+  async function runParse() {
+    if (!pasteText.trim() || parseBusy) return;
+    setParseBusy(true);
+    setParseErr(null);
+    try {
+      const out = await callExpenseParser(pasteText);
+      setParseResult(out);
+      if (out?.total > 0) setMonthlyExpenses(Math.round(out.total));
+    } catch (e) {
+      setParseErr(e?.message || "No se pudo parsear el resumen");
+    } finally {
+      setParseBusy(false);
+    }
+  }
+
   return (
     <div>
       <div style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:4 }}>Cuanto gastas por mes?</div>
-      <div style={{ fontSize:12, color:C.textMd, marginBottom:16, lineHeight:1.5 }}>Sumale alquiler, expensas, comida, transporte, suscripciones, gustitos — todo lo que se te va.</div>
-      <CurrencyInput value={monthlyExpenses} onChange={setMonthlyExpenses} C={C}/>
+      <div style={{ fontSize:12, color:C.textMd, marginBottom:16, lineHeight:1.5 }}>
+        Sumale alquiler, expensas, comida, transporte, suscripciones, gustitos — todo lo que se te va.
+      </div>
+      <CurrencyInput value={monthlyExpenses} onChange={setMonthlyExpenses} currency={currency} C={C}/>
+
+      {/* "Pegar resumen" option — lets Claude parse a bank/card statement */}
+      <div style={{ marginTop:10 }}>
+        <button
+          onClick={() => setPasteOpen(v => !v)}
+          style={{
+            width:"100%",
+            background: pasteOpen ? C.accent + "18" : "transparent",
+            border: "1.5px dashed " + (pasteOpen ? C.accent + "66" : C.border),
+            borderRadius: 10,
+            padding: "10px 12px",
+            fontSize: 12,
+            color: pasteOpen ? C.accent : C.textMd,
+            fontWeight: 600,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="8" y="2" width="8" height="4" rx="1"/>
+            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+          </svg>
+          {pasteOpen ? "Ocultar parser" : "No sabes el total? Pega tu resumen"}
+        </button>
+      </div>
+
+      {pasteOpen && (
+        <div style={{ marginTop:10, background:C.card, border:"1px solid "+C.border, borderRadius:12, padding:"12px" }}>
+          <div style={{ fontSize:11, color:C.textMd, marginBottom:8, lineHeight:1.5 }}>
+            Pegá texto de tu resumen de tarjeta, cuenta banco, Mercado Pago, etc. Claude extrae el total y categoriza.
+          </div>
+          <textarea
+            value={pasteText}
+            onChange={e => setPasteText(e.target.value)}
+            placeholder="Pega aca tu resumen (max ~8000 chars)..."
+            rows={6}
+            style={{ width:"100%", boxSizing:"border-box", background:C.bg, border:"1.5px solid "+C.border, borderRadius:10, padding:"10px", fontSize:12, fontFamily:"monospace", color:C.text, outline:"none", resize:"vertical", marginBottom:8 }}
+          />
+          <button
+            onClick={runParse}
+            disabled={parseBusy || !pasteText.trim()}
+            style={{
+              width:"100%",
+              background: parseBusy || !pasteText.trim() ? C.creamDk : C.accent,
+              color: parseBusy || !pasteText.trim() ? C.textLt : "#fff",
+              border:"none", borderRadius:10, padding:"10px", fontSize:12, fontWeight:700,
+              cursor: parseBusy || !pasteText.trim() ? "not-allowed" : "pointer", fontFamily:"inherit",
+            }}
+          >
+            {parseBusy ? "Analizando…" : "Calcular total con IA"}
+          </button>
+          {parseErr && (
+            <div style={{ marginTop:8, background:C.red+"18", border:"1px solid "+C.red+"44", color:C.red, borderRadius:8, padding:"6px 8px", fontSize:11 }}>{parseErr}</div>
+          )}
+          {parseResult && (
+            <div style={{ marginTop:10, fontSize:11, color:C.textMd, lineHeight:1.5 }}>
+              Total detectado: <strong style={{ color:C.text, fontFamily:"monospace" }}>{sym(parseResult.currency || currency)}{fmtNum(parseResult.total)}</strong>
+              {Array.isArray(parseResult.categories) && parseResult.categories.length > 0 && (
+                <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:8 }}>
+                  {parseResult.categories.slice(0, 6).map((c, i) => (
+                    <span key={i} style={{ background:C.bg, border:"1px solid "+C.border, borderRadius:8, padding:"3px 7px", fontSize:10, color:C.text }}>
+                      {c.name} <span style={{ color:C.textMd, fontFamily:"monospace" }}>{sym(parseResult.currency || currency)}{fmtNum(c.amount)}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {parseResult.notes && <div style={{ marginTop:8, fontSize:10, color:C.textLt, fontStyle:"italic" }}>{parseResult.notes}</div>}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Live breakdown */}
       <div style={{ marginTop:18, background:C.card, borderRadius:14, border:"1px solid "+C.border, padding:"14px" }}>
@@ -275,13 +426,13 @@ function StepExpenses({ monthlyIncome, monthlyExpenses, setMonthlyExpenses, inve
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", gap:10 }}>
           <div>
             <div style={{ fontSize:26, fontWeight:800, color: over ? C.red : (invest > 0 ? C.accent : C.textLt), fontFamily:"monospace" }}>
-              ${fmtARS(invest)}
+              {sym(currency)}{fmtNum(invest)}
             </div>
             <div style={{ fontSize:10, color:C.textLt, marginTop:2 }}>podes destinar a inversion cada mes</div>
           </div>
           <div style={{ textAlign:"right", fontSize:11, color:C.textLt, lineHeight:1.5 }}>
-            Ingreso ${fmtARS(monthlyIncome)}<br/>
-            Gasto  ${fmtARS(monthlyExpenses)}
+            Ingreso {sym(currency)}{fmtNum(monthlyIncome)}<br/>
+            Gasto  {sym(currency)}{fmtNum(monthlyExpenses)}
           </div>
         </div>
 
@@ -292,7 +443,7 @@ function StepExpenses({ monthlyIncome, monthlyExpenses, setMonthlyExpenses, inve
         )}
         {!over && invest === 0 && (
           <div style={{ marginTop:12, background:C.gold+"22", border:"1px solid "+C.gold+"55", color:C.gold, borderRadius:10, padding:"8px 10px", fontSize:11, lineHeight:1.5 }}>
-            Gastas todo lo que ganas. Incluso $5.000 por mes es mejor que cero — probalo.
+            Gastas todo lo que ganas. Incluso {sym(currency)}{currency === "USD" ? "20" : "5.000"} por mes es mejor que cero — probalo.
           </div>
         )}
       </div>
@@ -300,14 +451,14 @@ function StepExpenses({ monthlyIncome, monthlyExpenses, setMonthlyExpenses, inve
   );
 }
 
-function StepGoal({ targetAmount, setTargetAmount, horizonYears, setHorizonYears, invest, preview, C }) {
+function StepGoal({ targetAmount, setTargetAmount, horizonYears, setHorizonYears, invest, preview, currency, C }) {
   return (
     <div>
       <div style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:4 }}>Cual es tu objetivo?</div>
       <div style={{ fontSize:12, color:C.textMd, marginBottom:16, lineHeight:1.5 }}>Monto a acumular y en cuanto tiempo. La IA va a ver si te da con tu sobrante actual y elegir la estrategia.</div>
 
-      <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, textTransform:"uppercase", marginBottom:6 }}>Monto objetivo (ARS)</div>
-      <CurrencyInput value={targetAmount} onChange={setTargetAmount} C={C}/>
+      <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, textTransform:"uppercase", marginBottom:6 }}>Monto objetivo ({currency})</div>
+      <CurrencyInput value={targetAmount} onChange={setTargetAmount} currency={currency} C={C}/>
 
       <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, textTransform:"uppercase", marginTop:14, marginBottom:8 }}>Horizonte</div>
       <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:10 }}>
@@ -339,7 +490,7 @@ function StepGoal({ targetAmount, setTargetAmount, horizonYears, setHorizonYears
       {/* Live compound-interest preview */}
       <div style={{ marginTop:14, background:C.card, borderRadius:14, border:"1px solid "+C.border, padding:"14px" }}>
         <div style={{ fontSize:11, fontWeight:700, color:C.textMd, letterSpacing:1, textTransform:"uppercase", marginBottom:6 }}>
-          Si invertis ${fmtARS(invest)}/mes durante {horizonYears} anios
+          Si invertis {sym(currency)}{fmtNum(invest)}/mes durante {horizonYears} anios
         </div>
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
           {preview.map(p => {
@@ -352,7 +503,7 @@ function StepGoal({ targetAmount, setTargetAmount, horizonYears, setHorizonYears
                     {(p.rate * 100).toFixed(0)}% anual
                     {reaches && <span style={{ marginLeft:6, fontSize:10, fontWeight:800, color:C.green, background:C.green+"22", padding:"1px 5px", borderRadius:4 }}>llega</span>}
                   </span>
-                  <span style={{ color:C.text, fontFamily:"monospace", fontWeight:700 }}>${fmtARS(p.final)}</span>
+                  <span style={{ color:C.text, fontFamily:"monospace", fontWeight:700 }}>{sym(currency)}{fmtNum(p.final)}</span>
                 </div>
                 <div style={{ height:6, background:C.creamDk, borderRadius:3, overflow:"hidden" }}>
                   <div style={{ width: pct + "%", height:"100%", background: reaches ? C.green : C.accent, transition:"width 0.2s" }}/>
@@ -363,7 +514,7 @@ function StepGoal({ targetAmount, setTargetAmount, horizonYears, setHorizonYears
         </div>
         {targetAmount > 0 && (
           <div style={{ fontSize:10, color:C.textLt, marginTop:10, lineHeight:1.5 }}>
-            Objetivo: ${fmtARS(targetAmount)} · Cuanto mas larga la barra, mas cerca estas de tu objetivo a esa tasa.
+            Objetivo: {sym(currency)}{fmtNum(targetAmount)} · Cuanto mas larga la barra, mas cerca estas de tu objetivo a esa tasa.
           </div>
         )}
       </div>
@@ -373,7 +524,7 @@ function StepGoal({ targetAmount, setTargetAmount, horizonYears, setHorizonYears
 
 // ------- plan view ---------------------------------------------------------
 
-function PlanView({ plan, invest, target, horizon, C }) {
+function PlanView({ plan, invest, target, horizon, currency = "ARS", C }) {
   const stratColor = STRATEGY_COLORS[plan.strategy] || C.accent;
   const feasColor =
     plan.feasibility === "holgado"  ? C.green :
@@ -394,7 +545,7 @@ function PlanView({ plan, invest, target, horizon, C }) {
       {/* Numbers row */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:12 }}>
         <StatCard label="Retorno asumido" value={`${((plan.assumedReturn || 0) * 100).toFixed(1)}%`} sub="anual" C={C}/>
-        <StatCard label="Aporte necesario" value={`$${fmtARS(plan.monthlyNeeded)}`} sub="mensual" C={C}/>
+        <StatCard label="Aporte necesario" value={`${sym(currency)}${fmtNum(plan.monthlyNeeded)}`} sub="mensual" C={C}/>
       </div>
 
       {/* Feasibility */}
@@ -412,8 +563,8 @@ function PlanView({ plan, invest, target, horizon, C }) {
           }}/>
         </div>
         <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:C.textLt }}>
-          <span>Tenes ${fmtARS(invest)}/mes</span>
-          <span>Necesitas ${fmtARS(plan.monthlyNeeded)}/mes</span>
+          <span>Tenes {sym(currency)}{fmtNum(invest)}/mes</span>
+          <span>Necesitas {sym(currency)}{fmtNum(plan.monthlyNeeded)}/mes</span>
         </div>
         {plan.advice && (
           <div style={{ marginTop:10, fontSize:12, color:C.text, lineHeight:1.5 }}>{plan.advice}</div>
@@ -461,22 +612,24 @@ function StatCard({ label, value, sub, C }) {
 
 // ------- shared inputs -----------------------------------------------------
 
-function CurrencyInput({ value, onChange, C }) {
+function CurrencyInput({ value, onChange, currency = "ARS", C }) {
+  const prefix = currency === "USD" ? "u$s" : "$";
+  const leftPad = currency === "USD" ? 40 : 26;
   return (
     <div style={{ position:"relative" }}>
-      <span style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", color:C.textLt, fontSize:16, fontWeight:600 }}>$</span>
+      <span style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", color:C.textLt, fontSize:14, fontWeight:600 }}>{prefix}</span>
       <input
         type="number"
         inputMode="numeric"
         min={0}
-        step={1000}
+        step={currency === "USD" ? 10 : 1000}
         value={value}
         onChange={e => onChange(Number(e.target.value) || 0)}
         style={{
           background: C.bg,
           border: "1.5px solid " + C.border,
           borderRadius: 12,
-          padding: "14px 14px 14px 26px",
+          padding: `14px 14px 14px ${leftPad}px`,
           fontSize: 18,
           fontFamily: "Sora,sans-serif",
           fontWeight: 700,
