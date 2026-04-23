@@ -85,7 +85,6 @@ export function ObjectivesWizard({ onClose, onSave, savedPlan, C }) {
 
   // Live compound-interest projection (client-side math only).
   const projected = useMemo(() => fvAnnuity(calcMonthly, horizonYears, calcRate), [calcMonthly, horizonYears, calcRate]);
-  const monthlyToReachGoal = useMemo(() => pmtForGoal(targetAmount, horizonYears, calcRate), [targetAmount, horizonYears, calcRate]);
 
   async function generate() {
     if (busy) return;
@@ -179,7 +178,6 @@ export function ObjectivesWizard({ onClose, onSave, savedPlan, C }) {
               calcRate={calcRate}
               setCalcRate={setCalcRate}
               projected={projected}
-              monthlyToReachGoal={monthlyToReachGoal}
               C={C}
             />
           )}
@@ -233,9 +231,7 @@ export function ObjectivesWizard({ onClose, onSave, savedPlan, C }) {
 
 // ------- step 1: goal + calculator ------------------------------------------
 
-function StepObjective({ currency, targetAmount, setTargetAmount, horizonYears, setHorizonYears, calcMonthly, setCalcMonthly, calcRate, setCalcRate, projected, monthlyToReachGoal, C }) {
-  const reaches = projected >= targetAmount && targetAmount > 0;
-  const progressPct = targetAmount > 0 ? Math.min(100, (projected / targetAmount) * 100) : 0;
+function StepObjective({ currency, targetAmount, setTargetAmount, horizonYears, setHorizonYears, calcMonthly, setCalcMonthly, calcRate, setCalcRate, projected, C }) {
   return (
     <div>
       <div style={{ fontSize:18, fontWeight:800, color:C.text, marginBottom:4 }}>¿Cuál es tu objetivo?</div>
@@ -301,28 +297,21 @@ function StepObjective({ currency, targetAmount, setTargetAmount, horizonYears, 
           style={{ width:"100%", accentColor: C.accent }}
         />
 
-        {/* Live result */}
+        {/* Live result — just the projection, no "viability" bar.
+            Previous version showed a progress bar comparing the projection
+            to the user's goal, which felt judgy when it was "red / not
+            reaching". Collaborator: "saca la barra esa de viabilidad".
+            Users can still see their goal right above the calculator to
+            do the mental comparison themselves. */}
         <div style={{ marginTop:14, paddingTop:14, borderTop:"1px solid "+C.border }}>
           <div style={{ fontSize:11, fontWeight:700, color:C.textMd, letterSpacing:1, textTransform:"uppercase", marginBottom:6 }}>
             En {horizonYears} {horizonYears === 1 ? "año" : "años"} acumulás
           </div>
-          <div style={{ fontSize:26, fontWeight:800, color: reaches ? C.green : C.text, fontFamily:"monospace" }}>
+          <div style={{ fontSize:26, fontWeight:800, color: C.text, fontFamily:"monospace" }}>
             {sym(currency)}{fmtNum(projected)}
           </div>
-          {targetAmount > 0 && (
-            <>
-              <div style={{ height:6, background:C.creamDk, borderRadius:3, overflow:"hidden", marginTop:8 }}>
-                <div style={{ width: progressPct + "%", height:"100%", background: reaches ? C.green : C.accent, transition:"width 0.2s" }}/>
-              </div>
-              <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:C.textLt, marginTop:4 }}>
-                <span>{progressPct.toFixed(0)}% del objetivo</span>
-                <span>Objetivo: {sym(currency)}{fmtNum(targetAmount)}</span>
-              </div>
-            </>
-          )}
-          <div style={{ marginTop:10, padding:"8px 10px", background:C.bg, border:"1px dashed "+C.border, borderRadius:10, fontSize:11, color:C.textMd, lineHeight:1.5 }}>
-            A {(calcRate * 100).toFixed(1)}% anual, para llegar exactamente al objetivo tendrías que aportar{" "}
-            <strong style={{ color:C.text, fontFamily:"monospace" }}>{sym(currency)}{fmtNum(monthlyToReachGoal)}/mes</strong>.
+          <div style={{ fontSize:10.5, color:C.textLt, marginTop:4 }}>
+            a {(calcRate * 100).toFixed(1)}% anual, con aportes de {sym(currency)}{fmtNum(calcMonthly)}/mes.
           </div>
         </div>
       </div>
@@ -405,7 +394,10 @@ function PlanView({ plan, target, horizon, currency = "ARS", C }) {
   return (
     <div>
       {/* Difficulty banner — only shown when the goal is non-trivial.
-          Soft colloquial tone, no "imposible", no guilt. */}
+          Colloquial rioplatense tone. We intentionally don't show a
+          concrete monthly aport or suggest lowering the target — per
+          product: "decirle que es medio surrealista está bien, pero
+          sacando la chotada de decirle que apunte a menos". */}
       {diffColor && (
         <div className="samas-slide-up" style={{ background:diffColor + "18", border:"1.5px solid "+diffColor+"55", borderRadius:14, padding:"11px 13px", marginBottom:10, display:"flex", gap:10, alignItems:"flex-start" }}>
           <div style={{ width:26, height:26, borderRadius:13, background:diffColor+"33", color:diffColor, fontSize:14, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>!</div>
@@ -413,8 +405,8 @@ function PlanView({ plan, target, horizon, currency = "ARS", C }) {
             <div style={{ fontSize:11, fontWeight:800, color:diffColor, letterSpacing:1, textTransform:"uppercase", marginBottom:2 }}>{diffLabel}</div>
             <div style={{ fontSize:12, color:C.text, lineHeight:1.45 }}>
               {difficulty === "muy_exigente"
-                ? `Para llegar a ${sym(currency)}${fmtNum(target)} en ${horizon} ${horizon === 1 ? "año" : "años"} con retornos típicos necesitarías ${sym(currency)}${fmtNum(monthlyNeeded)}/mes. Vas a tener que meterle nazi con los aportes — o alargar un poco el plazo.`
-                : `Para llegar a ${sym(currency)}${fmtNum(target)} en ${horizon} ${horizon === 1 ? "año" : "años"} te piden aportes firmes (~${sym(currency)}${fmtNum(monthlyNeeded)}/mes al ${(plan.assumedReturn*100).toFixed(0)}% anual). Se puede, pero hay que ponerle.`}
+                ? "La tenés jodida. Apuntar a ese monto en ese plazo es medio surrealista — le vas a tener que meter nazi para acercarte."
+                : "La tenés jodida, pero con constancia y disciplina se puede. Le vas a tener que meter."}
             </div>
           </div>
         </div>

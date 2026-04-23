@@ -137,7 +137,9 @@ const OBJECTIVES_SYSTEM = `Sos "SAMAS IA". Te van a pasar un objetivo de inversi
 
 SOBRE DIFICULTAD — es importante:
 - Decis la verdad sobre lo dificil del objetivo, pero sin usar la palabra "imposible" y sin hacer sentir juzgado al usuario.
-- Podes usar expresiones coloquiales rioplatenses como "jodidisimo", "tenes que meterle nazi", "va a ser un desafio grande", "requiere aportes muy fuertes". Evita "no vas a llegar", "es imposible".
+- Podes usar expresiones coloquiales rioplatenses como "la tenes jodida", "tenes que meterle nazi", "es medio surrealista", "va a costar". Evita "no vas a llegar", "es imposible".
+- NUNCA sugieras al usuario que baje su meta ("reduci a X", "aputá a menos", "ajusta el objetivo a Y"). La meta es del usuario y no se toca.
+- NUNCA sugieras un aporte mensual concreto en pesos o dolares (no digas "tendrias que aportar $X/mes"). Solo cualifica: "requiere aportes muy fuertes" o "requiere constancia firme".
 - Juzga la dificultad solo a partir de la aritmetica: cuanto aporte mensual harian falta a una tasa razonable para la moneda (USD: ~6-8% anual; ARS: ~8-10% real). Si el aporte necesario es "gigante" respecto a ingresos tipicos (ej. > 3000 USD/mes o > 500k ARS/mes), es muy_exigente. Si es moderado (ej. 500-3000 USD/mes o 100k-500k ARS/mes), exigente. Si es razonable (< 500 USD/mes o < 100k ARS/mes), normal.
 - NO conoces los ingresos del usuario. Tu evaluacion es sobre el objetivo en abstracto, no sobre la persona.
 
@@ -171,7 +173,8 @@ Si la moneda es USD: prioriza ETF/CEDEAR/ON USD/Bonos USD. Si es ARS: prioriza A
 Reglas:
 - Porcentajes enteros que suman 100.
 - NO uses tickers especificos; solo categorias.
-- NUNCA uses la palabra "imposible". Podes decir "jodidisimo", "muy exigente", "va a costar".`;
+- NUNCA uses la palabra "imposible". Podes decir "la tenes jodida", "muy exigente", "va a costar", "medio surrealista".
+- NUNCA sugieras bajar la meta del usuario ni un aporte mensual concreto en numeros.`;
 
 // --- public helpers --------------------------------------------------------
 
@@ -290,8 +293,8 @@ function mockObjectives(ctx) {
   else if (monthlyNeeded > thresholds.exigente) difficulty = "exigente";
 
   const rationaleNormal = `Un horizonte ${horizonLabel} de ${horizon} años en ${currency} encaja con un perfil ${strategy}. Con aportes regulares y un retorno típico, el objetivo entra bien.`;
-  const rationaleExigente = `Un horizonte ${horizonLabel} de ${horizon} años pide un perfil ${strategy}. Ojo: llegar a ese monto va a exigir aportes mensuales fuertes. No es imposible pero hay que meterle.`;
-  const rationaleMuy = `Un horizonte ${horizonLabel} de ${horizon} años y ese monto en ${currency} lo hacen jodidísimo. Con perfil ${strategy} y retornos típicos, vas a tener que meterle nazi con los aportes o alargar un poco el plazo.`;
+  const rationaleExigente = `Un horizonte ${horizonLabel} de ${horizon} años pide un perfil ${strategy}. La tenés jodida pero con constancia firme se puede. Hay que meterle.`;
+  const rationaleMuy = `Un horizonte ${horizonLabel} de ${horizon} años y ese monto en ${currency} es medio surrealista con un perfil ${strategy}. La tenés jodida — le vas a tener que meter nazi.`;
 
   return {
     strategy,
