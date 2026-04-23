@@ -164,7 +164,7 @@ const IDEAS = [
 
 // Default demo user. Properties are overwritten on signup (see SignupForm) and
 // persisted to localStorage so subsequent sessions keep the created account.
-const DEMO_USER = { name:"Manuel Goldsztein", email:"manuel@samas.com.ar", initials:"MG", pin:"4821", totpSecret:"SAMASABC123" };
+const DEMO_USER = { name:"Usuario Demo", email:"demo@samas.com.ar", initials:"UD", pin:"4821", totpSecret:"SAMASABC123" };
 try {
   if (typeof localStorage !== "undefined") {
     const saved = JSON.parse(localStorage.getItem("samas_user") || "null");
@@ -2140,7 +2140,14 @@ function OnboardingTutorial({ onClose, onComplete, setTab, setShowUSD, setShowPr
   );
 }
 
+// Generate a 6-digit numeric code with leading-zero safe padding
+function genCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
 function SignupForm({ onBack, onComplete, C }) {
+  // Stages: "form" → "confirm" → onComplete()
+  const [stage, setStage]       = useState("form");
   const [name, setName]         = useState("");
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
@@ -2148,29 +2155,93 @@ function SignupForm({ onBack, onComplete, C }) {
   const [err, setErr]           = useState(null);
   const [busy, setBusy]         = useState(false);
 
-  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  const nameOk  = name.trim().split(/\s+/).length >= 2;
-  const pwdOk   = password.length >= 6;
-  const pinOk   = /^\d{4}$/.test(pin);
-  const allOk   = nameOk && emailOk && pwdOk && pinOk;
+  // Email confirmation state
+  const [emailCode, setEmailCode] = useState("");        // code user types in
+  const [sentCode, setSentCode]   = useState(null);      // code "sent" to email
+  const [resendCooldown, setResendCooldown] = useState(0);
 
-  const submit = () => {
+  // Validation
+  const emailOk      = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const nameOk       = name.trim().split(/\s+/).length >= 2;
+  const pwdLenOk     = password.length >= 6;
+  const pwdHasNumSym = /[^a-zA-Z\s]/.test(password);   // digit or symbol
+  const pwdOk        = pwdLenOk && pwdHasNumSym;
+  const pinOk        = /^\d{4}$/.test(pin);
+  const allOk        = nameOk && emailOk && pwdOk && pinOk;
+
+  const fieldStyle = { background:"rgba(255,255,255,0.06)", border:"1.5px solid rgba(255,255,255,0.12)", borderRadius:12, padding:"12px 14px", fontSize:14, fontFamily:"Sora,sans-serif", color:"#fff", outline:"none", width:"100%", boxSizing:"border-box" };
+
+  // Simulate sending a verification email. The real sendEmailNotification is a
+  // console.log stub so we just log — no SMTP backend wired up.
+  const sendConfirmationEmail = (addr) => {
+    const code = genCode();
+    setSentCode(code);
+    sendEmailNotification({
+      to: addr,
+      subject: "Confirma tu cuenta SAMAS",
+      body: `Tu codigo de confirmacion es: ${code}. Expira en 10 minutos. Si no creaste esta cuenta, ignora este email.`,
+    });
+    // Start resend cooldown (30s)
+    setResendCooldown(30);
+    return code;
+  };
+
+  // Cooldown tick
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const id = setTimeout(() => setResendCooldown(c => c - 1), 1000);
+    return () => clearTimeout(id);
+  }, [resendCooldown]);
+
+  const submitForm = () => {
     if (!allOk) {
-      setErr(!nameOk ? "Ingresa nombre y apellido" : !emailOk ? "Email invalido" : !pwdOk ? "Contrasena minima 6 caracteres" : "PIN: 4 digitos");
+      setErr(
+        !nameOk ? "Ingresa nombre y apellido" :
+        !emailOk ? "Email invalido" :
+        !pwdLenOk ? "Contrasena: minimo 6 caracteres" :
+        !pwdHasNumSym ? "Contrasena: al menos un numero o simbolo" :
+        "PIN: 4 digitos"
+      );
       return;
     }
     setBusy(true);
     setErr(null);
-    // Simulated latency so the CTA feels like a real account creation step
+    // Simulated network latency
+    setTimeout(() => {
+      sendConfirmationEmail(email);
+      setBusy(false);
+      setStage("confirm");
+      setEmailCode("");
+    }, 600);
+  };
+
+  const submitCode = () => {
+    if (emailCode.length !== 6) {
+      setErr("Ingresa los 6 digitos");
+      return;
+    }
+    if (emailCode !== sentCode) {
+      setErr("Codigo incorrecto");
+      setEmailCode("");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
     setTimeout(() => {
       registerUser({ name, email, pin });
       onComplete();
-    }, 700);
+    }, 500);
   };
 
-  const fieldStyle = { background:"rgba(255,255,255,0.06)", border:"1.5px solid rgba(255,255,255,0.12)", borderRadius:12, padding:"12px 14px", fontSize:14, fontFamily:"Sora,sans-serif", color:"#fff", outline:"none", width:"100%", boxSizing:"border-box" };
+  const resend = () => {
+    if (resendCooldown > 0) return;
+    sendConfirmationEmail(email);
+    setEmailCode("");
+    setErr(null);
+  };
 
-  return (
+  // ----- FORM STAGE -----
+  if (stage === "form") return (
     <div style={{ position:"absolute", inset:0, zIndex:100, background:"linear-gradient(160deg,#0D1117 0%,#0D2B1C 55%,#000000 100%)", display:"flex", flexDirection:"column", padding:"32px 24px 24px", overflowY:"auto" }}>
       <style>{"@keyframes fadeInUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}"}</style>
       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
@@ -2188,7 +2259,7 @@ function SignupForm({ onBack, onComplete, C }) {
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
           <div>
             <div style={{ fontSize:10, fontWeight:600, color:"rgba(255,255,255,0.5)", letterSpacing:1, marginBottom:6, textTransform:"uppercase" }}>Nombre completo</div>
-            <input value={name} onChange={e => { setName(e.target.value); setErr(null); }} placeholder="Manuel Goldsztein" autoComplete="name" style={fieldStyle}/>
+            <input value={name} onChange={e => { setName(e.target.value); setErr(null); }} placeholder="Nombre y apellido" autoComplete="name" style={fieldStyle}/>
           </div>
           <div>
             <div style={{ fontSize:10, fontWeight:600, color:"rgba(255,255,255,0.5)", letterSpacing:1, marginBottom:6, textTransform:"uppercase" }}>Email</div>
@@ -2196,7 +2267,13 @@ function SignupForm({ onBack, onComplete, C }) {
           </div>
           <div>
             <div style={{ fontSize:10, fontWeight:600, color:"rgba(255,255,255,0.5)", letterSpacing:1, marginBottom:6, textTransform:"uppercase" }}>Contrasena</div>
-            <input value={password} onChange={e => { setPassword(e.target.value); setErr(null); }} placeholder="Minimo 6 caracteres" type="password" autoComplete="new-password" style={fieldStyle}/>
+            <input value={password} onChange={e => { setPassword(e.target.value); setErr(null); }} placeholder="Min 6 caracteres con numero o simbolo" type="password" autoComplete="new-password" style={fieldStyle}/>
+            {password.length > 0 && (
+              <div style={{ display:"flex", gap:10, marginTop:6, fontSize:10 }}>
+                <span style={{ color: pwdLenOk ? "#16C784" : "rgba(255,255,255,0.4)" }}>{pwdLenOk ? "✓" : "○"} 6+ caracteres</span>
+                <span style={{ color: pwdHasNumSym ? "#16C784" : "rgba(255,255,255,0.4)" }}>{pwdHasNumSym ? "✓" : "○"} numero o simbolo</span>
+              </div>
+            )}
           </div>
           <div>
             <div style={{ fontSize:10, fontWeight:600, color:"rgba(255,255,255,0.5)", letterSpacing:1, marginBottom:6, textTransform:"uppercase" }}>PIN de 4 digitos</div>
@@ -2212,9 +2289,9 @@ function SignupForm({ onBack, onComplete, C }) {
       </div>
 
       <div style={{ marginTop:20 }}>
-        <button onClick={submit} disabled={busy}
+        <button onClick={submitForm} disabled={busy}
           style={{ width:"100%", background: allOk ? "#16C784" : "rgba(255,255,255,0.1)", color: allOk ? "#0D1117" : "rgba(255,255,255,0.4)", border:"none", borderRadius:14, padding:"14px", fontWeight:700, fontSize:14, cursor: allOk && !busy ? "pointer" : "not-allowed", fontFamily:"Sora,sans-serif", letterSpacing:1, transition:"background 0.2s" }}>
-          {busy ? "Creando cuenta…" : "Crear mi cuenta"}
+          {busy ? "Enviando codigo…" : "Continuar"}
         </button>
         <div style={{ marginTop:14, textAlign:"center" }}>
           <span style={{ color:"rgba(255,255,255,0.45)", fontSize:12 }}>Ya tenes cuenta? </span>
@@ -2223,6 +2300,73 @@ function SignupForm({ onBack, onComplete, C }) {
         <div style={{ marginTop:14, fontSize:10, color:"rgba(255,255,255,0.3)", textAlign:"center", lineHeight:1.5 }}>
           Al crear la cuenta aceptas los <span style={{ color:"rgba(255,255,255,0.5)", textDecoration:"underline" }}>Terminos</span> y la <span style={{ color:"rgba(255,255,255,0.5)", textDecoration:"underline" }}>Politica de privacidad</span>.
         </div>
+      </div>
+    </div>
+  );
+
+  // ----- CONFIRM STAGE -----
+  return (
+    <div style={{ position:"absolute", inset:0, zIndex:100, background:"linear-gradient(160deg,#0D1117 0%,#0D2B1C 55%,#000000 100%)", display:"flex", flexDirection:"column", padding:"32px 24px 24px" }}>
+      <style>{"@keyframes fadeInUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}"}</style>
+      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
+        <button onClick={() => { setStage("form"); setErr(null); }} aria-label="Volver" style={{ background:"rgba(255,255,255,0.08)", border:"none", borderRadius:10, width:36, height:36, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <SamasMark size={34} markColor="#FFFFFF" dotColor="#16C784"/>
+        <div style={{ color:"#fff", fontSize:16, fontWeight:600, letterSpacing:3, fontFamily:"Sora,sans-serif" }}>SAMAS</div>
+      </div>
+
+      <div style={{ animation:"fadeInUp 0.4s ease-out", flex:1, display:"flex", flexDirection:"column", alignItems:"center", textAlign:"center", paddingTop:20 }}>
+        <div style={{ width:72, height:72, borderRadius:"50%", background:"#16C78422", border:"2px solid #16C78466", display:"flex", alignItems:"center", justifyContent:"center", marginBottom:18 }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#16C784" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+            <polyline points="22,6 12,13 2,6"/>
+          </svg>
+        </div>
+        <div style={{ color:"#FFFFFF", fontSize:20, fontWeight:600, fontFamily:"Sora,sans-serif", marginBottom:8 }}>Revisa tu email</div>
+        <div style={{ color:"rgba(255,255,255,0.6)", fontSize:13, lineHeight:1.5, marginBottom:6, padding:"0 8px" }}>
+          Te enviamos un codigo de 6 digitos a
+        </div>
+        <div style={{ color:"#16C784", fontSize:13, fontWeight:600, marginBottom:24, wordBreak:"break-all", padding:"0 8px" }}>{email}</div>
+
+        <input
+          value={emailCode}
+          onChange={e => { setEmailCode(e.target.value.replace(/\D/g,"").slice(0,6)); setErr(null); }}
+          placeholder="000000"
+          inputMode="numeric"
+          maxLength={6}
+          autoFocus
+          style={{ ...fieldStyle, letterSpacing:10, textAlign:"center", fontSize:22, fontFamily:"monospace", fontWeight:600, width:220, padding:"14px 10px" }}
+        />
+
+        {err && (
+          <div style={{ marginTop:14, background:"rgba(248,113,113,0.15)", border:"1px solid rgba(248,113,113,0.35)", borderRadius:10, padding:"10px 12px", color:"#FCA5A5", fontSize:12 }}>
+            {err}
+          </div>
+        )}
+
+        <div style={{ marginTop:20, fontSize:12, color:"rgba(255,255,255,0.5)" }}>
+          No recibiste el email?{" "}
+          <button onClick={resend} disabled={resendCooldown > 0}
+            style={{ background:"transparent", border:"none", color: resendCooldown > 0 ? "rgba(255,255,255,0.3)" : "#16C784", fontSize:12, fontWeight:600, cursor: resendCooldown > 0 ? "default" : "pointer", fontFamily:"inherit", padding:0 }}>
+            {resendCooldown > 0 ? `Reenviar (${resendCooldown}s)` : "Reenviar"}
+          </button>
+        </div>
+
+        {/* Demo-only hint — stand-in for a real email backend. Safe to remove
+            once we wire an actual transactional sender. */}
+        {sentCode && (
+          <div style={{ marginTop:24, padding:"10px 14px", background:"rgba(201,168,76,0.15)", border:"1px dashed rgba(201,168,76,0.45)", borderRadius:10, color:"#E8C97A", fontSize:11 }}>
+            <strong>Demo:</strong> el codigo es <span style={{ fontFamily:"monospace", fontSize:14, fontWeight:700, letterSpacing:2 }}>{sentCode}</span>
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop:20 }}>
+        <button onClick={submitCode} disabled={busy || emailCode.length !== 6}
+          style={{ width:"100%", background: emailCode.length === 6 ? "#16C784" : "rgba(255,255,255,0.1)", color: emailCode.length === 6 ? "#0D1117" : "rgba(255,255,255,0.4)", border:"none", borderRadius:14, padding:"14px", fontWeight:700, fontSize:14, cursor: emailCode.length === 6 && !busy ? "pointer" : "not-allowed", fontFamily:"Sora,sans-serif", letterSpacing:1, transition:"background 0.2s" }}>
+          {busy ? "Creando cuenta…" : "Confirmar y crear cuenta"}
+        </button>
       </div>
     </div>
   );
