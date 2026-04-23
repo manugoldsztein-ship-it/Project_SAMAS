@@ -130,40 +130,48 @@ Reglas:
 - Los amounts deben ser enteros redondeados.
 - Si el texto esta vacio o no parece un resumen, devolve total: 0 y notes explicando que no pudiste parsearlo.`;
 
-const OBJECTIVES_SYSTEM = `Sos "SAMAS Coach". Te van a pasar la situacion financiera mensual del usuario (ingresos, gastos, sobrante), un objetivo concreto (monto + años, en ARS o USD), y una proyeccion de cuanto va a acumular si invierte ese sobrante a distintas tasas razonables para esa moneda. Tu tarea: ELEGIR la estrategia (conservadora / moderada / agresiva) y explicar brevemente por que.
+const OBJECTIVES_SYSTEM = `Sos "SAMAS IA". Te van a pasar un objetivo de inversion: monto a alcanzar, horizonte en años, moneda (ARS o USD). Hay que:
+1. CLASIFICAR el perfil como "conservadora", "moderada" o "agresiva" (en base al horizonte).
+2. EVALUAR la dificultad intrinseca del objetivo, en "normal", "exigente" o "muy_exigente".
+3. Proponer una asignacion por categoria coherente con el perfil.
 
-SAMAS opera estas categorias de activos (usa solo estas en la asignacion):
+SOBRE DIFICULTAD — es importante:
+- Decis la verdad sobre lo dificil del objetivo, pero sin usar la palabra "imposible" y sin hacer sentir juzgado al usuario.
+- Podes usar expresiones coloquiales rioplatenses como "jodidisimo", "tenes que meterle nazi", "va a ser un desafio grande", "requiere aportes muy fuertes". Evita "no vas a llegar", "es imposible".
+- Juzga la dificultad solo a partir de la aritmetica: cuanto aporte mensual harian falta a una tasa razonable para la moneda (USD: ~6-8% anual; ARS: ~8-10% real). Si el aporte necesario es "gigante" respecto a ingresos tipicos (ej. > 3000 USD/mes o > 500k ARS/mes), es muy_exigente. Si es moderado (ej. 500-3000 USD/mes o 100k-500k ARS/mes), exigente. Si es razonable (< 500 USD/mes o < 100k ARS/mes), normal.
+- NO conoces los ingresos del usuario. Tu evaluacion es sobre el objetivo en abstracto, no sobre la persona.
+
+SAMAS opera estas categorias (usa solo estas):
 - "Acciones" (acciones argentinas)
 - "CEDEAR" (acciones internacionales via CEDEAR)
 - "ETF" (ETFs globales como SPY/QQQ/GLD)
 - "Bonos" (bonos soberanos argentinos AL30/GD30/CER/LEDES)
 - "ON" (obligaciones negociables corporativas)
-- "FCI" (fondos comunes de inversion: money market, renta fija, mixtos)
+- "FCI" (fondos comunes: money market, renta fija, mixtos)
 - "Crypto" (BTC)
 - "Cash" (liquidez, reserva de emergencia)
 
-DEVOLVE SOLAMENTE JSON VALIDO, sin markdown, sin texto fuera del JSON. Schema:
+DEVOLVE SOLAMENTE JSON VALIDO (sin markdown, sin texto fuera del JSON). Schema:
 {
   "strategy": "conservadora" | "moderada" | "agresiva",
-  "rationale": string,          // 2-3 oraciones en español explicando POR QUE esa estrategia, citando el gap entre objetivo y proyeccion, el horizonte y la capacidad mensual
-  "assumedReturn": number,      // tasa anual esperada (decimal, ej 0.08 para 8%)
-  "allocation": [{ "name": string, "percent": number }], // usar solo las categorias de arriba, percents enteros que sumen 100
-  "monthlyNeeded": number,      // aporte mensual en ARS necesario para alcanzar el objetivo a la tasa assumedReturn
-  "feasibility": "holgado" | "ajustado" | "inviable",  // comparando monthlyNeeded vs el sobrante del usuario
-  "advice": string,             // 1-2 oraciones con un consejo concreto (subir aportes, bajar gastos, alargar horizonte, ajustar objetivo)
-  "disclaimer": string          // debe mencionar explicitamente que las proyecciones NO ajustan por la inflacion del peso ni del dolar, y que por tanto los poderes de compra futuros pueden diferir. Cerra con "Esto es educativo, no asesoramiento financiero."
+  "difficulty": "normal" | "exigente" | "muy_exigente",
+  "rationale": string,          // 2-3 oraciones en español, tono rioplatense. Explica el perfil y, si difficulty != "normal", avisa con franqueza pero sin "imposible" y sin juzgar a la persona. Ej: "Con ese horizonte y monto va a ser jodidisimo, vas a tener que meterle nazi con los aportes."
+  "assumedReturn": number,      // tasa anual tipica para ese perfil en esa moneda (decimal, ej 0.08)
+  "allocation": [{ "name": string, "percent": number }], // percents enteros que suman 100
+  "disclaimer": string          // menciona que las proyecciones no ajustan por inflacion de ARS ni USD. Cerra con "Esto es educativo, no asesoramiento financiero."
 }
 
-Como elegir la estrategia:
-- Horizonte corto (<3 años) o gap pequeño: conservadora (más FCI money market, Bonos, ON, Cash; menos Acciones/CEDEAR/Crypto).
-- Horizonte medio (3-7 años) o gap moderado: moderada (mix balanceado).
-- Horizonte largo (7+ años) o gap grande: agresiva (mas CEDEAR/ETF/Crypto, menos renta fija).
-- Si el objetivo es claramente inviable con la capacidad actual, igual elegi la estrategia mas adecuada y marca feasibility "inviable" con advice claro.
+Como elegir la estrategia (guia principal: horizonte):
+- Horizonte corto (< 3 años): conservadora. Mucho peso en FCI money market, ON en USD, Bonos cortos, Cash; poco o nada de Crypto y Acciones/CEDEAR.
+- Horizonte medio (3-7 años): moderada. Mix balanceado entre renta fija y variable.
+- Horizonte largo (7+ años): agresiva. Mayor peso en CEDEAR/ETF/Acciones, algo de Crypto opcional.
+
+Si la moneda es USD: prioriza ETF/CEDEAR/ON USD/Bonos USD. Si es ARS: prioriza Acciones argentinas, Bonos CER/LEDES, FCI en pesos.
 
 Reglas:
 - Porcentajes enteros que suman 100.
-- No recomendes tickers especificos en allocation.name — solo categorias.
-- Tono claro, directo, rioplatense.`;
+- NO uses tickers especificos; solo categorias.
+- NUNCA uses la palabra "imposible". Podes decir "jodidisimo", "muy exigente", "va a costar".`;
 
 // --- public helpers --------------------------------------------------------
 
@@ -194,49 +202,30 @@ export function pmtForGoal(target, years, annualRate) {
  */
 export async function callObjectives(profile) {
   const currency = profile.currency === "USD" ? "USD" : "ARS";
-  const income   = Number(profile.monthlyIncome)   || 0;
-  const expenses = Number(profile.monthlyExpenses) || 0;
-  const invest   = Math.max(0, income - expenses);
-  const target   = Number(profile.targetAmount)    || 0;
+  const target   = Number(profile.targetAmount)  || 0;
   const horizon  = Math.max(0.5, Number(profile.horizonYears) || 0);
-
-  // Rate expectations differ dramatically between ARS (high nominal due to
-  // inflation) and USD (real-ish). Use reasonable ranges for each.
-  const rates = currency === "USD"
-    ? [0.05, 0.07, 0.10]                         // USD: savings / balanced / equity
-    : [0.06, 0.09, 0.12];                        // ARS: kept from prior spec; represents real return net of inflation
-  const projections = rates.map(r => ({
-    annualRate: r,
-    finalAmount: Math.round(fvAnnuity(invest, horizon, r)),
-    monthlyNeeded: Math.round(pmtForGoal(target, horizon, r)),
-  }));
 
   const cur = currency;
   const userPrompt = [
-    "Decidi la estrategia para este usuario.",
+    "Clasifica la estrategia para este objetivo:",
     `- Moneda: ${cur}`,
-    `- Ingreso mensual (${cur}): ${income}`,
-    `- Gastos mensuales (${cur}): ${expenses}`,
-    `- Sobrante invertible mensual (${cur}): ${invest}`,
     `- Objetivo: acumular ${target} ${cur} en ${horizon} años`,
     ``,
-    `Proyecciones (invirtiendo el sobrante de ${invest} ${cur}/mes durante ${horizon} años):`,
-    ...projections.map(p => `  - a ${(p.annualRate * 100).toFixed(0)}% anual: acumula ~${p.finalAmount} ${cur}; para llegar al objetivo necesitarias aportar ~${p.monthlyNeeded} ${cur}/mes a esa tasa`),
-    ``,
+    `Recorda: no conoces ingresos ni gastos del usuario. Solo clasificas.`,
     `Devolve solo JSON.`,
   ].join("\n");
 
-  const fallback = () => ({ ...mockObjectives({ income, expenses, invest, target, horizon, projections, currency }), _projections: projections, _invest: invest, _profile: profile });
+  const fallback = () => ({ ...mockObjectives({ target, horizon, currency }), _profile: profile });
 
   if (!hasAnthropicKey()) return fallback();
   const raw = await callAnthropic({
     system: OBJECTIVES_SYSTEM,
     messages: [{ role: "user", content: userPrompt }],
-    maxTokens: 900,
+    maxTokens: 700,
   });
   const parsed = parseJson(raw);
   if (!parsed) return fallback();
-  return { ...parsed, _projections: projections, _invest: invest, _profile: profile };
+  return { ...parsed, _profile: profile };
 }
 
 /**
@@ -267,29 +256,49 @@ function parseJson(s) {
   try { return JSON.parse(s.slice(first, last + 1)); } catch { return null; }
 }
 
-// Mock responder keeps the Objetivos wizard demoable without an API key.
+// Mock responder keeps the Objetivos flow demoable without an API key.
+// Classifies by horizon + currency, and separately estimates difficulty of
+// the goal itself based on the compound-interest math (what monthly aport
+// it would take to hit the target at the typical rate for that profile).
 function mockObjectives(ctx) {
-  // Pick strategy based on horizon and gap (same heuristic Claude uses)
-  const { horizon = 5, invest = 0, projections = [] } = ctx;
+  const { target = 0, horizon = 5, currency = "ARS" } = ctx;
   const strategy = horizon >= 7 ? "agresiva" : horizon <= 3 ? "conservadora" : "moderada";
-  const assumedReturn = { conservadora: 0.06, moderada: 0.09, agresiva: 0.12 }[strategy];
-  const allocations = {
-    conservadora: { Acciones: 5,  CEDEAR: 10, ETF: 10, Bonos: 30, ON: 15, FCI: 25, Crypto: 0, Cash: 5 },
-    moderada:     { Acciones: 10, CEDEAR: 25, ETF: 20, Bonos: 15, ON: 12, FCI: 12, Crypto: 3, Cash: 3 },
-    agresiva:     { Acciones: 15, CEDEAR: 32, ETF: 25, Bonos: 5,  ON: 10, FCI: 5,  Crypto: 5, Cash: 3 },
+  const assumedReturn = currency === "USD"
+    ? { conservadora: 0.04, moderada: 0.07, agresiva: 0.10 }[strategy]
+    : { conservadora: 0.06, moderada: 0.09, agresiva: 0.12 }[strategy];
+  const allocationsArs = {
+    conservadora: { Acciones: 5,  CEDEAR: 8,  ETF: 7,  Bonos: 30, ON: 15, FCI: 30, Crypto: 0, Cash: 5 },
+    moderada:     { Acciones: 12, CEDEAR: 22, ETF: 16, Bonos: 15, ON: 12, FCI: 15, Crypto: 5, Cash: 3 },
+    agresiva:     { Acciones: 15, CEDEAR: 32, ETF: 25, Bonos: 5,  ON: 8,  FCI: 5,  Crypto: 7, Cash: 3 },
   };
-  const allocation = Object.entries(allocations[strategy]).map(([name, percent]) => ({ name, percent }));
-  // Find monthlyNeeded from projections at the chosen rate
-  const proj = projections.find(p => Math.abs(p.annualRate - assumedReturn) < 0.001) || projections[1] || { monthlyNeeded: invest };
-  const feasibility = invest === 0 ? "inviable" : proj.monthlyNeeded <= invest * 1.05 ? "holgado" : proj.monthlyNeeded <= invest * 1.5 ? "ajustado" : "inviable";
+  const allocationsUsd = {
+    conservadora: { Acciones: 0, CEDEAR: 5,  ETF: 15, Bonos: 25, ON: 30, FCI: 20, Crypto: 0, Cash: 5 },
+    moderada:     { Acciones: 3, CEDEAR: 18, ETF: 30, Bonos: 15, ON: 20, FCI: 8,  Crypto: 3, Cash: 3 },
+    agresiva:     { Acciones: 5, CEDEAR: 30, ETF: 40, Bonos: 5,  ON: 10, FCI: 3,  Crypto: 5, Cash: 2 },
+  };
+  const base = currency === "USD" ? allocationsUsd[strategy] : allocationsArs[strategy];
+  const allocation = Object.entries(base).map(([name, percent]) => ({ name, percent }));
+  const horizonLabel = horizon <= 3 ? "corto" : horizon >= 7 ? "largo" : "medio";
+
+  // Difficulty heuristic — compute the monthly aport required and compare
+  // against what a "typical" earner in that currency might set aside. This
+  // is all client-side math; it doesn't know your income, just the shape.
+  const monthlyNeeded = target > 0 && horizon > 0 ? pmtForGoal(target, horizon, assumedReturn) : 0;
+  const thresholds = currency === "USD" ? { exigente: 500, muy: 3000 } : { exigente: 100000, muy: 500000 };
+  let difficulty = "normal";
+  if (monthlyNeeded > thresholds.muy)      difficulty = "muy_exigente";
+  else if (monthlyNeeded > thresholds.exigente) difficulty = "exigente";
+
+  const rationaleNormal = `Un horizonte ${horizonLabel} de ${horizon} años en ${currency} encaja con un perfil ${strategy}. Con aportes regulares y un retorno típico, el objetivo entra bien.`;
+  const rationaleExigente = `Un horizonte ${horizonLabel} de ${horizon} años pide un perfil ${strategy}. Ojo: llegar a ese monto va a exigir aportes mensuales fuertes. No es imposible pero hay que meterle.`;
+  const rationaleMuy = `Un horizonte ${horizonLabel} de ${horizon} años y ese monto en ${currency} lo hacen jodidísimo. Con perfil ${strategy} y retornos típicos, vas a tener que meterle nazi con los aportes o alargar un poco el plazo.`;
+
   return {
     strategy,
-    rationale: `Con un horizonte de ${horizon} años y tu sobrante actual, la estrategia ${strategy} balancea el crecimiento esperado con el riesgo que te conviene asumir.`,
+    difficulty,
+    rationale: difficulty === "muy_exigente" ? rationaleMuy : difficulty === "exigente" ? rationaleExigente : rationaleNormal,
     assumedReturn,
     allocation,
-    monthlyNeeded: proj.monthlyNeeded,
-    feasibility,
-    advice: feasibility === "holgado" ? "Vas sobrado — podes ser mas conservador o ampliar el objetivo." : feasibility === "ajustado" ? "Te da justo. Automatiza el aporte y no falles meses." : "El objetivo no entra con tu sobrante actual. Bajar gastos, subir ingresos, o alargar el horizonte.",
     disclaimer: "Esto es educativo, no asesoramiento financiero. Las proyecciones no contemplan la inflación del peso ni del dólar — los rendimientos reales pueden diferir sustancialmente. _(Modo demo — configura tu API key para un análisis hecho por SAMAS IA.)_"
   };
 }

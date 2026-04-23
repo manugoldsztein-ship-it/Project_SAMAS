@@ -2445,6 +2445,9 @@ function PageWatchlist({ watchlists, onCreate, onRename, onRemove, onRemoveTicke
   const [editName, setEditName]   = useState("");
   const [creating, setCreating]   = useState(false);
   const [newName, setNewName]     = useState("");
+  // In-app confirm — replaces native window.confirm() which sometimes gets
+  // suppressed inside nested overlays (mobile frame -> modal).
+  const { confirm, ConfirmHost } = useConfirm(C);
   // Per-list collapsed state, persisted so your choice sticks across
   // sessions. All lists start expanded; toggle via the header chevron or
   // anywhere on the list's title row that isn't a button.
@@ -2572,7 +2575,17 @@ function PageWatchlist({ watchlists, onCreate, onRename, onRemove, onRemoveTicke
                     </button>
                     {lists.length > 1 && (
                       <button
-                        onClick={(e) => { e.stopPropagation(); if (window.confirm("Borrar la lista \""+list.name+"\"?")) onRemove && onRemove(list.id); }}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const ok = await confirm({
+                            title: "Borrar la lista?",
+                            body: `Se va a eliminar "${list.name}" y los ${(list.tickers || []).length} activos que tenga. No se borra nada de tu portafolio, solo la lista.`,
+                            confirmLabel: "Borrar lista",
+                            cancelLabel: "Cancelar",
+                            danger: true,
+                          });
+                          if (ok) onRemove && onRemove(list.id);
+                        }}
                         title="Borrar lista"
                         style={{ background:"transparent", border:"none", padding:5, color:C.red, cursor:"pointer" }}
                       >
@@ -2623,6 +2636,7 @@ function PageWatchlist({ watchlists, onCreate, onRename, onRemove, onRemoveTicke
           );
         })}
       </div>
+      <ConfirmHost/>
     </div>
   );
 }
