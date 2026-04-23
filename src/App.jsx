@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 // AI surface is intentionally narrow: one wizard that does compound interest
 // projection + income/expenses breakdown + strategy pick. No general chat,
 // no sentiment analysis — per product spec the AI's only job is that flow.
@@ -556,12 +557,17 @@ function useConfirm(C) {
   function ConfirmHost() {
     if (!pending) return null;
     const accent = pending.danger ? C.red : C.accent;
-    return (
+    // Render via a React portal to document.body so the modal escapes any
+    // overflow:auto / position:relative ancestors. Previously the modal
+    // used position:absolute inside a scroll container, which silently
+    // clipped it — the dialog effectively never appeared and the delete
+    // button looked broken.
+    const content = (
       <div
         className="samas-fade"
         onClick={() => respond(false)}
         style={{
-          position:"absolute", inset:0, zIndex:90,
+          position:"fixed", inset:0, zIndex:9999,
           background:"rgba(0,0,0,0.6)",
           display:"flex", alignItems:"center", justifyContent:"center",
           padding:20,
@@ -574,9 +580,10 @@ function useConfirm(C) {
             background: C.bg,
             border: "1px solid " + C.border,
             borderRadius: 16,
-            maxWidth: 320,
+            maxWidth: 340,
             width: "100%",
             padding: "18px 18px 16px",
+            boxShadow: "0 24px 48px rgba(0,0,0,0.5)",
           }}
         >
           <div style={{ fontSize:15, fontWeight:800, color:C.text, marginBottom:6 }}>{pending.title}</div>
@@ -598,6 +605,8 @@ function useConfirm(C) {
         </div>
       </div>
     );
+    if (typeof document === "undefined") return content;
+    return createPortal(content, document.body);
   }
 
   return { confirm, ConfirmHost };
