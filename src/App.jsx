@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { CoachChat } from "./ai/CoachChat.jsx";
+// AI surface is intentionally narrow: one wizard that does compound interest
+// projection + income/expenses breakdown + strategy pick. No general chat,
+// no sentiment analysis — per product spec the AI's only job is that flow.
 import { ObjectivesWizard } from "./ai/ObjectivesWizard.jsx";
-import { SentimentCard } from "./ai/SentimentCard.jsx";
 import {
   loadAnthropicKey, saveAnthropicKey,
   loadAnthropicModel, saveAnthropicModel,
@@ -2225,8 +2226,6 @@ function PageNoticias({ holdings, onSelectAsset, C, lang }) {
       <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:10, marginBottom:4 }}>
         {["Portafolio","Todos","Acciones","CEDEAR","ETF","Commodity","Crypto"].map(f => <button key={f} onClick={() => setFilter(f)} style={{ background: f===filter ? C.accent : C.card, color: f===filter ? "#fff" : C.textMd, border:"1.5px solid "+(f===filter?C.accent:C.border), borderRadius:20, padding:"5px 13px", fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap", flexShrink:0 }}>{f==="Portafolio" ? "* Portafolio" : f}</button>)}
       </div>
-      {/* AI Sentiment card — summarizes the currently-filtered feed */}
-      <SentimentCard posts={shown.map(n => ({ title: n.title, body: n.body }))} C={C}/>
       {shown.length === 0 && <div style={{ textAlign:"center", padding:"40px 0", color:C.textLt }}>No hay noticias para este filtro</div>}
       <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
         {shown.slice(0,30).map((n, idx) => {
@@ -3106,6 +3105,11 @@ function DevicesPage({ onBack, C }) {
 function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, finnhubKey, setFinnhubKey, finnhub, emailjsCfg, setEmailjsCfg, anthropicKey, setAnthropicKey, anthropicModel, setAnthropicModel, C }) {
   useEscapeKey(onClose);
   const [confirm, setConfirm]       = useState(false);
+  // Two-view panel: root (user card + dark mode + Settings row + logout)
+  // vs. settings subpage (back arrow + all the expandable integrations).
+  // Previously all 7 expandable items lived on the root, making the sheet
+  // dense and burying the close affordance.
+  const [showSettings, setShowSettings] = useState(false);
   const [show2FA, setShow2FA]       = useState(false);
   const [twoFAEnabled, set2FA]      = useState(false);
   const [totpCode, setTotpCode]     = useState("");
@@ -3143,13 +3147,45 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
   return (
     <div style={{ position:"absolute", inset:0, zIndex:40, display:"flex", flexDirection:"column", background:"rgba(0,0,0,0.55)" }}>
       <div onClick={onClose} style={{ flex:1 }}/>
-      <div style={{ background:C.bg, borderRadius:"20px 20px 0 0", padding:"20px 18px 28px", maxHeight:"90vh", overflowY:"auto" }}>
-        <div style={{ display:"flex", justifyContent:"center", marginBottom:18 }}><div style={{ width:36, height:4, background:C.border, borderRadius:2 }}/></div>
+      <div style={{ background:C.bg, borderRadius:"20px 20px 0 0", padding:"14px 18px 28px", maxHeight:"90vh", overflowY:"auto" }}>
+        {/* Handle */}
+        <div style={{ display:"flex", justifyContent:"center", marginBottom:10 }}><div style={{ width:36, height:4, background:C.border, borderRadius:2 }}/></div>
+        {/* Header row: back arrow (in Settings view) / title / close X.
+            The X button is always visible so the user never gets trapped. */}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14, minHeight:32 }}>
+          {showSettings ? (
+            <button
+              onClick={() => setShowSettings(false)}
+              aria-label="Atras"
+              style={{ background:C.creamDk, border:"1px solid "+C.border, borderRadius:10, padding:"6px 10px", display:"flex", alignItems:"center", gap:6, cursor:"pointer", fontFamily:"inherit", color:C.text }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+              <span style={{ fontSize:12, fontWeight:600 }}>{t("back")}</span>
+            </button>
+          ) : <div/>}
+          <div style={{ fontSize:14, fontWeight:700, color:C.text }}>
+            {showSettings ? t("settings") : t("profile")}
+          </div>
+          <button
+            onClick={onClose}
+            aria-label={t("close")}
+            style={{ background:C.creamDk, border:"1px solid "+C.border, borderRadius:10, width:32, height:32, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:C.textMd, padding:0 }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
         <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20, padding:"14px 16px", background:C.card, borderRadius:16, border:"1px solid "+C.border }}>
           <div style={{ width:50, height:50, borderRadius:14, background:C.isDark?"#1F1F1F":"linear-gradient(135deg,#0D1117,#1F1F1F)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, fontWeight:800, color:C.goldLt, flexShrink:0 }}>{DEMO_USER.initials}</div>
           <div><div style={{ fontWeight:800, fontSize:16, color:C.text }}>{DEMO_USER.name}</div><div style={{ fontSize:12, color:C.textMd, marginTop:1 }}>{DEMO_USER.email}</div><div style={{ display:"flex", alignItems:"center", gap:4, marginTop:4 }}><div style={{ width:6, height:6, borderRadius:3, background:C.green }}/><span style={{ fontSize:10, color:C.green, fontWeight:600 }}>{t("active_session")}</span></div></div>
         </div>
 
+        {/* ---- ROOT VIEW: Dark mode toggle + Settings row ---- */}
+        {!showSettings && (
         <button onClick={onToggleDark} style={{ width:"100%", background:isDark?"#2A1A2A":"#F5E8F5", border:"1.5px solid #0D111744", borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <div style={{ width:36, height:36, borderRadius:10, background:"#0D111722", display:"flex", alignItems:"center", justifyContent:"center" }}>{isDark ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0D1117" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg> : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0D1117" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>}</div>
@@ -3157,7 +3193,29 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
           </div>
           <div style={{ width:40, height:22, borderRadius:11, background:isDark?C.accent:C.creamDk, border:"1.5px solid "+C.border, position:"relative" }}><div style={{ position:"absolute", top:2, left:isDark?18:2, width:14, height:14, borderRadius:"50%", background:isDark?"#fff":C.textLt, transition:"left 0.2s" }}/></div>
         </button>
+        )}
 
+        {/* Settings entry row (root view only) */}
+        {!showSettings && (
+          <button onClick={() => setShowSettings(true)} style={{ width:"100%", background:C.creamDk, border:"1.5px solid "+C.border, borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <div style={{ width:36, height:36, borderRadius:10, background:C.accent+"22", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+              </div>
+              <div>
+                <div style={{ fontSize:13, fontWeight:600, color:C.text }}>{t("settings")}</div>
+                <div style={{ fontSize:11, color:C.textLt }}>Idioma, dispositivos, integraciones, 2FA</div>
+              </div>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        )}
+
+        {/* ---- SETTINGS VIEW: all integrations ---- */}
+        {showSettings && (<>
         <button onClick={() => setShowDevices(true)} style={{ width:"100%", background:C.creamDk, border:"1.5px solid "+C.border, borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <div style={{ width:36, height:36, borderRadius:10, background:C.accent+"22", display:"flex", alignItems:"center", justifyContent:"center" }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><polyline points="16 3 12 7 8 3"/></svg></div>
@@ -3274,7 +3332,7 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
               </svg>
             </div>
             <div>
-              <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Coach IA (Claude)</div>
+              <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Objetivos IA (Claude)</div>
               <div style={{ fontSize:11, color: anthropicKey ? C.green : C.textLt }}>
                 {anthropicKey ? `Activo · modelo ${anthropicModel}` : "Modo demo — configura tu API key para respuestas en vivo"}
               </div>
@@ -3285,7 +3343,7 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
         {showAI && (
           <div style={{ background:C.card, borderRadius:12, border:"1px solid "+C.border, padding:"14px", marginBottom:8 }}>
             <div style={{ fontSize:11, color:C.textMd, lineHeight:1.5, marginBottom:10 }}>
-              Habilita el <strong style={{ color:C.text }}>Coach IA</strong>, <strong style={{ color:C.text }}>Objetivos personalizados</strong> y el <strong style={{ color:C.text }}>analisis de sentimiento</strong> de noticias. Sacas tu API key en <span style={{ color:C.accent, fontWeight:600 }}>console.anthropic.com</span>. La key queda solo en tu navegador y se manda directo a Anthropic.
+              Habilita el wizard de <strong style={{ color:C.text }}>Objetivos con IA</strong> — calcula tu sobrante invertible, proyecta interes compuesto y elige la estrategia (conservadora / moderada / agresiva). Sacas tu API key en <span style={{ color:C.accent, fontWeight:600 }}>console.anthropic.com</span>. La key queda solo en tu navegador y se manda directo a Anthropic.
             </div>
 
             <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:6 }}>API KEY</div>
@@ -3449,6 +3507,7 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
             </button>
           </div>
         )}
+        </>)}
 
         {!confirm ? (
           <button onClick={() => setConfirm(true)} style={{ width:"100%", marginTop:8, background:C.red+"18", border:"1.5px solid "+C.red+"33", borderRadius:14, padding:"13px", display:"flex", alignItems:"center", justifyContent:"center", gap:8, cursor:"pointer", fontFamily:"inherit" }}>
@@ -3529,7 +3588,6 @@ function MobileApp({ appState, handlers, C }) {
       <TickerBanner C={C}/>
       <FXStrip C={C} totalARS={totalARS}/>
       <div style={{ flex:1, overflowY:"auto", paddingBottom:84 }}>{renderPage()}</div>
-      {loggedIn && <CoachChat holdings={holdings} assets={ASSETS} C={C} lang={lang}/>}
       <div style={{ position:"absolute", bottom:0, left:0, right:0, background:C.isDark?"#0F0F0F":C.card, borderTop:"1px solid "+C.border, display:"flex", height:78, zIndex:20, paddingTop:6, paddingBottom:4 }}>
         {TABS.map(t => {
           const active = tab === t.id;
@@ -3619,7 +3677,6 @@ function WebDashboard({ appState, handlers, C }) {
           {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} finnhubKey={finnhubKey} setFinnhubKey={setFinnhubKey} finnhub={finnhub} emailjsCfg={emailjsCfg} setEmailjsCfg={setEmailjsCfg} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} anthropicModel={anthropicModel} setAnthropicModel={setAnthropicModel} C={C}/>}
           {toast && <div style={{ position:"fixed", top:70, left:"50%", transform:"translateX(-50%)", zIndex:99, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 20px", fontSize:13, fontWeight:700, boxShadow:"0 8px 32px rgba(0,0,0,0.3)" }}>{toast.msg}</div>}
           <div style={{ overflowY:"auto", height:"calc(100vh - 56px)" }}>{renderPage()}</div>
-          <CoachChat holdings={holdings} assets={ASSETS} C={C} lang={lang}/>
           {showObjectives && <ObjectivesWizard onClose={() => setShowObjectives(false)} C={C}/>}
         </div>
         <div style={{ width:320, background:C.card, borderLeft:"1px solid "+C.border, padding:"20px 16px", position:"sticky", top:56, height:"calc(100vh - 56px)", overflowY:"auto" }}>

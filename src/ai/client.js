@@ -112,19 +112,6 @@ export async function testAnthropic() {
 
 // --- system prompts --------------------------------------------------------
 
-const COACH_SYSTEM = `Sos "SAMAS Coach", el coach de inversiones con IA dentro de la app SAMAS, un broker social para la proxima generacion de inversores en Argentina y LatAm.
-
-Tu rol:
-- Hablas en el mismo idioma que el usuario. Por defecto, espanol rioplatense, tono cercano pero profesional.
-- Explicas conceptos en lenguaje simple. Si usas jerga (YTM, CER, CEDEAR, UVA, BADLAR, etc.) definila brevemente la primera vez.
-- Respuestas compactas. Parrafo o 2-3 bullets maximo. Si el usuario quiere mas, que pregunte.
-- SAMAS tiene: Acciones argentinas (GGAL, YPF, PAMP, BBAR, ALUA, MIRG), CEDEAR (AAPL, MSFT, NVDA, GOOGL, AMZN, TSLA), ETFs (SPY, QQQ, GLD), Crypto (BTC), Bonos (AL30, GD30, AL35, GD35, CER, LEDES), Obligaciones Negociables, y Fondos Comunes.
-- NUNCA des ordenes directas tipo "compra X" o "vende Y". Si te presionan, redireccionas hacia un principio o estrategia.
-- Si el usuario te pide un plan concreto, cerra con: "Esto es educativo, no asesoramiento financiero."
-- Si te refieren al portafolio del usuario, asumi que se lo estan pasando vos como contexto y referilo de manera natural.
-- NO inventes cotizaciones actuales. Si el usuario pregunta por precios, decile que mire la pestana Mercado.
-- Responde en el idioma que uso el usuario en su ultimo mensaje.`;
-
 const OBJECTIVES_SYSTEM = `Sos "SAMAS Coach". Te van a pasar la situacion financiera mensual del usuario (ingresos, gastos, sobrante), un objetivo concreto (monto + anios), y una proyeccion de cuanto va a acumular si invierte ese sobrante a distintas tasas. Tu tarea: ELEGIR la estrategia (conservadora / moderada / agresiva) y explicar brevemente por que.
 
 SAMAS opera estas categorias de activos (usa solo estas en la asignacion):
@@ -160,39 +147,7 @@ Reglas:
 - No recomendes tickers especificos en allocation.name — solo categorias.
 - Tono claro, directo, rioplatense.`;
 
-const SENTIMENT_SYSTEM = `Sos el analizador de sentimiento del feed de noticias de SAMAS. Recibis una lista de titulares de mercado. Devolves SOLAMENTE JSON valido, sin markdown, sin texto fuera del JSON. Schema:
-{
-  "bullish": number,   // 0-100
-  "bearish": number,   // 0-100
-  "neutral": number,   // 0-100 — los tres deben sumar 100
-  "hotTopics": string[], // 3-5 temas cortos en espanol
-  "summary": string    // 2-3 oraciones en espanol, tono neutral y observacional
-}
-
-Reglas:
-- Tono neutral. Nada de consejos de inversion.
-- Usa enteros.`;
-
 // --- public helpers --------------------------------------------------------
-
-/**
- * Chat turn for the Coach. `portfolio` is an optional array of
- * { ticker, qty, value } rows that we inject into the system prompt so the
- * coach can reference the user's holdings naturally.
- */
-export async function callCoachChat(messages, { portfolio } = {}) {
-  let system = COACH_SYSTEM;
-  if (portfolio && portfolio.length) {
-    const ctx = portfolio
-      .slice(0, 20)
-      .map(p => `- ${p.ticker}: ${p.qty} unidades${p.value ? ` (~$${Math.round(p.value).toLocaleString("es-AR")} ARS)` : ""}`)
-      .join("\n");
-    system += `\n\n---\nPORTAFOLIO ACTUAL DEL USUARIO (para referencia; no lo menciones salvo que venga al caso):\n${ctx}`;
-  }
-  if (!hasAnthropicKey()) return mockCoach(messages);
-  const trimmed = messages.slice(-12);
-  return callAnthropic({ system, messages: trimmed, maxTokens: 800 });
-}
 
 /**
  * Compound interest helpers — the math is client-side so the AI only has
@@ -261,28 +216,6 @@ export async function callObjectives(profile) {
   return { ...parsed, _projections: projections, _invest: invest, _profile: profile };
 }
 
-/**
- * Summarize / score a list of news or forum items.
- * posts: [{ title: string, body?: string }]
- */
-export async function callSentiment(posts) {
-  const sample = posts.slice(0, 30).map((p, i) => `${i + 1}. ${(p.title || "").replace(/\s+/g, " ").trim()}${p.body ? " — " + p.body.slice(0, 140).replace(/\s+/g, " ").trim() : ""}`).join("\n");
-  const userPrompt = [
-    "Analiza el sentimiento de estos titulares del feed de SAMAS:",
-    "",
-    sample,
-    "",
-    "Devolve solo JSON."
-  ].join("\n");
-  if (!hasAnthropicKey()) return mockSentiment(posts);
-  const raw = await callAnthropic({
-    system: SENTIMENT_SYSTEM,
-    messages: [{ role: "user", content: userPrompt }],
-    maxTokens: 600,
-  });
-  return parseJson(raw) || mockSentiment(posts);
-}
-
 // --- helpers ---------------------------------------------------------------
 
 function parseJson(s) {
@@ -294,17 +227,7 @@ function parseJson(s) {
   try { return JSON.parse(s.slice(first, last + 1)); } catch { return null; }
 }
 
-// Mock responders keep the UI usable without an API key.
-function mockCoach(messages) {
-  const last = (messages[messages.length - 1]?.content || "").toLowerCase();
-  const tag = (body) => body + "\n\n_(Modo demo — pega tu API key de Anthropic en Perfil → Coach IA para respuestas reales.)_";
-  if (last.includes("cedear")) return tag("Los CEDEAR son certificados que replican acciones del exterior (ej. AAPL, NVDA) y se operan en pesos en Argentina. Pro: acceso a Wall Street sin tener cuenta afuera. Contra: menor liquidez y spreads mas anchos que el subyacente.");
-  if (last.includes("dolariz") || last.includes("dolar")) return tag("Para dolarizar dentro de SAMAS tenes tres caminos tipicos: bonos soberanos en USD (AL30, GD30), obligaciones negociables corporativas en USD, o un FCI de renta fija USD. Cada uno cambia el perfil riesgo/retorno — ONs pagan mas pero con mas riesgo de credito.");
-  if (last.includes("retirar") || last.includes("jubil")) return tag("Arranque simple para largo plazo: 1) fondo de emergencia de 3-6 meses en un money market en pesos, 2) aporte mensual automatico a un mix de CEDEAR/ETF segun tu tolerancia, 3) revisa la asignacion una vez al ano. Esto es educativo, no asesoramiento financiero.");
-  if (last.includes("compound") || last.includes("interes compuesto") || last.includes("interés")) return tag("Interes compuesto = interes sobre interes. $100.000 a 10% anual se convierten en ~$259.000 en 10 anios, y en ~$672.000 en 20 anios si lo dejas tranquilo. El tiempo importa mas que el monto inicial.");
-  return tag("Lo pensaria en tres palancas: horizonte temporal, tolerancia al riesgo y consistencia del aporte mensual. Cual de las tres es tu limite mas fuerte hoy?");
-}
-
+// Mock responder keeps the Objetivos wizard demoable without an API key.
 function mockObjectives(ctx) {
   // Pick strategy based on horizon and gap (same heuristic Claude uses)
   const { horizon = 5, invest = 0, projections = [] } = ctx;
@@ -328,15 +251,5 @@ function mockObjectives(ctx) {
     feasibility,
     advice: feasibility === "holgado" ? "Vas sobrado — podes ser mas conservador o ampliar el objetivo." : feasibility === "ajustado" ? "Te da justo. Automatiza el aporte y no falles meses." : "El objetivo no entra con tu sobrante actual. Bajar gastos, subir ingresos, o alargar el horizonte.",
     disclaimer: "Esto es educativo, no asesoramiento financiero. _(Modo demo — configura tu API key para un analisis hecho por Claude.)_"
-  };
-}
-
-function mockSentiment(posts) {
-  return {
-    bullish: 58,
-    bearish: 22,
-    neutral: 20,
-    hotTopics: ["IA e infraestructura de chips", "Politica monetaria global", "Energia argentina", "Crypto y Bitcoin"],
-    summary: "El feed de hoy inclina levemente alcista, impulsado por chips/IA y recuperacion de energia local. Una minoria marca riesgo de valuacion y tono cauto del banco central. _(Modo demo — configura tu API key para un analisis en vivo.)_"
   };
 }
