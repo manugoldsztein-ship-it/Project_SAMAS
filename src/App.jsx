@@ -4266,7 +4266,7 @@ function WebDashboard({ appState, handlers, C }) {
     }
   };
   return (
-    <div style={{ width:"100%", minHeight:"100vh", background:C.isDark?"#080808":"#F0E0E0", display:"flex", flexDirection:"column" }}>
+    <div style={{ width:"100%", minHeight:"100vh", background:C.isDark?"#0F0F0F":"#0D1117", display:"flex", flexDirection:"column" }}>
       {/* Header: keep the dark surface full-bleed, but constrain the
           INNER header content to the same max-width as the body so brand
           + dollar chips stay aligned with the sidebar/columns below. */}
