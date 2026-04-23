@@ -242,6 +242,81 @@ const fN   = n => new Intl.NumberFormat("es-AR", { maximumFractionDigits:0 }).fo
 const fARS = n => n >= 1e6 ? "$" + (n/1e6).toFixed(2) + "M" : n >= 1e3 ? "$" + (n/1e3).toFixed(1) + "k" : "$" + n;
 
 // ============================================================
+// FINNHUB INTEGRATION
+// ============================================================
+// Maps our internal ticker → Finnhub symbol. `null` = skip (no free-tier coverage).
+// Everything else falls through to `asset.yf || asset.ticker`.
+const FINNHUB_SYMBOL_OVERRIDE = {
+  ALUA: null,   // BCBA-only, not on free tier
+  MIRG: null,   // BCBA-only
+  BTC: "BINANCE:BTCUSDT", // unofficial crypto symbol; falls back to mock if 404
+  OIL: "USO",   // WTI proxy
+  COPPER: "CPER",
+};
+
+// Fetch /quote for every ASSET with a valid Finnhub symbol, mutate price/change
+// in place, and bump a render counter. Cheap and coarse — good enough for a
+// prototype where the prop-drilling cost would be higher than the mutation cost.
+function useFinnhubQuotes(apiKey, mepRate) {
+  const [bump, setBump] = useState(0);
+  const [status, setStatus] = useState({ live: false, count: 0, error: null, lastSync: null });
+
+  useEffect(() => {
+    if (!apiKey) {
+      setStatus({ live: false, count: 0, error: null, lastSync: null });
+      return;
+    }
+    let cancelled = false;
+
+    const resolve = (asset) => {
+      if (Object.prototype.hasOwnProperty.call(FINNHUB_SYMBOL_OVERRIDE, asset.ticker)) {
+        return FINNHUB_SYMBOL_OVERRIDE[asset.ticker];
+      }
+      return asset.yf || asset.ticker;
+    };
+
+    const fetchQuote = async (asset) => {
+      const symbol = resolve(asset);
+      if (!symbol) return false;
+      try {
+        const r = await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${encodeURIComponent(apiKey)}`);
+        if (!r.ok) return { ok: false, status: r.status };
+        const d = await r.json();
+        if (!d || typeof d.c !== "number" || d.c === 0) return false;
+        asset.price = d.c * mepRate;
+        asset.change = typeof d.dp === "number" ? d.dp : 0;
+        asset.up = asset.change >= 0;
+        return true;
+      } catch { return false; }
+    };
+
+    const refresh = async () => {
+      const results = await Promise.all(ASSETS.map(fetchQuote));
+      if (cancelled) return;
+      const authErr = results.find(r => r && typeof r === "object" && r.status === 401);
+      const count = results.filter(r => r === true).length;
+      setStatus({
+        live: count > 0,
+        count,
+        error: authErr ? "API key invalida" : (count === 0 ? "Sin datos de Finnhub" : null),
+        lastSync: new Date(),
+      });
+      setBump(b => b + 1);
+    };
+
+    refresh();
+    const id = setInterval(refresh, 60000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [apiKey, mepRate]);
+
+  return { bump, ...status };
+}
+
+// localStorage helpers — guarded against non-browser contexts just in case
+function loadKey() { try { return typeof localStorage !== "undefined" ? localStorage.getItem("samas_finnhub_key") : null; } catch { return null; } }
+function saveKey(k) { try { if (k) localStorage.setItem("samas_finnhub_key", k); else localStorage.removeItem("samas_finnhub_key"); } catch {} }
+
+// ============================================================
 // COMPANY LOGO with fallback
 // ============================================================
 // Brand colors and symbols for each asset
@@ -2179,7 +2254,7 @@ function DevicesPage({ onBack, C }) {
   );
 }
 
-function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, C }) {
+function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, finnhubKey, setFinnhubKey, finnhub, C }) {
   const [confirm, setConfirm]       = useState(false);
   const [show2FA, setShow2FA]       = useState(false);
   const [twoFAEnabled, set2FA]      = useState(false);
@@ -2187,6 +2262,8 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
   const [totpVerified, setTotpVerified] = useState(false);
   const [showDevices, setShowDevices] = useState(false);
   const [showLang, setShowLang]     = useState(false);
+  const [showFinnhub, setShowFinnhub] = useState(false);
+  const [finnhubInput, setFinnhubInput] = useState(finnhubKey || "");
   const t = useT(lang);
 
   if (showDevices) {
@@ -2255,6 +2332,61 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
 
+        {/* Finnhub live-data settings */}
+        <button onClick={() => setShowFinnhub(v => !v)} style={{ width:"100%", background: finnhub?.live ? C.green+"18" : C.creamDk, border:"1.5px solid "+(finnhub?.live?C.green+"44":C.border), borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ width:36, height:36, borderRadius:10, background:(finnhub?.live?C.green:C.accent)+"22", display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={finnhub?.live?C.green:C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12h4l3-9 4 18 3-9h6"/></svg>
+            </div>
+            <div>
+              <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Cotizaciones en vivo</div>
+              <div style={{ fontSize:11, color: finnhub?.live ? C.green : (finnhub?.error ? C.red : C.textLt) }}>
+                {finnhub?.live ? `Live · ${finnhub.count} activos · Finnhub` : (finnhub?.error ? finnhub.error : "Datos mock — configura API key para activar")}
+              </div>
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: showFinnhub ? "rotate(90deg)" : "rotate(0deg)", transition:"transform 0.2s" }}><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+        {showFinnhub && (
+          <div style={{ background:C.card, borderRadius:12, border:"1px solid "+C.border, padding:"14px", marginBottom:8 }}>
+            <div style={{ fontSize:11, color:C.textMd, lineHeight:1.5, marginBottom:10 }}>
+              Usa tu API key de Finnhub para traer precios reales cada 60s. Registrate gratis en <span style={{ color:C.accent, fontWeight:600 }}>finnhub.io</span> — 60 req/min sin tarjeta.
+            </div>
+            <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:6 }}>API KEY</div>
+            <input
+              value={finnhubInput}
+              onChange={e => setFinnhubInput(e.target.value.trim())}
+              placeholder="cxxxxxxxxxxxxxxxxxxxx"
+              type="password"
+              autoComplete="off"
+              style={{ background:C.bg, border:"1.5px solid "+C.border, borderRadius:10, padding:"10px 12px", fontSize:12, fontFamily:"monospace", color:C.text, outline:"none", width:"100%", boxSizing:"border-box", marginBottom:10 }}
+            />
+            <div style={{ display:"flex", gap:8 }}>
+              <button
+                onClick={() => { setFinnhubKey(finnhubInput || null); }}
+                disabled={!finnhubInput}
+                style={{ flex:2, background: finnhubInput ? C.accent : C.creamDk, color: finnhubInput ? "#fff" : C.textLt, border:"none", borderRadius:10, padding:"10px", fontWeight:600, fontSize:12, cursor: finnhubInput ? "pointer" : "not-allowed", fontFamily:"inherit" }}>
+                {finnhubKey === finnhubInput && finnhubKey ? "Guardada" : "Guardar y activar"}
+              </button>
+              {finnhubKey && (
+                <button
+                  onClick={() => { setFinnhubKey(null); setFinnhubInput(""); }}
+                  style={{ flex:1, background:"transparent", color:C.textMd, border:"1.5px solid "+C.border, borderRadius:10, padding:"10px", fontWeight:500, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                  Quitar
+                </button>
+              )}
+            </div>
+            {finnhub?.lastSync && (
+              <div style={{ fontSize:10, color:C.textLt, marginTop:10, textAlign:"center" }}>
+                Ultima sync: {new Date(finnhub.lastSync).toLocaleTimeString("es-AR")}
+              </div>
+            )}
+            <div style={{ fontSize:10, color:C.textLt, marginTop:8, lineHeight:1.5 }}>
+              <span style={{ color:C.textMd, fontWeight:600 }}>Nota:</span> la key se guarda solo en este dispositivo (localStorage). ALUA, MIRG y BTC usan datos mock — el plan free de Finnhub no cubre BCBA ni crypto.
+            </div>
+          </div>
+        )}
+
         <button onClick={() => setShow2FA(v => !v)} style={{ width:"100%", background: twoFAEnabled ? C.green+"18" : C.creamDk, border:"1.5px solid "+(twoFAEnabled?C.green+"44":C.border), borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <div style={{ width:36, height:36, borderRadius:10, background:(twoFAEnabled?C.green:C.accent)+"22", display:"flex", alignItems:"center", justifyContent:"center" }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={twoFAEnabled?C.green:C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
@@ -2309,8 +2441,8 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
 // MOBILE PHONE WRAPPER
 // ============================================================
 function MobileApp({ appState, handlers, C }) {
-  const { loggedIn, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist } = appState;
-  const { setLoggedIn, handleLogin, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist } = handlers;
+  const { loggedIn, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, finnhubKey, finnhub } = appState;
+  const { setLoggedIn, handleLogin, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, setFinnhubKey } = handlers;
   const t = useT(lang);
   const TABS = [{ id:"portfolio",label:t("portfolio") },{ id:"mercado",label:t("mercado") },{ id:"noticias",label:t("noticias") },{ id:"ideas",label:t("inversiones") },{ id:"ordenes",label:t("ordenes") }];
   const totalARS = holdings.reduce((s, h) => { const a = ASSETS.find(x => x.ticker === h.ticker); return s + (a ? h.qty * a.price : 0); }, 0);
@@ -2333,12 +2465,20 @@ function MobileApp({ appState, handlers, C }) {
       <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:110, height:26, background:"#0a0a0a", borderRadius:"0 0 16px 16px", zIndex:30 }}/>
       {!loggedIn && <LoginScreen onLogin={handleLogin} C={C}/>}
       {showTutorial && <OnboardingTutorial onClose={finishTutorial} onComplete={finishTutorial} setTab={setTab} setShowUSD={setShowUSD} setShowProfile={setShowProfile} currentTab={tab} C={C}/>}
-      {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} C={C}/>}
+      {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} finnhubKey={finnhubKey} setFinnhubKey={setFinnhubKey} finnhub={finnhub} C={C}/>}
       {toast && <div style={{ position:"absolute", top:34, left:14, right:14, zIndex:50, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 14px", fontSize:12, fontWeight:700 }}>{toast.msg}</div>}
       {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} C={C}/>}
       {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} C={C}/>}
       <div style={{ background:C.isDark?"#0F0F0F":"#0D1117", paddingTop:30, paddingBottom:8, paddingLeft:20, paddingRight:20, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0, zIndex:10 }}>
-        <span style={{ color:"rgba(255,255,255,0.6)", fontSize:12, fontWeight:600 }}>{new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})}</span>
+        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+          <span style={{ color:"rgba(255,255,255,0.6)", fontSize:12, fontWeight:600 }}>{new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})}</span>
+          {finnhub?.live && (
+            <div title={`${finnhub.count} activos en vivo`} style={{ display:"flex", alignItems:"center", gap:3, background:C.accent+"22", border:"1px solid "+C.accent+"55", borderRadius:8, padding:"1px 5px" }}>
+              <div style={{ width:5, height:5, borderRadius:3, background:C.accent }}/>
+              <span style={{ fontSize:8, fontWeight:700, color:C.accent, letterSpacing:0.5 }}>LIVE</span>
+            </div>
+          )}
+        </div>
         <SAMASLogo textColor="#FFFFFF"/>
         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
           <CurrencyToggle showUSD={showUSD} onToggle={() => setShowUSD(v => !v)} C={C}/>
@@ -2373,8 +2513,8 @@ function MobileApp({ appState, handlers, C }) {
 // WEB DASHBOARD LAYOUT
 // ============================================================
 function WebDashboard({ appState, handlers, C }) {
-  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, showProfile, showUSD, showTutorial, lang, watchlist } = appState;
-  const { setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, setShowProfile, setIsDark, setShowUSD, setLang, finishTutorial, toggleWatchlist } = handlers;
+  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, showProfile, showUSD, showTutorial, lang, watchlist, finnhubKey, finnhub } = appState;
+  const { setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, setShowProfile, setIsDark, setShowUSD, setLang, finishTutorial, toggleWatchlist, setFinnhubKey } = handlers;
   const [sideTab, setSideTab] = useState("portfolio");
   const t = useT(lang);
   const TABS2 = [{ id:"portfolio",label:t("portfolio"),icon:"portfolio" },{ id:"mercado",label:t("mercado"),icon:"mercado" },{ id:"noticias",label:t("noticias"),icon:"noticias" },{ id:"ideas",label:t("inversiones"),icon:"ideas" },{ id:"bonos",label:t("bonos"),icon:"bonos" },{ id:"ordenes",label:t("ordenes"),icon:"ordenes" },{ id:"reportes",label:t("reportes"),icon:"reportes" }];
@@ -2399,6 +2539,12 @@ function WebDashboard({ appState, handlers, C }) {
     <div style={{ width:"100%", minHeight:"100vh", background:C.isDark?"#080808":"#F0E0E0", display:"flex", flexDirection:"column" }}>
       <div style={{ background:C.isDark?"#0F0F0F":"#0D1117", height:56, display:"flex", alignItems:"center", padding:"0 24px", gap:24, borderBottom:"1px solid rgba(255,255,255,0.08)", position:"sticky", top:0, zIndex:50 }}>
         <SAMASLogo textColor="#FFFFFF"/>
+        {finnhub?.live && (
+          <div title={`${finnhub.count} activos en vivo (Finnhub)`} style={{ display:"flex", alignItems:"center", gap:4, background:C.accent+"22", border:"1px solid "+C.accent+"55", borderRadius:10, padding:"3px 8px" }}>
+            <div style={{ width:6, height:6, borderRadius:3, background:C.accent }}/>
+            <span style={{ fontSize:9, fontWeight:700, color:C.accent, letterSpacing:0.5 }}>LIVE · {finnhub.count}</span>
+          </div>
+        )}
         <div style={{ flex:1 }}/>
         <div style={{ display:"flex", gap:8 }}>
           {FX.map(fx => <div key={fx.label} style={{ background:"rgba(255,255,255,0.07)", borderRadius:8, padding:"4px 10px" }}><div style={{ color:"rgba(255,255,255,0.45)", fontSize:8, fontWeight:700 }}>USD {fx.label}</div><div style={{ color:"#fff", fontSize:11, fontFamily:"monospace", fontWeight:700 }}>${fN(fx.value)}</div><div style={{ color:fx.up?"#4ADE80":"#F87171", fontSize:9 }}>{fx.up?"+":"-"}{Math.abs(fx.change).toFixed(1)}%</div></div>)}
@@ -2428,7 +2574,7 @@ function WebDashboard({ appState, handlers, C }) {
         <div style={{ flex:1, position:"relative", maxWidth:600 }}>
           {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} C={C}/>}
           {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} C={C}/>}
-          {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} C={C}/>}
+          {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} finnhubKey={finnhubKey} setFinnhubKey={setFinnhubKey} finnhub={finnhub} C={C}/>}
           {toast && <div style={{ position:"fixed", top:70, left:"50%", transform:"translateX(-50%)", zIndex:99, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 20px", fontSize:13, fontWeight:700, boxShadow:"0 8px 32px rgba(0,0,0,0.3)" }}>{toast.msg}</div>}
           <div style={{ overflowY:"auto", height:"calc(100vh - 56px)" }}>{renderPage()}</div>
         </div>
@@ -2474,8 +2620,16 @@ export default function SAMASApp() {
   const [pendingTrade, setPending]    = useState(null);
   const [toast, setToast]             = useState(null);
   const [viewMode, setViewMode]       = useState("mobile");
+  const [finnhubKey, setFinnhubKey]   = useState(() => loadKey());
 
   const C = makeTheme(isDark);
+
+  // MEP rate from the FX strip — converts USD quotes into peso-equivalent.
+  const mepRate = (FX.find(f => f.label === "MEP") || FX[0]).value;
+  const finnhub = useFinnhubQuotes(finnhubKey, mepRate);
+
+  // Persist the key whenever it changes
+  useEffect(() => { saveKey(finnhubKey); }, [finnhubKey]);
 
   useEffect(() => {
     const handler = () => setShowTutorial(true);
@@ -2529,8 +2683,8 @@ export default function SAMASApp() {
   const handleLogout = () => { setLoggedIn(false); setShowProfile(false); setTab("portfolio"); setSelected(null); setPending(null); };
   const finishTutorial = () => { setHasSeen(true); setShowTutorial(false); };
 
-  const appState = { isDark, loggedIn, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist };
-  const handlers = { setLoggedIn, handleLogin, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist };
+  const appState = { isDark, loggedIn, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, finnhubKey, finnhub };
+  const handlers = { setLoggedIn, handleLogin, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, setFinnhubKey };
 
   const outerBg = isDark ? "#080808" : "#050505";
 
