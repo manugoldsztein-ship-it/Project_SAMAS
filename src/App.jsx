@@ -4142,7 +4142,16 @@ export default function SAMASApp() {
 
   return (
     <div style={{ minHeight:"100vh", background:outerBg, fontFamily:"Sora,sans-serif" }}>
-      <style>{"@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap'); *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;} ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-track{background:transparent} ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:2px}"}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap');
+        *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+        /* Hide scrollbars across the whole app. Scroll still works via touch
+           and wheel; we just don't render the track or thumb. */
+        *::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
+        *::-webkit-scrollbar-track { background: transparent !important; }
+        *::-webkit-scrollbar-thumb { background: transparent !important; }
+        * { scrollbar-width: none !important; -ms-overflow-style: none !important; }
+        html, body { scrollbar-width: none !important; -ms-overflow-style: none !important; }
+      `}</style>
 
       <div style={{ display:"flex", justifyContent:"center", gap:12, padding:"16px 0 8px", position:"sticky", top:0, zIndex:200, background:outerBg, borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
         {[["mobile","Movil"],["web","Web"]].map(([v, l]) => (
