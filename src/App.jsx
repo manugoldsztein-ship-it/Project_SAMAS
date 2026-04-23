@@ -77,7 +77,7 @@ const NEWS = [
   { id:5,  tickers:["SPY","GLD"],   cat:"ETF",       src:"CNBC",        time:"Hace 1h 20m", title:"Fed mantiene tasas; mercados celebran tono mas dovish de Powell",               body:"El presidente de la Fed senalo que los datos justifican una pausa." },
   { id:6,  tickers:["AAPL","MSFT"], cat:"CEDEAR",    src:"WSJ",         time:"Hace 2h",     title:"Apple y Microsoft suben tras rumores de acuerdo de distribucion de IA",         body:"Ambas companias estudian integrar modelos de lenguaje en sus plataformas." },
   { id:7,  tickers:["PAMP","ALUA"], cat:"Acciones",    src:"El Cronista", time:"Hace 3h",     title:"Energia y materiales basicos recuperan terreno tras desregulacion",             body:"El Gobierno confirmo nuevas medidas de liberalizacion del sector energetico." },
-  { id:8,  tickers:["TSLA"],        cat:"CEDEAR",    src:"Bloomberg",   time:"Hace 4h",     title:"Tesla recorta precios en Europa y Asia por cuarto mes consecutivo",             body:"La compania enfrenta creciente competencia de BYD en los mercados globales." },
+  { id:8,  tickers:["TSLA"],        cat:"CEDEAR",    src:"Bloomberg",   time:"Hace 4h",     title:"Tesla recorta precios en Europa y Asia por cuarto mes consecutivo",             body:"La compañía enfrenta creciente competencia de BYD en los mercados globales." },
 ];
 
 // ============================================================
@@ -2000,7 +2000,7 @@ const REPORTES = [
   { id:4, cat:"Macro",       date:"Feb 2025", title:"Argentina: normalizacion macro y oportunidades", summary:"Analisis del programa economico, proyecciones de inflacion y tipo de cambio para 2025.", pages:32, download:"samas_macro_arg_2025.pdf", highlight:false },
   { id:5, cat:"Fondos",      date:"Feb 2025", title:"Comparativa fondos comunes Q1 2025", summary:"Rendimientos, volatilidad y ratios de Sharpe de los principales FCIs del mercado argentino.", pages:20, download:"samas_fondos_q1_2025.pdf", highlight:false },
   { id:6, cat:"ON",          date:"Ene 2025", title:"Obligaciones negociables: oportunidades en el mercado primario", summary:"Pipeline de emisiones de ONs y analisis de spreads en el mercado secundario.", pages:16, download:"samas_on_2025.pdf", highlight:false },
-  { id:7, cat:"Estrategia",  date:"Ene 2025", title:"Informe anual 2024 y outlook 2025", summary:"Resumen del anio 2024 y proyecciones estrategicas para el 2025. El informe mas completo del equipo.", pages:48, download:"samas_anual_2024.pdf", highlight:false },
+  { id:7, cat:"Estrategia",  date:"Ene 2025", title:"Informe anual 2024 y outlook 2025", summary:"Resumen del año 2024 y proyecciones estrategicas para el 2025. El informe mas completo del equipo.", pages:48, download:"samas_anual_2024.pdf", highlight:false },
   { id:8, cat:"Cripto",      date:"Dic 2024", title:"Bitcoin y el ecosistema cripto en 2025", summary:"Analisis del mercado cripto, adoption curves y oportunidades para inversores institucionales.", pages:22, download:"samas_cripto_2025.pdf", highlight:false },
 ];
 
@@ -2666,7 +2666,7 @@ function PageOrdenes({ orders, C, lang }) {
   return (
     <div style={{ padding:"14px" }}>
       <div style={{ display:"flex", gap:8, marginBottom:14 }}>
-        {[["30d","+3.2%",C.green],["90d","+11.8%",C.green],["1 anio","+41.7%",C.gold]].map(([l,v,col]) => (
+        {[["30d","+3.2%",C.green],["90d","+11.8%",C.green],["1 año","+41.7%",C.gold]].map(([l,v,col]) => (
           <div key={l} style={{ flex:1, background:C.card, borderRadius:12, border:"1px solid "+C.border, padding:"9px 6px", textAlign:"center" }}><div style={{ fontSize:9, fontWeight:700, color:C.textLt, textTransform:"uppercase" }}>{l}</div><div style={{ fontSize:17, fontWeight:800, color:col, marginTop:1 }}>{v}</div></div>
         ))}
       </div>
@@ -3615,7 +3615,7 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
         <button onClick={() => setShowLang(v => !v)} style={{ width:"100%", background:showLang?C.accent+"18":C.creamDk, border:"1.5px solid "+(showLang?C.accent+"44":C.border), borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <div style={{ width:36, height:36, borderRadius:10, background:"#2563EB22", display:"flex", alignItems:"center", justifyContent:"center" }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
-            <div><div style={{ fontSize:13, fontWeight:600, color:C.text }}>{t("language")}</div><div style={{ fontSize:11, color:C.textLt }}>{LANGUAGES.find(l => l.code === lang)?.label || "Espanol"}</div></div>
+            <div><div style={{ fontSize:13, fontWeight:600, color:C.text }}>{t("language")}</div><div style={{ fontSize:11, color:C.textLt }}>{LANGUAGES.find(l => l.code === lang)?.label || "Español"}</div></div>
           </div>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: showLang ? "rotate(90deg)" : "rotate(0deg)", transition:"transform 0.2s" }}><polyline points="9 18 15 12 9 6"/></svg>
         </button>

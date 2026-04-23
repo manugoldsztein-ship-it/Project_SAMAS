@@ -8,7 +8,7 @@ import { InfoBadge } from "./glossary.jsx";
 // Flujo fijado por producto:
 //   1. Ingresos mensuales
 //   2. Gastos mensuales  (la app calcula el sobrante invertible en vivo)
-//   3. Objetivo: monto + horizonte en anios
+//   3. Objetivo: monto + horizonte en años
 //   4. Resultado: proyeccion de interes compuesto + Claude elige la
 //      estrategia (conservadora / moderada / agresiva) y la explica.
 // La app hace la aritmetica de interes compuesto; Claude solo decide la
@@ -498,7 +498,7 @@ function StepGoal({ targetAmount, setTargetAmount, horizonYears, setHorizonYears
                 fontFamily: "inherit",
                 textAlign: "center",
               }}>
-              {h} {h === 1 ? "anio" : "anios"}
+              {h} {h === 1 ? "año" : "años"}
             </button>
           );
         })}
@@ -507,7 +507,7 @@ function StepGoal({ targetAmount, setTargetAmount, horizonYears, setHorizonYears
       {/* Live compound-interest preview */}
       <div style={{ marginTop:14, background:C.card, borderRadius:14, border:"1px solid "+C.border, padding:"14px" }}>
         <div style={{ fontSize:11, fontWeight:700, color:C.textMd, letterSpacing:1, textTransform:"uppercase", marginBottom:6 }}>
-          Si invertis {sym(currency)}{fmtNum(invest)}/mes durante {horizonYears} anios
+          Si invertis {sym(currency)}{fmtNum(invest)}/mes durante {horizonYears} años
         </div>
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
           {preview.map(p => {

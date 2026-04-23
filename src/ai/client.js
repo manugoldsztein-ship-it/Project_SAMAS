@@ -121,7 +121,7 @@ Devolves SOLAMENTE JSON valido (sin markdown ni texto fuera del JSON):
   "total": number,           // suma total de gastos del periodo, en la misma moneda que el texto
   "currency": "ARS" | "USD", // moneda detectada
   "categories": [{ "name": string, "amount": number }],  // 3-8 categorias, nombres cortos (Alquiler, Comida, Transporte, Suscripciones, Salud, Entretenimiento, etc.)
-  "notes": string            // 1-2 oraciones en espanol con observaciones relevantes (ej: "dos suscripciones que podrias revisar", "gasto atipico en noviembre")
+  "notes": string            // 1-2 oraciones en español con observaciones relevantes (ej: "dos suscripciones que podrias revisar", "gasto atipico en noviembre")
 }
 
 Reglas:
@@ -130,7 +130,7 @@ Reglas:
 - Los amounts deben ser enteros redondeados.
 - Si el texto esta vacio o no parece un resumen, devolve total: 0 y notes explicando que no pudiste parsearlo.`;
 
-const OBJECTIVES_SYSTEM = `Sos "SAMAS Coach". Te van a pasar la situacion financiera mensual del usuario (ingresos, gastos, sobrante), un objetivo concreto (monto + anios, en ARS o USD), y una proyeccion de cuanto va a acumular si invierte ese sobrante a distintas tasas razonables para esa moneda. Tu tarea: ELEGIR la estrategia (conservadora / moderada / agresiva) y explicar brevemente por que.
+const OBJECTIVES_SYSTEM = `Sos "SAMAS Coach". Te van a pasar la situacion financiera mensual del usuario (ingresos, gastos, sobrante), un objetivo concreto (monto + años, en ARS o USD), y una proyeccion de cuanto va a acumular si invierte ese sobrante a distintas tasas razonables para esa moneda. Tu tarea: ELEGIR la estrategia (conservadora / moderada / agresiva) y explicar brevemente por que.
 
 SAMAS opera estas categorias de activos (usa solo estas en la asignacion):
 - "Acciones" (acciones argentinas)
@@ -145,7 +145,7 @@ SAMAS opera estas categorias de activos (usa solo estas en la asignacion):
 DEVOLVE SOLAMENTE JSON VALIDO, sin markdown, sin texto fuera del JSON. Schema:
 {
   "strategy": "conservadora" | "moderada" | "agresiva",
-  "rationale": string,          // 2-3 oraciones en espanol explicando POR QUE esa estrategia, citando el gap entre objetivo y proyeccion, el horizonte y la capacidad mensual
+  "rationale": string,          // 2-3 oraciones en español explicando POR QUE esa estrategia, citando el gap entre objetivo y proyeccion, el horizonte y la capacidad mensual
   "assumedReturn": number,      // tasa anual esperada (decimal, ej 0.08 para 8%)
   "allocation": [{ "name": string, "percent": number }], // usar solo las categorias de arriba, percents enteros que sumen 100
   "monthlyNeeded": number,      // aporte mensual en ARS necesario para alcanzar el objetivo a la tasa assumedReturn
@@ -155,9 +155,9 @@ DEVOLVE SOLAMENTE JSON VALIDO, sin markdown, sin texto fuera del JSON. Schema:
 }
 
 Como elegir la estrategia:
-- Horizonte corto (<3 anios) o gap pequeno: conservadora (mas FCI money market, Bonos, ON, Cash; menos Acciones/CEDEAR/Crypto).
-- Horizonte medio (3-7 anios) o gap moderado: moderada (mix balanceado).
-- Horizonte largo (7+ anios) o gap grande: agresiva (mas CEDEAR/ETF/Crypto, menos renta fija).
+- Horizonte corto (<3 años) o gap pequeño: conservadora (más FCI money market, Bonos, ON, Cash; menos Acciones/CEDEAR/Crypto).
+- Horizonte medio (3-7 años) o gap moderado: moderada (mix balanceado).
+- Horizonte largo (7+ años) o gap grande: agresiva (mas CEDEAR/ETF/Crypto, menos renta fija).
 - Si el objetivo es claramente inviable con la capacidad actual, igual elegi la estrategia mas adecuada y marca feasibility "inviable" con advice claro.
 
 Reglas:
@@ -218,9 +218,9 @@ export async function callObjectives(profile) {
     `- Ingreso mensual (${cur}): ${income}`,
     `- Gastos mensuales (${cur}): ${expenses}`,
     `- Sobrante invertible mensual (${cur}): ${invest}`,
-    `- Objetivo: acumular ${target} ${cur} en ${horizon} anios`,
+    `- Objetivo: acumular ${target} ${cur} en ${horizon} años`,
     ``,
-    `Proyecciones (invirtiendo el sobrante de ${invest} ${cur}/mes durante ${horizon} anios):`,
+    `Proyecciones (invirtiendo el sobrante de ${invest} ${cur}/mes durante ${horizon} años):`,
     ...projections.map(p => `  - a ${(p.annualRate * 100).toFixed(0)}% anual: acumula ~${p.finalAmount} ${cur}; para llegar al objetivo necesitarias aportar ~${p.monthlyNeeded} ${cur}/mes a esa tasa`),
     ``,
     `Devolve solo JSON.`,
@@ -284,7 +284,7 @@ function mockObjectives(ctx) {
   const feasibility = invest === 0 ? "inviable" : proj.monthlyNeeded <= invest * 1.05 ? "holgado" : proj.monthlyNeeded <= invest * 1.5 ? "ajustado" : "inviable";
   return {
     strategy,
-    rationale: `Con un horizonte de ${horizon} anios y tu sobrante actual, la estrategia ${strategy} balancea el crecimiento esperado con el riesgo que te conviene asumir.`,
+    rationale: `Con un horizonte de ${horizon} años y tu sobrante actual, la estrategia ${strategy} balancea el crecimiento esperado con el riesgo que te conviene asumir.`,
     assumedReturn,
     allocation,
     monthlyNeeded: proj.monthlyNeeded,
