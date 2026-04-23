@@ -193,10 +193,22 @@ function registerUser({ name, email, pin }) {
 // LANGUAGES / i18n
 // ============================================================
 const LANGUAGES = [
-  { code:"es", label:"Espanol", flag:"ES" },
-  { code:"en", label:"English", flag:"EN" },
+  { code:"es", label:"Espanol",   flag:"ES" },
+  { code:"en", label:"English",   flag:"EN" },
   { code:"pt", label:"Portugues", flag:"PT" },
+  { code:"it", label:"Italiano",  flag:"IT" },
+  { code:"fr", label:"Francais",  flag:"FR" },
+  { code:"de", label:"Deutsch",   flag:"DE" },
+  { code:"zh", label:"中文",       flag:"ZH" },
+  { code:"ru", label:"Русский",   flag:"RU" },
+  { code:"ja", label:"日本語",     flag:"JA" },
+  { code:"he", label:"עברית",     flag:"HE" },
+  { code:"ar", label:"العربية",   flag:"AR" },
 ];
+
+// Languages that render right-to-left. Used to flip `dir` on the document
+// root so Hebrew / Arabic read naturally.
+const RTL_LANGS = ["he", "ar"];
 
 const TRANSLATIONS = {
   es: {
@@ -252,6 +264,150 @@ const TRANSLATIONS = {
     market_no_results:"Sem resultados",
     order_history:"Historico", no_orders:"Voce ainda nao operou nada", executed:"Executada",
     open_devices:"Dispositivos conectados", remote_logout:"Encerrar todas as outras sessoes", device_active:"ATIVO", device_active_now:"dispositivo ativo agora mesmo",
+  },
+  it: {
+    portfolio:"Portafoglio", mercado:"Mercato", noticias:"Notizie", inversiones:"Investimenti", ordenes:"Ordini", bonos:"Obbligazioni", reportes:"Report",
+    search:"Cerca asset...", buy:"Compra", sell:"Vendi", cancel:"Annulla", confirm:"Conferma", close:"Chiudi", edit:"Modifica", save:"Salva", activate:"Attiva", delete:"Elimina", back:"Indietro", next:"Avanti", skip:"Salta", finish:"Fine",
+    total_portfolio:"Portafoglio totale", invested:"Investito", gain:"Guadagno", available:"Disponibile", distribution:"Distribuzione", positions:"Posizioni",
+    categories:"Categorie", all:"Tutti", stocks:"Azioni",
+    profile:"Profilo", dark_mode:"Modalita scura", light_mode:"Modalita chiara", dark_mode_sub:"Passa al tema scuro", light_mode_sub:"Passa al tema chiaro", devices:"Dispositivi", devices_sub:"4 sessioni attive", tutorial:"Guarda il tutorial", tutorial_sub:"Tour dell'app", twofa:"Autenticazione 2FA", twofa_sub:"Consigliato - Aumenta la sicurezza", twofa_active:"Attiva - App Authenticator", logout:"Esci", active_session:"Sessione attiva", language:"Lingua",
+    settings:"Impostazioni",
+    ideas_title:"Idee di investimento", ideas_sub:"Portafogli consigliati dal team SAMAS", inv_title:"Investimenti", inv_sub:"Idee, prodotti e fondi",
+    trend_title:"Tendenze di oggi", trend_sub:"Gli asset che si sono mossi di piu oggi", trend_gainers:"Maggiori rialzi", trend_losers:"Maggiori ribassi",
+    news_title:"Notizie", news_live:"CNBC in diretta", news_demo:"Dati demo", news_loading:"Caricamento...", news_refresh:"Aggiorna", news_empty:"Nessuna notizia per questo filtro",
+    on_title:"Obbligazioni corporate", on_sub:"Debito corporate argentino di alta qualita",
+    fondos_title:"Fondi comuni", fondos_sub:"Fondi di investimento professionali",
+    bonos_title:"Titoli di Stato", bonos_sub:"Debito pubblico argentino",
+    reports_title:"Report di ricerca", reports_sub:"Analisi e report esclusivi del team SAMAS", featured:"IN EVIDENZA", download_pdf:"Scarica PDF", download:"Scarica", pages:"pagine",
+    market_no_results:"Nessun risultato",
+    order_history:"Cronologia", no_orders:"Non hai ancora negoziato nulla", executed:"Eseguita",
+    open_devices:"Dispositivi connessi", remote_logout:"Chiudi tutte le altre sessioni", device_active:"ATTIVO", device_active_now:"dispositivo attivo adesso",
+  },
+  fr: {
+    portfolio:"Portefeuille", mercado:"Marche", noticias:"Actualites", inversiones:"Investissements", ordenes:"Ordres", bonos:"Obligations", reportes:"Rapports",
+    search:"Rechercher un actif...", buy:"Acheter", sell:"Vendre", cancel:"Annuler", confirm:"Confirmer", close:"Fermer", edit:"Modifier", save:"Enregistrer", activate:"Activer", delete:"Supprimer", back:"Retour", next:"Suivant", skip:"Passer", finish:"Terminer",
+    total_portfolio:"Portefeuille total", invested:"Investi", gain:"Gain", available:"Disponible", distribution:"Repartition", positions:"Positions",
+    categories:"Categories", all:"Tous", stocks:"Actions",
+    profile:"Profil", dark_mode:"Mode sombre", light_mode:"Mode clair", dark_mode_sub:"Passer au theme sombre", light_mode_sub:"Passer au theme clair", devices:"Appareils", devices_sub:"4 sessions actives", tutorial:"Voir le tutoriel", tutorial_sub:"Visite de l'app", twofa:"Authentification 2FA", twofa_sub:"Recommande - Ameliore la securite", twofa_active:"Activee - App Authenticator", logout:"Se deconnecter", active_session:"Session active", language:"Langue",
+    settings:"Parametres",
+    ideas_title:"Idees d'investissement", ideas_sub:"Portefeuilles recommandes par l'equipe SAMAS", inv_title:"Investissements", inv_sub:"Idees, produits et fonds",
+    trend_title:"Tendances du jour", trend_sub:"Les actifs qui ont le plus bouge aujourd'hui", trend_gainers:"Plus fortes hausses", trend_losers:"Plus fortes baisses",
+    news_title:"Actualites", news_live:"CNBC en direct", news_demo:"Donnees demo", news_loading:"Chargement...", news_refresh:"Actualiser", news_empty:"Aucune actualite pour ce filtre",
+    on_title:"Obligations d'entreprise", on_sub:"Dette corporate argentine de haute qualite",
+    fondos_title:"Fonds communs", fondos_sub:"Fonds d'investissement professionnels",
+    bonos_title:"Obligations d'Etat", bonos_sub:"Dette publique argentine",
+    reports_title:"Rapports de recherche", reports_sub:"Analyses et rapports exclusifs de l'equipe SAMAS", featured:"A LA UNE", download_pdf:"Telecharger le PDF", download:"Telecharger", pages:"pages",
+    market_no_results:"Aucun resultat",
+    order_history:"Historique", no_orders:"Vous n'avez encore rien negocie", executed:"Executee",
+    open_devices:"Appareils connectes", remote_logout:"Fermer toutes les autres sessions", device_active:"ACTIF", device_active_now:"appareil actif maintenant",
+  },
+  de: {
+    portfolio:"Portfolio", mercado:"Markt", noticias:"Nachrichten", inversiones:"Anlagen", ordenes:"Auftrage", bonos:"Anleihen", reportes:"Berichte",
+    search:"Asset suchen...", buy:"Kaufen", sell:"Verkaufen", cancel:"Abbrechen", confirm:"Bestatigen", close:"Schliessen", edit:"Bearbeiten", save:"Speichern", activate:"Aktivieren", delete:"Loschen", back:"Zuruck", next:"Weiter", skip:"Uberspringen", finish:"Fertig",
+    total_portfolio:"Gesamtportfolio", invested:"Investiert", gain:"Gewinn", available:"Verfugbar", distribution:"Verteilung", positions:"Positionen",
+    categories:"Kategorien", all:"Alle", stocks:"Aktien",
+    profile:"Profil", dark_mode:"Dunkler Modus", light_mode:"Heller Modus", dark_mode_sub:"Zum dunklen Thema wechseln", light_mode_sub:"Zum hellen Thema wechseln", devices:"Gerate", devices_sub:"4 aktive Sitzungen", tutorial:"Tutorial ansehen", tutorial_sub:"App-Rundgang", twofa:"2FA-Authentifizierung", twofa_sub:"Empfohlen - Erhoht die Sicherheit", twofa_active:"Aktiviert - Authenticator-App", logout:"Abmelden", active_session:"Aktive Sitzung", language:"Sprache",
+    settings:"Einstellungen",
+    ideas_title:"Anlageideen", ideas_sub:"Vom SAMAS-Team empfohlene Portfolios", inv_title:"Anlagen", inv_sub:"Ideen, Produkte und Fonds",
+    trend_title:"Trends des Tages", trend_sub:"Die Werte mit der starksten Bewegung heute", trend_gainers:"Top-Gewinner", trend_losers:"Top-Verlierer",
+    news_title:"Nachrichten", news_live:"CNBC live", news_demo:"Demo-Daten", news_loading:"Wird geladen...", news_refresh:"Aktualisieren", news_empty:"Keine Nachrichten fur diesen Filter",
+    on_title:"Unternehmensanleihen", on_sub:"Hochwertige argentinische Unternehmensschulden",
+    fondos_title:"Investmentfonds", fondos_sub:"Professionelle Investmentfonds",
+    bonos_title:"Staatsanleihen", bonos_sub:"Argentinische Staatsschulden",
+    reports_title:"Research-Berichte", reports_sub:"Exklusive Analysen und Berichte des SAMAS-Teams", featured:"EMPFOHLEN", download_pdf:"PDF herunterladen", download:"Herunterladen", pages:"Seiten",
+    market_no_results:"Keine Ergebnisse",
+    order_history:"Verlauf", no_orders:"Sie haben noch nichts gehandelt", executed:"Ausgefuhrt",
+    open_devices:"Verbundene Gerate", remote_logout:"Alle anderen Sitzungen schliessen", device_active:"AKTIV", device_active_now:"Gerat gerade aktiv",
+  },
+  zh: {
+    portfolio:"投资组合", mercado:"市场", noticias:"新闻", inversiones:"投资", ordenes:"订单", bonos:"债券", reportes:"报告",
+    search:"搜索资产...", buy:"买入", sell:"卖出", cancel:"取消", confirm:"确认", close:"关闭", edit:"编辑", save:"保存", activate:"启用", delete:"删除", back:"返回", next:"下一步", skip:"跳过", finish:"完成",
+    total_portfolio:"总资产", invested:"已投资", gain:"收益", available:"可用", distribution:"分布", positions:"持仓",
+    categories:"分类", all:"全部", stocks:"股票",
+    profile:"个人资料", dark_mode:"深色模式", light_mode:"浅色模式", dark_mode_sub:"切换到深色主题", light_mode_sub:"切换到浅色主题", devices:"设备", devices_sub:"4 个活动会话", tutorial:"查看教程", tutorial_sub:"应用导览", twofa:"双重认证", twofa_sub:"推荐 - 提升安全性", twofa_active:"已启用 - 身份验证器应用", logout:"退出登录", active_session:"活动会话", language:"语言",
+    settings:"设置",
+    ideas_title:"投资想法", ideas_sub:"SAMAS 团队推荐的投资组合", inv_title:"投资", inv_sub:"想法、产品和基金",
+    trend_title:"今日趋势", trend_sub:"今天波动最大的资产", trend_gainers:"涨幅榜", trend_losers:"跌幅榜",
+    news_title:"新闻", news_live:"CNBC 直播", news_demo:"演示数据", news_loading:"加载中...", news_refresh:"刷新", news_empty:"此筛选下暂无新闻",
+    on_title:"公司债", on_sub:"阿根廷高质量公司债",
+    fondos_title:"共同基金", fondos_sub:"专业投资基金",
+    bonos_title:"主权债", bonos_sub:"阿根廷公共债务",
+    reports_title:"研究报告", reports_sub:"SAMAS 团队独家分析与报告", featured:"精选", download_pdf:"下载 PDF", download:"下载", pages:"页",
+    market_no_results:"无结果",
+    order_history:"历史", no_orders:"您还没有交易过", executed:"已执行",
+    open_devices:"已连接的设备", remote_logout:"关闭所有其他会话", device_active:"活跃", device_active_now:"设备当前在线",
+  },
+  ru: {
+    portfolio:"Портфель", mercado:"Рынок", noticias:"Новости", inversiones:"Инвестиции", ordenes:"Ордера", bonos:"Облигации", reportes:"Отчеты",
+    search:"Поиск актива...", buy:"Купить", sell:"Продать", cancel:"Отмена", confirm:"Подтвердить", close:"Закрыть", edit:"Изменить", save:"Сохранить", activate:"Активировать", delete:"Удалить", back:"Назад", next:"Далее", skip:"Пропустить", finish:"Готово",
+    total_portfolio:"Общий портфель", invested:"Вложено", gain:"Прибыль", available:"Доступно", distribution:"Распределение", positions:"Позиции",
+    categories:"Категории", all:"Все", stocks:"Акции",
+    profile:"Профиль", dark_mode:"Темная тема", light_mode:"Светлая тема", dark_mode_sub:"Переключить на темную тему", light_mode_sub:"Переключить на светлую тему", devices:"Устройства", devices_sub:"4 активные сессии", tutorial:"Посмотреть обучение", tutorial_sub:"Обзор приложения", twofa:"Двухфакторная аутентификация", twofa_sub:"Рекомендуется - повышает безопасность", twofa_active:"Включено - Authenticator App", logout:"Выйти", active_session:"Активная сессия", language:"Язык",
+    settings:"Настройки",
+    ideas_title:"Инвестиционные идеи", ideas_sub:"Портфели, рекомендованные командой SAMAS", inv_title:"Инвестиции", inv_sub:"Идеи, продукты и фонды",
+    trend_title:"Тренды дня", trend_sub:"Активы с наибольшим движением сегодня", trend_gainers:"Лидеры роста", trend_losers:"Лидеры падения",
+    news_title:"Новости", news_live:"CNBC в прямом эфире", news_demo:"Демо-данные", news_loading:"Загрузка...", news_refresh:"Обновить", news_empty:"Нет новостей по этому фильтру",
+    on_title:"Корпоративные облигации", on_sub:"Качественный корпоративный долг Аргентины",
+    fondos_title:"Инвестиционные фонды", fondos_sub:"Профессиональные инвестиционные фонды",
+    bonos_title:"Государственные облигации", bonos_sub:"Государственный долг Аргентины",
+    reports_title:"Аналитические отчеты", reports_sub:"Эксклюзивные анализы и отчеты команды SAMAS", featured:"ВЫБОР", download_pdf:"Скачать PDF", download:"Скачать", pages:"стр.",
+    market_no_results:"Нет результатов",
+    order_history:"История", no_orders:"Вы еще не торговали", executed:"Исполнено",
+    open_devices:"Подключенные устройства", remote_logout:"Закрыть все другие сессии", device_active:"АКТИВНО", device_active_now:"устройство активно сейчас",
+  },
+  ja: {
+    portfolio:"ポートフォリオ", mercado:"マーケット", noticias:"ニュース", inversiones:"投資", ordenes:"注文", bonos:"債券", reportes:"レポート",
+    search:"銘柄を検索...", buy:"買い", sell:"売り", cancel:"キャンセル", confirm:"確認", close:"閉じる", edit:"編集", save:"保存", activate:"有効化", delete:"削除", back:"戻る", next:"次へ", skip:"スキップ", finish:"完了",
+    total_portfolio:"総資産", invested:"投資額", gain:"損益", available:"利用可能", distribution:"配分", positions:"保有銘柄",
+    categories:"カテゴリー", all:"すべて", stocks:"株式",
+    profile:"プロフィール", dark_mode:"ダークモード", light_mode:"ライトモード", dark_mode_sub:"ダークテーマに切り替え", light_mode_sub:"ライトテーマに切り替え", devices:"デバイス", devices_sub:"4 件のアクティブセッション", tutorial:"チュートリアルを見る", tutorial_sub:"アプリの案内", twofa:"2 段階認証", twofa_sub:"推奨 - セキュリティを強化", twofa_active:"有効 - Authenticator アプリ", logout:"ログアウト", active_session:"アクティブなセッション", language:"言語",
+    settings:"設定",
+    ideas_title:"投資アイデア", ideas_sub:"SAMAS チームのおすすめポートフォリオ", inv_title:"投資", inv_sub:"アイデア・商品・ファンド",
+    trend_title:"今日のトレンド", trend_sub:"本日もっとも動いた銘柄", trend_gainers:"値上がり率", trend_losers:"値下がり率",
+    news_title:"ニュース", news_live:"CNBC ライブ", news_demo:"デモデータ", news_loading:"読み込み中...", news_refresh:"更新", news_empty:"このフィルターに該当するニュースはありません",
+    on_title:"社債", on_sub:"アルゼンチンの高品質な社債",
+    fondos_title:"投資信託", fondos_sub:"プロ向け投資ファンド",
+    bonos_title:"国債", bonos_sub:"アルゼンチン国債",
+    reports_title:"リサーチレポート", reports_sub:"SAMAS チームによる独占分析とレポート", featured:"注目", download_pdf:"PDF をダウンロード", download:"ダウンロード", pages:"ページ",
+    market_no_results:"該当なし",
+    order_history:"履歴", no_orders:"まだ取引がありません", executed:"約定済み",
+    open_devices:"接続中のデバイス", remote_logout:"他のすべてのセッションを閉じる", device_active:"アクティブ", device_active_now:"現在アクティブ",
+  },
+  he: {
+    portfolio:"תיק", mercado:"שוק", noticias:"חדשות", inversiones:"השקעות", ordenes:"פקודות", bonos:"אגרות חוב", reportes:"דוחות",
+    search:"חפש נכס...", buy:"קנה", sell:"מכור", cancel:"בטל", confirm:"אשר", close:"סגור", edit:"ערוך", save:"שמור", activate:"הפעל", delete:"מחק", back:"חזור", next:"הבא", skip:"דלג", finish:"סיום",
+    total_portfolio:"תיק כולל", invested:"הושקע", gain:"רווח", available:"זמין", distribution:"התפלגות", positions:"פוזיציות",
+    categories:"קטגוריות", all:"הכל", stocks:"מניות",
+    profile:"פרופיל", dark_mode:"מצב כהה", light_mode:"מצב בהיר", dark_mode_sub:"עבור לערכה כהה", light_mode_sub:"עבור לערכה בהירה", devices:"מכשירים", devices_sub:"4 הפעלות פעילות", tutorial:"צפה במדריך", tutorial_sub:"סיור באפליקציה", twofa:"אימות דו-שלבי", twofa_sub:"מומלץ - משפר אבטחה", twofa_active:"מופעל - אפליקציית Authenticator", logout:"התנתק", active_session:"הפעלה פעילה", language:"שפה",
+    settings:"הגדרות",
+    ideas_title:"רעיונות השקעה", ideas_sub:"תיקים מומלצים על ידי צוות SAMAS", inv_title:"השקעות", inv_sub:"רעיונות, מוצרים וקרנות",
+    trend_title:"מגמות היום", trend_sub:"הנכסים שזזו הכי הרבה היום", trend_gainers:"עליות מובילות", trend_losers:"ירידות מובילות",
+    news_title:"חדשות", news_live:"CNBC בשידור חי", news_demo:"נתוני דמו", news_loading:"טוען...", news_refresh:"רענן", news_empty:"אין חדשות למסנן זה",
+    on_title:"אגרות חוב קונצרניות", on_sub:"חוב קונצרני ארגנטינאי באיכות גבוהה",
+    fondos_title:"קרנות נאמנות", fondos_sub:"קרנות השקעה מקצועיות",
+    bonos_title:"אגרות חוב ממשלתיות", bonos_sub:"חוב ציבורי ארגנטינאי",
+    reports_title:"דוחות מחקר", reports_sub:"ניתוחים ודוחות בלעדיים של צוות SAMAS", featured:"מומלץ", download_pdf:"הורד PDF", download:"הורד", pages:"עמודים",
+    market_no_results:"אין תוצאות",
+    order_history:"היסטוריה", no_orders:"עדיין לא ביצעת עסקה", executed:"בוצעה",
+    open_devices:"מכשירים מחוברים", remote_logout:"סגור את כל שאר ההפעלות", device_active:"פעיל", device_active_now:"מכשיר פעיל כרגע",
+  },
+  ar: {
+    portfolio:"المحفظة", mercado:"السوق", noticias:"الأخبار", inversiones:"الاستثمارات", ordenes:"الأوامر", bonos:"السندات", reportes:"التقارير",
+    search:"ابحث عن أصل...", buy:"شراء", sell:"بيع", cancel:"إلغاء", confirm:"تأكيد", close:"إغلاق", edit:"تعديل", save:"حفظ", activate:"تفعيل", delete:"حذف", back:"رجوع", next:"التالي", skip:"تخطي", finish:"إنهاء",
+    total_portfolio:"إجمالي المحفظة", invested:"المُستثمر", gain:"الربح", available:"المتاح", distribution:"التوزيع", positions:"المراكز",
+    categories:"الفئات", all:"الكل", stocks:"الأسهم",
+    profile:"الملف الشخصي", dark_mode:"الوضع الداكن", light_mode:"الوضع الفاتح", dark_mode_sub:"التبديل إلى السمة الداكنة", light_mode_sub:"التبديل إلى السمة الفاتحة", devices:"الأجهزة", devices_sub:"4 جلسات نشطة", tutorial:"عرض البرنامج التعليمي", tutorial_sub:"جولة في التطبيق", twofa:"المصادقة الثنائية", twofa_sub:"موصى به - يعزز الأمان", twofa_active:"مفعّل - تطبيق المصادقة", logout:"تسجيل الخروج", active_session:"جلسة نشطة", language:"اللغة",
+    settings:"الإعدادات",
+    ideas_title:"أفكار استثمارية", ideas_sub:"محافظ موصى بها من فريق SAMAS", inv_title:"الاستثمارات", inv_sub:"أفكار ومنتجات وصناديق",
+    trend_title:"اتجاهات اليوم", trend_sub:"الأصول الأكثر تحركاً اليوم", trend_gainers:"أكبر الرابحين", trend_losers:"أكبر الخاسرين",
+    news_title:"الأخبار", news_live:"CNBC مباشر", news_demo:"بيانات تجريبية", news_loading:"جارٍ التحميل...", news_refresh:"تحديث", news_empty:"لا توجد أخبار لهذا الفلتر",
+    on_title:"السندات الشركات", on_sub:"ديون شركات أرجنتينية عالية الجودة",
+    fondos_title:"صناديق الاستثمار", fondos_sub:"صناديق استثمار احترافية",
+    bonos_title:"السندات السيادية", bonos_sub:"ديون عامة أرجنتينية",
+    reports_title:"تقارير الأبحاث", reports_sub:"تحليلات وتقارير حصرية من فريق SAMAS", featured:"مميز", download_pdf:"تنزيل PDF", download:"تنزيل", pages:"صفحات",
+    market_no_results:"لا توجد نتائج",
+    order_history:"السجل", no_orders:"لم تتداول بعد", executed:"مُنفّذ",
+    open_devices:"الأجهزة المتصلة", remote_logout:"إغلاق جميع الجلسات الأخرى", device_active:"نشط", device_active_now:"جهاز نشط الآن",
   },
 };
 
@@ -3411,6 +3567,16 @@ export default function SAMASApp() {
   useEffect(() => { saveAnthropicKey(anthropicKey); }, [anthropicKey]);
   useEffect(() => { saveAnthropicModel(anthropicModel); }, [anthropicModel]);
   const setAnthropicModel = (m) => setAnthropicModelState(m || ANTHROPIC_DEFAULT_MODEL);
+
+  // RTL support — flip the document direction for Hebrew / Arabic so that
+  // text, form fields, and mirrored icons read naturally. Everything else
+  // is positioned with flexbox which adapts to dir="rtl" automatically.
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.dir = RTL_LANGS.includes(lang) ? "rtl" : "ltr";
+      document.documentElement.lang = lang;
+    }
+  }, [lang]);
 
   useEffect(() => {
     const handler = () => setShowTutorial(true);
