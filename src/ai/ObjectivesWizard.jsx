@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { callObjectives, callExpenseParser, fvAnnuity, hasAnthropicKey } from "./client.js";
+import { InfoBadge } from "./glossary.jsx";
 
 // ============================================================
 // OBJETIVOS WIZARD (AI) — spec v2
@@ -104,6 +105,11 @@ export function ObjectivesWizard({ onClose, onSave, savedPlan, C }) {
     if (targetAmount <= 0) { setErr("El objetivo debe ser mayor a 0"); return; }
     setBusy(true);
     setErr(null);
+    // Advance to step 4 immediately so the skeleton renders while we wait
+    // for Claude — gives the user visual anticipation instead of a frozen
+    // button. If the call fails we bounce back to step 3.
+    setPlan(null);
+    setStep(4);
     try {
       const p = await callObjectives({
         monthlyIncome,
@@ -116,13 +122,13 @@ export function ObjectivesWizard({ onClose, onSave, savedPlan, C }) {
       // Stamp the plan so we can show "hace X dias" on the progress card.
       const stamped = { ...p, _savedAt: Date.now() };
       setPlan(stamped);
-      setStep(4);
       // Persist automatically so the user doesn't lose the plan if they
       // close without hitting "Cerrar" (most people just swipe away).
       if (onSave) onSave(stamped);
     } catch (e) {
       if (!mountedRef.current) return;
       setErr(e?.message || "Error al generar el plan");
+      setStep(3);
     } finally {
       if (mountedRef.current) setBusy(false);
     }
@@ -227,6 +233,9 @@ export function ObjectivesWizard({ onClose, onSave, savedPlan, C }) {
               C={C}
             />
           )}
+          {step === 4 && !plan && (
+            <PlanSkeleton C={C}/>
+          )}
           {step === 4 && plan && (
             <PlanView
               plan={plan}
@@ -272,11 +281,19 @@ export function ObjectivesWizard({ onClose, onSave, savedPlan, C }) {
           )}
           {step === 4 && (
             <>
-              <button onClick={reset} style={{ flex:1, background:C.creamDk, color:C.textMd, border:"1.5px solid "+C.border, borderRadius:12, padding:"11px", fontWeight:600, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
+              <button
+                onClick={reset}
+                disabled={busy}
+                style={{ flex:1, background:C.creamDk, color: busy ? C.textLt : C.textMd, border:"1.5px solid "+C.border, borderRadius:12, padding:"11px", fontWeight:600, fontSize:13, cursor: busy ? "not-allowed" : "pointer", fontFamily:"inherit", opacity: busy ? 0.6 : 1 }}
+              >
                 Regenerar
               </button>
-              <button onClick={onClose} style={{ flex:2, background:C.accent, color:"#fff", border:"none", borderRadius:12, padding:"11px", fontWeight:700, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
-                Listo
+              <button
+                onClick={onClose}
+                disabled={busy}
+                style={{ flex:2, background: busy ? C.creamDk : C.accent, color: busy ? C.textLt : "#fff", border:"none", borderRadius:12, padding:"11px", fontWeight:700, fontSize:13, cursor: busy ? "not-allowed" : "pointer", fontFamily:"inherit" }}
+              >
+                {busy ? "Pensando..." : "Listo"}
               </button>
             </>
           )}
@@ -586,6 +603,7 @@ function PlanView({ plan, invest, target, horizon, currency = "ARS", C }) {
                 <div style={{ width:9, height:9, borderRadius:2, background: CATEGORY_COLORS[a.name] || "#6B7280" }}/>
                 <span style={{ fontSize:11, color:C.text, fontWeight:600 }}>{a.name}</span>
                 <span style={{ fontSize:11, color:C.textMd, fontFamily:"monospace" }}>{a.percent}%</span>
+                <InfoBadge term={a.name} C={C}/>
               </div>
             ))}
           </div>
@@ -597,6 +615,76 @@ function PlanView({ plan, invest, target, horizon, currency = "ARS", C }) {
         {plan.disclaimer || "Esto es educativo, no asesoramiento financiero."}
       </div>
     </div>
+  );
+}
+
+// Skeleton state rendered while Claude is computing the plan. Mirrors the
+// structure of PlanView so the layout doesn't jump when the real data
+// lands — same hero card, same stat grid, same allocation strip.
+function PlanSkeleton({ C }) {
+  const sk = (style = {}) => (
+    <div className="samas-skeleton" style={{ height:14, ...style }}/>
+  );
+  return (
+    <div className="samas-fade">
+      <div style={{ background: C.accent + "18", border: "1px solid " + C.accent + "55", borderRadius: 14, padding: "14px" }}>
+        <div style={{ fontSize:11, fontWeight:700, color:C.accent, letterSpacing:1, textTransform:"uppercase", marginBottom:6, display:"flex", alignItems:"center", gap:8 }}>
+          <span>Armando tu plan</span>
+          <DotsSpinner C={C}/>
+        </div>
+        {sk({ width: "50%", height: 22, marginBottom: 10 })}
+        {sk({ width: "100%", marginBottom: 5 })}
+        {sk({ width: "82%", marginBottom: 5 })}
+        {sk({ width: "65%" })}
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:12 }}>
+        <div style={{ background:C.card, border:"1px solid "+C.border, borderRadius:14, padding:"11px 13px" }}>
+          {sk({ width: "55%", height: 8, marginBottom: 8 })}
+          {sk({ width: "70%", height: 18 })}
+        </div>
+        <div style={{ background:C.card, border:"1px solid "+C.border, borderRadius:14, padding:"11px 13px" }}>
+          {sk({ width: "55%", height: 8, marginBottom: 8 })}
+          {sk({ width: "80%", height: 18 })}
+        </div>
+      </div>
+
+      <div style={{ marginTop:12, background:C.card, border:"1px solid "+C.border, borderRadius:14, padding:"12px 14px" }}>
+        {sk({ width: "30%", height: 10, marginBottom: 10 })}
+        {sk({ width: "100%", height: 8, marginBottom: 8 })}
+        {sk({ width: "90%", height: 12 })}
+      </div>
+
+      <div style={{ marginTop:14 }}>
+        {sk({ width: "40%", height: 10, marginBottom: 8 })}
+        {sk({ width: "100%", height: 12, marginBottom: 8 })}
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+          {[62, 78, 90, 110, 72, 88].map((w, i) => (
+            <div key={i} className="samas-skeleton" style={{ width: w, height: 22, borderRadius: 10 }}/>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DotsSpinner({ C }) {
+  return (
+    <span style={{ display: "inline-flex", gap: 3 }}>
+      {[0, 1, 2].map(i => (
+        <span
+          key={i}
+          style={{
+            width: 5, height: 5, borderRadius: 3,
+            background: C.accent,
+            animation: `samasDot 1.1s infinite ease-in-out`,
+            animationDelay: (i * 0.14) + "s",
+            display: "inline-block",
+          }}
+        />
+      ))}
+      <style>{`@keyframes samasDot { 0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }`}</style>
+    </span>
   );
 }
 

@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 // projection + income/expenses breakdown + strategy pick. No general chat,
 // no sentiment analysis — per product spec the AI's only job is that flow.
 import { ObjectivesWizard } from "./ai/ObjectivesWizard.jsx";
+import { InfoBadge } from "./ai/glossary.jsx";
 import {
   loadAnthropicKey, saveAnthropicKey,
   loadAnthropicModel, saveAnthropicModel,
@@ -1053,7 +1054,10 @@ function FXStrip({ C, totalARS }) {
           <div style={{ display:"flex", gap:8 }}>
             {FX.map(fx => (
               <div key={fx.label} style={{ flex:1, background:C.creamDk, borderRadius:10, padding:"8px 10px", textAlign:"center" }}>
-                <div style={{ fontSize:9, color:C.textLt, fontWeight:600, marginBottom:3 }}>USD {fx.label}</div>
+                <div style={{ fontSize:9, color:C.textLt, fontWeight:600, marginBottom:3, display:"flex", alignItems:"center", justifyContent:"center", gap:2 }}>
+                  <span>USD {fx.label}</span>
+                  <InfoBadge term={fx.label === "OF." ? "Oficial" : fx.label} C={C}/>
+                </div>
                 <div style={{ fontSize:14, fontWeight:800, color:C.accent, fontFamily:"monospace" }}>
                   u$s{fN(Math.round(totalARS / fx.value))}
                 </div>
@@ -1650,7 +1654,9 @@ function PageON({ C, showUSD, lang }) {
                 <div style={{ fontSize:20, fontWeight:800, color:C.text }}>{selected.name}</div>
                 <div style={{ fontSize:12, color:C.textMd, marginTop:2 }}>{selected.issuer}</div>
               </div>
-              <button onClick={() => setSelected(null)} style={{ background:"transparent", border:"none", fontSize:20, color:C.textLt, cursor:"pointer" }}>x</button>
+              <button onClick={() => setSelected(null)} aria-label="Cerrar" style={{ background:"transparent", border:"none", padding:4, color:C.textLt, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
               {[
@@ -1729,7 +1735,9 @@ function PageFondos({ C, lang }) {
                 <div style={{ fontSize:20, fontWeight:800, color:C.text }}>{selected.name}</div>
                 <div style={{ fontSize:12, color:C.textMd, marginTop:2 }}>{selected.manager} - {selected.type}</div>
               </div>
-              <button onClick={() => setSelected(null)} style={{ background:"transparent", border:"none", fontSize:20, color:C.textLt, cursor:"pointer" }}>x</button>
+              <button onClick={() => setSelected(null)} aria-label="Cerrar" style={{ background:"transparent", border:"none", padding:4, color:C.textLt, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:12 }}>
               {[
@@ -1810,19 +1818,24 @@ function PageBonos({ C, showUSD, lang }) {
                 </div>
                 <div style={{ fontSize:13, color:C.textMd }}>{selected.name}</div>
               </div>
-              <button onClick={() => setSelected(null)} style={{ background:"transparent", border:"none", fontSize:20, color:C.textLt, cursor:"pointer" }}>x</button>
+              <button onClick={() => setSelected(null)} aria-label="Cerrar" style={{ background:"transparent", border:"none", padding:4, color:C.textLt, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
               {[
-                ["Precio", selected.currency==="USD" ? "u$s"+selected.price : "$"+fN(Math.round(selected.price*(showUSD?1:1247.5)))],
-                ["TIR", selected.ytm ? selected.ytm+"%" : "N/A"],
-                ["Duration", selected.duration+" anos"],
-                ["Vencimiento", selected.maturity.slice(0,7)],
-                ["Rating", selected.rating],
-                ["Paridad", selected.paridad ? selected.paridad+"%" : "N/A"],
-              ].map(([l,v]) => (
+                ["Precio", selected.currency==="USD" ? "u$s"+selected.price : "$"+fN(Math.round(selected.price*(showUSD?1:1247.5))), null],
+                ["TIR", selected.ytm ? selected.ytm+"%" : "N/A", "YTM"],
+                ["Duration", selected.duration+" años", "Duration"],
+                ["Vencimiento", selected.maturity.slice(0,7), null],
+                ["Rating", selected.rating, null],
+                ["Paridad", selected.paridad ? selected.paridad+"%" : "N/A", "Paridad"],
+              ].map(([l, v, term]) => (
                 <div key={l} style={{ background:C.card, borderRadius:10, border:"1px solid "+C.border, padding:"9px 12px" }}>
-                  <div style={{ fontSize:9, color:C.textLt, fontWeight:600, marginBottom:2 }}>{l}</div>
+                  <div style={{ fontSize:9, color:C.textLt, fontWeight:600, marginBottom:2, display:"flex", alignItems:"center" }}>
+                    {l}
+                    {term && <InfoBadge term={term} C={C}/>}
+                  </div>
                   <div style={{ fontSize:13, fontWeight:700, color:C.text }}>{v}</div>
                 </div>
               ))}
