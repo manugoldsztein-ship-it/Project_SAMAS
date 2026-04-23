@@ -4040,6 +4040,8 @@ function DevicesPage({ onBack, C }) {
 
 function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, finnhubKey, setFinnhubKey, finnhub, emailjsCfg, setEmailjsCfg, anthropicKey, setAnthropicKey, anthropicModel, setAnthropicModel, C }) {
   useEscapeKey(onClose);
+  // In-app confirm for destructive actions like "reset demo data".
+  const { confirm, ConfirmHost } = useConfirm(C);
   const [confirm, setConfirm]       = useState(false);
   // Two-view panel: root (user card + dark mode + Settings row + logout)
   // vs. settings subpage (back arrow + all the expandable integrations).
@@ -4480,6 +4482,44 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
 
+        {/* Reset all SAMAS data. Useful before a demo recording — single
+            click, confirmed, then hard reload. Only wipes keys that start
+            with "samas_" so unrelated localStorage usage is left alone. */}
+        <button
+          onClick={async () => {
+            const ok = await confirm({
+              title: "Resetear datos del simulador?",
+              body: "Borra holdings, órdenes, balance, watchlists, plan IA, historial del portafolio, aporte recurrente y config guardada (Finnhub, EmailJS, Anthropic). Después recarga la app. No hay vuelta atrás.",
+              confirmLabel: "Sí, resetear",
+              cancelLabel: "Cancelar",
+              danger: true,
+            });
+            if (!ok) return;
+            try {
+              Object.keys(localStorage)
+                .filter(k => k.startsWith("samas_") || k === "samas_user")
+                .forEach(k => localStorage.removeItem(k));
+            } catch {}
+            location.reload();
+          }}
+          style={{ width:"100%", background:C.red+"14", border:"1.5px solid "+C.red+"44", borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}
+        >
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ width:36, height:36, borderRadius:10, background:C.red+"22", display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6l-2 14H7L5 6"/>
+                <path d="M10 11v6M14 11v6"/>
+              </svg>
+            </div>
+            <div>
+              <div style={{ fontSize:13, fontWeight:600, color:C.red }}>Resetear datos del simulador</div>
+              <div style={{ fontSize:11, color:C.textLt }}>Borra holdings, órdenes, watchlists, config</div>
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+
         <button onClick={() => setShow2FA(v => !v)} style={{ width:"100%", background: twoFAEnabled ? C.green+"18" : C.creamDk, border:"1.5px solid "+(twoFAEnabled?C.green+"44":C.border), borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <div style={{ width:36, height:36, borderRadius:10, background:(twoFAEnabled?C.green:C.accent)+"22", display:"flex", alignItems:"center", justifyContent:"center" }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={twoFAEnabled?C.green:C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
@@ -4527,6 +4567,7 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
           </div>
         )}
       </div>
+      <ConfirmHost/>
     </div>
   );
 }
