@@ -1745,7 +1745,7 @@ function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatch
         </div>
       </div>
       {showDeposit && (
-        <DepositModal balance={balance} onClose={() => setShowDeposit(false)} onConfirm={(amt, method) => onDeposit && onDeposit(amt, method)} C={C}/>
+        <DepositModal user={DEMO_USER} onClose={() => setShowDeposit(false)} onSimulate={(amt, method) => onDeposit && onDeposit(amt, method)} C={C}/>
       )}
       <div style={{ margin:"12px 14px 0", background:C.card, borderRadius:14, border:"1px solid "+C.border, padding:"12px 14px" }}>
         <div style={{ fontSize:11, fontWeight:700, color:C.textMd, marginBottom:8 }}>{t("distribution")}</div>
@@ -2249,137 +2249,146 @@ function genCode() {
 }
 
 // ============================================================
-// DEPOSIT MODAL (demo — no real payment gateway)
+// DEPOSIT MODAL (info-only — user transfers from their bank)
 // ============================================================
-function DepositModal({ balance, onClose, onConfirm, C }) {
-  const [amount, setAmount]   = useState("");
-  const [method, setMethod]   = useState("transfer");
-  const [processing, setProcessing] = useState(false);
-  const amt = parseInt(amount.replace(/\D/g, ""), 10) || 0;
-  const MIN = 1000;
-  const valid = amt >= MIN;
+// SAMAS doesn't set the deposit amount. The user chooses it in their own
+// bank / MP / wallet. This modal only shows destination details (CBU,
+// alias, address) and a unique reference code so an eventual backend can
+// match incoming transfers to this account.
+function DepositModal({ user, onClose, onSimulate, C }) {
+  const [method, setMethod] = useState("transfer");
+  const [copied, setCopied] = useState(null);
+  const [showSim, setShowSim] = useState(false);
+  const [simAmount, setSimAmount] = useState("");
+
+  // Reference code tied to the user — persists per-account, stable across
+  // sessions so the bank reference stays the same on repeat deposits.
+  const ref = "SAMAS-" + (user?.email || "demo").split("@")[0].toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6).padEnd(6, "X");
 
   const methods = [
-    { id: "transfer", label: "Transferencia bancaria", desc: "CBU / CVU · Acreditacion 24hs hábiles", badge: "Sin comision",
+    { id: "transfer", label: "Transferencia bancaria", desc: "Acreditacion ~minutos · Sin comision",
       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M3 12h18"/><path d="M12 2l3 6H9l3-6z"/></svg> },
-    { id: "mp",       label: "MercadoPago",            desc: "Débito / saldo en cuenta · Instantáneo", badge: "1.5% + IVA",
+    { id: "mp",       label: "MercadoPago",            desc: "Instantaneo · 1.5% + IVA",
       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg> },
-    { id: "crypto",   label: "Criptomonedas (USDT)",   desc: "Red TRC-20 · ~10 min de confirmación", badge: "0.5%",
+    { id: "crypto",   label: "USDT (TRC-20)",          desc: "~10 min confirmacion · 0.5%",
       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M8 10h8M8 14h8"/></svg> },
   ];
-  const selected = methods.find(m => m.id === method);
 
-  // Demo-only "account details" that would come from the selected gateway
   const details = {
     transfer: [
-      { label: "CBU",   value: "0000003100010012345678" },
-      { label: "Alias", value: "SAMAS.WALLET.DEMO" },
-      { label: "Titular", value: "SAMAS S.A. – CUIT 30-12345678-9" },
+      { label: "CBU",       value: "0000003100010012345678" },
+      { label: "Alias",     value: "SAMAS.WALLET.DEMO" },
+      { label: "Titular",   value: "SAMAS S.A." },
+      { label: "CUIT",      value: "30-12345678-9" },
+      { label: "Referencia", value: ref, note: "Incluí esta referencia en el concepto para que se asocie a tu cuenta" },
     ],
     mp: [
-      { label: "Link de pago", value: "mercadopago.com.ar/samas/wallet" },
+      { label: "Link",       value: "mercadopago.com.ar/samas/" + ref.toLowerCase() },
+      { label: "Alias MP",   value: "samas.wallet" },
+      { label: "Referencia", value: ref, note: "Se agrega automaticamente al link" },
     ],
     crypto: [
-      { label: "Address USDT",  value: "TR7NHqjeKQxGTCi8q8ZY4pL5SomeFakeAddress" },
-      { label: "Red",           value: "TRC-20 (solo USDT)" },
+      { label: "Address",    value: "TR7NHqjeKQxGTCi8q8ZY4pL5SomeFakeAddress" },
+      { label: "Red",        value: "TRC-20 (solo USDT)" },
+      { label: "Memo / Tag", value: ref, note: "Obligatorio — sin este memo no podemos identificar tu deposito" },
     ],
   };
 
-  const chips = [10000, 50000, 100000, 500000];
+  const copy = async (value, label) => {
+    try {
+      if (navigator?.clipboard?.writeText) await navigator.clipboard.writeText(value);
+      setCopied(label);
+      setTimeout(() => setCopied(null), 1500);
+    } catch {}
+  };
 
-  const confirm = () => {
-    if (!valid || processing) return;
-    setProcessing(true);
-    // Simulated latency so the button feels like it's actually hitting a payment API
-    setTimeout(() => {
-      onConfirm(amt, method);
-      setProcessing(false);
-      onClose();
-    }, 900);
+  const simAmt = parseInt(simAmount.replace(/\D/g, ""), 10) || 0;
+  const runSim = () => {
+    if (simAmt <= 0) return;
+    onSimulate(simAmt, method);
+    onClose();
   };
 
   return (
     <div style={{ position:"absolute", inset:0, zIndex:60, display:"flex", flexDirection:"column", background:"rgba(0,0,0,0.55)" }}>
-      <div onClick={processing ? undefined : onClose} style={{ flex:1 }}/>
+      <div onClick={onClose} style={{ flex:1 }}/>
       <div style={{ background:C.bg, borderRadius:"20px 20px 0 0", padding:"18px 18px 22px", maxHeight:"92vh", overflowY:"auto" }}>
         <div style={{ display:"flex", justifyContent:"center", marginBottom:14 }}><div style={{ width:36, height:4, background:C.border, borderRadius:2 }}/></div>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
           <div>
             <div style={{ fontSize:18, fontWeight:600, color:C.text, fontFamily:"Sora,sans-serif" }}>Depositar fondos</div>
-            <div style={{ fontSize:11, color:C.textLt, marginTop:2 }}>Saldo actual: <span style={{ color:C.text, fontWeight:600, fontFamily:"monospace" }}>${fN(balance)}</span></div>
+            <div style={{ fontSize:11, color:C.textLt, marginTop:2, lineHeight:1.4 }}>Transferi desde tu banco el monto que quieras.<br/>Se acredita automaticamente al recibirlo.</div>
           </div>
-          <button onClick={onClose} disabled={processing} style={{ background:C.creamDk, border:"none", borderRadius:10, width:32, height:32, display:"flex", alignItems:"center", justifyContent:"center", cursor: processing ? "not-allowed" : "pointer" }}>
+          <button onClick={onClose} style={{ background:C.creamDk, border:"none", borderRadius:10, width:32, height:32, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", flexShrink:0 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.textMd} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
 
-        {/* Amount input */}
-        <div style={{ background:C.card, border:"1.5px solid "+(valid?C.accent+"55":C.border), borderRadius:14, padding:"14px 16px", marginBottom:10, transition:"border 0.2s" }}>
-          <div style={{ fontSize:10, fontWeight:700, color:C.textLt, letterSpacing:1, marginBottom:4 }}>MONTO A DEPOSITAR</div>
-          <div style={{ display:"flex", alignItems:"baseline", gap:4 }}>
-            <span style={{ fontSize:26, fontWeight:700, color:C.textMd }}>$</span>
-            <input
-              value={amount ? fN(amt) : ""}
-              onChange={e => setAmount(e.target.value.replace(/\D/g, "").slice(0, 10))}
-              placeholder="0"
-              inputMode="numeric"
-              autoFocus
-              style={{ background:"transparent", border:"none", fontSize:26, fontWeight:700, color:C.text, outline:"none", width:"100%", fontFamily:"Sora,sans-serif", padding:0 }}
-            />
-          </div>
-          {amount && !valid && <div style={{ fontSize:11, color:C.red, marginTop:4 }}>Minimo ${fN(MIN)}</div>}
-        </div>
-
-        {/* Quick amount chips */}
-        <div style={{ display:"flex", gap:6, marginBottom:16, overflowX:"auto", paddingBottom:2 }}>
-          {chips.map(c => (
-            <button key={c} onClick={() => setAmount(String(c))}
-              style={{ background: amt === c ? C.accent : C.creamDk, color: amt === c ? "#fff" : C.textMd, border:"none", borderRadius:20, padding:"6px 14px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap", flexShrink:0 }}>
-              +${fN(c)}
-            </button>
-          ))}
-        </div>
-
-        {/* Method selector */}
-        <div style={{ fontSize:10, fontWeight:700, color:C.textLt, letterSpacing:1, marginBottom:8 }}>METODO DE PAGO</div>
-        <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:14 }}>
+        {/* Method selector — pills */}
+        <div style={{ display:"flex", gap:6, marginBottom:14, overflowX:"auto" }}>
           {methods.map(m => (
             <button key={m.id} onClick={() => setMethod(m.id)}
-              style={{ background: m.id === method ? C.accent + "18" : C.card, border:"1.5px solid "+(m.id === method ? C.accent + "66" : C.border), borderRadius:12, padding:"12px 14px", display:"flex", alignItems:"center", gap:12, cursor:"pointer", fontFamily:"inherit", textAlign:"left", color:C.text }}>
-              <div style={{ width:36, height:36, borderRadius:10, background: m.id === method ? C.accent + "33" : C.creamDk, display:"flex", alignItems:"center", justifyContent:"center", color: m.id === method ? C.accent : C.textMd, flexShrink:0 }}>{m.icon}</div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-                  <span style={{ fontSize:13, fontWeight:600, color:C.text }}>{m.label}</span>
-                  <span style={{ fontSize:9, fontWeight:700, color:C.accent, background:C.accent+"22", borderRadius:5, padding:"1px 6px" }}>{m.badge}</span>
-                </div>
-                <div style={{ fontSize:11, color:C.textLt, marginTop:2 }}>{m.desc}</div>
-              </div>
-              <div style={{ width:18, height:18, borderRadius:"50%", border:"1.5px solid "+(m.id === method ? C.accent : C.border), display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                {m.id === method && <div style={{ width:10, height:10, borderRadius:"50%", background:C.accent }}/>}
-              </div>
+              style={{ background: m.id === method ? C.accent : C.creamDk, color: m.id === method ? "#fff" : C.textMd, border:"none", borderRadius:20, padding:"8px 14px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap", flexShrink:0, display:"flex", alignItems:"center", gap:6 }}>
+              <span style={{ color: m.id === method ? "#fff" : C.textMd, display:"flex", alignItems:"center" }}>{m.icon}</span>
+              {m.label}
             </button>
           ))}
         </div>
+        <div style={{ fontSize:11, color:C.textLt, marginBottom:12 }}>{methods.find(m => m.id === method)?.desc}</div>
 
-        {/* Destination details */}
-        <div style={{ background:C.creamDk, borderRadius:12, padding:"12px 14px", marginBottom:16 }}>
-          <div style={{ fontSize:10, fontWeight:700, color:C.textLt, letterSpacing:1, marginBottom:6 }}>DATOS PARA EL {method === "transfer" ? "DEPOSITO" : method === "mp" ? "PAGO" : "ENVIO"}</div>
-          {details[method].map(d => (
-            <div key={d.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4, gap:10 }}>
-              <span style={{ fontSize:11, color:C.textMd, flexShrink:0 }}>{d.label}</span>
-              <span style={{ fontSize:11, fontFamily:"monospace", fontWeight:600, color:C.text, textAlign:"right", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{d.value}</span>
+        {/* Destination details with per-row copy */}
+        <div style={{ background:C.card, borderRadius:14, border:"1px solid "+C.border, padding:"6px 0", marginBottom:14 }}>
+          {details[method].map((d, i) => (
+            <div key={d.label} style={{ padding:"10px 14px", borderBottom: i < details[method].length - 1 ? "1px solid "+C.border : "none" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:10 }}>
+                <span style={{ fontSize:11, color:C.textMd, flexShrink:0 }}>{d.label}</span>
+                <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
+                  <span style={{ fontSize:12, fontFamily:"monospace", fontWeight:600, color:C.text, textAlign:"right", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{d.value}</span>
+                  <button onClick={() => copy(d.value, d.label)} title="Copiar" style={{ background:"transparent", border:"1px solid "+C.border, borderRadius:7, padding:"4px 6px", cursor:"pointer", display:"flex", alignItems:"center", flexShrink:0 }}>
+                    {copied === d.label ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.textMd} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+              {d.note && <div style={{ fontSize:10, color:C.textLt, marginTop:4, lineHeight:1.5 }}>{d.note}</div>}
             </div>
           ))}
         </div>
 
-        {/* CTA */}
-        <button onClick={confirm} disabled={!valid || processing}
-          style={{ width:"100%", background: valid ? C.accent : C.creamDk, color: valid ? "#fff" : C.textLt, border:"none", borderRadius:14, padding:"14px", fontWeight:700, fontSize:14, cursor: valid && !processing ? "pointer" : "not-allowed", fontFamily:"inherit", letterSpacing:0.5 }}>
-          {processing ? "Procesando…" : valid ? `Depositar $${fN(amt)}` : "Ingresa un monto"}
-        </button>
+        <div style={{ background:C.accent+"14", border:"1px solid "+C.accent+"33", borderRadius:12, padding:"10px 12px", marginBottom:14, display:"flex", gap:8, alignItems:"flex-start" }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink:0, marginTop:2 }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <div style={{ fontSize:11, color:C.text, lineHeight:1.5 }}>
+            El monto lo elegís vos al hacer la transferencia desde tu banco / app. Cuando detectemos el ingreso con la referencia <span style={{ fontFamily:"monospace", fontWeight:700 }}>{ref}</span>, los fondos se acreditan automáticamente.
+          </div>
+        </div>
 
-        <div style={{ fontSize:10, color:C.textLt, marginTop:10, textAlign:"center", lineHeight:1.5 }}>
-          <strong style={{ color:C.textMd }}>Demo:</strong> no se procesa ningun pago real. El saldo se actualiza localmente.
+        {/* Demo-only: simulate a received deposit so testers can exercise the
+            balance update without a real backend. Remove once a gateway is
+            wired in. */}
+        <div style={{ borderTop:"1px dashed "+C.border, paddingTop:14 }}>
+          <button onClick={() => setShowSim(v => !v)} style={{ background:"transparent", border:"none", color:C.textLt, fontSize:11, cursor:"pointer", fontFamily:"inherit", padding:0, display:"flex", alignItems:"center", gap:6 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: showSim ? "rotate(90deg)" : "rotate(0deg)", transition:"transform 0.2s" }}><polyline points="9 18 15 12 9 6"/></svg>
+            <span style={{ textTransform:"uppercase", letterSpacing:1, fontWeight:600 }}>Modo demo — simular deposito</span>
+          </button>
+          {showSim && (
+            <div style={{ marginTop:10, background:C.creamDk, borderRadius:10, padding:"10px 12px" }}>
+              <div style={{ fontSize:10, color:C.textLt, marginBottom:6, lineHeight:1.5 }}>
+                En produccion, el backend detecta la transferencia y acredita. Para testear localmente:
+              </div>
+              <div style={{ display:"flex", gap:6 }}>
+                <input value={simAmount ? fN(simAmt) : ""} onChange={e => setSimAmount(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                  placeholder="$ Monto recibido" inputMode="numeric"
+                  style={{ flex:1, background:C.bg, border:"1.5px solid "+C.border, borderRadius:8, padding:"8px 10px", fontSize:13, fontFamily:"monospace", color:C.text, outline:"none", boxSizing:"border-box" }}/>
+                <button onClick={runSim} disabled={simAmt <= 0}
+                  style={{ background: simAmt > 0 ? C.accent : C.creamDk, color: simAmt > 0 ? "#fff" : C.textLt, border:"none", borderRadius:8, padding:"8px 14px", fontSize:12, fontWeight:600, cursor: simAmt > 0 ? "pointer" : "not-allowed", fontFamily:"inherit", whiteSpace:"nowrap" }}>
+                  Simular
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
