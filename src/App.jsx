@@ -3056,9 +3056,13 @@ function WatchlistPickerModal({ ticker, watchlists, onConfirm, onCreate, onClose
     onClose();
   }
 
-  const content = (
-    <div className="samas-fade" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:9998, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
-      <div className="samas-slide-up" onClick={e => e.stopPropagation()} style={{ background:C.bg, borderRadius:20, maxWidth:420, width:"100%", padding:"16px 18px 18px", border:"1px solid "+C.border, maxHeight:"82vh", display:"flex", flexDirection:"column", boxShadow:"0 24px 48px rgba(0,0,0,0.5)" }}>
+  // position:absolute so we fill the nearest positioned ancestor (the
+  // phone frame in mobile view, the main column in web). No portal —
+  // using document.body escapes the phone frame and the modal ends up
+  // floating somewhere else in the viewport.
+  return (
+    <div className="samas-fade" onClick={onClose} style={{ position:"absolute", inset:0, zIndex:70, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div className="samas-slide-up" onClick={e => e.stopPropagation()} style={{ background:C.bg, borderRadius:18, maxWidth:420, width:"100%", padding:"16px 16px 16px", border:"1px solid "+C.border, maxHeight:"90%", display:"flex", flexDirection:"column", boxShadow:"0 24px 48px rgba(0,0,0,0.5)" }}>
         <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
           <div style={{ width:34, height:34, borderRadius:10, background:C.gold+"22", color:C.gold, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
@@ -3148,8 +3152,6 @@ function WatchlistPickerModal({ ticker, watchlists, onConfirm, onCreate, onClose
       </div>
     </div>
   );
-  if (typeof document === "undefined") return content;
-  return createPortal(content, document.body);
 }
 
 // ============================================================
@@ -3172,9 +3174,10 @@ function AssetPickerModal({ title = "Agregar activo", alreadyIn, onPick, onClose
     if (q && !a.ticker.toLowerCase().includes(q) && !a.name.toLowerCase().includes(q)) return false;
     return true;
   });
-  const content = (
-    <div className="samas-fade" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:9998, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
-      <div className="samas-slide-up" onClick={e => e.stopPropagation()} style={{ background:C.bg, borderRadius:20, maxWidth:420, width:"100%", padding:"16px 16px 18px", border:"1px solid "+C.border, maxHeight:"82vh", display:"flex", flexDirection:"column", boxShadow:"0 24px 48px rgba(0,0,0,0.5)" }}>
+  // position:absolute so we fill the nearest positioned ancestor.
+  return (
+    <div className="samas-fade" onClick={onClose} style={{ position:"absolute", inset:0, zIndex:70, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div className="samas-slide-up" onClick={e => e.stopPropagation()} style={{ background:C.bg, borderRadius:18, maxWidth:420, width:"100%", padding:"16px 16px 18px", border:"1px solid "+C.border, maxHeight:"90%", display:"flex", flexDirection:"column", boxShadow:"0 24px 48px rgba(0,0,0,0.5)" }}>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
           <div style={{ flex:1, fontSize:14, fontWeight:800, color:C.text }}>{title}</div>
           <button onClick={onClose} aria-label="Cerrar" style={{ background:"transparent", border:"none", cursor:"pointer", padding:4, color:C.textMd }}>
@@ -3252,8 +3255,6 @@ function AssetPickerModal({ title = "Agregar activo", alreadyIn, onPick, onClose
       </div>
     </div>
   );
-  if (typeof document === "undefined") return content;
-  return createPortal(content, document.body);
 }
 
 // ============================================================
@@ -3264,13 +3265,11 @@ function AssetPickerModal({ title = "Agregar activo", alreadyIn, onPick, onClose
 // ticker to a specific list happens via the star button on an asset row —
 // that goes through the default list today, but users can then drag or
 // move items between lists once we add that flow.
-function PageWatchlist({ watchlists, onCreate, onRename, onRemove, onRemoveTicker, onAddTicker, onSelectAsset, C, showUSD }) {
+function PageWatchlist({ watchlists, onCreate, onRename, onRemove, onRemoveTicker, onOpenAssetPicker, onSelectAsset, C, showUSD }) {
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName]   = useState("");
   const [creating, setCreating]   = useState(false);
   const [newName, setNewName]     = useState("");
-  // Which list is receiving an asset-pick right now (null = no picker).
-  const [addingToListId, setAddingToListId] = useState(null);
   // In-app confirm — replaces native window.confirm() which sometimes gets
   // suppressed inside nested overlays (mobile frame -> modal).
   const { confirm, ConfirmHost } = useConfirm(C);
@@ -3428,7 +3427,7 @@ function PageWatchlist({ watchlists, onCreate, onRename, onRemove, onRemoveTicke
               {/* Tickers — hidden when the list is collapsed. */}
               {!isCollapsed && (tickers.length === 0 ? (
                 <div style={{ padding:"14px 16px 12px", textAlign:"center", fontSize:10.5, color:C.textLt, lineHeight:1.5 }}>
-                  Lista vacía. <button onClick={() => setAddingToListId(list.id)} style={{ background:"transparent", border:"none", color:C.accent, fontWeight:700, cursor:"pointer", fontFamily:"inherit", padding:0, textDecoration:"underline" }}>Agregar un activo</button>
+                  Lista vacía. <button onClick={() => onOpenAssetPicker && onOpenAssetPicker(list.id)} style={{ background:"transparent", border:"none", color:C.accent, fontWeight:700, cursor:"pointer", fontFamily:"inherit", padding:0, textDecoration:"underline" }}>Agregar un activo</button>
                 </div>
               ) : tickers.map((tick, i) => {
                 const a = ASSETS.find(x => x.ticker === tick);
@@ -3464,7 +3463,7 @@ function PageWatchlist({ watchlists, onCreate, onRename, onRemove, onRemoveTicke
                   can keep adding without scrolling up). */}
               {!isCollapsed && tickers.length > 0 && (
                 <button
-                  onClick={() => setAddingToListId(list.id)}
+                  onClick={() => onOpenAssetPicker && onOpenAssetPicker(list.id)}
                   style={{ width:"100%", background:"transparent", border:"none", borderTop:"1px dashed "+C.border+"66", padding:"10px 14px", display:"flex", alignItems:"center", justifyContent:"center", gap:6, color:C.accent, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -3475,19 +3474,6 @@ function PageWatchlist({ watchlists, onCreate, onRename, onRemove, onRemoveTicke
           );
         })}
       </div>
-      {addingToListId && (() => {
-        const l = lists.find(x => x.id === addingToListId);
-        const already = new Set(l?.tickers || []);
-        return (
-          <AssetPickerModal
-            title={l ? `Agregar a "${l.name}"` : "Agregar activo"}
-            alreadyIn={already}
-            onPick={(ticker) => onAddTicker && onAddTicker(addingToListId, ticker)}
-            onClose={() => setAddingToListId(null)}
-            C={C}
-          />
-        );
-      })()}
       <ConfirmHost/>
     </div>
   );
@@ -5139,6 +5125,8 @@ function MobileApp({ appState, handlers, C }) {
   // page's overflow:auto scroll container — the X button could fall out
   // of the visible region on some scroll offsets).
   const [showObjectives, setShowObjectives] = useState(false);
+  // Asset-picker (add to watchlist) — same hoisting pattern.
+  const [addingToListId, setAddingToListId] = useState(null);
   const t = useT(lang);
   const TABS = [{ id:"portfolio",label:t("portfolio") },{ id:"mercado",label:t("mercado") },{ id:"favoritos",label:"Watchlist" },{ id:"noticias",label:t("noticias") },{ id:"ordenes",label:t("ordenes") }];
   const totalARS = holdings.reduce((s, h) => { const a = ASSETS.find(x => x.ticker === h.ticker); return s + (a ? h.qty * a.price : 0); }, 0);
@@ -5150,7 +5138,7 @@ function MobileApp({ appState, handlers, C }) {
     switch (tab) {
       case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} portfolioHistory={portfolioHistory} recurringAporte={recurringAporte} onSetRecurring={setRecurringAporte} C={C} showUSD={showUSD} lang={lang}/>;
       case "mercado":    return <PageMercado onSelectAsset={setSelected} C={C} showUSD={showUSD} lang={lang}/>;
-      case "favoritos":  return <PageWatchlist watchlists={watchlists} onCreate={createWatchlist} onRename={renameWatchlist} onRemove={removeWatchlist} onRemoveTicker={removeFromWatchlist} onAddTicker={addToWatchlist} onSelectAsset={setSelected} C={C} showUSD={showUSD}/>;
+      case "favoritos":  return <PageWatchlist watchlists={watchlists} onCreate={createWatchlist} onRename={renameWatchlist} onRemove={removeWatchlist} onRemoveTicker={removeFromWatchlist} onOpenAssetPicker={setAddingToListId} onSelectAsset={setSelected} C={C} showUSD={showUSD}/>;
       case "noticias":   return <PageNoticias holdings={holdings} onSelectAsset={setSelected} C={C} lang={lang}/>;
       case "ideas":      return <PageIdeas C={C} showUSD={showUSD} onSelectAsset={setSelected} lang={lang}/>;
       case "ordenes":    return <PageOrdenes orders={orders} C={C} lang={lang}/>;
@@ -5177,6 +5165,19 @@ function MobileApp({ appState, handlers, C }) {
           C={C}
         />
       )}
+      {addingToListId && (() => {
+        const l = (watchlists || []).find(x => x.id === addingToListId);
+        const already = new Set(l?.tickers || []);
+        return (
+          <AssetPickerModal
+            title={l ? `Agregar a "${l.name}"` : "Agregar activo"}
+            alreadyIn={already}
+            onPick={(ticker) => addToWatchlist && addToWatchlist(addingToListId, ticker)}
+            onClose={() => setAddingToListId(null)}
+            C={C}
+          />
+        );
+      })()}
       <div style={{ background:C.isDark?"#0F0F0F":"#0D1117", paddingTop:30, paddingBottom:8, paddingLeft:20, paddingRight:20, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0, zIndex:10 }}>
         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
           <span style={{ color:"rgba(255,255,255,0.6)", fontSize:12, fontWeight:600 }}>{new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})}</span>
@@ -5227,6 +5228,7 @@ function WebDashboard({ appState, handlers, C }) {
   // Objectives modal lives at dashboard level for the same reason as in
   // MobileApp — keeps the overlay out of the page's scroll container.
   const [showObjectives, setShowObjectives] = useState(false);
+  const [addingToListId, setAddingToListId] = useState(null);
   const t = useT(lang);
   const TABS2 = [{ id:"portfolio",label:t("portfolio"),icon:"portfolio" },{ id:"mercado",label:t("mercado"),icon:"mercado" },{ id:"favoritos",label:"Watchlist",icon:"favoritos" },{ id:"noticias",label:t("noticias"),icon:"noticias" },{ id:"ideas",label:t("inversiones"),icon:"ideas" },{ id:"bonos",label:t("bonos"),icon:"bonos" },{ id:"ordenes",label:t("ordenes"),icon:"ordenes" },{ id:"reportes",label:t("reportes"),icon:"reportes" }];
   const totalARS = holdings.reduce((s, h) => { const a = ASSETS.find(x => x.ticker === h.ticker); return s + (a ? h.qty * a.price : 0); }, 0);
@@ -5237,7 +5239,7 @@ function WebDashboard({ appState, handlers, C }) {
     switch (sideTab) {
       case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} portfolioHistory={portfolioHistory} recurringAporte={recurringAporte} onSetRecurring={setRecurringAporte} C={C} showUSD={showUSD} lang={lang}/>;
       case "mercado":    return <PageMercado onSelectAsset={setSelected} C={C} showUSD={showUSD} lang={lang}/>;
-      case "favoritos":  return <PageWatchlist watchlists={watchlists} onCreate={createWatchlist} onRename={renameWatchlist} onRemove={removeWatchlist} onRemoveTicker={removeFromWatchlist} onAddTicker={addToWatchlist} onSelectAsset={setSelected} C={C} showUSD={showUSD}/>;
+      case "favoritos":  return <PageWatchlist watchlists={watchlists} onCreate={createWatchlist} onRename={renameWatchlist} onRemove={removeWatchlist} onRemoveTicker={removeFromWatchlist} onOpenAssetPicker={setAddingToListId} onSelectAsset={setSelected} C={C} showUSD={showUSD}/>;
       case "noticias":   return <PageNoticias holdings={holdings} onSelectAsset={setSelected} C={C} lang={lang}/>;
       case "ideas":      return <PageIdeas C={C} showUSD={showUSD} onSelectAsset={setSelected} lang={lang}/>;
       case "bonos":      return <PageBonos C={C} showUSD={showUSD} lang={lang}/>;
@@ -5307,6 +5309,19 @@ function WebDashboard({ appState, handlers, C }) {
               C={C}
             />
           )}
+          {addingToListId && (() => {
+            const l = (watchlists || []).find(x => x.id === addingToListId);
+            const already = new Set(l?.tickers || []);
+            return (
+              <AssetPickerModal
+                title={l ? `Agregar a "${l.name}"` : "Agregar activo"}
+                alreadyIn={already}
+                onPick={(ticker) => addToWatchlist && addToWatchlist(addingToListId, ticker)}
+                onClose={() => setAddingToListId(null)}
+                C={C}
+              />
+            );
+          })()}
         </div>
         <div style={{ width:320, background:C.card, borderLeft:"1px solid "+C.border, padding:"20px 16px", position:"sticky", top:56, height:"calc(100vh - 56px)", overflowY:"auto" }}>
           <div style={{ fontWeight:700, fontSize:14, color:C.text, marginBottom:16 }}>Mercado en vivo</div>
