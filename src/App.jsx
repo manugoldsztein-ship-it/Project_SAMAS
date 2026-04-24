@@ -21,6 +21,10 @@ import { useSupabaseSession, SupabaseAuthFlow } from "./auth/SupabaseAuth.jsx";
 // 4-digit PIN stored hashed in localStorage. Prevents shoulder-surfers
 // from getting into the app even if the browser/phone is unlocked.
 import { hasPinSet, clearPin, PinLockScreen } from "./auth/PinLock.jsx";
+// Welcome chooser: shown only on first session when profiles.ui_mode
+// is null. User picks "principiante" or "profesional" and the rest
+// of the app reads that choice to decide which surfaces to show.
+import { WelcomeChooser } from "./auth/WelcomeChooser.jsx";
 
 // ============================================================
 // THEME
@@ -5128,7 +5132,7 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
 // MOBILE PHONE WRAPPER
 // ============================================================
 function MobileApp({ appState, handlers, C }) {
-  const { loggedIn, needsAuth, needsPinGate, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
+  const { loggedIn, needsAuth, needsPinGate, needsWelcome, uiMode, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
   const { handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte } = handlers;
   // Modal state hoisted out of PagePortfolio so the wizard's absolute
   // overlay covers the full phone frame (otherwise it was clipped by the
@@ -5166,6 +5170,13 @@ function MobileApp({ appState, handlers, C }) {
           userEmail={sbSession?.user?.email}
           onSuccess={() => setPinUnlocked(true)}
           onForgot={handlers.handleLogout}
+        />
+      )}
+      {needsWelcome && (
+        <WelcomeChooser
+          C={C}
+          userId={sbSession?.user?.id}
+          onDone={() => refetchProfile()}
         />
       )}
       {showTutorial && <OnboardingTutorial onClose={finishTutorial} onComplete={finishTutorial} setTab={setTab} setShowUSD={setShowUSD} setShowProfile={setShowProfile} currentTab={tab} C={C}/>}
@@ -5241,7 +5252,7 @@ function MobileApp({ appState, handlers, C }) {
 // WEB DASHBOARD LAYOUT
 // ============================================================
 function WebDashboard({ appState, handlers, C }) {
-  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, needsAuth, needsPinGate, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, showUSD, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
+  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, needsAuth, needsPinGate, needsWelcome, uiMode, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, showUSD, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
   const { setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, setShowProfile, setIsDark, setShowUSD, setLang, finishTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, handleDeposit, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte } = handlers;
   const [sideTab, setSideTab] = useState("portfolio");
   // Objectives modal lives at dashboard level for the same reason as in
@@ -5382,7 +5393,12 @@ export default function SAMASApp() {
   const supabaseReady = !!sbSession && !!sbProfile?.phone_verified;
   const needsAuth   = !sbLoading && !supabaseReady;
   const needsPinGate = supabaseReady && !pinUnlocked;
-  const loggedIn    = supabaseReady && pinUnlocked;
+  // ui_mode comes from profiles.ui_mode. null = never chosen → show the
+  // WelcomeChooser once the session is fully unlocked. Changeable later
+  // from the Settings submenu.
+  const uiMode        = sbProfile?.ui_mode || null;
+  const needsWelcome  = supabaseReady && pinUnlocked && !uiMode;
+  const loggedIn    = supabaseReady && pinUnlocked && !!uiMode;
   const [hasSeenTutorial, setHasSeen] = usePersistedState("samas_seen_tutorial", false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -5710,7 +5726,7 @@ export default function SAMASApp() {
     showToast(`$${fN(amount)} acreditados via ${methodLabel}`, C.green);
   };
 
-  const appState = { isDark, loggedIn, needsAuth, needsPinGate, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker };
+  const appState = { isDark, loggedIn, needsAuth, needsPinGate, needsWelcome, uiMode, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker };
   const handlers = { handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte };
 
   const outerBg = isDark ? "#080808" : "#050505";
@@ -5790,6 +5806,13 @@ export default function SAMASApp() {
                   userEmail={sbSession?.user?.email}
                   onSuccess={() => setPinUnlocked(true)}
                   onForgot={handleLogout}
+                />
+              )}
+              {needsWelcome && (
+                <WelcomeChooser
+                  C={C}
+                  userId={sbSession?.user?.id}
+                  onDone={() => refetchProfile()}
                 />
               )}
             </div>

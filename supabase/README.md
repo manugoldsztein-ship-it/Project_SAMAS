@@ -1,69 +1,201 @@
-# Supabase setup
+# Supabase + Twilio setup
 
-Este directorio contiene el schema y la configuración para el backend de SAMAS
-(Postgres + auth managed por Supabase).
+Backend de SAMAS. Postgres managed + auth + Edge Functions en Supabase.
+Verificación por WhatsApp con OTP custom vía Twilio Messaging API.
 
-## 1. Correr el schema inicial
+## 1. Aplicar el schema
 
-La primera vez:
+Una vez, desde el dashboard de Supabase → **SQL Editor** → **New query**:
 
-1. Abrí el dashboard del proyecto → **SQL Editor** → **New query**.
-2. Pegá el contenido completo de `schema.sql`.
-3. Run (botón verde arriba a la derecha, o ⌘+Enter).
+1. Pegá el contenido completo de `schema.sql` → Run.
+2. Pegá el contenido de `otp_codes.sql` → Run.
+3. Pegá el contenido de `ui_mode.sql` → Run.
 
-Deberías ver "Success. No rows returned" al pie. Si tira error de "relation
-already exists", es porque ya corrió antes — no pasa nada, seguí adelante.
+Deberías ver "Success. No rows returned" en cada uno. Verificá en **Table
+Editor** que están: `profiles`, `accounts`, `holdings`, `orders`,
+`transactions`, `watchlists`, `watchlist_tickers`, `plans`, `broker_links`,
+`otp_codes` y la vista `portfolio_summary`.
 
-Para verificar que quedó bien, andá a **Table Editor** (ícono de tabla a la
-izquierda) y confirmá que aparecen: `profiles`, `accounts`, `holdings`,
-`orders`, `transactions`, `watchlists`, `watchlist_tickers`, `plans`,
-`broker_links`.
+Si re-corrés y tira "relation already exists", ignoralo — esos archivos
+usan `create table if not exists` / `add column if not exists` cuando es
+posible, pero algunos statements son idempotentes por error (el re-run
+falla pero no daña nada).
 
-## 2. Configurar auth por email
+## 2. Configurar auth email + URLs
 
-1. **Authentication → Providers → Email** → dejá activado, confirmá que
-   "Enable email confirmations" esté en ON.
-2. **Authentication → URL Configuration** → en "Site URL" poné
-   `http://localhost:5173` (para dev). En "Redirect URLs" agregá la misma
-   URL. Cuando tengas un dominio de producción lo sumás.
+En el dashboard:
 
-## 3. Configurar SMS OTP con Twilio
+- **Authentication → Providers → Email** → activado + "Confirm email" ON.
+- **Authentication → URL Configuration:**
+  - Site URL: `http://localhost:5173` (dev).
+  - Redirect URLs: agregá `http://localhost:5173/**`.
+  - Cuando tengas dominio de producción (ej. `app.samas.com.ar`), sumalo
+    a Redirect URLs y cambiá Site URL.
 
-Necesitás una cuenta de Twilio (twilio.com/try-twilio). Del dashboard:
+## 3. WhatsApp OTP — sandbox (desarrollo)
 
-- Account SID (empieza con `AC...`)
-- Auth Token
-- Un número comprado o el trial number (de los settings de la cuenta)
+Para desarrollar y demos internos usamos el sandbox compartido de Twilio.
+Los códigos se mandan desde el número `+1 415 523 8886` con remitente
+"Twilio" en WhatsApp (es un nombre genérico del sandbox — ver sección 4
+para producción).
 
-En Supabase:
+### 3.1 Crear cuenta Twilio trial
 
-1. **Authentication → Providers → Phone** → Enable.
-2. SMS Provider: Twilio.
-3. Pegá Account SID, Auth Token, y el número en "Twilio Phone Number" (con
-   formato internacional, ej. `+15551234567`).
-4. Save.
+1. twilio.com/try-twilio → signup con email + verificación.
+2. Anotá del dashboard de Twilio:
+   - **Account SID** (`AC...`)
+   - **Auth Token** (click Show para revelarlo)
 
-**Importante sobre costos:** cada SMS a Argentina sale ~USD 0.06. Twilio te
-da ~$15 USD de crédito inicial (unos 250 SMS a AR), alcanza para el demo y
-early users.
+### 3.2 Joinear el sandbox de WhatsApp
 
-## 4. (Opcional) Políticas de seguridad adicionales
+1. Twilio Console → **Messaging → Try it out → Send a WhatsApp message**.
+2. Vas a ver un número (`+1 415 523 8886`) y un código `join <dos-palabras>`.
+3. Desde tu WhatsApp, mandale ese texto exacto al número.
+4. Twilio responde `"Twilio Sandbox: You are all set!"` = listo para recibir.
 
-Cuando tengas usuarios reales, vale la pena agregar en Supabase dashboard:
+*Importante:* el sandbox solo entrega a números que hicieron `join`. En dev
+solo vas a poder testear con tu número propio. Para producción real, ver
+sección 4.
 
-- **Authentication → Rate Limits** → bajá el límite de signups por IP si
-  ves abuso.
+### 3.3 Cargar secrets en Supabase
+
+Edge Functions → **Secrets** → agregar estos tres:
+
+| Name | Value |
+|---|---|
+| `TWILIO_ACCOUNT_SID` | tu Account SID (empieza con `AC`) |
+| `TWILIO_AUTH_TOKEN` | tu Auth Token |
+
+Opcionalmente:
+
+| Name | Value |
+|---|---|
+| `TWILIO_WHATSAPP_FROM` | dejalo vacío en sandbox (default: `whatsapp:+14155238886`) |
+
+*Nota:* la versión vieja del código usaba Twilio Verify con un
+`TWILIO_VERIFY_SERVICE_SID` secret. Ya no se usa — se puede borrar.
+
+### 3.4 Deploy de las Edge Functions
+
+Dos caminos:
+
+**CLI (recomendado):**
+
+```bash
+brew install supabase/tap/supabase
+supabase login
+supabase link --project-ref <your-project-ref>
+supabase functions deploy send-otp
+supabase functions deploy verify-otp
+```
+
+**Dashboard web editor:**
+
+Edge Functions → **Deploy a new function** → Via Editor → name:
+`send-otp` → pegar contenido de `functions/send-otp/index.ts` → Deploy.
+Repetir para `verify-otp`.
+
+## 4. WhatsApp OTP — producción (sender propio "SAMAS")
+
+Para que el WhatsApp llegue con remitente **"SAMAS"** en vez de "Twilio"
+genérico, hay que salir del sandbox y registrar un sender dedicado. Es
+una restricción anti-impersonación de Meta — no se puede mover sin
+certificación.
+
+### 4.1 Pre-requisitos
+
+- **Cuenta Twilio paga.** Upgrade desde Console → Billing → Upgrade. Un
+  depósito mínimo (~$20 USD) desbloquea el envío sin Verified Caller IDs.
+- **Facebook Business Manager account** a nombre del negocio.
+  business.facebook.com → Create Account → llenar datos (nombre, email,
+  sitio web si lo tenés). Gratis.
+- **Número de teléfono dedicado** — o uno que comprás a Twilio (Console
+  → Phone Numbers → Buy a number), o uno propio que quieras portar. No
+  puede tener WhatsApp personal previamente registrado en él (si sí,
+  desregistralo antes).
+- **Documentación del negocio** — algún comprobante (factura de servicios
+  a nombre de la empresa, registro público, etc.) que Meta pueda usar
+  para verificar existencia.
+
+### 4.2 Solicitar el sender
+
+1. Twilio Console → **Messaging → Senders → WhatsApp senders** →
+   **Request Access** o **Create new**.
+2. Elegís el número dedicado.
+3. Completás el form:
+   - **Display name:** `SAMAS` (este es el nombre que va a aparecer en
+     los chats como remitente)
+   - **Category:** Financial services
+   - **Profile picture:** logo de SAMAS (cuadrado, >640×640px)
+   - **Business description:** qué hace SAMAS en una línea
+   - **Website:** URL pública del producto (obligatorio)
+   - **Facebook Business Manager ID:** el ID de tu Business Manager
+     (aparece en Business Settings → Business info)
+4. Submit. Twilio reenvía la solicitud a Meta.
+
+### 4.3 Verificación de Meta
+
+Meta revisa:
+- Que el negocio exista (checkeo contra tu Facebook Business).
+- Que el display name no imita marca ajena.
+- Que la categoría sea correcta.
+- A veces pide documentos adicionales — suben por un portal que te
+  abre Meta en tu email.
+
+**Tiempo de aprobación:** 24hs a 2 semanas según complejidad. Historial
+típico argentino: ~5-7 días hábiles.
+
+### 4.4 Switch a producción
+
+Cuando Meta aprueba, Twilio te avisa por email. En ese momento:
+
+1. **Supabase → Edge Functions → Secrets** → agregá (o edit) el secret:
+   ```
+   TWILIO_WHATSAPP_FROM = whatsapp:+<tu-numero-aprobado>
+   ```
+   *(Con el `whatsapp:` prefix y el número en formato E.164.)*
+
+2. Las Edge Functions no necesitan re-deploy — el código ya lee el env var:
+   ```ts
+   Deno.env.get("TWILIO_WHATSAPP_FROM") ?? "whatsapp:+14155238886"
+   ```
+
+3. Próximo OTP sale desde el número nuevo, con display name "SAMAS" + tu
+   logo. Los usuarios ya **no** necesitan hacer `join <palabras>` — pueden
+   recibir mensajes sin joinear nada.
+
+### 4.5 Costos en producción
+
+Precio por WhatsApp categoría "utility" (OTPs entran acá):
+- **Argentina:** ~USD 0.005/mensaje
+- **1000 OTPs/mes:** ~$5 USD
+- **10k OTPs/mes:** ~$50 USD
+
+Meta introduce cambios de pricing anuales — ver twilio.com/whatsapp/pricing
+para el número al día.
+
+## 5. Políticas de seguridad
+
+Una vez en prod con usuarios reales:
+
+- **Authentication → Rate Limits** → ajustar límite de signups por IP
+  para prevenir abuso.
 - **Database → Backups** → encender backups diarios (requiere plan Pro).
-- **Project Settings → API → Allowed Origins** → restringí a tus dominios
-  cuando salgas a producción.
+- **Project Settings → API → Allowed Origins** → restringir a los
+  dominios de producción (ej. `https://app.samas.com.ar`).
+- **Edge Functions → Secrets** → rotar `TWILIO_AUTH_TOKEN` cada 90 días.
 
-## 5. Rotar credenciales
+## 6. Rotar credenciales Supabase
 
-Si alguna vez tenés que rotar las API keys:
+Si hay que rotar las API keys públicas:
 
-1. **Project Settings → API → API Keys** → rotate.
-2. Actualizá `src/lib/supabase.js` con la nueva publishable key.
-3. Rebuild + redeploy.
+1. **Project Settings → API → API Keys → Rotate**.
+2. Actualizar `src/lib/supabase.js` con la nueva publishable key.
+3. Rebuild + redeploy del front.
+4. Rotar también `TWILIO_AUTH_TOKEN` en Twilio Console si el cambio se
+   debe a una exposición (es sinergia: si la publishable key se
+   comprometió, asumí que lo demás también).
 
-La `secret_key` no toca el cliente nunca; si la necesitás (scripts, Edge
-Functions) guardala en variables de entorno del server.
+La `secret_key` de Supabase (service_role) **nunca** va al cliente. Solo
+en Edge Functions como env var auto-provisionada — no hay que cargarla
+manualmente.
