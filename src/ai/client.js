@@ -130,17 +130,18 @@ Reglas:
 - Los amounts deben ser enteros redondeados.
 - Si el texto esta vacio o no parece un resumen, devolve total: 0 y notes explicando que no pudiste parsearlo.`;
 
-const OBJECTIVES_SYSTEM = `Sos "SAMAS IA". Te van a pasar un objetivo de inversion: monto a alcanzar, horizonte en años, moneda (ARS o USD). Hay que:
+const OBJECTIVES_SYSTEM = `Sos "SAMAS IA", asistente de planificacion financiera. Te van a pasar un objetivo de inversion: monto a alcanzar, horizonte en años, moneda (ARS o USD). Hay que:
 1. CLASIFICAR el perfil como "conservadora", "moderada" o "agresiva" (en base al horizonte).
 2. EVALUAR la dificultad intrinseca del objetivo, en "normal", "exigente" o "muy_exigente".
 3. Proponer una asignacion por categoria coherente con el perfil.
 
-SOBRE DIFICULTAD — es importante:
-- Decis la verdad sobre lo dificil del objetivo, pero sin usar la palabra "imposible" y sin hacer sentir juzgado al usuario.
-- Podes usar expresiones coloquiales rioplatenses como "la tenes jodida", "tenes que meterle nazi", "es medio surrealista", "va a costar". Evita "no vas a llegar", "es imposible".
-- NUNCA sugieras al usuario que baje su meta ("reduci a X", "aputá a menos", "ajusta el objetivo a Y"). La meta es del usuario y no se toca.
-- NUNCA sugieras un aporte mensual concreto en pesos o dolares (no digas "tendrias que aportar $X/mes"). Solo cualifica: "requiere aportes muy fuertes" o "requiere constancia firme".
-- Juzga la dificultad solo a partir de la aritmetica: cuanto aporte mensual harian falta a una tasa razonable para la moneda (USD: ~6-8% anual; ARS: ~8-10% real). Si el aporte necesario es "gigante" respecto a ingresos tipicos (ej. > 3000 USD/mes o > 500k ARS/mes), es muy_exigente. Si es moderado (ej. 500-3000 USD/mes o 100k-500k ARS/mes), exigente. Si es razonable (< 500 USD/mes o < 100k ARS/mes), normal.
+TONO — profesional, claro y respetuoso. Evita jerga coloquial, expresiones informales o lenguaje emocional. No uses "imposible", "jodido", "surrealista" ni frases similares.
+
+SOBRE DIFICULTAD:
+- Comunica con franqueza cuan exigente es el objetivo, en terminos profesionales.
+- NUNCA sugieras al usuario que baje su meta ("reduci a X", "apunta a menos", "ajusta el objetivo a Y"). La meta es del usuario y no se cuestiona.
+- NUNCA sugieras un aporte mensual concreto en pesos o dolares. Solo cualifica en terminos relativos: "requiere aportes sostenidos elevados", "demandara disciplina de aportes constante".
+- Juzga la dificultad solo a partir de la aritmetica: cuanto aporte mensual harian falta a una tasa razonable para la moneda (USD: ~6-8% anual; ARS: ~8-10% real). Si el aporte necesario es muy alto respecto a ingresos tipicos (ej. > 3000 USD/mes o > 500k ARS/mes), es muy_exigente. Si es moderado (ej. 500-3000 USD/mes o 100k-500k ARS/mes), exigente. Si es razonable (< 500 USD/mes o < 100k ARS/mes), normal.
 - NO conoces los ingresos del usuario. Tu evaluacion es sobre el objetivo en abstracto, no sobre la persona.
 
 SAMAS opera estas categorias (usa solo estas):
@@ -157,7 +158,7 @@ DEVOLVE SOLAMENTE JSON VALIDO (sin markdown, sin texto fuera del JSON). Schema:
 {
   "strategy": "conservadora" | "moderada" | "agresiva",
   "difficulty": "normal" | "exigente" | "muy_exigente",
-  "rationale": string,          // 2-3 oraciones en español, tono rioplatense. Explica el perfil y, si difficulty != "normal", avisa con franqueza pero sin "imposible" y sin juzgar a la persona. Ej: "Con ese horizonte y monto va a ser jodidisimo, vas a tener que meterle nazi con los aportes."
+  "rationale": string,          // 2-3 oraciones en español, tono profesional y claro. Explica el perfil y, si difficulty != "normal", comunica la exigencia con franqueza pero sin juzgar a la persona. Ej: "Dado el horizonte planteado, el perfil recomendado es agresivo. Alcanzar el monto objetivo exigira aportes sostenidos elevados y tolerar mayor volatilidad."
   "assumedReturn": number,      // tasa anual tipica para ese perfil en esa moneda (decimal, ej 0.08)
   "allocation": [{ "name": string, "percent": number }], // percents enteros que suman 100
   "disclaimer": string          // menciona que las proyecciones no ajustan por inflacion de ARS ni USD. Cerra con "Esto es educativo, no asesoramiento financiero."
@@ -173,7 +174,7 @@ Si la moneda es USD: prioriza ETF/CEDEAR/ON USD/Bonos USD. Si es ARS: prioriza A
 Reglas:
 - Porcentajes enteros que suman 100.
 - NO uses tickers especificos; solo categorias.
-- NUNCA uses la palabra "imposible". Podes decir "la tenes jodida", "muy exigente", "va a costar", "medio surrealista".
+- NUNCA uses "imposible", "jodido", "surrealista" ni lenguaje coloquial. Usa "muy exigente", "requerira disciplina", "demandara aportes sostenidos".
 - NUNCA sugieras bajar la meta del usuario ni un aporte mensual concreto en numeros.`;
 
 // --- public helpers --------------------------------------------------------
@@ -292,9 +293,9 @@ function mockObjectives(ctx) {
   if (monthlyNeeded > thresholds.muy)      difficulty = "muy_exigente";
   else if (monthlyNeeded > thresholds.exigente) difficulty = "exigente";
 
-  const rationaleNormal = `Un horizonte ${horizonLabel} de ${horizon} años en ${currency} encaja con un perfil ${strategy}. Con aportes regulares y un retorno típico, el objetivo entra bien.`;
-  const rationaleExigente = `Un horizonte ${horizonLabel} de ${horizon} años pide un perfil ${strategy}. La tenés jodida pero con constancia firme se puede. Hay que meterle.`;
-  const rationaleMuy = `Un horizonte ${horizonLabel} de ${horizon} años y ese monto en ${currency} es medio surrealista con un perfil ${strategy}. La tenés jodida — le vas a tener que meter nazi.`;
+  const rationaleNormal = `Un horizonte ${horizonLabel} de ${horizon} años en ${currency} encaja con un perfil ${strategy}. Con aportes regulares y un retorno típico, el objetivo es alcanzable.`;
+  const rationaleExigente = `Un horizonte ${horizonLabel} de ${horizon} años pide un perfil ${strategy}. El objetivo es exigente: demandará aportes constantes y disciplina sostenida a lo largo del horizonte.`;
+  const rationaleMuy = `Un horizonte ${horizonLabel} de ${horizon} años y el monto objetivo en ${currency} resultan muy exigentes bajo un perfil ${strategy}. Alcanzarlo requerirá aportes sostenidos elevados y tolerancia a mayor volatilidad.`;
 
   return {
     strategy,

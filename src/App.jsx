@@ -3068,7 +3068,7 @@ function WatchlistPickerModal({ ticker, watchlists, onConfirm, onCreate, onClose
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
           </div>
           <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontSize:14, fontWeight:800, color:C.text }}>Guardar <span style={{ fontFamily:"monospace" }}>{ticker}</span></div>
+            <div style={{ fontSize:14, fontWeight:800, color:C.text }}>Guardar {ticker}</div>
             <div style={{ fontSize:11, color:C.textMd }}>Elegí en qué listas querés tenerlo.</div>
           </div>
           <button onClick={onClose} aria-label="Cerrar" style={{ background:"transparent", border:"none", cursor:"pointer", padding:4, color:C.textMd }}>

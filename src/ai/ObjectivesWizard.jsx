@@ -387,17 +387,16 @@ function PlanView({ plan, target, horizon, currency = "ARS", C }) {
   const diffColor = difficulty === "muy_exigente" ? C.red
                   : difficulty === "exigente"     ? C.gold
                   : null;
-  const diffLabel = difficulty === "muy_exigente" ? "Jodidísimo"
+  const diffLabel = difficulty === "muy_exigente" ? "Muy exigente"
                   : difficulty === "exigente"     ? "Exigente"
                   : null;
 
   return (
     <div>
-      {/* Difficulty banner — only shown when the goal is non-trivial.
-          Colloquial rioplatense tone. We intentionally don't show a
-          concrete monthly aport or suggest lowering the target — per
-          product: "decirle que es medio surrealista está bien, pero
-          sacando la chotada de decirle que apunte a menos". */}
+      {/* Difficulty banner — shown when the goal is non-trivial.
+          Professional Spanish. We intentionally don't show a concrete
+          monthly aport or suggest lowering the target — the wizard
+          communicates difficulty without questioning the user's goal. */}
       {diffColor && (
         <div className="samas-slide-up" style={{ background:diffColor + "18", border:"1.5px solid "+diffColor+"55", borderRadius:14, padding:"11px 13px", marginBottom:10, display:"flex", gap:10, alignItems:"flex-start" }}>
           <div style={{ width:26, height:26, borderRadius:13, background:diffColor+"33", color:diffColor, fontSize:14, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>!</div>
@@ -405,8 +404,8 @@ function PlanView({ plan, target, horizon, currency = "ARS", C }) {
             <div style={{ fontSize:11, fontWeight:800, color:diffColor, letterSpacing:1, textTransform:"uppercase", marginBottom:2 }}>{diffLabel}</div>
             <div style={{ fontSize:12, color:C.text, lineHeight:1.45 }}>
               {difficulty === "muy_exigente"
-                ? "La tenés jodida. Apuntar a ese monto en ese plazo es medio surrealista — le vas a tener que meter nazi para acercarte."
-                : "La tenés jodida, pero con constancia y disciplina se puede. Le vas a tener que meter."}
+                ? "El objetivo es ambicioso para el horizonte planteado. Alcanzarlo exigirá una disciplina de aportes sostenida y tolerar exposición a activos de mayor riesgo."
+                : "El objetivo es exigente pero alcanzable con aportes constantes y disciplina a lo largo del horizonte de inversión."}
             </div>
           </div>
         </div>
@@ -547,7 +546,7 @@ function CopyPlanButton({ plan, target, horizon, currency, monthlyNeeded, C }) {
     }
     if (plan.difficulty && plan.difficulty !== "normal") {
       lines.push(`## Dificultad`);
-      lines.push(plan.difficulty === "muy_exigente" ? "Muy exigente — la tenés jodida, le vas a tener que meter nazi." : "Exigente — hay que ponerle pero se puede.");
+      lines.push(plan.difficulty === "muy_exigente" ? "Muy exigente — objetivo ambicioso para el horizonte; requiere disciplina de aportes sostenida." : "Exigente — alcanzable con aportes constantes y disciplina a lo largo del horizonte.");
       lines.push("");
     }
     lines.push(`---`);
