@@ -11,6 +11,11 @@ import {
   DEFAULT_MODEL as ANTHROPIC_DEFAULT_MODEL,
   testAnthropic,
 } from "./ai/client.js";
+// Real auth: Supabase session + signup/login/verify-WhatsApp flow. Replaces
+// the demo-PIN LoginScreen. See src/auth/SupabaseAuth.jsx for the UI, and
+// src/lib/supabase.js for the client configuration.
+import { supabase } from "./lib/supabase.js";
+import { useSupabaseSession, SupabaseAuthFlow } from "./auth/SupabaseAuth.jsx";
 
 // ============================================================
 // THEME
@@ -5118,8 +5123,8 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
 // MOBILE PHONE WRAPPER
 // ============================================================
 function MobileApp({ appState, handlers, C }) {
-  const { loggedIn, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
-  const { setLoggedIn, handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte } = handlers;
+  const { loggedIn, needsAuth, sbSession, sbProfile, refetchProfile, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
+  const { handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte } = handlers;
   // Modal state hoisted out of PagePortfolio so the wizard's absolute
   // overlay covers the full phone frame (otherwise it was clipped by the
   // page's overflow:auto scroll container — the X button could fall out
@@ -5148,7 +5153,7 @@ function MobileApp({ appState, handlers, C }) {
   return (
     <div style={{ width:375, height:760, background:C.bg, borderRadius:48, overflow:"hidden", boxShadow:"0 40px 80px rgba(0,0,0,0.7)", display:"flex", flexDirection:"column", border:"9px solid #0a0a0a", position:"relative", flexShrink:0 }}>
       <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:110, height:26, background:"#0a0a0a", borderRadius:"0 0 16px 16px", zIndex:30 }}/>
-      {!loggedIn && <LoginScreen onLogin={handleLogin} onSignup={handleSignup} emailjsCfg={emailjsCfg} C={C}/>}
+      {needsAuth && <SupabaseAuthFlow C={C} session={sbSession} profile={sbProfile} onVerified={refetchProfile}/>}
       {showTutorial && <OnboardingTutorial onClose={finishTutorial} onComplete={finishTutorial} setTab={setTab} setShowUSD={setShowUSD} setShowProfile={setShowProfile} currentTab={tab} C={C}/>}
       {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} finnhubKey={finnhubKey} setFinnhubKey={setFinnhubKey} finnhub={finnhub} emailjsCfg={emailjsCfg} setEmailjsCfg={setEmailjsCfg} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} anthropicModel={anthropicModel} setAnthropicModel={setAnthropicModel} C={C}/>}
       {toast && <div className="samas-slide-up" style={{ position:"absolute", top:34, left:14, right:14, zIndex:50, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 14px", fontSize:12, fontWeight:700, boxShadow:"0 10px 30px rgba(0,0,0,0.35)" }}>{toast.msg}</div>}
@@ -5222,7 +5227,7 @@ function MobileApp({ appState, handlers, C }) {
 // WEB DASHBOARD LAYOUT
 // ============================================================
 function WebDashboard({ appState, handlers, C }) {
-  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, showProfile, showUSD, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
+  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, needsAuth, sbSession, sbProfile, refetchProfile, showProfile, showUSD, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
   const { setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, setShowProfile, setIsDark, setShowUSD, setLang, finishTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, handleDeposit, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte } = handlers;
   const [sideTab, setSideTab] = useState("portfolio");
   // Objectives modal lives at dashboard level for the same reason as in
@@ -5351,7 +5356,12 @@ export default function SAMASApp() {
   // truly ephemeral state (modals, toasts, current tab, pending trade) lives
   // in memory — everything a user would expect to survive a reload is saved.
   const [isDark, setIsDark]           = usePersistedState("samas_ui_dark", true);
-  const [loggedIn, setLoggedIn]       = useState(false);  // session — not persisted
+  // Real auth: Supabase session + phone-verified flag drive `loggedIn`.
+  // `loggedIn` is derived (not a useState) — the app is "logged in" only
+  // when there's a valid session AND the user's WhatsApp is verified.
+  const { session: sbSession, profile: sbProfile, loading: sbLoading, refetchProfile } = useSupabaseSession();
+  const loggedIn = !!sbSession && !!sbProfile?.phone_verified;
+  const needsAuth = !sbLoading && !loggedIn;
   const [hasSeenTutorial, setHasSeen] = usePersistedState("samas_seen_tutorial", false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -5641,29 +5651,31 @@ export default function SAMASApp() {
       samasNotify(`Alerta programada · ${ticker}`, `Te avisamos cuando ${dir} $${fN(alert.price)}.`);
     }
   };
-  const handleLogin = () => {
-    setLoggedIn(true);
-    if (!hasSeenTutorial) {
-      // Delay so the login success animation finishes first
-      setTimeout(() => setShowTutorial(true), 400);
+  // handleLogin / handleSignup are no-ops now — the Supabase auth flow in
+  // SupabaseAuthFlow handles signup + login directly with the SDK, and the
+  // useSupabaseSession hook updates our session state automatically. We keep
+  // stubs here so any stale call sites (e.g. the old LoginScreen renders,
+  // now unreachable) don't crash.
+  const handleLogin = () => {};
+  const handleSignup = () => {};
+  // Tutorial kickoff: show it once, after login, for users who haven't seen
+  // it yet. Triggered by a useEffect that watches `loggedIn`.
+  useEffect(() => {
+    if (loggedIn && !hasSeenTutorial) {
+      const id = setTimeout(() => setShowTutorial(true), 400);
+      return () => clearTimeout(id);
     }
-  };
-  // Fresh signup → wipe the demo user's portfolio so the new account doesn't
-  // inherit holdings, balance, orders, watchlist, or risk controls.
-  const handleSignup = () => {
-    setHoldings([]);
-    setStopLosses({});
-    setPriceAlerts({});
-    setWatchlists([{ id: "default", name: "Mi Watchlist", tickers: [] }]);
-    setOrders([]);
-    setBalance(100000);  // $100k ARS starter balance for a demo account
-    setSavedPlan(null);  // new user, no plan yet
+  }, [loggedIn, hasSeenTutorial]);
+  // Logout → Supabase sign-out triggers onAuthStateChange, which clears
+  // sbSession and therefore flips `loggedIn` false. We also reset local
+  // ephemeral state (modals, selected asset, pending trade).
+  const handleLogout = async () => {
+    try { await supabase.auth.signOut(); } catch (e) { console.error("[auth] signOut", e); }
+    setShowProfile(false);
+    setTab("portfolio");
     setSelected(null);
     setPending(null);
-    setTab("portfolio");
-    handleLogin();
   };
-  const handleLogout = () => { setLoggedIn(false); setShowProfile(false); setTab("portfolio"); setSelected(null); setPending(null); };
   const finishTutorial = () => { setHasSeen(true); setShowTutorial(false); };
 
   // Demo deposit — no payment gateway. Adds to balance and shows confirmation.
@@ -5674,8 +5686,8 @@ export default function SAMASApp() {
     showToast(`$${fN(amount)} acreditados via ${methodLabel}`, C.green);
   };
 
-  const appState = { isDark, loggedIn, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker };
-  const handlers = { setLoggedIn, handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte };
+  const appState = { isDark, loggedIn, needsAuth, sbSession, sbProfile, refetchProfile, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker };
+  const handlers = { handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte };
 
   const outerBg = isDark ? "#080808" : "#050505";
 
@@ -5745,8 +5757,8 @@ export default function SAMASApp() {
           <ErrorBoundary><WebDashboard appState={appState} handlers={handlers} C={C}/></ErrorBoundary>
         ) : (
           <div style={{ display:"flex", justifyContent:"center", alignItems:"center", minHeight:"calc(100vh - 60px)" }}>
-            <div style={{ width:375, height:760, position:"relative", borderRadius:20, overflow:"hidden" }}>
-              <LoginScreen onLogin={handleLogin} onSignup={handleSignup} emailjsCfg={emailjsCfg} C={C} isWeb={true}/>
+            <div style={{ width:420, height:620, position:"relative", borderRadius:20, overflow:"hidden" }}>
+              <SupabaseAuthFlow C={C} session={sbSession} profile={sbProfile} onVerified={refetchProfile}/>
             </div>
           </div>
         )

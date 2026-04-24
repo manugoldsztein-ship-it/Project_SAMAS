@@ -20,4 +20,43 @@ try {
   }
 } catch {}
 
-createRoot(document.getElementById("root")).render(<SAMASApp />);
+// Root-level error boundary. If anything throws during render (auth hook
+// failing, import error, etc.) we show a visible fallback instead of a
+// silent black screen — much easier to diagnose from a screenshot.
+class RootBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  componentDidCatch(error, info) {
+    console.error("[SAMAS] Root render error:", error, info);
+  }
+  render() {
+    if (this.state.error) {
+      return React.createElement(
+        "div",
+        {
+          style: {
+            padding: 24,
+            fontFamily: "system-ui, sans-serif",
+            color: "#F7F7F5",
+            background: "#0D1117",
+            minHeight: "100vh",
+            lineHeight: 1.5,
+          },
+        },
+        React.createElement("h1", { style: { fontSize: 20, color: "#E05555", margin: 0, marginBottom: 8 } }, "SAMAS no pudo arrancar"),
+        React.createElement("p", { style: { fontSize: 13, color: "#9CA3AF", marginBottom: 16 } }, "Algo falló durante la carga inicial. Abrí la consola del browser (F12 → Console) y copiame el error rojo."),
+        React.createElement("pre", { style: { background: "#161B22", color: "#E05555", padding: 12, borderRadius: 8, fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 300, overflow: "auto" } }, String(this.state.error?.stack || this.state.error)),
+      );
+    }
+    return this.props.children;
+  }
+}
+
+createRoot(document.getElementById("root")).render(
+  React.createElement(RootBoundary, null, React.createElement(SAMASApp))
+);
