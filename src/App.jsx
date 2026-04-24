@@ -527,8 +527,8 @@ function samasNotify(title, body, opts = {}) {
 
 // Simple two-key navigation: press "g" then one of { p, m, w, n, o } to
 // jump between tabs. Vim-style. Ignores keypresses when the user is
-// typing in an input / textarea. Also supports "?" to show a small hint.
-function useKeyboardShortcuts(setTab) {
+// typing in an input / textarea. "?" opens a help modal.
+function useKeyboardShortcuts(setTab, onShowHelp) {
   useEffect(() => {
     let gPressed = false;
     let gTimer = null;
@@ -543,6 +543,11 @@ function useKeyboardShortcuts(setTab) {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (isEditable(e.target)) return;
       const k = e.key.toLowerCase();
+      // "?" opens the help modal. Works even without shift on some layouts.
+      if (e.key === "?" || (e.shiftKey && k === "/")) {
+        if (onShowHelp) { onShowHelp(); e.preventDefault(); }
+        return;
+      }
       if (gPressed) {
         const map = { p: "portfolio", m: "mercado", w: "favoritos", n: "noticias", o: "ordenes" };
         if (map[k] && setTab) {
@@ -561,7 +566,7 @@ function useKeyboardShortcuts(setTab) {
     };
     window.addEventListener("keydown", onKey);
     return () => { window.removeEventListener("keydown", onKey); clearTimeout(gTimer); };
-  }, [setTab]);
+  }, [setTab, onShowHelp]);
 }
 
 // Light-touch haptic feedback for key actions on mobile. Silent no-op where
@@ -2321,6 +2326,263 @@ function RecurringAporteModal({ current, onSave, onClose, C }) {
   );
 }
 
+// ============================================================
+// MARKET MOVERS — top 3 gainers + top 3 losers of the day
+// ============================================================
+// Computed from ASSETS. Rank by daily change %. Shows small rows with
+// ticker + name + price + chg pct; tapping opens the asset detail.
+function MarketMovers({ onSelectAsset, C }) {
+  const sorted = [...ASSETS].sort((a, b) => (b.change || 0) - (a.change || 0));
+  const gainers = sorted.slice(0, 3);
+  const losers  = sorted.slice(-3).reverse();
+  const row = (a) => (
+    <button
+      key={a.ticker}
+      onClick={() => onSelectAsset && onSelectAsset(a)}
+      style={{ width:"100%", background:"transparent", border:"none", cursor:"pointer", display:"flex", alignItems:"center", gap:8, padding:"7px 2px", borderBottom:"1px solid "+C.border+"33", fontFamily:"inherit", textAlign:"left" }}
+    >
+      <AssetLogo asset={a} size={24} C={C}/>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontSize:12, fontWeight:700, color:C.text }}>{a.ticker}</div>
+        <div style={{ fontSize:9, color:C.textLt, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.name}</div>
+      </div>
+      <div style={{ textAlign:"right" }}>
+        <div style={{ fontSize:11, fontWeight:700, fontFamily:"monospace", color:C.text }}>${fN(a.price)}</div>
+        <div style={{ fontSize:10, fontWeight:800, color: a.up ? C.green : C.red }}>
+          {a.up ? "+" : "-"}{Math.abs(a.change).toFixed(2)}%
+        </div>
+      </div>
+    </button>
+  );
+  return (
+    <div style={{ padding:"12px 14px 0" }}>
+      <div style={{ fontSize:11, fontWeight:700, color:C.textMd, marginBottom:8, letterSpacing:0.5 }}>Top del día</div>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+        <div style={{ background:C.card, border:"1px solid "+C.green+"33", borderRadius:12, padding:"10px 12px" }}>
+          <div style={{ fontSize:9, fontWeight:800, color:C.green, letterSpacing:1, textTransform:"uppercase", marginBottom:6, display:"flex", alignItems:"center", gap:4 }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+            Mayores subas
+          </div>
+          {gainers.map(row)}
+        </div>
+        <div style={{ background:C.card, border:"1px solid "+C.red+"33", borderRadius:12, padding:"10px 12px" }}>
+          <div style={{ fontSize:9, fontWeight:800, color:C.red, letterSpacing:1, textTransform:"uppercase", marginBottom:6, display:"flex", alignItems:"center", gap:4 }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
+            Mayores bajas
+          </div>
+          {losers.map(row)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// SHOCK TEST — what-if-history-repeated scenario panel
+// ============================================================
+// Applies a simulated percentage shock to the current total portfolio and
+// shows what the new value would be. Doesn't mutate state; purely a "try
+// this mentally" aid so users grok volatility.
+function ShockTestPanel({ totalValue, C }) {
+  const [selected, setSelected] = useState(null);
+  const scenarios = [
+    { id: "covid",   label: "Crash COVID (2020)",   pct: -30, note: "Marzo 2020: S&P cae 30% en 4 semanas." },
+    { id: "gfc",     label: "Gran crisis 2008",     pct: -37, note: "S&P cae 37% en el año. Recuperación en 2 años." },
+    { id: "arg18",   label: "Crisis ARS 2018",      pct: -50, note: "Devaluación fuerte + caída de Merval en USD." },
+    { id: "dotcom",  label: "Burbuja .com (2000)",  pct: -49, note: "Nasdaq pierde casi 80% entre 2000 y 2002." },
+    { id: "bull",    label: "Rally fuerte",         pct: +25, note: "Semestre alcista tipo post-COVID 2020." },
+  ];
+  if (!totalValue || totalValue <= 0) return null;
+  return (
+    <div style={{ margin:"14px 14px 0", background:C.card, border:"1px solid "+C.border, borderRadius:14, padding:"12px 14px" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+        <div>
+          <div style={{ fontSize:12, fontWeight:700, color:C.text, display:"flex", alignItems:"center", gap:6 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.textMd} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Shock test
+          </div>
+          <div style={{ fontSize:10, color:C.textMd, marginTop:1 }}>Simulá qué pasaría con tu cartera en escenarios históricos</div>
+        </div>
+        {selected && (
+          <button onClick={() => setSelected(null)} style={{ background:"transparent", border:"none", fontSize:11, color:C.textLt, cursor:"pointer", fontFamily:"inherit", textDecoration:"underline" }}>Limpiar</button>
+        )}
+      </div>
+      <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:10 }}>
+        {scenarios.map(s => {
+          const active = selected?.id === s.id;
+          const isDown = s.pct < 0;
+          return (
+            <button
+              key={s.id}
+              onClick={() => setSelected(s)}
+              style={{
+                background: active ? (isDown ? C.red + "22" : C.green + "22") : C.bg,
+                border: "1.5px solid " + (active ? (isDown ? C.red + "66" : C.green + "66") : C.border),
+                color: active ? (isDown ? C.red : C.green) : C.textMd,
+                borderRadius: 10,
+                padding: "5px 9px",
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              {s.label} <span style={{ fontFamily:"monospace" }}>{s.pct > 0 ? "+" : ""}{s.pct}%</span>
+            </button>
+          );
+        })}
+      </div>
+      {selected && (() => {
+        const newValue = Math.max(0, Math.round(totalValue * (1 + selected.pct / 100)));
+        const delta    = newValue - totalValue;
+        const isDown   = delta < 0;
+        return (
+          <div className="samas-fade" style={{ background: isDown ? C.red + "14" : C.green + "14", border: "1px solid " + (isDown ? C.red + "44" : C.green + "44"), borderRadius: 10, padding: "10px 12px" }}>
+            <div style={{ fontSize:9, fontWeight:800, color: isDown ? C.red : C.green, letterSpacing:1, textTransform:"uppercase", marginBottom:4 }}>{selected.label}</div>
+            <div style={{ fontSize:10, color:C.textMd, lineHeight:1.4, marginBottom:8 }}>{selected.note}</div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:10 }}>
+              <div>
+                <div style={{ fontSize:9, color:C.textLt, fontWeight:700 }}>Tu cartera quedaría en</div>
+                <div style={{ fontSize:18, fontWeight:800, color: isDown ? C.red : C.green, fontFamily:"monospace" }}>${fN(newValue)}</div>
+              </div>
+              <div style={{ textAlign:"right" }}>
+                <div style={{ fontSize:9, color:C.textLt, fontWeight:700 }}>Impacto</div>
+                <div style={{ fontSize:14, fontWeight:800, color: isDown ? C.red : C.green, fontFamily:"monospace" }}>
+                  {isDown ? "-" : "+"}${fN(Math.abs(delta))}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
+// ============================================================
+// REBALANCE HINT — compares holdings allocation vs saved plan
+// ============================================================
+// Maps each holding to its SAMAS category via ASSETS, aggregates the
+// current % per category, and compares against the plan's target
+// allocation. Flags categories that are >5 percentage points off.
+const TICKER_TO_CAT = (ticker) => {
+  const a = ASSETS.find(x => x.ticker === ticker);
+  if (!a) return "Cash";
+  if (a.cat === "Acciones")  return "Acciones";
+  if (a.cat === "CEDEAR")    return "CEDEAR";
+  if (a.cat === "ETF")       return "ETF";
+  if (a.cat === "Commodity") return "ETF";   // commodity ETFs group with ETF
+  if (a.cat === "Crypto")    return "Crypto";
+  return "Acciones";
+};
+function RebalanceHint({ holdings, plan, C }) {
+  if (!plan || !Array.isArray(plan.allocation) || plan.allocation.length === 0) return null;
+  if (!holdings || holdings.length === 0) return null;
+  // Current allocation from holdings value.
+  const current = {};
+  let total = 0;
+  holdings.forEach(h => {
+    const a = ASSETS.find(x => x.ticker === h.ticker);
+    if (!a) return;
+    const v = h.qty * a.price;
+    const cat = TICKER_TO_CAT(h.ticker);
+    current[cat] = (current[cat] || 0) + v;
+    total += v;
+  });
+  if (total === 0) return null;
+  const diffs = plan.allocation
+    .map(p => {
+      const currentPct = ((current[p.name] || 0) / total) * 100;
+      const diff = currentPct - p.percent;
+      return { name: p.name, target: p.percent, current: currentPct, diff };
+    })
+    .filter(d => Math.abs(d.diff) > 5)
+    .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff))
+    .slice(0, 4);
+  if (diffs.length === 0) {
+    return (
+      <div style={{ margin:"14px 14px 0", background:C.green + "14", border:"1px solid "+C.green+"44", borderRadius:14, padding:"11px 14px", display:"flex", alignItems:"center", gap:10 }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        <div style={{ fontSize:12, color:C.text, lineHeight:1.4 }}>Tu cartera está <strong>alineada con el plan</strong>. Todas las categorías dentro de ±5pp del target.</div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ margin:"14px 14px 0", background:C.card, border:"1px solid "+C.border, borderRadius:14, padding:"12px 14px" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+        <div style={{ fontSize:12, fontWeight:700, color:C.text }}>Rebalanceo sugerido</div>
+      </div>
+      <div style={{ fontSize:10.5, color:C.textMd, marginBottom:10, lineHeight:1.5 }}>Estas categorías están lejos de tu plan. Considerá ajustar en próximas compras / ventas.</div>
+      <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+        {diffs.map(d => {
+          const over = d.diff > 0;
+          const col  = over ? C.gold : C.accent;
+          return (
+            <div key={d.name} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 8px", background:C.bg, border:"1px solid "+C.border, borderRadius:10 }}>
+              <div style={{ fontSize:11, fontWeight:700, color:C.text, minWidth:64 }}>{d.name}</div>
+              <div style={{ flex:1, display:"flex", gap:3, alignItems:"center", fontSize:10 }}>
+                <span style={{ color:C.textLt, fontFamily:"monospace" }}>actual {d.current.toFixed(0)}%</span>
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                <span style={{ color:C.accent, fontWeight:700, fontFamily:"monospace" }}>target {d.target}%</span>
+              </div>
+              <div style={{ fontSize:10, fontWeight:800, color:col, fontFamily:"monospace", background:col+"22", borderRadius:6, padding:"2px 6px" }}>
+                {over ? "+" : "−"}{Math.abs(d.diff).toFixed(0)}pp
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ fontSize:9, color:C.textLt, marginTop:8, lineHeight:1.4 }}>
+        <strong style={{ color:C.text }}>+</strong> = exceso (vender para bajar), <strong style={{ color:C.text }}>−</strong> = falta (comprar para subir). Unidad: puntos porcentuales (pp).
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// KEYBOARD SHORTCUTS HELP MODAL — shown via "?" key
+// ============================================================
+function ShortcutsHelpModal({ onClose, C }) {
+  useEscapeKey(onClose);
+  const items = [
+    { keys: ["G", "P"], desc: "Ir a Portafolio" },
+    { keys: ["G", "M"], desc: "Ir a Mercado" },
+    { keys: ["G", "W"], desc: "Ir a Watchlist" },
+    { keys: ["G", "N"], desc: "Ir a Noticias" },
+    { keys: ["G", "O"], desc: "Ir a Órdenes" },
+    { keys: ["?"],      desc: "Mostrar esta ayuda" },
+    { keys: ["Esc"],    desc: "Cerrar modal abierto" },
+  ];
+  const content = (
+    <div className="samas-fade" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:9999, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+      <div className="samas-slide-up" onClick={e => e.stopPropagation()} style={{ background:C.bg, border:"1px solid "+C.border, borderRadius:16, maxWidth:380, width:"100%", padding:"18px 20px 18px", boxShadow:"0 24px 48px rgba(0,0,0,0.5)" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+          <div style={{ fontSize:15, fontWeight:800, color:C.text }}>Atajos de teclado</div>
+          <button onClick={onClose} aria-label="Cerrar" style={{ background:"transparent", border:"none", padding:4, color:C.textMd, cursor:"pointer" }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {items.map((it, i) => (
+            <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 0", borderBottom: i < items.length - 1 ? "1px solid "+C.border+"66" : "none" }}>
+              <div style={{ display:"flex", gap:4, minWidth:70 }}>
+                {it.keys.map((k, j) => (
+                  <kbd key={j} style={{ background:C.creamDk, border:"1px solid "+C.border, borderRadius:5, padding:"2px 7px", fontSize:10, fontFamily:"monospace", fontWeight:700, color:C.text }}>{k}</kbd>
+                ))}
+              </div>
+              <div style={{ fontSize:12, color:C.text }}>{it.desc}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize:10, color:C.textLt, marginTop:14, textAlign:"center" }}>Tip: presioná <kbd style={{ background:C.creamDk, border:"1px solid "+C.border, borderRadius:4, padding:"1px 5px", fontSize:9, fontFamily:"monospace" }}>G</kbd> y después la segunda tecla.</div>
+      </div>
+    </div>
+  );
+  if (typeof document === "undefined") return content;
+  return createPortal(content, document.body);
+}
+
 function PlanProgressCard({ plan, currentValue, onOpen, onClear, C }) {
   const { confirm, ConfirmHost } = useConfirm(C);
   const profile = plan?._profile || {};
@@ -2721,6 +2983,17 @@ function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatch
           })}
         </div>
       </div>
+
+      {/* Rebalance hint — only renders when there's a saved plan and
+          holdings diverge materially from the target allocation. */}
+      <RebalanceHint holdings={holdings} plan={savedPlan} C={C}/>
+
+      {/* Top / bottom 3 market movers of the day. Always shown. */}
+      <MarketMovers onSelectAsset={onSelectAsset} C={C}/>
+
+      {/* Shock test — lets the user simulate big historical moves
+          against their current portfolio. Doesn't touch any state. */}
+      <ShockTestPanel totalValue={tv} C={C}/>
 
       {/* Watchlist moved to its own tab (Favoritos) so the Portfolio page
           stays focused on holdings + plan. Access via the bottom nav. */}
@@ -4831,7 +5104,8 @@ export default function SAMASApp() {
   useEffect(() => { saveAnthropicModel(anthropicModel); }, [anthropicModel]);
   const setAnthropicModel = (m) => setAnthropicModelState(m || ANTHROPIC_DEFAULT_MODEL);
 
-  useKeyboardShortcuts(setTab);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  useKeyboardShortcuts(setTab, () => setShowShortcuts(true));
 
   // RTL support — flip the document direction for Hebrew / Arabic so that
   // text, form fields, and mirrored icons read naturally. Everything else
@@ -5095,6 +5369,8 @@ export default function SAMASApp() {
           <button key={v} onClick={() => setViewMode(v)} style={{ background: v===viewMode ? "#16C784" : "rgba(255,255,255,0.07)", color: v===viewMode ? "#fff" : "rgba(255,255,255,0.5)", border:"none", borderRadius:10, padding:"6px 20px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
         ))}
       </div>
+
+      {showShortcuts && <ShortcutsHelpModal onClose={() => setShowShortcuts(false)} C={C}/>}
 
       {viewMode === "mobile" ? (
         <div style={{ display:"flex", justifyContent:"center", padding:"20px" }}>

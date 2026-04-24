@@ -465,8 +465,63 @@ function PlanView({ plan, target, horizon, currency = "ARS", C }) {
 
       {/* Copy-to-clipboard for offline sharing. The output is markdown so
           it pastes cleanly into Notion, WhatsApp, Notes, etc. */}
-      <CopyPlanButton plan={plan} target={target} horizon={horizon} currency={currency} monthlyNeeded={monthlyNeeded} C={C}/>
+      <div style={{ display:"flex", gap:8, marginTop:10 }}>
+        <CopyPlanButton plan={plan} target={target} horizon={horizon} currency={currency} monthlyNeeded={monthlyNeeded} C={C}/>
+        <SharePlanButton plan={plan} target={target} horizon={horizon} currency={currency} monthlyNeeded={monthlyNeeded} C={C}/>
+      </div>
     </div>
+  );
+}
+
+// Native Web Share API where available (mobile), clipboard fallback
+// elsewhere. Produces the same markdown body as CopyPlanButton.
+function SharePlanButton({ plan, target, horizon, currency, monthlyNeeded, C }) {
+  const [done, setDone] = useState(false);
+  const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+  async function share() {
+    const title = `Mi plan SAMAS — ${plan.strategy || "estrategia"}`;
+    const lines = [
+      `🎯 Objetivo: ${sym(currency)}${fmtNum(target)} en ${horizon} ${horizon === 1 ? "año" : "años"}`,
+      `📊 Perfil: ${plan.strategy}`,
+      `💰 Aporte mensual: ${sym(currency)}${fmtNum(monthlyNeeded)} a ${((plan.assumedReturn || 0) * 100).toFixed(1)}% anual`,
+    ];
+    if (Array.isArray(plan.allocation)) {
+      lines.push("");
+      lines.push("Asignación:");
+      plan.allocation.forEach(a => lines.push(`• ${a.name} ${a.percent}%`));
+    }
+    lines.push("");
+    lines.push("— Armado en SAMAS");
+    const text = lines.join("\n");
+    try {
+      if (canShare) {
+        await navigator.share({ title, text });
+      } else {
+        await navigator.clipboard.writeText(title + "\n\n" + text);
+      }
+      setDone(true);
+      setTimeout(() => setDone(false), 1800);
+    } catch { /* user cancelled share sheet — ignore */ }
+  }
+  return (
+    <button
+      onClick={share}
+      style={{ flex:1, background: done ? C.accent + "18" : "transparent", border: "1.5px dashed " + (done ? C.accent + "55" : C.border), color: done ? C.accent : C.textMd, borderRadius:10, padding:"10px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}
+    >
+      {done ? (
+        <>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          {canShare ? "Compartido" : "Copiado"}
+        </>
+      ) : (
+        <>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+          </svg>
+          Compartir
+        </>
+      )}
+    </button>
   );
 }
 
@@ -515,17 +570,17 @@ function CopyPlanButton({ plan, target, horizon, currency, monthlyNeeded, C }) {
   return (
     <button
       onClick={copy}
-      style={{ marginTop:10, width:"100%", background: copied ? C.green + "18" : "transparent", border: "1.5px dashed " + (copied ? C.green + "55" : C.border), color: copied ? C.green : C.textMd, borderRadius:10, padding:"10px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}
+      style={{ flex:1, background: copied ? C.green + "18" : "transparent", border: "1.5px dashed " + (copied ? C.green + "55" : C.border), color: copied ? C.green : C.textMd, borderRadius:10, padding:"10px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}
     >
       {copied ? (
         <>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          Copiado al portapapeles
+          Copiado
         </>
       ) : (
         <>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          Copiar plan (markdown)
+          Copiar markdown
         </>
       )}
     </button>
