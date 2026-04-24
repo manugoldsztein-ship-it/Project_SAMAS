@@ -16,6 +16,11 @@ import {
 // src/lib/supabase.js for the client configuration.
 import { supabase } from "./lib/supabase.js";
 import { useSupabaseSession, SupabaseAuthFlow } from "./auth/SupabaseAuth.jsx";
+// PIN gate: standard fintech pattern (Brubank, Ualá). Once the user has
+// a valid Supabase session, the app still locks on every open behind a
+// 4-digit PIN stored hashed in localStorage. Prevents shoulder-surfers
+// from getting into the app even if the browser/phone is unlocked.
+import { hasPinSet, clearPin, PinLockScreen } from "./auth/PinLock.jsx";
 
 // ============================================================
 // THEME
@@ -5123,7 +5128,7 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
 // MOBILE PHONE WRAPPER
 // ============================================================
 function MobileApp({ appState, handlers, C }) {
-  const { loggedIn, needsAuth, sbSession, sbProfile, refetchProfile, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
+  const { loggedIn, needsAuth, needsPinGate, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
   const { handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte } = handlers;
   // Modal state hoisted out of PagePortfolio so the wizard's absolute
   // overlay covers the full phone frame (otherwise it was clipped by the
@@ -5154,6 +5159,15 @@ function MobileApp({ appState, handlers, C }) {
     <div style={{ width:375, height:760, background:C.bg, borderRadius:48, overflow:"hidden", boxShadow:"0 40px 80px rgba(0,0,0,0.7)", display:"flex", flexDirection:"column", border:"9px solid #0a0a0a", position:"relative", flexShrink:0 }}>
       <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:110, height:26, background:"#0a0a0a", borderRadius:"0 0 16px 16px", zIndex:30 }}/>
       {needsAuth && <SupabaseAuthFlow C={C} session={sbSession} profile={sbProfile} onVerified={refetchProfile}/>}
+      {needsPinGate && (
+        <PinLockScreen
+          C={C}
+          mode={hasPinSet() ? "enter" : "create"}
+          userEmail={sbSession?.user?.email}
+          onSuccess={() => setPinUnlocked(true)}
+          onForgot={handlers.handleLogout}
+        />
+      )}
       {showTutorial && <OnboardingTutorial onClose={finishTutorial} onComplete={finishTutorial} setTab={setTab} setShowUSD={setShowUSD} setShowProfile={setShowProfile} currentTab={tab} C={C}/>}
       {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} finnhubKey={finnhubKey} setFinnhubKey={setFinnhubKey} finnhub={finnhub} emailjsCfg={emailjsCfg} setEmailjsCfg={setEmailjsCfg} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} anthropicModel={anthropicModel} setAnthropicModel={setAnthropicModel} C={C}/>}
       {toast && <div className="samas-slide-up" style={{ position:"absolute", top:34, left:14, right:14, zIndex:50, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 14px", fontSize:12, fontWeight:700, boxShadow:"0 10px 30px rgba(0,0,0,0.35)" }}>{toast.msg}</div>}
@@ -5227,7 +5241,7 @@ function MobileApp({ appState, handlers, C }) {
 // WEB DASHBOARD LAYOUT
 // ============================================================
 function WebDashboard({ appState, handlers, C }) {
-  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, needsAuth, sbSession, sbProfile, refetchProfile, showProfile, showUSD, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
+  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, needsAuth, needsPinGate, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, showUSD, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
   const { setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, setShowProfile, setIsDark, setShowUSD, setLang, finishTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, handleDeposit, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte } = handlers;
   const [sideTab, setSideTab] = useState("portfolio");
   // Objectives modal lives at dashboard level for the same reason as in
@@ -5356,12 +5370,19 @@ export default function SAMASApp() {
   // truly ephemeral state (modals, toasts, current tab, pending trade) lives
   // in memory — everything a user would expect to survive a reload is saved.
   const [isDark, setIsDark]           = usePersistedState("samas_ui_dark", true);
-  // Real auth: Supabase session + phone-verified flag drive `loggedIn`.
-  // `loggedIn` is derived (not a useState) — the app is "logged in" only
-  // when there's a valid session AND the user's WhatsApp is verified.
+  // Real auth: Supabase session + phone-verified flag + local PIN gate.
+  // The app is "logged in" only when all three are true:
+  //   - valid Supabase session
+  //   - profile.phone_verified = true (WhatsApp OTP completed)
+  //   - user has passed the PIN gate this tab session
   const { session: sbSession, profile: sbProfile, loading: sbLoading, refetchProfile } = useSupabaseSession();
-  const loggedIn = !!sbSession && !!sbProfile?.phone_verified;
-  const needsAuth = !sbLoading && !loggedIn;
+  // pinUnlocked is per-tab (useState, not persisted) — the user has to
+  // enter the PIN every time they reopen the app.
+  const [pinUnlocked, setPinUnlocked] = useState(false);
+  const supabaseReady = !!sbSession && !!sbProfile?.phone_verified;
+  const needsAuth   = !sbLoading && !supabaseReady;
+  const needsPinGate = supabaseReady && !pinUnlocked;
+  const loggedIn    = supabaseReady && pinUnlocked;
   const [hasSeenTutorial, setHasSeen] = usePersistedState("samas_seen_tutorial", false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -5667,10 +5688,13 @@ export default function SAMASApp() {
     }
   }, [loggedIn, hasSeenTutorial]);
   // Logout → Supabase sign-out triggers onAuthStateChange, which clears
-  // sbSession and therefore flips `loggedIn` false. We also reset local
-  // ephemeral state (modals, selected asset, pending trade).
+  // sbSession and therefore flips `loggedIn` false. We also clear the
+  // PIN hash (next user on this device shouldn't inherit it) and reset
+  // local ephemeral state (modals, selected asset, pending trade).
   const handleLogout = async () => {
     try { await supabase.auth.signOut(); } catch (e) { console.error("[auth] signOut", e); }
+    clearPin();
+    setPinUnlocked(false);
     setShowProfile(false);
     setTab("portfolio");
     setSelected(null);
@@ -5686,7 +5710,7 @@ export default function SAMASApp() {
     showToast(`$${fN(amount)} acreditados via ${methodLabel}`, C.green);
   };
 
-  const appState = { isDark, loggedIn, needsAuth, sbSession, sbProfile, refetchProfile, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker };
+  const appState = { isDark, loggedIn, needsAuth, needsPinGate, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker };
   const handlers = { handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte };
 
   const outerBg = isDark ? "#080808" : "#050505";
@@ -5758,7 +5782,16 @@ export default function SAMASApp() {
         ) : (
           <div style={{ display:"flex", justifyContent:"center", alignItems:"center", minHeight:"calc(100vh - 60px)" }}>
             <div style={{ width:420, height:620, position:"relative", borderRadius:20, overflow:"hidden" }}>
-              <SupabaseAuthFlow C={C} session={sbSession} profile={sbProfile} onVerified={refetchProfile}/>
+              {needsAuth && <SupabaseAuthFlow C={C} session={sbSession} profile={sbProfile} onVerified={refetchProfile}/>}
+              {needsPinGate && (
+                <PinLockScreen
+                  C={C}
+                  mode={hasPinSet() ? "enter" : "create"}
+                  userEmail={sbSession?.user?.email}
+                  onSuccess={() => setPinUnlocked(true)}
+                  onForgot={handleLogout}
+                />
+              )}
             </div>
           </div>
         )
