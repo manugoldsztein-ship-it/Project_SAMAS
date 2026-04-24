@@ -2358,10 +2358,12 @@ function MarketMovers({ onSelectAsset, C }) {
     >
       <AssetLogo asset={a} size={24} C={C}/>
       <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ fontSize:12, fontWeight:700, color:C.text }}>{a.ticker}</div>
+        <div style={{ fontSize:12, fontWeight:700, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.ticker}</div>
         <div style={{ fontSize:9, color:C.textLt, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.name}</div>
       </div>
-      <div style={{ textAlign:"right" }}>
+      {/* flexShrink:0 keeps the price block from being squeezed; overflow
+          pressure is taken by the ticker/name column instead. */}
+      <div style={{ textAlign:"right", flexShrink:0 }}>
         <div style={{ fontSize:11, fontWeight:700, fontFamily:"monospace", color:C.text }}>${fN(a.price)}</div>
         <div style={{ fontSize:10, fontWeight:800, color: a.up ? C.green : C.red }}>
           {a.up ? "+" : "-"}{Math.abs(a.change).toFixed(2)}%
@@ -2372,16 +2374,19 @@ function MarketMovers({ onSelectAsset, C }) {
   return (
     <div style={{ padding:"12px 14px 0" }}>
       <div style={{ fontSize:11, fontWeight:700, color:C.textMd, marginBottom:8, letterSpacing:0.5 }}>Top del día</div>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-        <div style={{ background:C.card, border:"1px solid "+C.green+"33", borderRadius:12, padding:"10px 12px" }}>
-          <div style={{ fontSize:9, fontWeight:800, color:C.green, letterSpacing:1, textTransform:"uppercase", marginBottom:6, display:"flex", alignItems:"center", gap:4 }}>
+      {/* minmax(0, 1fr) forces each column to stay within its fraction even
+          when the ticker / price content is wide — without this, long
+          strings on one side push it out of the 50/50 split. */}
+      <div style={{ display:"grid", gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)", gap:8 }}>
+        <div style={{ background:C.card, border:"1px solid "+C.green+"33", borderRadius:12, padding:"10px 12px", minWidth:0 }}>
+          <div style={{ fontSize:9, fontWeight:800, color:C.green, letterSpacing:1, textTransform:"uppercase", marginBottom:8, display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
             Mayores subas
           </div>
           {gainers.map(row)}
         </div>
-        <div style={{ background:C.card, border:"1px solid "+C.red+"33", borderRadius:12, padding:"10px 12px" }}>
-          <div style={{ fontSize:9, fontWeight:800, color:C.red, letterSpacing:1, textTransform:"uppercase", marginBottom:6, display:"flex", alignItems:"center", gap:4 }}>
+        <div style={{ background:C.card, border:"1px solid "+C.red+"33", borderRadius:12, padding:"10px 12px", minWidth:0 }}>
+          <div style={{ fontSize:9, fontWeight:800, color:C.red, letterSpacing:1, textTransform:"uppercase", marginBottom:8, display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
             Mayores bajas
           </div>
