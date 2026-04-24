@@ -500,7 +500,15 @@ class ErrorBoundary extends React.Component {
 function useEscapeKey(onEscape) {
   useEffect(() => {
     if (!onEscape) return;
-    const fn = (e) => { if (e.key === "Escape") { e.stopPropagation(); onEscape(); } };
+    // stopImmediatePropagation so when multiple modals are stacked, a single
+    // Esc closes only the top one instead of collapsing the whole stack.
+    const fn = (e) => {
+      if (e.key === "Escape") {
+        e.stopImmediatePropagation();
+        e.stopPropagation();
+        onEscape();
+      }
+    };
     window.addEventListener("keydown", fn);
     return () => window.removeEventListener("keydown", fn);
   }, [onEscape]);
@@ -2332,7 +2340,14 @@ function RecurringAporteModal({ current, onSave, onClose, C }) {
 // Computed from ASSETS. Rank by daily change %. Shows small rows with
 // ticker + name + price + chg pct; tapping opens the asset detail.
 function MarketMovers({ onSelectAsset, C }) {
-  const sorted = [...ASSETS].sort((a, b) => (b.change || 0) - (a.change || 0));
+  // Stable sort: tie-break on ticker alphabetical order so the same
+  // ties always render in the same order instead of depending on the
+  // engine's implementation detail.
+  const sorted = [...ASSETS].sort((a, b) => {
+    const d = (b.change || 0) - (a.change || 0);
+    if (d !== 0) return d;
+    return (a.ticker || "").localeCompare(b.ticker || "");
+  });
   const gainers = sorted.slice(0, 3);
   const losers  = sorted.slice(-3).reverse();
   const row = (a) => (
@@ -4315,7 +4330,7 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
   useEscapeKey(onClose);
   // In-app confirm for destructive actions like "reset demo data".
   const { confirm, ConfirmHost } = useConfirm(C);
-  const [confirm, setConfirm]       = useState(false);
+  const [logoutConfirm, setLogoutConfirm] = useState(false);
   // Two-view panel: root (user card + dark mode + Settings row + logout)
   // vs. settings subpage (back arrow + all the expandable integrations).
   // Previously all 7 expandable items lived on the root, making the sheet
@@ -4824,8 +4839,8 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
         )}
         </>)}
 
-        {!confirm ? (
-          <button onClick={() => setConfirm(true)} style={{ width:"100%", marginTop:8, background:C.red+"18", border:"1.5px solid "+C.red+"33", borderRadius:14, padding:"13px", display:"flex", alignItems:"center", justifyContent:"center", gap:8, cursor:"pointer", fontFamily:"inherit" }}>
+        {!logoutConfirm ? (
+          <button onClick={() => setLogoutConfirm(true)} style={{ width:"100%", marginTop:8, background:C.red+"18", border:"1.5px solid "+C.red+"33", borderRadius:14, padding:"13px", display:"flex", alignItems:"center", justifyContent:"center", gap:8, cursor:"pointer", fontFamily:"inherit" }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             <span style={{ color:C.red, fontWeight:700, fontSize:14 }}>{t("logout")}</span>
           </button>
@@ -4834,7 +4849,7 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
             <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:4 }}>Cerrar sesion?</div>
             <div style={{ fontSize:11, color:C.textMd, marginBottom:12 }}>Tendras que verificar tu identidad al volver.</div>
             <div style={{ display:"flex", gap:10 }}>
-              <button onClick={() => setConfirm(false)} style={{ flex:1, background:C.creamDk, border:"none", borderRadius:10, padding:"11px", fontWeight:600, fontSize:13, cursor:"pointer", color:C.textMd, fontFamily:"inherit" }}>Cancelar</button>
+              <button onClick={() => setLogoutConfirm(false)} style={{ flex:1, background:C.creamDk, border:"none", borderRadius:10, padding:"11px", fontWeight:600, fontSize:13, cursor:"pointer", color:C.textMd, fontFamily:"inherit" }}>Cancelar</button>
               <button onClick={onLogout} style={{ flex:2, background:C.red, border:"none", borderRadius:10, padding:"11px", fontWeight:700, fontSize:13, cursor:"pointer", color:"#fff", fontFamily:"inherit" }}>Si, cerrar sesion</button>
             </div>
           </div>
@@ -5173,19 +5188,26 @@ export default function SAMASApp() {
   }, [totalARS]);
 
   // Apply the recurring aporte if one is configured and a calendar month has
-  // passed since lastApplied. Runs on every mount; cheap.
+  // passed since lastApplied. Runs once on mount. Values are clamped so a
+  // hand-edited localStorage key (negative amount, future date, wrong
+  // types) can't silently drain or inflate the balance.
   useEffect(() => {
-    if (!recurringAporte || !recurringAporte.amount || !recurringAporte.lastApplied) return;
+    if (!recurringAporte || !recurringAporte.lastApplied) return;
+    const amount = Math.max(0, Number(recurringAporte.amount) || 0);
+    if (amount <= 0) return;
     const now = new Date();
     const last = new Date(recurringAporte.lastApplied);
-    const monthsElapsed = (now.getFullYear() - last.getFullYear()) * 12 + (now.getMonth() - last.getMonth());
+    if (isNaN(last.getTime())) return;   // malformed date
+    const monthsElapsed = Math.max(
+      0,
+      (now.getFullYear() - last.getFullYear()) * 12 + (now.getMonth() - last.getMonth())
+    );
     if (monthsElapsed < 1) return;
-    // Apply as many months as we missed (at most 6, so we don't turbo-deposit
-    // after a long absence).
     const toApply = Math.min(monthsElapsed, 6);
-    setBalance(b => b + recurringAporte.amount * toApply);
+    const credit = amount * toApply;
+    setBalance(b => b + credit);
     setRecurringAporte(prev => ({ ...prev, lastApplied: now.toISOString().slice(0, 10) }));
-    showToast(`Aporte automático: $${fN(recurringAporte.amount * toApply)} acreditado (${toApply} ${toApply === 1 ? "mes" : "meses"})`, C.green);
+    showToast(`Aporte automático: $${fN(credit)} acreditado (${toApply} ${toApply === 1 ? "mes" : "meses"})`, C.green);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
