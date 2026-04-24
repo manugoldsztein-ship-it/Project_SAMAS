@@ -3057,9 +3057,8 @@ function WatchlistPickerModal({ ticker, watchlists, onConfirm, onCreate, onClose
   }
 
   const content = (
-    <div className="samas-fade" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:9998, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-      <div className="samas-slide-up" onClick={e => e.stopPropagation()} style={{ background:C.bg, borderRadius:"22px 22px 0 0", maxWidth:420, width:"100%", padding:"14px 18px 18px", border:"1px solid "+C.border, borderBottom:"none", maxHeight:"82vh", display:"flex", flexDirection:"column" }}>
-        <div style={{ display:"flex", justifyContent:"center", marginBottom:10 }}><div style={{ width:36, height:4, background:C.border, borderRadius:2 }}/></div>
+    <div className="samas-fade" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:9998, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+      <div className="samas-slide-up" onClick={e => e.stopPropagation()} style={{ background:C.bg, borderRadius:20, maxWidth:420, width:"100%", padding:"16px 18px 18px", border:"1px solid "+C.border, maxHeight:"82vh", display:"flex", flexDirection:"column", boxShadow:"0 24px 48px rgba(0,0,0,0.5)" }}>
         <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
           <div style={{ width:34, height:34, borderRadius:10, background:C.gold+"22", color:C.gold, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
@@ -3174,9 +3173,8 @@ function AssetPickerModal({ title = "Agregar activo", alreadyIn, onPick, onClose
     return true;
   });
   const content = (
-    <div className="samas-fade" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:9998, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-      <div className="samas-slide-up" onClick={e => e.stopPropagation()} style={{ background:C.bg, borderRadius:"22px 22px 0 0", maxWidth:420, width:"100%", padding:"14px 16px 18px", border:"1px solid "+C.border, borderBottom:"none", maxHeight:"82vh", display:"flex", flexDirection:"column" }}>
-        <div style={{ display:"flex", justifyContent:"center", marginBottom:10 }}><div style={{ width:36, height:4, background:C.border, borderRadius:2 }}/></div>
+    <div className="samas-fade" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:9998, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+      <div className="samas-slide-up" onClick={e => e.stopPropagation()} style={{ background:C.bg, borderRadius:20, maxWidth:420, width:"100%", padding:"16px 16px 18px", border:"1px solid "+C.border, maxHeight:"82vh", display:"flex", flexDirection:"column", boxShadow:"0 24px 48px rgba(0,0,0,0.5)" }}>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
           <div style={{ flex:1, fontSize:14, fontWeight:800, color:C.text }}>{title}</div>
           <button onClick={onClose} aria-label="Cerrar" style={{ background:"transparent", border:"none", cursor:"pointer", padding:4, color:C.textMd }}>
