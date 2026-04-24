@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 // AI surface is intentionally narrow: one wizard that does compound interest
 // projection + income/expenses breakdown + strategy pick. No general chat,
@@ -3017,6 +3017,139 @@ function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatch
 }
 
 // ============================================================
+// WATCHLIST PICKER MODAL
+// ============================================================
+// Shown when the user clicks the star on an asset and has multiple
+// watchlists. Pre-checks lists that currently contain the ticker,
+// lets them check/uncheck multiple, plus inline "create new list".
+// Rendered via portal so it escapes any overflow ancestors.
+function WatchlistPickerModal({ ticker, watchlists, onConfirm, onCreate, onClose, C }) {
+  useEscapeKey(onClose);
+  const lists = Array.isArray(watchlists) ? watchlists : [];
+  const initiallySelected = useMemo(() => {
+    return new Set(lists.filter(l => (l.tickers || []).includes(ticker)).map(l => l.id));
+  }, [lists, ticker]);
+  const [selected, setSelected] = useState(initiallySelected);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName]   = useState("");
+
+  function toggle(id) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function submitCreate() {
+    const name = newName.trim();
+    if (!name) { setCreating(false); setNewName(""); return; }
+    onCreate && onCreate(name);
+    setCreating(false);
+    setNewName("");
+  }
+  function save() {
+    onConfirm([...selected]);
+    onClose();
+  }
+
+  const content = (
+    <div className="samas-fade" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:9998, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+      <div className="samas-slide-up" onClick={e => e.stopPropagation()} style={{ background:C.bg, borderRadius:"22px 22px 0 0", maxWidth:420, width:"100%", padding:"14px 18px 18px", border:"1px solid "+C.border, borderBottom:"none", maxHeight:"82vh", display:"flex", flexDirection:"column" }}>
+        <div style={{ display:"flex", justifyContent:"center", marginBottom:10 }}><div style={{ width:36, height:4, background:C.border, borderRadius:2 }}/></div>
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+          <div style={{ width:34, height:34, borderRadius:10, background:C.gold+"22", color:C.gold, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          </div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:14, fontWeight:800, color:C.text }}>Guardar <span style={{ fontFamily:"monospace" }}>{ticker}</span></div>
+            <div style={{ fontSize:11, color:C.textMd }}>Elegí en qué listas querés tenerlo.</div>
+          </div>
+          <button onClick={onClose} aria-label="Cerrar" style={{ background:"transparent", border:"none", cursor:"pointer", padding:4, color:C.textMd }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        {/* List rows */}
+        <div style={{ flex:1, overflowY:"auto", display:"flex", flexDirection:"column", gap:6, marginBottom:10 }}>
+          {lists.map(list => {
+            const isSel = selected.has(list.id);
+            return (
+              <button
+                key={list.id}
+                onClick={() => toggle(list.id)}
+                style={{
+                  display:"flex", alignItems:"center", gap:10,
+                  background: isSel ? C.gold + "18" : C.card,
+                  border: "1.5px solid " + (isSel ? C.gold + "66" : C.border),
+                  borderRadius: 12,
+                  padding: "10px 12px",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  textAlign: "left",
+                }}
+              >
+                <div style={{
+                  width: 22, height: 22, borderRadius: 6,
+                  border: "2px solid " + (isSel ? C.gold : C.border),
+                  background: isSel ? C.gold : "transparent",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  flexShrink: 0,
+                }}>
+                  {isSel && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0D1117" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  )}
+                </div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:C.text }}>{list.name}</div>
+                  <div style={{ fontSize:10, color:C.textLt }}>{(list.tickers || []).length} activos</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Create new list inline */}
+        {creating ? (
+          <div style={{ display:"flex", gap:6, marginBottom:10 }}>
+            <input
+              autoFocus
+              value={newName}
+              maxLength={40}
+              onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") submitCreate(); if (e.key === "Escape") { setCreating(false); setNewName(""); } }}
+              placeholder="Nombre de la nueva lista"
+              style={{ flex:1, background:C.bg, border:"1.5px solid "+C.accent+"66", borderRadius:10, padding:"9px 11px", fontSize:13, color:C.text, outline:"none", fontFamily:"inherit" }}
+            />
+            <button onClick={submitCreate} style={{ background:C.accent, color:"#fff", border:"none", borderRadius:10, padding:"9px 14px", fontWeight:700, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>Crear</button>
+            <button onClick={() => { setCreating(false); setNewName(""); }} style={{ background:"transparent", color:C.textMd, border:"1px solid "+C.border, borderRadius:10, padding:"9px 10px", fontWeight:600, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>✕</button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setCreating(true)}
+            style={{ width:"100%", background:"transparent", border:"1.5px dashed "+C.border, borderRadius:10, padding:"10px", fontSize:12, fontWeight:600, color:C.textMd, cursor:"pointer", fontFamily:"inherit", marginBottom:10, display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Nueva lista
+          </button>
+        )}
+
+        {/* Actions */}
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={onClose} style={{ flex:1, background:C.creamDk, color:C.textMd, border:"1.5px solid "+C.border, borderRadius:12, padding:"11px", fontWeight:600, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
+            Cancelar
+          </button>
+          <button onClick={save} style={{ flex:2, background:C.accent, color:"#fff", border:"none", borderRadius:12, padding:"11px", fontWeight:700, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+  if (typeof document === "undefined") return content;
+  return createPortal(content, document.body);
+}
+
+// ============================================================
 // PAGE: FAVORITOS (multiple named watchlists)
 // ============================================================
 // Each list is { id, name, tickers[] }. Users can create lists with custom
@@ -4864,8 +4997,8 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
 // MOBILE PHONE WRAPPER
 // ============================================================
 function MobileApp({ appState, handlers, C }) {
-  const { loggedIn, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte } = appState;
-  const { setLoggedIn, handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte } = handlers;
+  const { loggedIn, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
+  const { setLoggedIn, handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte } = handlers;
   // Modal state hoisted out of PagePortfolio so the wizard's absolute
   // overlay covers the full phone frame (otherwise it was clipped by the
   // page's overflow:auto scroll container — the X button could fall out
@@ -4899,6 +5032,16 @@ function MobileApp({ appState, handlers, C }) {
       {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} C={C}/>}
       {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} C={C}/>}
       {showObjectives && <ObjectivesWizard onClose={() => setShowObjectives(false)} onSave={setSavedPlan} savedPlan={savedPlan} C={C}/>}
+      {pickerTicker && (
+        <WatchlistPickerModal
+          ticker={pickerTicker}
+          watchlists={watchlists}
+          onConfirm={(ids) => setTickerInLists(pickerTicker, ids)}
+          onCreate={createWatchlist}
+          onClose={() => setPickerTicker(null)}
+          C={C}
+        />
+      )}
       <div style={{ background:C.isDark?"#0F0F0F":"#0D1117", paddingTop:30, paddingBottom:8, paddingLeft:20, paddingRight:20, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0, zIndex:10 }}>
         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
           <span style={{ color:"rgba(255,255,255,0.6)", fontSize:12, fontWeight:600 }}>{new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})}</span>
@@ -4943,8 +5086,8 @@ function MobileApp({ appState, handlers, C }) {
 // WEB DASHBOARD LAYOUT
 // ============================================================
 function WebDashboard({ appState, handlers, C }) {
-  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, showProfile, showUSD, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte } = appState;
-  const { setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, setShowProfile, setIsDark, setShowUSD, setLang, finishTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setFinnhubKey, setEmailjsCfg, handleDeposit, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte } = handlers;
+  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, showProfile, showUSD, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
+  const { setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, setShowProfile, setIsDark, setShowUSD, setLang, finishTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, handleDeposit, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte } = handlers;
   const [sideTab, setSideTab] = useState("portfolio");
   // Objectives modal lives at dashboard level for the same reason as in
   // MobileApp — keeps the overlay out of the page's scroll container.
@@ -5019,6 +5162,16 @@ function WebDashboard({ appState, handlers, C }) {
           {toast && <div className="samas-slide-up" style={{ position:"fixed", top:70, left:"50%", transform:"translateX(-50%)", zIndex:99, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 20px", fontSize:13, fontWeight:700, boxShadow:"0 8px 32px rgba(0,0,0,0.3)" }}>{toast.msg}</div>}
           <div style={{ overflowY:"auto", height:"calc(100vh - 56px)" }}>{renderPage()}</div>
           {showObjectives && <ObjectivesWizard onClose={() => setShowObjectives(false)} onSave={setSavedPlan} savedPlan={savedPlan} C={C}/>}
+          {pickerTicker && (
+            <WatchlistPickerModal
+              ticker={pickerTicker}
+              watchlists={watchlists}
+              onConfirm={(ids) => setTickerInLists(pickerTicker, ids)}
+              onCreate={createWatchlist}
+              onClose={() => setPickerTicker(null)}
+              C={C}
+            />
+          )}
         </div>
         <div style={{ width:320, background:C.card, borderLeft:"1px solid "+C.border, padding:"20px 16px", position:"sticky", top:56, height:"calc(100vh - 56px)", overflowY:"auto" }}>
           <div style={{ fontWeight:700, fontSize:14, color:C.text, marginBottom:16 }}>Mercado en vivo</div>
@@ -5249,6 +5402,14 @@ export default function SAMASApp() {
     // Star toggle — operates across lists. If the ticker is in ANY list, we
   // remove it from all. Otherwise we add it to the first (default) list.
   // Users who want per-list control can manage from the Favoritos tab.
+  // When to show the picker vs. toggle immediately:
+  //   - Zero lists: create default + add (same as before).
+  //   - One list: star behaves as a simple toggle — no picker overhead.
+  //   - Multiple lists + star currently FILLED: remove from all lists
+  //     (the classic "un-star it everywhere" gesture).
+  //   - Multiple lists + star currently EMPTY: open the picker so the
+  //     user can choose which list to add to.
+  const [pickerTicker, setPickerTicker] = useState(null);
   const toggleWatchlist = (ticker) => {
     setWatchlists(prev => {
       if (!prev || !prev.length) {
@@ -5256,13 +5417,41 @@ export default function SAMASApp() {
         return [{ id: "default", name: "Mi Watchlist", tickers: [ticker] }];
       }
       const has = prev.some(l => (l.tickers || []).includes(ticker));
+      // 1 list — classic toggle.
+      if (prev.length === 1) {
+        if (has) {
+          haptic("tap"); showToast("Removido de watchlist:" + ticker, C.textMd);
+          return prev.map(l => ({ ...l, tickers: (l.tickers || []).filter(t => t !== ticker) }));
+        }
+        haptic("tap"); showToast("Agregado a watchlist:" + ticker, C.gold);
+        return prev.map((l, i) => i === 0 ? { ...l, tickers: [...(l.tickers || []), ticker] } : l);
+      }
+      // Multiple lists + already starred → remove everywhere.
       if (has) {
         haptic("tap"); showToast("Removido de watchlist:" + ticker, C.textMd);
         return prev.map(l => ({ ...l, tickers: (l.tickers || []).filter(t => t !== ticker) }));
       }
-      haptic("tap"); showToast("Agregado a watchlist:" + ticker, C.gold);
-      return prev.map((l, i) => i === 0 ? { ...l, tickers: [...(l.tickers || []), ticker] } : l);
+      // Multiple lists + not starred → open picker. Schedule the state
+      // update outside of this setter so React doesn't complain about
+      // side-effects during reducer.
+      setTimeout(() => setPickerTicker(ticker), 0);
+      return prev;
     });
+  };
+  // Apply picker selection: replace the ticker's membership across lists
+  // to match the given set of list ids.
+  const setTickerInLists = (ticker, selectedIds) => {
+    setWatchlists(prev => (prev || []).map(l => {
+      const should = selectedIds.includes(l.id);
+      const has    = (l.tickers || []).includes(ticker);
+      if (should && !has) return { ...l, tickers: [...l.tickers, ticker] };
+      if (!should && has) return { ...l, tickers: l.tickers.filter(t => t !== ticker) };
+      return l;
+    }));
+    haptic("tap");
+    const n = selectedIds.length;
+    if (n === 0) showToast("Removido de watchlist:" + ticker, C.textMd);
+    else         showToast(`${ticker} guardado en ${n} ${n === 1 ? "lista" : "listas"}`, C.gold);
   };
   // Handlers for managing the list set itself — create, rename, delete.
   const createWatchlist = (name) => {
@@ -5335,8 +5524,8 @@ export default function SAMASApp() {
     showToast(`$${fN(amount)} acreditados via ${methodLabel}`, C.green);
   };
 
-  const appState = { isDark, loggedIn, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte };
-  const handlers = { setLoggedIn, handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte };
+  const appState = { isDark, loggedIn, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker };
+  const handlers = { setLoggedIn, handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte };
 
   const outerBg = isDark ? "#080808" : "#050505";
 
