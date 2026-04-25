@@ -5517,14 +5517,12 @@ function MobileApp({ appState, handlers, C }) {
       })()}
       <div style={{
         background:C.isDark?"#0F0F0F":"#0D1117",
-        // Header background extends through the status-bar zone.
-        // paddingTop = exactly env(safe-area-inset-top) so content
-        // sits right at the bottom edge of the iOS chrome — no
-        // extra breathing offset, that just adds visible empty space.
-        paddingTop: isNativeApp ? "env(safe-area-inset-top)" : 30,
-        paddingBottom: isNativeApp ? 8 : 8,
-        paddingLeft: isNativeApp ? "calc(env(safe-area-inset-left) + 20px)" : 20,
-        paddingRight: isNativeApp ? "calc(env(safe-area-inset-right) + 20px)" : 20,
+        // Safe-area-inset is on #root (see index.html). Header just
+        // needs normal breathing-room padding.
+        paddingTop: isNativeApp ? 8 : 30,
+        paddingBottom: 8,
+        paddingLeft: 20,
+        paddingRight: 20,
         display:"flex", alignItems:"center", flexShrink:0, zIndex:10, gap:8,
       }}>
         {/* Three-column layout: left + center (SAMAS) + right. Each
@@ -5575,14 +5573,12 @@ function MobileApp({ appState, handlers, C }) {
         background:C.isDark?"#0F0F0F":C.card,
         borderTop:"1px solid "+C.border,
         display:"flex",
-        // Bottom nav background extends through the home-indicator
-        // zone. 70px reserved for labels + icons, plus the safe-area
-        // padding below them. Previously had 58px which cut off the
-        // labels on Pro phones with larger gesture areas.
-        height: isNativeApp ? "calc(70px + env(safe-area-inset-bottom))" : 78,
+        // Safe-area-inset is on #root. Nav just needs to fit icons
+        // and labels comfortably.
+        height: isNativeApp ? 70 : 78,
         zIndex:20,
-        paddingTop: isNativeApp ? 6 : 6,
-        paddingBottom: isNativeApp ? "env(safe-area-inset-bottom)" : 4,
+        paddingTop: 6,
+        paddingBottom: 6,
       }}>
         {TABS.map(t => {
           const active = tab === t.id;

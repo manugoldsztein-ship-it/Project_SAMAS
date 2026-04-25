@@ -23,17 +23,22 @@
         overscroll-behavior: none;
       }
       html { -webkit-text-size-adjust: 100%; }
-      /* CNBC-style chrome: header and bottom nav extend edge-to-edge
-         through the iOS status-bar / home-indicator zones, with their
-         own internal safe-area-inset padding so the actual content
-         (logo, icons) sits inside the safe area. body just provides
-         the fallback dark color while React mounts. */
+      /* #root absorbs the iOS safe-area insets (status bar zone +
+         home-indicator zone). The wrapper inside is position:absolute;
+         inset:0 so it fills #root's PADDING BOX — i.e. the inside of
+         the safe area. Visually that means: the SAMAS header sits at
+         the bottom edge of the status bar zone (no gap), and the bg
+         color of the safe-area zones matches the chrome bars so it
+         reads as one continuous dark surface from the very top of
+         the screen down to where the content begins. */
       body { background: #0F0F0F; }
       #root {
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
         background: #0F0F0F;
         box-sizing: border-box;
-        /* Positioned ancestor for the absolutely-positioned MobileApp
-           wrapper. */
         position: relative;
       }
       /* Global box-sizing so width:100% + padding doesn't blow past the
