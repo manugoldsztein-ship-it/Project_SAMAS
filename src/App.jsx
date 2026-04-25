@@ -14,13 +14,17 @@ import {
 // Real auth: Supabase session + signup/login/verify-WhatsApp flow. Replaces
 // the demo-PIN LoginScreen. See src/auth/SupabaseAuth.jsx for the UI, and
 // src/lib/supabase.js for the client configuration.
-import { supabase } from "./lib/supabase.js";
+import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./lib/supabase.js";
 import { useSupabaseSession, SupabaseAuthFlow } from "./auth/SupabaseAuth.jsx";
+// User data: holdings / orders / balance now live in Supabase. The UI
+// keeps using the same local state shapes — userData.js is the
+// translation + sync layer.
+import { loadUserPortfolio, saveHoldings, saveBalance, appendOrder, saveWatchlists, savePlan, clearPlans, saveStopLosses, savePriceAlerts } from "./lib/userData.js";
 // PIN gate: standard fintech pattern (Brubank, Ualá). Once the user has
 // a valid Supabase session, the app still locks on every open behind a
 // 4-digit PIN stored hashed in localStorage. Prevents shoulder-surfers
 // from getting into the app even if the browser/phone is unlocked.
-import { hasPinSet, clearPin, PinLockScreen } from "./auth/PinLock.jsx";
+import { hashPin, PinLockScreen } from "./auth/PinLock.jsx";
 // Welcome chooser: shown only on first session when profiles.ui_mode
 // is null. User picks "principiante" or "profesional" and the rest
 // of the app reads that choice to decide which surfaces to show.
@@ -1287,7 +1291,7 @@ function PriceAlertModal({ asset, current, onSave, onClose, C }) {
 // ============================================================
 // CONFIRM TRADE MODAL (with 2FA + email)
 // ============================================================
-function ConfirmTradeModal({ trade, onConfirm, onCancel, C, isWeb = false }) {
+function ConfirmTradeModal({ trade, onConfirm, onCancel, C, isWeb = false, displayUser = DEMO_USER, storedPinHash = null }) {
   useEscapeKey(onCancel);
   const [step, setStep]       = useState("alert");   // alert | review | faceid | pin
   const [pin, setPin]         = useState("");
@@ -1302,7 +1306,7 @@ function ConfirmTradeModal({ trade, onConfirm, onCancel, C, isWeb = false }) {
       setFacePhase("success");
       setTimeout(() => {
         sendEmailNotification({
-          to: DEMO_USER.email,
+          to: displayUser.email,
           subject: "Operacion ejecutada: " + trade.side + " " + trade.ticker,
           body: trade.side + " " + trade.qty + " " + trade.ticker + " a $" + fN(trade.price) + ". Total: $" + fN(total) + ". Fecha: " + new Date().toLocaleString("es-AR") + ". Si no reconoces esta operacion contacta a SAMAS inmediatamente."
         });
@@ -1311,15 +1315,26 @@ function ConfirmTradeModal({ trade, onConfirm, onCancel, C, isWeb = false }) {
     }, 1800);
   };
 
-  const doPin = () => {
-    if (pin === DEMO_USER.pin) {
-      sendEmailNotification({
-        to: DEMO_USER.email,
-        subject: "Operacion ejecutada: " + trade.side + " " + trade.ticker,
-        body: trade.side + " " + trade.qty + " " + trade.ticker + " a $" + fN(trade.price) + ". Total: $" + fN(total) + ". Fecha: " + new Date().toLocaleString("es-AR") + ". Si no reconoces esta operacion contacta a SAMAS inmediatamente."
-      });
-      onConfirm();
-    } else {
+  const doPin = async () => {
+    // Hash the entered PIN and compare against the profile's stored PIN
+    // hash. If we somehow don't have a hash (new account with no PIN set
+    // — shouldn't happen because the app gates behind PinLockScreen),
+    // fall back to demo "4821" so local-only testing keeps working.
+    try {
+      const hash = await hashPin(pin);
+      const ok = storedPinHash ? (hash === storedPinHash) : pin === "4821";
+      if (ok) {
+        sendEmailNotification({
+          to: displayUser.email,
+          subject: "Operacion ejecutada: " + trade.side + " " + trade.ticker,
+          body: trade.side + " " + trade.qty + " " + trade.ticker + " a $" + fN(trade.price) + ". Total: $" + fN(total) + ". Fecha: " + new Date().toLocaleString("es-AR") + ". Si no reconoces esta operacion contacta a SAMAS inmediatamente."
+        });
+        onConfirm();
+      } else {
+        setPinErr(true); setPin(""); setTimeout(() => setPinErr(false), 1400);
+      }
+    } catch (e) {
+      console.error("[trade-pin] hash failed:", e);
       setPinErr(true); setPin(""); setTimeout(() => setPinErr(false), 1400);
     }
   };
@@ -1344,7 +1359,7 @@ function ConfirmTradeModal({ trade, onConfirm, onCancel, C, isWeb = false }) {
           </div>
           <div style={{ background:C.creamDk, borderRadius:10, padding:"8px 12px", fontSize:11, color:C.textMd, display:"flex", alignItems:"center", gap:6 }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.textMd} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.29 2 2 0 0 1 3.62 1h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 8.61a16 16 0 0 0 6 6l.94-.94a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-            Confirmacion por email a {DEMO_USER.email}
+            Confirmacion por email a {displayUser.email}
           </div>
         </div>}
 
@@ -1448,32 +1463,15 @@ function ConfirmTradeModal({ trade, onConfirm, onCancel, C, isWeb = false }) {
             <div style={{ fontSize:11, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:12, textAlign:"center" }}>
               {isWeb ? "VERIFICA ESTA OPERACION CON TU PIN" : "ELIGE COMO VERIFICAR ESTA OPERACION"}
             </div>
-            <div style={{ display:"flex", gap:10, marginBottom:16 }}>
-              {/* Face ID option only on mobile — laptops don't have secure
-                  face auth exposed to the browser, so showing this on the
-                  web build is misleading. */}
-              {!isWeb && (
-                <button onClick={() => setStep("faceid")} style={{ flex:1, background:C.isDark?"#1A0A18":"#FFF0F8", border:"2px solid #0D1117", borderRadius:14, padding:"16px 10px", cursor:"pointer", fontFamily:"inherit", display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
-                  <svg width="28" height="28" viewBox="0 0 80 80" fill="none">
-                    <ellipse cx="40" cy="36" rx="24" ry="28" stroke="#0D1117" strokeWidth="3"/>
-                    <ellipse cx="31" cy="30" rx="3.5" ry="4.5" stroke="#0D1117" strokeWidth="2.5"/>
-                    <ellipse cx="49" cy="30" rx="3.5" ry="4.5" stroke="#0D1117" strokeWidth="2.5"/>
-                    <path d="M32 50 Q40 55 48 50" stroke="#0D1117" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
-                    <path d="M8 18 L8 8 L18 8" stroke="#0D1117" strokeWidth="2.5" strokeLinecap="round"/>
-                    <path d="M62 8 L72 8 L72 18" stroke="#0D1117" strokeWidth="2.5" strokeLinecap="round"/>
-                    <path d="M8 55 L8 65 L18 65" stroke="#0D1117" strokeWidth="2.5" strokeLinecap="round"/>
-                    <path d="M62 65 L72 65 L72 55" stroke="#0D1117" strokeWidth="2.5" strokeLinecap="round"/>
-                  </svg>
-                  <div style={{ fontSize:13, fontWeight:700, color:C.text }}>Face ID</div>
-                  <div style={{ fontSize:10, color:C.textLt }}>Rapido y seguro</div>
-                </button>
-              )}
-              <button onClick={() => setStep("pin")} style={{ flex:1, background:C.isDark?"#0A1A0A":"#F0FFF4", border:"2px solid "+C.green, borderRadius:14, padding:"16px 10px", cursor:"pointer", fontFamily:"inherit", display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                <div style={{ fontSize:13, fontWeight:700, color:C.text }}>PIN</div>
-                <div style={{ fontSize:10, color:C.textLt }}>Codigo de 4 digitos</div>
-              </button>
-            </div>
+            {/* Face ID removed: it was a cosmetic-only button in web/mobile
+                (no secure biometric API is accessible from a browser). It'll
+                come back as the primary option once we wrap the app with
+                Capacitor + the Native Biometric plugin on iOS / Android.
+                Until then, PIN is the only path to keep the UX honest. */}
+            <button onClick={() => setStep("pin")} style={{ width:"100%", background:C.accent, color:"#fff", border:"none", borderRadius:14, padding:"15px", cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:10, fontSize:14, fontWeight:800, marginBottom:10 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Confirmar con PIN
+            </button>
             <button onClick={onCancel} style={{ width:"100%", background:C.creamDk, color:C.textMd, border:"none", borderRadius:12, padding:"13px", fontWeight:600, fontSize:14, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
           </div>
         )}
@@ -1522,11 +1520,17 @@ function ConfirmTradeModal({ trade, onConfirm, onCancel, C, isWeb = false }) {
                   if (k === "x") { setPin(p => p.slice(0,-1)); return; }
                   if (k === "") return;
                   const next = pin + String(k); setPin(next);
-                  if (next.length === 4) setTimeout(() => {
-                    if (next === DEMO_USER.pin) {
-                      sendEmailNotification({ to:DEMO_USER.email, subject:"Operacion ejecutada: "+trade.side+" "+trade.ticker, body:trade.side+" "+trade.qty+" "+trade.ticker+" a $"+fN(trade.price)+". Total: $"+fN(total)+". Fecha: "+new Date().toLocaleString("es-AR")+"." });
-                      onConfirm();
-                    } else { setPinErr(true); setPin(""); setTimeout(() => setPinErr(false), 1400); }
+                  if (next.length === 4) setTimeout(async () => {
+                    // Verify against the stored hash from profiles (cross-
+                    // device PIN). Fall back to demo "4821" if no hash yet.
+                    try {
+                      const h = await hashPin(next);
+                      const ok = storedPinHash ? (h === storedPinHash) : next === "4821";
+                      if (ok) {
+                        sendEmailNotification({ to:displayUser.email, subject:"Operacion ejecutada: "+trade.side+" "+trade.ticker, body:trade.side+" "+trade.qty+" "+trade.ticker+" a $"+fN(trade.price)+". Total: $"+fN(total)+". Fecha: "+new Date().toLocaleString("es-AR")+"." });
+                        onConfirm();
+                      } else { setPinErr(true); setPin(""); setTimeout(() => setPinErr(false), 1400); }
+                    } catch (e) { setPinErr(true); setPin(""); setTimeout(() => setPinErr(false), 1400); }
                   }, 80);
                 }}
                 disabled={k === ""}
@@ -1617,8 +1621,9 @@ function WhatIfPanel({ asset, C }) {
   );
 }
 
-function AssetDetail({ asset, holding, stopLoss, priceAlert, balance, isInWatchlist, onToggleWatchlist, onClose, onTrade, onSetStopLoss, onSetAlert, C }) {
+function AssetDetail({ asset, holding, stopLoss, priceAlert, balance, isInWatchlist, onToggleWatchlist, onClose, onTrade, onSetStopLoss, onSetAlert, C, uiMode }) {
   useEscapeKey(onClose);
+  const isPro = uiMode !== "principiante";
   const [mode, setMode]           = useState(null);
   const [qty, setQty]             = useState("");
   const [done, setDone]           = useState(false);
@@ -1684,10 +1689,10 @@ function AssetDetail({ asset, holding, stopLoss, priceAlert, balance, isInWatchl
 
           <YahooChart asset={asset} C={C}/>
 
-          {/* What-if: pick an amount and a time window, show the simulated
-              gain/loss at the seeded chg1m/chgYTD deltas. Pure math, no
-              network. Lets users poke at 'qué hubiera pasado si compraba'. */}
-          <WhatIfPanel asset={asset} C={C}/>
+          {/* What-if: simulated gain/loss at seeded chg1m/chgYTD deltas.
+              Hidden in beginner mode — it's a "play with numbers" surface
+              that assumes some comfort with returns math. */}
+          {isPro && <WhatIfPanel asset={asset} C={C}/>}
 
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:10, marginTop:10 }}>
             {[["Volumen",asset.vol],["Mkt Cap",asset.mktCap],["Max 52s","$"+fN(asset.hi52)],["Min 52s","$"+fN(asset.lo52)], ...(asset.pe ? [["P/E",asset.pe+"x"]] : [])].map(([l, v]) => (
@@ -2800,7 +2805,14 @@ function OnboardingRow({ n, title, body, cta, onClick, accent, children, C }) {
   );
 }
 
-function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatchlist, onSelectAsset, onDeposit, onOpenObjectives, savedPlan, onClearPlan, portfolioHistory, recurringAporte, onSetRecurring, C, showUSD, lang }) {
+function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatchlist, onSelectAsset, onDeposit, onOpenObjectives, savedPlan, onClearPlan, portfolioHistory, recurringAporte, onSetRecurring, C, showUSD, lang, uiMode }) {
+  // In beginner mode ("principiante") we hide the dense advanced surfaces
+  // (shock test, rebalanceo, market movers) and keep the page focused on
+  // the minimum: balance, holdings, distribution, positions.
+  const isPro = uiMode !== "principiante";
+  // Debug badge — temporary, very visible, so we can confirm at a glance
+  // that the toggle in Settings is actually flipping uiMode down here.
+  // Remove once we trust the wiring.
   const t = useT(lang);
   // Privacy toggle: when true, amounts in the hero card are replaced with dots.
   // Percent gain is still shown so the user sees direction without a dollar figure.
@@ -2849,13 +2861,39 @@ function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatch
             </svg>
           )}
         </button>
-        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4, flexWrap:"wrap" }}>
           <div style={{ color:C.goldLt, fontSize:9, fontWeight:700, letterSpacing:2, textTransform:"uppercase" }}>{t("total_portfolio")}</div>
-          {/* Persistent SIMULADOR badge so no one mistakes this for a real
-              broker account. Small, unobtrusive but always visible. */}
-          <span title="Los saldos, órdenes y ganancias son simulados" style={{ background:"rgba(255,255,255,0.10)", border:"1px solid rgba(255,255,255,0.18)", color:"rgba(255,255,255,0.7)", fontSize:8, fontWeight:800, letterSpacing:1, padding:"2px 6px", borderRadius:5 }}>SIMULADOR</span>
+          {/* UI mode badge — live reflection of profiles.ui_mode. */}
+          <span style={{ background: isPro ? "rgba(22,199,132,0.18)" : "rgba(201,168,76,0.22)", border: "1px solid " + (isPro ? "rgba(22,199,132,0.45)" : "rgba(201,168,76,0.45)"), color: isPro ? "#4ADE80" : "#E8C97A", fontSize:8, fontWeight:800, letterSpacing:1, padding:"2px 6px", borderRadius:5 }}>{isPro ? "PRO" : "SIMPLE"}</span>
         </div>
-        <div style={{ color:"#fff", fontSize:30, fontWeight:700, letterSpacing:-1, marginBottom:6, fontFamily: hideValues ? "monospace" : "inherit" }}>{fmtAmt(tv)}</div>
+        {/* Total + today's change pill. Today's change is derived from
+            portfolioHistory (last two data points). If we don't have
+            enough history (brand-new account), we hide the pill. */}
+        <div style={{ display:"flex", alignItems:"baseline", gap:10, flexWrap:"wrap", marginBottom:6 }}>
+          <div style={{ color:"#fff", fontSize:30, fontWeight:700, letterSpacing:-1, fontFamily: hideValues ? "monospace" : "inherit" }}>{fmtAmt(tv)}</div>
+          {(() => {
+            const hist = Array.isArray(portfolioHistory) ? portfolioHistory : [];
+            if (hideValues || hist.length < 2) return null;
+            const prev = hist[hist.length - 2]?.value || 0;
+            if (prev <= 0) return null;
+            const dChange = tv - prev;
+            const dPct = (dChange / prev) * 100;
+            const up = dChange >= 0;
+            return (
+              <span style={{
+                background: up ? "rgba(74,222,128,0.16)" : "rgba(248,113,113,0.16)",
+                color: up ? "#4ADE80" : "#F87171",
+                border: "1px solid " + (up ? "rgba(74,222,128,0.4)" : "rgba(248,113,113,0.4)"),
+                borderRadius: 8,
+                padding: "3px 8px",
+                fontSize: 11, fontWeight: 800,
+                whiteSpace: "nowrap",
+              }}>
+                {up ? "+" : "−"}{showUSD ? "u$s"+fN(Math.round(Math.abs(dChange)/1247.5)) : "$"+fN(Math.abs(dChange))} <span style={{ opacity: 0.85 }}>({up ? "+" : "−"}{Math.abs(dPct).toFixed(2)}%) hoy</span>
+              </span>
+            );
+          })()}
+        </div>
         <div style={{ display:"flex", gap:16, flexWrap:"wrap" }}>
           <div><div style={{ color:"rgba(255,255,255,0.5)", fontSize:9, textTransform:"uppercase", letterSpacing:1 }}>{t("invested")}</div><div style={{ color:"#fff", fontWeight:600, fontSize:13, fontFamily:"monospace" }}>{fmtAmt(tc)}</div></div>
           <div><div style={{ color:"rgba(255,255,255,0.5)", fontSize:9, textTransform:"uppercase", letterSpacing:1 }}>{t("gain")}</div><div style={{ color: gA >= 0 ? C.green : C.red, fontWeight:700, fontSize:14 }}>{hideValues ? mask : (gA >= 0 ? "+" : "-") + (showUSD ? "u$s" + fN(Math.round(Math.abs(gA)/1247.5)) : "$" + fN(Math.abs(gA)))} ({gA >= 0 ? "+" : ""}{((gA/tc)*100).toFixed(1)}%)</div></div>
@@ -2865,9 +2903,10 @@ function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatch
           {FX.map(fx => <div key={fx.label} style={{ background:"rgba(255,255,255,0.1)", borderRadius:8, padding:"4px 10px" }}><div style={{ color:"rgba(255,255,255,0.5)", fontSize:8, fontWeight:700 }}>USD {fx.label}</div><div style={{ color:"#fff", fontSize:12, fontFamily:"monospace", fontWeight:700 }}>{hideValues ? mask : "u$s"+fN(Math.round(tv/fx.value))}</div></div>)}
         </div>
         {/* Portfolio-value sparkline — shows last ~30 days of history.
-            Hidden when the user flipped the privacy eye off, same as the
-            numeric values. */}
-        {!hideValues && portfolioHistory && portfolioHistory.length > 1 && (
+            Hidden when the user flipped the privacy eye off, or when in
+            beginner mode (line charts are one of the first things to
+            overwhelm first-time users). */}
+        {isPro && !hideValues && portfolioHistory && portfolioHistory.length > 1 && (
           <div style={{ marginTop:14, background:"rgba(255,255,255,0.04)", borderRadius:12, padding:"8px 10px 6px", border:"1px solid rgba(255,255,255,0.06)" }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
               <span style={{ color:"rgba(255,255,255,0.5)", fontSize:8, fontWeight:700, letterSpacing:1, textTransform:"uppercase" }}>Últimos {portfolioHistory.length} días</span>
@@ -3017,16 +3056,23 @@ function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatch
         </div>
       </div>
 
-      {/* Rebalance hint — only renders when there's a saved plan and
-          holdings diverge materially from the target allocation. */}
-      <RebalanceHint holdings={holdings} plan={savedPlan} C={C}/>
+      {/* Advanced surfaces — hidden in "principiante" mode. These are
+          the surfaces that require some technical vocabulary to parse
+          (rebalance deltas, shock test scenarios, market movers). */}
+      {isPro && (
+        <>
+          {/* Rebalance hint — only renders when there's a saved plan and
+              holdings diverge materially from the target allocation. */}
+          <RebalanceHint holdings={holdings} plan={savedPlan} C={C}/>
 
-      {/* Top / bottom 3 market movers of the day. Always shown. */}
-      <MarketMovers onSelectAsset={onSelectAsset} C={C}/>
+          {/* Top / bottom 3 market movers of the day. */}
+          <MarketMovers onSelectAsset={onSelectAsset} C={C}/>
 
-      {/* Shock test — lets the user simulate big historical moves
-          against their current portfolio. Doesn't touch any state. */}
-      <ShockTestPanel totalValue={tv} C={C}/>
+          {/* Shock test — lets the user simulate big historical moves
+              against their current portfolio. Doesn't touch any state. */}
+          <ShockTestPanel totalValue={tv} C={C}/>
+        </>
+      )}
 
       {/* Watchlist moved to its own tab (Favoritos) so the Portfolio page
           stays focused on holdings + plan. Access via the bottom nav. */}
@@ -3878,14 +3924,79 @@ function SAMASLogoLarge() {
 // ============================================================
 // ONBOARDING TUTORIAL
 // ============================================================
-function OnboardingTutorial({ onClose, onComplete, setTab, setShowUSD, setShowProfile, currentTab, C }) {
+function OnboardingTutorial({ onClose, onComplete, setTab, setShowUSD, setShowProfile, currentTab, C, uiMode }) {
   const [step, setStep] = useState(0);
   useEscapeKey(onClose);
+  const isPro = uiMode !== "principiante";
 
-  // Each step points to a specific UI element in the mobile phone frame (375x760)
-  // target: the bounding box (top, left, width, height) of the element being highlighted
-  // tooltipPos: where to place the tooltip relative to phone (top|bottom)
-  const steps = [
+  // In beginner mode we keep the tour short and don't fight with
+  // pixel-perfect highlight boxes — the layout shifts depending on
+  // whether the hero card is taller (showed plan, fresh account, etc.)
+  // and chasing those coordinates per render is fragile. Each step is
+  // a centered tooltip with a clear description; the user advances
+  // with Continuar. Fewer steps, less misalignment, same coverage.
+  const beginnerSteps = [
+    {
+      title: "Bienvenido a SAMAS",
+      body: "Te hago un recorrido rapido. Menos de un minuto y empezas a operar.",
+      target: null,
+      tabTo: "portfolio",
+      accent: "#16C784",
+    },
+    {
+      title: "Tu cartera",
+      body: "En la pantalla principal vas a ver cuanta plata tenes invertida, cuanto ganaste hoy, y cuanto te queda disponible para nuevas operaciones.",
+      target: null,
+      tabTo: "portfolio",
+      accent: "#16C784",
+    },
+    {
+      title: "Depositar y retirar",
+      body: "Con los botones verde y gris en la cartera podes acreditar plata o retirarla. Tambien podes programar un aporte mensual automatico.",
+      target: null,
+      tabTo: "portfolio",
+      accent: "#16C784",
+    },
+    {
+      title: "Armar un plan con IA",
+      body: "Tocando 'Armar mi plan con IA' la app te ayuda a definir un objetivo (cuanto queres tener y para cuando) y te sugiere como invertir.",
+      target: null,
+      tabTo: "portfolio",
+      accent: "#16C784",
+    },
+    {
+      title: "Mercado",
+      body: "Buscas un activo (acciones, bonos, etc.) y compras o vendes desde su pagina. Podes filtrar por categoria.",
+      target: null,
+      tabTo: "mercado",
+      accent: "#16C784",
+    },
+    {
+      title: "Watchlist",
+      body: "Guarda los activos que queres seguir sin comprarlos todavia. Te muestran precio en vivo.",
+      target: null,
+      tabTo: "favoritos",
+      accent: "#16C784",
+    },
+    {
+      title: "Ajustes",
+      body: "Tocando el boton de tus iniciales arriba a la derecha entras a tu perfil. Ahi cambias de modo simple a pro, idioma, o cerras sesion.",
+      target: null,
+      tabTo: "portfolio",
+      accent: "#16C784",
+    },
+    {
+      title: "Listo",
+      body: "Ya podes empezar a usar SAMAS. Si queres repasar el tutorial, entra a tu perfil y toca 'Ver tutorial'.",
+      target: null,
+      tabTo: "portfolio",
+      accent: "#16C784",
+    },
+  ];
+
+  // Full pro tutorial — steps reference elements (ticker, FX strip) that
+  // only exist in profesional mode.
+  const proSteps = [
     // All steps use the SAMAS brand green (#16C784) as the accent so the
     // tutorial stays on-palette against the dark modal surface.
     {
@@ -3968,6 +4079,9 @@ function OnboardingTutorial({ onClose, onComplete, setTab, setShowUSD, setShowPr
     },
   ];
 
+  // Pick the right tutorial flavor based on the active UI mode.
+  const steps = isPro ? proSteps : beginnerSteps;
+
   // When step changes, navigate to the corresponding tab automatically.
   // Guard against out-of-bounds step indexes — e.g. if a future edit makes
   // the wizard advance past the last entry, the previous direct index
@@ -3996,7 +4110,15 @@ function OnboardingTutorial({ onClose, onComplete, setTab, setShowUSD, setShowPr
   }
 
   return (
-    <div style={{ position:"absolute", inset:0, zIndex:150, pointerEvents:"none" }}>
+    // pointerEvents:"auto" on the outer overlay blocks interaction
+    // with (and scrolling of) the page behind the tutorial. The user
+    // can only progress via the Next / Previous / Skip buttons in the
+    // tooltip card below.
+    <div
+      style={{ position:"absolute", inset:0, zIndex:150, pointerEvents:"auto" }}
+      onWheel={(e) => e.preventDefault()}
+      onTouchMove={(e) => e.preventDefault()}
+    >
       <style>{"@keyframes tutPulse{0%,100%{box-shadow:0 0 0 0 " + s.accent + "66,0 0 0 9999px rgba(0,0,0,0.72)}50%{box-shadow:0 0 0 8px " + s.accent + "33,0 0 0 9999px rgba(0,0,0,0.72)}} @keyframes tutSlide{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}"}</style>
 
       {/* Dim overlay with cutout around target. Border-radius uses the target's
@@ -4520,82 +4642,11 @@ function LoginScreen({ onLogin, onSignup, emailjsCfg, C, isWeb = false }) {
 // ============================================================
 // PROFILE SHEET
 // ============================================================
-// ============================================================
-// DEVICES PAGE (profile sub-page)
-// ============================================================
-function DevicesPage({ onBack, C }) {
-  const DEVICES = [
-    { id:1, name:"iPhone 15 Pro",         type:"mobile",  browser:"Safari 17",    ip:"186.12.XX.XX", location:"Buenos Aires, AR", lastSeen:"Ahora mismo",    current:true  },
-    { id:2, name:"MacBook Pro 14in",       type:"desktop", browser:"Chrome 122",   ip:"186.12.XX.XX", location:"Buenos Aires, AR", lastSeen:"Hace 2 horas",   current:false },
-    { id:3, name:"iPad Air",              type:"tablet",  browser:"Safari 16",    ip:"200.55.XX.XX", location:"Montevideo, UY",   lastSeen:"Hace 3 dias",    current:false },
-    { id:4, name:"Chrome - Windows 11",   type:"desktop", browser:"Chrome 121",   ip:"181.30.XX.XX", location:"Buenos Aires, AR", lastSeen:"Hace 1 semana",  current:false },
-  ];
-  const [removingId, setRemovingId] = useState(null);
-
-  const DeviceIcon = ({ type, current }) => {
-    const col = current ? C.green : C.textMd;
-    const s = { width:20, height:20, viewBox:"0 0 24 24", fill:"none", stroke:col, strokeWidth:2, strokeLinecap:"round", strokeLinejoin:"round" };
-    if (type === "mobile")  return <svg {...s}><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="17" r="1"/></svg>;
-    if (type === "tablet")  return <svg {...s}><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18"/></svg>;
-    return <svg {...s}><rect x="2" y="3" width="20" height="14" rx="2"/><polyline points="8 21 12 17 16 21"/></svg>;
-  };
-
-  return (
-    <div style={{ padding:"0 18px 28px" }}>
-      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
-        <button onClick={onBack} style={{ background:"transparent", border:"none", cursor:"pointer", padding:4, color:C.textMd }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-        </button>
-        <div style={{ fontSize:16, fontWeight:800, color:C.text }}>Dispositivos conectados</div>
-      </div>
-      <div style={{ background:C.green+"18", border:"1px solid "+C.green+"44", borderRadius:12, padding:"10px 13px", marginBottom:16, fontSize:11, color:C.green, display:"flex", alignItems:"center", gap:8 }}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="6 12 10 16 18 8"/></svg>
-        {DEVICES.filter(d => d.current).length} dispositivo activo ahora mismo
-      </div>
-      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-        {DEVICES.map(d => (
-          <div key={d.id} style={{ background:C.card, borderRadius:14, border:"1px solid "+(d.current?C.green+"44":C.border), padding:"13px 14px" }}>
-            <div style={{ display:"flex", alignItems:"flex-start", gap:12 }}>
-              <div style={{ width:40, height:40, borderRadius:10, background:d.current?C.green+"18":C.creamDk, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                <DeviceIcon type={d.type} current={d.current}/>
-              </div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:3 }}>
-                  <span style={{ fontSize:13, fontWeight:700, color:C.text }}>{d.name}</span>
-                  {d.current && <span style={{ background:C.green+"22", color:C.green, fontSize:9, fontWeight:700, borderRadius:5, padding:"2px 7px" }}>ACTIVO</span>}
-                </div>
-                <div style={{ fontSize:10, color:C.textMd, marginBottom:2 }}>{d.browser}</div>
-                <div style={{ fontSize:10, color:C.textLt }}>{d.location} - {d.ip}</div>
-                <div style={{ fontSize:10, color:d.current?C.green:C.textLt, fontWeight: d.current?700:400, marginTop:3 }}>{d.lastSeen}</div>
-              </div>
-              {!d.current && (
-                <button onClick={() => setRemovingId(d.id === removingId ? null : d.id)}
-                  style={{ background:"transparent", border:"1px solid "+C.border, borderRadius:8, padding:"5px 10px", fontSize:10, color:C.red, cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}>
-                  Cerrar
-                </button>
-              )}
-            </div>
-            {removingId === d.id && (
-              <div style={{ marginTop:10, background:C.red+"18", borderRadius:10, padding:"10px 12px" }}>
-                <div style={{ fontSize:11, color:C.text, marginBottom:8 }}>Cerrar sesion en {d.name}?</div>
-                <div style={{ display:"flex", gap:8 }}>
-                  <button onClick={() => setRemovingId(null)} style={{ flex:1, background:C.creamDk, border:"none", borderRadius:8, padding:"8px", fontSize:11, cursor:"pointer", color:C.textMd, fontFamily:"inherit" }}>Cancelar</button>
-                  <button onClick={() => setRemovingId(null)} style={{ flex:1, background:C.red, border:"none", borderRadius:8, padding:"8px", fontSize:11, cursor:"pointer", color:"#fff", fontFamily:"inherit" }}>Cerrar sesion</button>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-      <button style={{ width:"100%", marginTop:16, background:C.red+"18", border:"1.5px solid "+C.red+"33", borderRadius:12, padding:"12px", fontSize:13, fontWeight:700, color:C.red, cursor:"pointer", fontFamily:"inherit" }}>
-        Cerrar todas las demas sesiones
-      </button>
-    </div>
-  );
-}
-
-function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, finnhubKey, setFinnhubKey, finnhub, emailjsCfg, setEmailjsCfg, anthropicKey, setAnthropicKey, anthropicModel, setAnthropicModel, C }) {
+function ProfileSheet({ displayUser, uiMode, onChangeUiMode, onResetAccount, onResetPin, onClose, onLogout, onToggleDark, isDark, lang, setLang, C }) {
   useEscapeKey(onClose);
+  // U = the authenticated user (fallback to DEMO_USER shape if no real
+  // one is passed; shouldn't happen once auth gates are wired).
+  const U = displayUser || DEMO_USER;
   // In-app confirm for destructive actions like "reset demo data".
   const { confirm, ConfirmHost } = useConfirm(C);
   const [logoutConfirm, setLogoutConfirm] = useState(false);
@@ -4608,35 +4659,12 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
   const [twoFAEnabled, set2FA]      = useState(false);
   const [totpCode, setTotpCode]     = useState("");
   const [totpVerified, setTotpVerified] = useState(false);
-  const [showDevices, setShowDevices] = useState(false);
   const [showLang, setShowLang]     = useState(false);
-  const [showFinnhub, setShowFinnhub] = useState(false);
-  const [finnhubInput, setFinnhubInput] = useState(finnhubKey || "");
-  const [showEmail, setShowEmail]   = useState(false);
-  const [emailSvc, setEmailSvc]     = useState(emailjsCfg?.serviceId || "");
-  const [emailTpl, setEmailTpl]     = useState(emailjsCfg?.templateId || "");
-  const [emailKey, setEmailKey]     = useState(emailjsCfg?.publicKey || "");
-  const [emailTestMsg, setEmailTestMsg] = useState(null);
-  const [emailTestBusy, setEmailTestBusy] = useState(false);
-  // Anthropic (Claude) — mirrors the Finnhub expand/save UX
-  const [showAI, setShowAI] = useState(false);
-  const [anthInput, setAnthInput] = useState(anthropicKey || "");
-  const [anthModelInput, setAnthModelInput] = useState(anthropicModel || ANTHROPIC_DEFAULT_MODEL);
-  const [anthTestMsg, setAnthTestMsg] = useState(null);
-  const [anthTestBusy, setAnthTestBusy] = useState(false);
   const t = useT(lang);
-
-  if (showDevices) {
-    return (
-      <div style={{ position:"absolute", inset:0, zIndex:40, display:"flex", flexDirection:"column", background:"rgba(0,0,0,0.55)" }}>
-        <div onClick={onClose} style={{ flex:1 }}/>
-        <div style={{ background:C.bg, borderRadius:"20px 20px 0 0", maxHeight:"90vh", overflowY:"auto" }}>
-          <div style={{ display:"flex", justifyContent:"center", padding:"14px 0 6px" }}><div style={{ width:36, height:4, background:C.border, borderRadius:2 }}/></div>
-          <DevicesPage onBack={() => setShowDevices(false)} C={C}/>
-        </div>
-      </div>
-    );
-  }
+  // Note: finnhub / emailjs / anthropic BYOK panels + devices sub-page
+  // were removed — those integrations now live on the backend. The state
+  // variables and the DevicesPage sub-render block that previously sat
+  // here are gone to keep ProfileSheet lean.
 
   return (
     <div style={{ position:"absolute", inset:0, zIndex:40, display:"flex", flexDirection:"column", background:"rgba(0,0,0,0.55)" }}>
@@ -4687,8 +4715,8 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
         </div>
 
         <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20, padding:"14px 16px", background:C.card, borderRadius:16, border:"1px solid "+C.border }}>
-          <div style={{ width:50, height:50, borderRadius:14, background:C.isDark?"#1F1F1F":"linear-gradient(135deg,#0D1117,#1F1F1F)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, fontWeight:800, color:C.goldLt, flexShrink:0 }}>{DEMO_USER.initials}</div>
-          <div><div style={{ fontWeight:800, fontSize:16, color:C.text }}>{DEMO_USER.name}</div><div style={{ fontSize:12, color:C.textMd, marginTop:1 }}>{DEMO_USER.email}</div><div style={{ display:"flex", alignItems:"center", gap:4, marginTop:4 }}><div style={{ width:6, height:6, borderRadius:3, background:C.green }}/><span style={{ fontSize:10, color:C.green, fontWeight:600 }}>{t("active_session")}</span></div></div>
+          <div style={{ width:50, height:50, borderRadius:14, background:C.isDark?"#1F1F1F":"linear-gradient(135deg,#0D1117,#1F1F1F)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, fontWeight:800, color:C.goldLt, flexShrink:0 }}>{U.initials}</div>
+          <div><div style={{ fontWeight:800, fontSize:16, color:C.text }}>{U.name}</div><div style={{ fontSize:12, color:C.textMd, marginTop:1 }}>{U.email}</div><div style={{ display:"flex", alignItems:"center", gap:4, marginTop:4 }}><div style={{ width:6, height:6, borderRadius:3, background:C.green }}/><span style={{ fontSize:10, color:C.green, fontWeight:600 }}>{t("active_session")}</span></div></div>
         </div>
 
         {/* ---- ROOT VIEW: Dark mode toggle + Settings row ---- */}
@@ -4723,13 +4751,55 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
 
         {/* ---- SETTINGS VIEW: all integrations ---- */}
         {showSettings && (<>
-        <button onClick={() => setShowDevices(true)} style={{ width:"100%", background:C.creamDk, border:"1.5px solid "+C.border, borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            <div style={{ width:36, height:36, borderRadius:10, background:C.accent+"22", display:"flex", alignItems:"center", justifyContent:"center" }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><polyline points="16 3 12 7 8 3"/></svg></div>
-            <div><div style={{ fontSize:13, fontWeight:600, color:C.text }}>{t("devices")}</div><div style={{ fontSize:11, color:C.textLt }}>{t("devices_sub")}</div></div>
+        {/* UI MODE: toggle between principiante / profesional. Saves to
+            profiles.ui_mode and the rest of the app picks up the change
+            on next render (sbProfile is refetched inside the handler). */}
+        <div style={{ background:C.creamDk, border:"1.5px solid "+C.border, borderRadius:14, padding:"12px 14px", marginBottom:8 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+            <div style={{ width:36, height:36, borderRadius:10, background:C.accent+"22", display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="3" y1="20" x2="21" y2="20"/>
+              </svg>
+            </div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Modo de interfaz</div>
+              <div style={{ fontSize:11, color:C.textLt }}>Principiante: más guiada · Profesional: más datos</div>
+            </div>
           </div>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+            {[
+              { v: "principiante", label: "Principiante" },
+              { v: "profesional",  label: "Profesional" },
+            ].map(o => {
+              const active = uiMode === o.v;
+              return (
+                <button
+                  key={o.v}
+                  onClick={() => {
+                    if (!active && onChangeUiMode) onChangeUiMode(o.v);
+                  }}
+                  style={{
+                    background: active ? C.accent : C.card,
+                    color: active ? "#fff" : C.textMd,
+                    border: "1.5px solid " + (active ? C.accent : C.border),
+                    borderRadius: 10,
+                    padding: "10px",
+                    fontSize: 12, fontWeight: 700,
+                    cursor: active ? "default" : "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  {o.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Devices panel removed — it was a UI stub with mock data and
+            no real functionality. Will come back when we wire up proper
+            session management from Supabase (needs an Edge Function to
+            call auth.admin via service_role). */}
 
         <button onClick={() => setShowLang(v => !v)} style={{ width:"100%", background:showLang?C.accent+"18":C.creamDk, border:"1.5px solid "+(showLang?C.accent+"44":C.border), borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
@@ -4759,231 +4829,11 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
 
-        {/* Finnhub live-data settings */}
-        <button onClick={() => setShowFinnhub(v => !v)} style={{ width:"100%", background: finnhub?.live ? C.green+"18" : C.creamDk, border:"1.5px solid "+(finnhub?.live?C.green+"44":C.border), borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            <div style={{ width:36, height:36, borderRadius:10, background:(finnhub?.live?C.green:C.accent)+"22", display:"flex", alignItems:"center", justifyContent:"center" }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={finnhub?.live?C.green:C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12h4l3-9 4 18 3-9h6"/></svg>
-            </div>
-            <div>
-              <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Cotizaciones en vivo</div>
-              <div style={{ fontSize:11, color: finnhub?.live ? C.green : (finnhub?.error ? C.red : C.textLt) }}>
-                {finnhub?.live ? `Live · ${finnhub.count} activos · Finnhub` : (finnhub?.error ? finnhub.error : "Datos mock — configura API key para activar")}
-              </div>
-            </div>
-          </div>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: showFinnhub ? "rotate(90deg)" : "rotate(0deg)", transition:"transform 0.2s" }}><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
-        {showFinnhub && (
-          <div style={{ background:C.card, borderRadius:12, border:"1px solid "+C.border, padding:"14px", marginBottom:8 }}>
-            <div style={{ fontSize:11, color:C.textMd, lineHeight:1.5, marginBottom:10 }}>
-              Usa tu API key de Finnhub para traer precios reales cada 60s. Registrate gratis en <span style={{ color:C.accent, fontWeight:600 }}>finnhub.io</span> — 60 req/min sin tarjeta.
-            </div>
-            <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:6 }}>API KEY</div>
-            <input
-              value={finnhubInput}
-              onChange={e => setFinnhubInput(e.target.value.trim())}
-              placeholder="cxxxxxxxxxxxxxxxxxxxx"
-              type="password"
-              autoComplete="off"
-              style={{ background:C.bg, border:"1.5px solid "+C.border, borderRadius:10, padding:"10px 12px", fontSize:12, fontFamily:"monospace", color:C.text, outline:"none", width:"100%", boxSizing:"border-box", marginBottom:10 }}
-            />
-            <div style={{ display:"flex", gap:8 }}>
-              <button
-                onClick={() => { setFinnhubKey(finnhubInput || null); }}
-                disabled={!finnhubInput}
-                style={{ flex:2, background: finnhubInput ? C.accent : C.creamDk, color: finnhubInput ? "#fff" : C.textLt, border:"none", borderRadius:10, padding:"10px", fontWeight:600, fontSize:12, cursor: finnhubInput ? "pointer" : "not-allowed", fontFamily:"inherit" }}>
-                {finnhubKey === finnhubInput && finnhubKey ? "Guardada" : "Guardar y activar"}
-              </button>
-              {finnhubKey && (
-                <button
-                  onClick={() => { setFinnhubKey(null); setFinnhubInput(""); }}
-                  style={{ flex:1, background:"transparent", color:C.textMd, border:"1.5px solid "+C.border, borderRadius:10, padding:"10px", fontWeight:500, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
-                  Quitar
-                </button>
-              )}
-            </div>
-            {finnhub?.lastSync && (
-              <div style={{ fontSize:10, color:C.textLt, marginTop:10, textAlign:"center" }}>
-                Ultima sync: {new Date(finnhub.lastSync).toLocaleTimeString("es-AR")}
-              </div>
-            )}
-            {finnhub?.failures && finnhub.failures.length > 0 && (
-              <div style={{ marginTop:10, padding:"8px 10px", background:C.creamDk, borderRadius:10, border:"1px solid "+C.border }}>
-                <div style={{ fontSize:10, fontWeight:700, color:C.textMd, marginBottom:5, letterSpacing:0.5 }}>
-                  SIN DATOS EN VIVO ({finnhub.failures.length})
-                </div>
-                <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
-                  {finnhub.failures.map(f => (
-                    <span key={f.ticker} title={f.reason} style={{ fontSize:9, fontFamily:"monospace", fontWeight:600, background:C.bg, color:C.textMd, borderRadius:5, padding:"2px 6px", border:"1px solid "+C.border }}>
-                      {f.ticker}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div style={{ fontSize:10, color:C.textLt, marginTop:8, lineHeight:1.5 }}>
-              <span style={{ color:C.textMd, fontWeight:600 }}>Cobertura del plan free:</span> solo cotizacion actual (precio y cambio del dia). No hay datos historicos mas alla de hoy, ni volumen intradiario, ni candles. Para 1m / YTD / P-E se sigue usando el mock. ALUA, MIRG y BTC no estan cubiertos.
-            </div>
-          </div>
-        )}
+        {/* BYOK API sections (Finnhub, Anthropic, EmailJS) removed —
+            moving those integrations to the backend so users don't
+            have to bring their own keys. Will come back as a read-
+            only status row when the server wrapper is in place. */}
 
-        {/* Anthropic (Claude) AI — BYOK, same UX as Finnhub */}
-        <button onClick={() => setShowAI(v => !v)} style={{ width:"100%", background: anthropicKey ? C.green+"18" : C.creamDk, border:"1.5px solid "+(anthropicKey?C.green+"44":C.border), borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            <div style={{ width:36, height:36, borderRadius:10, background:(anthropicKey?C.green:C.accent)+"22", display:"flex", alignItems:"center", justifyContent:"center" }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={anthropicKey?C.green:C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2a5 5 0 0 1 5 5v1a5 5 0 0 1-5 5 5 5 0 0 1-5-5V7a5 5 0 0 1 5-5z"/>
-                <path d="M19 13v1a7 7 0 0 1-14 0v-1"/>
-                <path d="M12 19v3"/>
-              </svg>
-            </div>
-            <div>
-              <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Objetivos IA</div>
-              <div style={{ fontSize:11, color: anthropicKey ? C.green : C.textLt }}>
-                {anthropicKey ? `Activo · modelo ${anthropicModel}` : "Modo demo — configura tu API key para respuestas en vivo"}
-              </div>
-            </div>
-          </div>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: showAI ? "rotate(90deg)" : "rotate(0deg)", transition:"transform 0.2s" }}><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
-        {showAI && (
-          <div style={{ background:C.card, borderRadius:12, border:"1px solid "+C.border, padding:"14px", marginBottom:8 }}>
-            <div style={{ fontSize:11, color:C.textMd, lineHeight:1.5, marginBottom:10 }}>
-              Habilita el wizard de <strong style={{ color:C.text }}>Objetivos con IA</strong> — calcula tu sobrante invertible, proyecta interes compuesto y elige la estrategia (conservadora / moderada / agresiva). Sacas tu API key en <span style={{ color:C.accent, fontWeight:600 }}>console.anthropic.com</span>. La key queda solo en tu navegador y se manda directo a Anthropic.
-            </div>
-
-            <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:6 }}>API KEY</div>
-            <input
-              value={anthInput}
-              onChange={e => setAnthInput(e.target.value.trim())}
-              placeholder="sk-ant-api03-..."
-              type="password"
-              autoComplete="off"
-              style={{ background:C.bg, border:"1.5px solid "+C.border, borderRadius:10, padding:"10px 12px", fontSize:12, fontFamily:"monospace", color:C.text, outline:"none", width:"100%", boxSizing:"border-box", marginBottom:10 }}
-            />
-
-            <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:6 }}>MODELO</div>
-            <select
-              value={anthModelInput}
-              onChange={e => setAnthModelInput(e.target.value)}
-              style={{ background:C.bg, border:"1.5px solid "+C.border, borderRadius:10, padding:"10px 12px", fontSize:12, color:C.text, outline:"none", width:"100%", boxSizing:"border-box", marginBottom:10, fontFamily:"inherit" }}
-            >
-              <option value="claude-sonnet-4-6">claude-sonnet-4-6 (recomendado)</option>
-              <option value="claude-opus-4-6">claude-opus-4-6 (mas preciso, mas caro)</option>
-              <option value="claude-haiku-4-5-20251001">claude-haiku-4-5 (rapido y barato)</option>
-            </select>
-
-            <div style={{ display:"flex", gap:8 }}>
-              <button
-                onClick={() => { setAnthropicKey(anthInput || null); setAnthropicModel(anthModelInput); setAnthTestMsg({ type: anthInput ? "ok" : "info", text: anthInput ? "Key guardada en este navegador" : "Key eliminada — volvimos a modo demo" }); }}
-                disabled={!anthInput && !anthropicKey}
-                style={{ flex:2, background: anthInput ? C.accent : C.creamDk, color: anthInput ? "#fff" : C.textLt, border:"none", borderRadius:10, padding:"10px", fontWeight:600, fontSize:12, cursor: anthInput || anthropicKey ? "pointer" : "not-allowed", fontFamily:"inherit" }}>
-                {anthropicKey === anthInput && anthropicKey ? "Guardada" : "Guardar"}
-              </button>
-              <button
-                onClick={async () => {
-                  if (!anthInput) { setAnthTestMsg({ type:"err", text:"Pega una API key primero" }); return; }
-                  // Save-then-test so the helper reads the latest value from storage
-                  setAnthropicKey(anthInput);
-                  setAnthropicModel(anthModelInput);
-                  setAnthTestBusy(true);
-                  setAnthTestMsg(null);
-                  try {
-                    const r = await testAnthropic();
-                    setAnthTestMsg({ type:"ok", text: "OK · IA respondio: \"" + r.slice(0, 40) + "\"" });
-                  } catch (e) {
-                    setAnthTestMsg({ type:"err", text: (e?.message || "Error desconocido").slice(0, 120) });
-                  } finally { setAnthTestBusy(false); }
-                }}
-                disabled={anthTestBusy}
-                style={{ flex:1, background:"transparent", color:C.textMd, border:"1.5px solid "+C.border, borderRadius:10, padding:"10px", fontWeight:500, fontSize:12, cursor: anthTestBusy ? "not-allowed" : "pointer", fontFamily:"inherit" }}>
-                {anthTestBusy ? "…" : "Probar"}
-              </button>
-              {anthropicKey && (
-                <button
-                  onClick={() => { setAnthropicKey(null); setAnthInput(""); setAnthTestMsg({ type:"info", text:"Key eliminada — volvimos a modo demo" }); }}
-                  style={{ flex:1, background:"transparent", color:C.textMd, border:"1.5px solid "+C.border, borderRadius:10, padding:"10px", fontWeight:500, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
-                  Quitar
-                </button>
-              )}
-            </div>
-
-            {anthTestMsg && (
-              <div style={{ marginTop:10, padding:"8px 10px", borderRadius:8, fontSize:11, background: anthTestMsg.type === "ok" ? C.green+"22" : anthTestMsg.type === "err" ? C.red+"22" : C.creamDk, color: anthTestMsg.type === "ok" ? C.green : anthTestMsg.type === "err" ? C.red : C.textMd, border:"1px solid "+(anthTestMsg.type === "ok" ? C.green+"55" : anthTestMsg.type === "err" ? C.red+"55" : C.border) }}>
-                {anthTestMsg.text}
-              </div>
-            )}
-            <div style={{ fontSize:10, color:C.textLt, marginTop:10, lineHeight:1.5 }}>
-              <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" style={{ color:C.accent, fontWeight:600 }}>Crear API key →</a> · La key se manda con el header <span style={{ fontFamily:"monospace" }}>anthropic-dangerous-direct-browser-access</span>. Si preferis no exponerla al navegador, revisa las instrucciones del proxy en el README.
-            </div>
-          </div>
-        )}
-
-        {/* EmailJS — transactional email for signup confirmation */}
-        <button onClick={() => setShowEmail(v => !v)} style={{ width:"100%", background: emailjsCfg ? C.green+"18" : C.creamDk, border:"1.5px solid "+(emailjsCfg?C.green+"44":C.border), borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            <div style={{ width:36, height:36, borderRadius:10, background:(emailjsCfg?C.green:C.accent)+"22", display:"flex", alignItems:"center", justifyContent:"center" }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={emailjsCfg?C.green:C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-            </div>
-            <div>
-              <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Envio de emails (EmailJS)</div>
-              <div style={{ fontSize:11, color: emailjsCfg ? C.green : C.textLt }}>
-                {emailjsCfg ? "Configurado — emails reales al registrarse" : "Sin configurar — modo demo con codigo en pantalla"}
-              </div>
-            </div>
-          </div>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: showEmail ? "rotate(90deg)" : "rotate(0deg)", transition:"transform 0.2s" }}><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
-        {showEmail && (
-          <div style={{ background:C.card, borderRadius:12, border:"1px solid "+C.border, padding:"14px", marginBottom:8 }}>
-            <div style={{ fontSize:11, color:C.textMd, lineHeight:1.5, marginBottom:10 }}>
-              Usamos <span style={{ color:C.accent, fontWeight:600 }}>emailjs.com</span> para mandar emails desde el cliente sin backend. Creas una cuenta gratis, conectas tu Gmail/Outlook y crear un template con las variables <span style={{ fontFamily:"monospace", background:C.creamDk, padding:"1px 4px", borderRadius:3 }}>{"{{to_email}}"}</span>, <span style={{ fontFamily:"monospace", background:C.creamDk, padding:"1px 4px", borderRadius:3 }}>{"{{code}}"}</span>, <span style={{ fontFamily:"monospace", background:C.creamDk, padding:"1px 4px", borderRadius:3 }}>{"{{to_name}}"}</span>.
-            </div>
-            <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:5 }}>SERVICE ID</div>
-            <input value={emailSvc} onChange={e => setEmailSvc(e.target.value.trim())} placeholder="service_xxxxxx" autoComplete="off" style={{ background:C.bg, border:"1.5px solid "+C.border, borderRadius:10, padding:"9px 11px", fontSize:12, fontFamily:"monospace", color:C.text, outline:"none", width:"100%", boxSizing:"border-box", marginBottom:8 }}/>
-            <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:5 }}>TEMPLATE ID</div>
-            <input value={emailTpl} onChange={e => setEmailTpl(e.target.value.trim())} placeholder="template_xxxxxx" autoComplete="off" style={{ background:C.bg, border:"1.5px solid "+C.border, borderRadius:10, padding:"9px 11px", fontSize:12, fontFamily:"monospace", color:C.text, outline:"none", width:"100%", boxSizing:"border-box", marginBottom:8 }}/>
-            <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:5 }}>PUBLIC KEY</div>
-            <input value={emailKey} onChange={e => setEmailKey(e.target.value.trim())} placeholder="xxxxxxxxxxxxxxxxxxx" autoComplete="off" style={{ background:C.bg, border:"1.5px solid "+C.border, borderRadius:10, padding:"9px 11px", fontSize:12, fontFamily:"monospace", color:C.text, outline:"none", width:"100%", boxSizing:"border-box", marginBottom:10 }}/>
-            <div style={{ display:"flex", gap:8 }}>
-              <button
-                onClick={() => {
-                  const cfg = emailSvc && emailTpl && emailKey ? { serviceId: emailSvc, templateId: emailTpl, publicKey: emailKey } : null;
-                  setEmailjsCfg(cfg);
-                  setEmailTestMsg(cfg ? { type: "ok", text: "Configuracion guardada" } : { type: "info", text: "Configuracion eliminada" });
-                }}
-                style={{ flex:2, background: (emailSvc && emailTpl && emailKey) ? C.accent : C.creamDk, color: (emailSvc && emailTpl && emailKey) ? "#fff" : C.textLt, border:"none", borderRadius:10, padding:"10px", fontWeight:600, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
-                Guardar
-              </button>
-              <button
-                onClick={async () => {
-                  const cfg = { serviceId: emailSvc, templateId: emailTpl, publicKey: emailKey };
-                  if (!cfg.serviceId || !cfg.templateId || !cfg.publicKey) { setEmailTestMsg({ type:"err", text:"Completa los 3 campos" }); return; }
-                  setEmailTestBusy(true);
-                  setEmailTestMsg(null);
-                  try {
-                    await sendViaEmailjs(cfg, { to: DEMO_USER.email, name: DEMO_USER.name, code: "TEST12", message: "Este es un email de prueba desde SAMAS." });
-                    setEmailTestMsg({ type: "ok", text: "Email de prueba enviado a " + DEMO_USER.email });
-                  } catch (e) {
-                    setEmailTestMsg({ type: "err", text: (e?.message || "Error desconocido").slice(0, 120) });
-                  } finally { setEmailTestBusy(false); }
-                }}
-                disabled={emailTestBusy}
-                style={{ flex:1, background:"transparent", color:C.textMd, border:"1.5px solid "+C.border, borderRadius:10, padding:"10px", fontWeight:500, fontSize:12, cursor: emailTestBusy ? "not-allowed" : "pointer", fontFamily:"inherit" }}>
-                {emailTestBusy ? "…" : "Test"}
-              </button>
-            </div>
-            {emailTestMsg && (
-              <div style={{ marginTop:10, padding:"8px 10px", borderRadius:8, fontSize:11, background: emailTestMsg.type === "ok" ? C.green+"22" : emailTestMsg.type === "err" ? C.red+"22" : C.creamDk, color: emailTestMsg.type === "ok" ? C.green : emailTestMsg.type === "err" ? C.red : C.textMd, border:"1px solid "+(emailTestMsg.type === "ok" ? C.green+"55" : emailTestMsg.type === "err" ? C.red+"55" : C.border) }}>
-                {emailTestMsg.text}
-              </div>
-            )}
-            <div style={{ fontSize:10, color:C.textLt, marginTop:10, lineHeight:1.5 }}>
-              <a href="https://www.emailjs.com" target="_blank" rel="noopener" style={{ color:C.accent, fontWeight:600 }}>Abrir EmailJS →</a> · Free tier: 200 emails/mes. La public key es segura de exponer (las restricciones van en el dashboard por dominio).
-            </div>
-          </div>
-        )}
 
         {/* Export data — dump all localStorage-backed SAMAS keys as JSON */}
         <button
@@ -5038,43 +4888,10 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
 
-        {/* Reset all SAMAS data. Useful before a demo recording — single
-            click, confirmed, then hard reload. Only wipes keys that start
-            with "samas_" so unrelated localStorage usage is left alone. */}
-        <button
-          onClick={async () => {
-            const ok = await confirm({
-              title: "Resetear datos del simulador?",
-              body: "Borra holdings, órdenes, balance, watchlists, plan IA, historial del portafolio, aporte recurrente y config guardada (Finnhub, EmailJS, Anthropic). Después recarga la app. No hay vuelta atrás.",
-              confirmLabel: "Sí, resetear",
-              cancelLabel: "Cancelar",
-              danger: true,
-            });
-            if (!ok) return;
-            try {
-              Object.keys(localStorage)
-                .filter(k => k.startsWith("samas_") || k === "samas_user")
-                .forEach(k => localStorage.removeItem(k));
-            } catch {}
-            location.reload();
-          }}
-          style={{ width:"100%", background:C.red+"14", border:"1.5px solid "+C.red+"44", borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}
-        >
-          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            <div style={{ width:36, height:36, borderRadius:10, background:C.red+"22", display:"flex", alignItems:"center", justifyContent:"center" }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6"/>
-                <path d="M19 6l-2 14H7L5 6"/>
-                <path d="M10 11v6M14 11v6"/>
-              </svg>
-            </div>
-            <div>
-              <div style={{ fontSize:13, fontWeight:600, color:C.red }}>Resetear datos del simulador</div>
-              <div style={{ fontSize:11, color:C.textLt }}>Borra holdings, órdenes, watchlists, config</div>
-            </div>
-          </div>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
+        {/* Old "Resetear datos del simulador" button removed — was clearing
+            localStorage only, but data lives in Supabase now. Replaced by
+            the "Reiniciar cuenta" button at the bottom of Settings which
+            properly wipes the user's rows in the DB. */}
 
         <button onClick={() => setShow2FA(v => !v)} style={{ width:"100%", background: twoFAEnabled ? C.green+"18" : C.creamDk, border:"1.5px solid "+(twoFAEnabled?C.green+"44":C.border), borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
@@ -5099,13 +4916,59 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
             <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:6 }}>CONFIRMA CON TU APP (demo: 4821)</div>
             <input value={totpCode} onChange={e => setTotpCode(e.target.value.slice(0,6))} placeholder="000000" maxLength={6}
               style={{ background:C.bg, border:"1.5px solid "+(totpVerified?C.green:C.border), borderRadius:10, padding:"10px", fontSize:18, fontFamily:"monospace", fontWeight:700, color:C.text, outline:"none", width:"100%", boxSizing:"border-box", textAlign:"center", letterSpacing:8, marginBottom:8 }}/>
-            <button onClick={() => { if (totpCode === DEMO_USER.pin || totpCode === "123456") { set2FA(true); setTotpVerified(true); setShow2FA(false); } }}
+            <button onClick={() => { if (totpCode === "123456") { set2FA(true); setTotpVerified(true); setShow2FA(false); } }}
               style={{ width:"100%", background: totpCode.length >= 4 ? C.green : C.creamDk, color: totpCode.length >= 4 ? "#fff" : C.textLt, border:"none", borderRadius:10, padding:"11px", fontWeight:700, fontSize:13, cursor: totpCode.length >= 4 ? "pointer" : "not-allowed", fontFamily:"inherit" }}>
               Activar 2FA
             </button>
           </div>
         )}
         </>)}
+
+        {/* Reset account — destructive dev/testing button. Wipes all
+            portfolio data (holdings, orders, balance, watchlists, plans,
+            stop losses, price alerts). Keeps auth + PIN + ui_mode intact.
+            Guarded behind in-app confirm so no accidental nukes. */}
+        {/* Reset PIN — useful when the user forgot their PIN or has a
+            stale hash from a previous test session. Clears profiles.pin_hash
+            and forces the PIN gate back so they create a new one. */}
+        {onResetPin && (
+          <button
+            onClick={async () => {
+              const ok = await confirm({
+                title: "¿Reiniciar PIN?",
+                body: "Vas a borrar tu PIN actual. La próxima vez que abras la app vas a crear uno nuevo.",
+                confirmLabel: "Reiniciar PIN",
+                cancelLabel: "Cancelar",
+                danger: true,
+              });
+              if (ok) await onResetPin();
+            }}
+            style={{ width:"100%", marginTop:8, background:C.gold+"14", border:"1.5px solid "+C.gold+"55", borderRadius:12, padding:"12px", display:"flex", alignItems:"center", justifyContent:"center", gap:8, fontWeight:700, fontSize:13, cursor:"pointer", color:C.gold, fontFamily:"inherit" }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><path d="M12 16h.01"/></svg>
+            Reiniciar PIN
+          </button>
+        )}
+
+        {onResetAccount && (
+          <button
+            onClick={async () => {
+              const ok = await confirm({
+                title: "¿Reiniciar cuenta?",
+                body: "Vas a borrar todos tus holdings, órdenes, saldo, watchlists, plan y reglas de stop loss. El email, contraseña, PIN y modo de interfaz se mantienen.",
+                confirmLabel: "Reiniciar",
+                cancelLabel: "Cancelar",
+                danger: true,
+              });
+              if (ok) {
+              }
+            }}
+            style={{ width:"100%", marginTop:4, background: C.red+"14", border:"1.5px solid "+C.red+"55", borderRadius:12, padding:"12px", display:"flex", alignItems:"center", justifyContent:"center", gap:8, fontWeight:700, fontSize:13, cursor:"pointer", color:C.red, fontFamily:"inherit" }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+            Reiniciar cuenta (borrar datos)
+          </button>
+        )}
 
         {!logoutConfirm ? (
           <button onClick={() => setLogoutConfirm(true)} style={{ width:"100%", marginTop:8, background:C.red+"18", border:"1.5px solid "+C.red+"33", borderRadius:14, padding:"13px", display:"flex", alignItems:"center", justifyContent:"center", gap:8, cursor:"pointer", fontFamily:"inherit" }}>
@@ -5132,7 +4995,7 @@ function ProfileSheet({ onClose, onLogout, onToggleDark, isDark, lang, setLang, 
 // MOBILE PHONE WRAPPER
 // ============================================================
 function MobileApp({ appState, handlers, C }) {
-  const { loggedIn, needsAuth, needsPinGate, needsWelcome, uiMode, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
+  const { loggedIn, needsAuth, needsPinGate, needsWelcome, uiMode, displayUser, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
   const { handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte } = handlers;
   // Modal state hoisted out of PagePortfolio so the wizard's absolute
   // overlay covers the full phone frame (otherwise it was clipped by the
@@ -5150,13 +5013,13 @@ function MobileApp({ appState, handlers, C }) {
   const getA  = t => priceAlerts[t] || null;
   const renderPage = () => {
     switch (tab) {
-      case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} portfolioHistory={portfolioHistory} recurringAporte={recurringAporte} onSetRecurring={setRecurringAporte} C={C} showUSD={showUSD} lang={lang}/>;
+      case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} portfolioHistory={portfolioHistory} recurringAporte={recurringAporte} onSetRecurring={setRecurringAporte} uiMode={uiMode} C={C} showUSD={showUSD} lang={lang}/>;
       case "mercado":    return <PageMercado onSelectAsset={setSelected} C={C} showUSD={showUSD} lang={lang}/>;
       case "favoritos":  return <PageWatchlist watchlists={watchlists} onCreate={createWatchlist} onRename={renameWatchlist} onRemove={removeWatchlist} onRemoveTicker={removeFromWatchlist} onOpenAssetPicker={setAddingToListId} onSelectAsset={setSelected} C={C} showUSD={showUSD}/>;
       case "noticias":   return <PageNoticias holdings={holdings} onSelectAsset={setSelected} C={C} lang={lang}/>;
       case "ideas":      return <PageIdeas C={C} showUSD={showUSD} onSelectAsset={setSelected} lang={lang}/>;
       case "ordenes":    return <PageOrdenes orders={orders} C={C} lang={lang}/>;
-      default:           return <PagePortfolio watchlist={watchlist} onToggleWatchlist={toggleWatchlist} holdings={holdings} stopLosses={stopLosses} balance={balance} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} portfolioHistory={portfolioHistory} recurringAporte={recurringAporte} onSetRecurring={setRecurringAporte} C={C} showUSD={showUSD} lang={lang}/>;
+      default:           return <PagePortfolio watchlist={watchlist} onToggleWatchlist={toggleWatchlist} holdings={holdings} stopLosses={stopLosses} balance={balance} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} portfolioHistory={portfolioHistory} recurringAporte={recurringAporte} onSetRecurring={setRecurringAporte} uiMode={uiMode} C={C} showUSD={showUSD} lang={lang}/>;
     }
   };
   return (
@@ -5166,7 +5029,8 @@ function MobileApp({ appState, handlers, C }) {
       {needsPinGate && (
         <PinLockScreen
           C={C}
-          mode={hasPinSet() ? "enter" : "create"}
+          storedPinHash={sbProfile?.pin_hash || null}
+          onSavePin={handlers.handleSavePin}
           userEmail={sbSession?.user?.email}
           onSuccess={() => setPinUnlocked(true)}
           onForgot={handlers.handleLogout}
@@ -5179,11 +5043,11 @@ function MobileApp({ appState, handlers, C }) {
           onDone={() => refetchProfile()}
         />
       )}
-      {showTutorial && <OnboardingTutorial onClose={finishTutorial} onComplete={finishTutorial} setTab={setTab} setShowUSD={setShowUSD} setShowProfile={setShowProfile} currentTab={tab} C={C}/>}
-      {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} finnhubKey={finnhubKey} setFinnhubKey={setFinnhubKey} finnhub={finnhub} emailjsCfg={emailjsCfg} setEmailjsCfg={setEmailjsCfg} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} anthropicModel={anthropicModel} setAnthropicModel={setAnthropicModel} C={C}/>}
+      {showTutorial && <OnboardingTutorial onClose={finishTutorial} onComplete={finishTutorial} setTab={setTab} setShowUSD={setShowUSD} setShowProfile={setShowProfile} currentTab={tab} uiMode={uiMode} C={C}/>}
+      {showProfile && <ProfileSheet displayUser={displayUser} uiMode={uiMode} onChangeUiMode={handlers.handleChangeUiMode} onResetAccount={handlers.handleResetAccount} onResetPin={handlers.handleResetPin} onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} C={C}/>}
       {toast && <div className="samas-slide-up" style={{ position:"absolute", top:34, left:14, right:14, zIndex:50, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 14px", fontSize:12, fontWeight:700, boxShadow:"0 10px 30px rgba(0,0,0,0.35)" }}>{toast.msg}</div>}
-      {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} C={C}/>}
-      {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} C={C}/>}
+      {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} uiMode={uiMode} C={C}/>}
+      {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} displayUser={displayUser} storedPinHash={sbProfile?.pin_hash || null} C={C}/>}
       {showObjectives && <ObjectivesWizard onClose={() => setShowObjectives(false)} onSave={setSavedPlan} savedPlan={savedPlan} C={C}/>}
       {pickerTicker && (
         <WatchlistPickerModal
@@ -5222,12 +5086,15 @@ function MobileApp({ appState, handlers, C }) {
         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
           <CurrencyToggle showUSD={showUSD} onToggle={() => setShowUSD(v => !v)} C={C}/>
           <button onClick={() => setShowProfile(true)} style={{ background:"transparent", border:"none", cursor:"pointer", padding:0 }}>
-            <div style={{ width:28, height:28, borderRadius:8, background:"#0D111733", border:"1.5px solid #0D111766", display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:800, color:C.goldLt }}>{DEMO_USER.initials}</div>
+            <div style={{ width:28, height:28, borderRadius:8, background:"#0D111733", border:"1.5px solid #0D111766", display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:800, color:C.goldLt }}>{displayUser.initials}</div>
           </button>
         </div>
       </div>
-      <TickerBanner C={C}/>
-      <FXStrip C={C} totalARS={totalARS}/>
+      {/* In beginner mode hide the live-ticker banner (too much info)
+          and the USD CCL/Oficial triple-strip (we'll substitute a
+          simpler "Dólar MEP" note inside each page where relevant). */}
+      {uiMode !== "principiante" && <TickerBanner C={C}/>}
+      {uiMode !== "principiante" && <FXStrip C={C} totalARS={totalARS}/>}
       <div style={{ flex:1, overflowY:"auto", paddingBottom:84 }}>{renderPage()}</div>
       <div style={{ position:"absolute", bottom:0, left:0, right:0, background:C.isDark?"#0F0F0F":C.card, borderTop:"1px solid "+C.border, display:"flex", height:78, zIndex:20, paddingTop:6, paddingBottom:4 }}>
         {TABS.map(t => {
@@ -5252,7 +5119,7 @@ function MobileApp({ appState, handlers, C }) {
 // WEB DASHBOARD LAYOUT
 // ============================================================
 function WebDashboard({ appState, handlers, C }) {
-  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, needsAuth, needsPinGate, needsWelcome, uiMode, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, showUSD, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
+  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, needsAuth, needsPinGate, needsWelcome, uiMode, displayUser, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, showUSD, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
   const { setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, setShowProfile, setIsDark, setShowUSD, setLang, finishTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, handleDeposit, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte } = handlers;
   const [sideTab, setSideTab] = useState("portfolio");
   // Objectives modal lives at dashboard level for the same reason as in
@@ -5267,7 +5134,7 @@ function WebDashboard({ appState, handlers, C }) {
   const getA  = t => priceAlerts[t] || null;
   const renderPage = () => {
     switch (sideTab) {
-      case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} portfolioHistory={portfolioHistory} recurringAporte={recurringAporte} onSetRecurring={setRecurringAporte} C={C} showUSD={showUSD} lang={lang}/>;
+      case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} portfolioHistory={portfolioHistory} recurringAporte={recurringAporte} onSetRecurring={setRecurringAporte} uiMode={uiMode} C={C} showUSD={showUSD} lang={lang}/>;
       case "mercado":    return <PageMercado onSelectAsset={setSelected} C={C} showUSD={showUSD} lang={lang}/>;
       case "favoritos":  return <PageWatchlist watchlists={watchlists} onCreate={createWatchlist} onRename={renameWatchlist} onRemove={removeWatchlist} onRemoveTicker={removeFromWatchlist} onOpenAssetPicker={setAddingToListId} onSelectAsset={setSelected} C={C} showUSD={showUSD}/>;
       case "noticias":   return <PageNoticias holdings={holdings} onSelectAsset={setSelected} C={C} lang={lang}/>;
@@ -5275,7 +5142,7 @@ function WebDashboard({ appState, handlers, C }) {
       case "bonos":      return <PageBonos C={C} showUSD={showUSD} lang={lang}/>;
       case "ordenes":    return <PageOrdenes orders={orders} C={C} lang={lang}/>;
       case "reportes":   return <PageReportes C={C} lang={lang}/>;
-      default:           return <PagePortfolio watchlist={watchlist} onToggleWatchlist={toggleWatchlist} holdings={holdings} stopLosses={stopLosses} balance={balance} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} portfolioHistory={portfolioHistory} recurringAporte={recurringAporte} onSetRecurring={setRecurringAporte} C={C} showUSD={showUSD} lang={lang}/>;
+      default:           return <PagePortfolio watchlist={watchlist} onToggleWatchlist={toggleWatchlist} holdings={holdings} stopLosses={stopLosses} balance={balance} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} portfolioHistory={portfolioHistory} recurringAporte={recurringAporte} onSetRecurring={setRecurringAporte} uiMode={uiMode} C={C} showUSD={showUSD} lang={lang}/>;
     }
   };
   return (
@@ -5301,7 +5168,7 @@ function WebDashboard({ appState, handlers, C }) {
             {showUSD ? "USD" : "ARS"}
           </button>
           <button onClick={() => setIsDark(d => !d)} style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:8, padding:"6px 10px", color:"rgba(255,255,255,0.6)", cursor:"pointer", fontSize:12, fontFamily:"inherit" }}>{isDark?"Modo claro":"Modo oscuro"}</button>
-          <button onClick={() => setShowProfile(true)} style={{ background:"#0D111733", border:"1.5px solid #0D111766", borderRadius:8, padding:"6px 12px", color:C.goldLt, fontWeight:800, cursor:"pointer", fontSize:12, fontFamily:"inherit" }}>{DEMO_USER.initials}</button>
+          <button onClick={() => setShowProfile(true)} style={{ background:"#0D111733", border:"1.5px solid #0D111766", borderRadius:8, padding:"6px 12px", color:C.goldLt, fontWeight:800, cursor:"pointer", fontSize:12, fontFamily:"inherit" }}>{displayUser.initials}</button>
         </div>
       </div>
       </div>
@@ -5323,9 +5190,9 @@ function WebDashboard({ appState, handlers, C }) {
           </div>
         </div>
         <div style={{ flex:1, position:"relative", minWidth:0 }}>
-          {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} C={C}/>}
-          {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} isWeb={true} C={C}/>}
-          {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} finnhubKey={finnhubKey} setFinnhubKey={setFinnhubKey} finnhub={finnhub} emailjsCfg={emailjsCfg} setEmailjsCfg={setEmailjsCfg} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} anthropicModel={anthropicModel} setAnthropicModel={setAnthropicModel} C={C}/>}
+          {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} uiMode={uiMode} C={C}/>}
+          {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} isWeb={true} displayUser={displayUser} storedPinHash={sbProfile?.pin_hash || null} C={C}/>}
+          {showProfile && <ProfileSheet displayUser={displayUser} uiMode={uiMode} onChangeUiMode={handlers.handleChangeUiMode} onResetAccount={handlers.handleResetAccount} onResetPin={handlers.handleResetPin} onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} C={C}/>}
           {toast && <div className="samas-slide-up" style={{ position:"fixed", top:70, left:"50%", transform:"translateX(-50%)", zIndex:99, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 20px", fontSize:13, fontWeight:700, boxShadow:"0 8px 32px rgba(0,0,0,0.3)" }}>{toast.msg}</div>}
           <div style={{ overflowY:"auto", height:"calc(100vh - 56px)" }}>{renderPage()}</div>
           {showObjectives && <ObjectivesWizard onClose={() => setShowObjectives(false)} onSave={setSavedPlan} savedPlan={savedPlan} C={C}/>}
@@ -5399,6 +5266,26 @@ export default function SAMASApp() {
   const uiMode        = sbProfile?.ui_mode || null;
   const needsWelcome  = supabaseReady && pinUnlocked && !uiMode;
   const loggedIn    = supabaseReady && pinUnlocked && !!uiMode;
+  // displayUser — name/email/initials derived from the real Supabase
+  // session + profile. Replaces the old DEMO_USER hardcoded values in
+  // every UI surface (ProfileSheet, header avatars, email receipts).
+  // Falls back to "Usuario Demo" only if no session is present, which
+  // shouldn't happen once the auth gates are passed.
+  const displayUser = useMemo(() => {
+    if (!sbSession?.user) return DEMO_USER;
+    const first = (sbProfile?.nombre || "").trim();
+    const last  = (sbProfile?.apellido || "").trim();
+    const email = sbSession.user.email || "";
+    const fullName = [first, last].filter(Boolean).join(" ") || email.split("@")[0] || "Usuario";
+    const initials = (() => {
+      if (first && last) return (first[0] + last[0]).toUpperCase();
+      const parts = fullName.split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+      if (parts[0]) return parts[0].slice(0, 2).toUpperCase();
+      return (email.slice(0, 2) || "U").toUpperCase();
+    })();
+    return { name: fullName, email, initials };
+  }, [sbSession, sbProfile]);
   const [hasSeenTutorial, setHasSeen] = usePersistedState("samas_seen_tutorial", false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -5407,7 +5294,12 @@ export default function SAMASApp() {
   const [lang, setLang]               = usePersistedState("samas_lang", "es");
   const [selectedAsset, setSelected]  = useState(null);
   const [orders, setOrders]           = usePersistedState("samas_orders", []);
-  const [holdings, setHoldings]       = usePersistedState("samas_holdings", INIT_HOLDINGS);
+  // Default to empty holdings — real broker, not a demo sandbox. A new
+  // user sees the OnboardingEmptyState prompting them to deposit + buy.
+  // INIT_HOLDINGS remains as a constant in this file for future demo /
+  // testing purposes (dev-only "seed my account" button) but is no
+  // longer pushed to new accounts automatically.
+  const [holdings, setHoldings]       = usePersistedState("samas_holdings", []);
   const [stopLosses, setStopLosses]   = usePersistedState("samas_stop_losses", {});
   const [priceAlerts, setPriceAlerts] = usePersistedState("samas_price_alerts", {});
   // Multi-watchlist model: an array of named lists, each with its own
@@ -5434,7 +5326,7 @@ export default function SAMASApp() {
     (watchlists || []).forEach(l => (l.tickers || []).forEach(t => seen.add(t)));
     return [...seen];
   })();
-  const [balance, setBalance]         = usePersistedState("samas_balance", 50000);
+  const [balance, setBalance]         = usePersistedState("samas_balance", 0);
   // Saved plan from the Objetivos wizard (strategy + allocation + profile
   // used to generate it + timestamp). Persisted so users can return to
   // their plan, and the Portfolio page can render progress against it.
@@ -5569,23 +5461,136 @@ export default function SAMASApp() {
 
   const showToast = (msg, color) => { setToast({ msg, color: color || C.green }); setTimeout(() => setToast(null), 4000); };
 
+  // ----- Supabase sync for portfolio data -----
+  // On first mount (or when the user switches accounts), pull the
+  // canonical state from Supabase and use it as the source of truth.
+  // localStorage stays as a fast cache so renders are instant; the
+  // DB load just overrides if it has data, or seeds the DB with the
+  // local cache if it's empty (typical first-login case).
+  const userId = sbSession?.user?.id;
+  // Gate to avoid re-saving on the round-trip from the initial load.
+  // Until syncedUserIdRef matches the current userId, the save effects
+  // below skip — they only kick in once the loader has finished.
+  const syncedUserIdRef = useRef(null);
+  useEffect(() => {
+    if (!userId || !uiMode) return; // wait until auth gates pass
+    let alive = true;
+    syncedUserIdRef.current = null; // block saves while we're loading
+    (async () => {
+      try {
+        const snap = await loadUserPortfolio(userId);
+        if (!alive) return;
+        // Real broker, no demo seeding. If the DB is empty we keep local
+        // state empty too — the user sees the OnboardingEmptyState and
+        // has to fund their account + make their first trade like on
+        // any real broker app.
+        setHoldings(snap.holdings || []);
+        setOrders(snap.orders || []);
+        setBalance(snap.balance != null ? snap.balance : 0);
+        setWatchlists(
+          (snap.watchlists && snap.watchlists.length > 0)
+            ? snap.watchlists
+            : [{ id: "default", name: "Mi Watchlist", tickers: [] }],
+        );
+        setSavedPlan(snap.plan || null);
+        setStopLosses(snap.stopLosses || {});
+        setPriceAlerts(snap.priceAlerts || {});
+        if (snap.errors.length > 0) {
+          console.warn("[userData] partial load errors:", snap.errors);
+        }
+        if (alive) syncedUserIdRef.current = userId;
+      } catch (e) {
+        console.error("[userData] load failed:", e);
+      }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, uiMode]);
+
+  // Save effects — write to DB whenever the state changes, after the
+  // initial load has completed (gated on syncedUserIdRef).
+  useEffect(() => {
+    if (syncedUserIdRef.current !== userId || !userId) return;
+    saveWatchlists(userId, watchlists)
+      .then((newLists) => {
+        // saveWatchlists returns rows with new DB-generated UUIDs.
+        // If we got new ids, swap them into local state so subsequent
+        // edits hit the same DB rows. Skip if length differs (race).
+        if (Array.isArray(newLists) && newLists.length === watchlists.length) {
+          // Only swap when ids actually changed (avoid unnecessary re-renders)
+          const idsChanged = newLists.some((w, i) => w.id !== watchlists[i].id);
+          if (idsChanged) setWatchlists(newLists);
+        }
+      })
+      .catch((e) => console.error("[watchlists] save:", e));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchlists, userId]);
+
+  useEffect(() => {
+    if (syncedUserIdRef.current !== userId || !userId) return;
+    if (savedPlan) {
+      savePlan(userId, savedPlan).catch((e) => console.error("[plan] save:", e));
+    } else {
+      clearPlans(userId).catch((e) => console.error("[plan] clear:", e));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedPlan, userId]);
+
+  // Risk rules — JSONB columns on profiles, so each change is a small
+  // whole-value update. Cheap, no need for debouncing at this volume.
+  useEffect(() => {
+    if (syncedUserIdRef.current !== userId || !userId) return;
+    saveStopLosses(userId, stopLosses).catch((e) => console.error("[stopLosses] save:", e));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stopLosses, userId]);
+
+  useEffect(() => {
+    if (syncedUserIdRef.current !== userId || !userId) return;
+    savePriceAlerts(userId, priceAlerts).catch((e) => console.error("[priceAlerts] save:", e));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [priceAlerts, userId]);
+
   const handleTrade = trade => { setSelected(null); setPending(trade); };
 
   const executeTrade = () => {
     const { ticker, side, qty, price } = pendingTrade;
     const total = qty * price;
-    setOrders(prev => [{ ticker, side, qty, price }, ...prev]);
+    // Compute next state synchronously, persist locally, then push to DB.
+    setOrders(prev => {
+      const next = [{ ticker, side, qty, price }, ...prev];
+      if (userId) appendOrder(userId, { ticker, side, qty, price }).catch((e) => console.error("[orders] append:", e));
+      return next;
+    });
     if (side === "Compra") {
-      setBalance(prev => prev - total);
-      setHoldings(prev => { const ex = prev.find(h => h.ticker === ticker); if (ex) return prev.map(h => h.ticker === ticker ? { ...h, qty:h.qty+qty, avg:Math.round((h.avg*h.qty+price*qty)/(h.qty+qty)) } : h); return [...prev, { ticker, qty, avg:price }]; });
+      setBalance(prev => {
+        const next = prev - total;
+        if (userId) saveBalance(userId, next).catch((e) => console.error("[balance] save:", e));
+        return next;
+      });
+      setHoldings(prev => {
+        const ex = prev.find(h => h.ticker === ticker);
+        const next = ex
+          ? prev.map(h => h.ticker === ticker ? { ...h, qty:h.qty+qty, avg:Math.round((h.avg*h.qty+price*qty)/(h.qty+qty)) } : h)
+          : [...prev, { ticker, qty, avg:price }];
+        if (userId) saveHoldings(userId, next).catch((e) => console.error("[holdings] save:", e));
+        return next;
+      });
     } else {
-      setBalance(prev => prev + total);
-      setHoldings(prev => prev.map(h => h.ticker === ticker ? { ...h, qty:Math.max(0, h.qty-qty) } : h).filter(h => h.qty > 0));
+      setBalance(prev => {
+        const next = prev + total;
+        if (userId) saveBalance(userId, next).catch((e) => console.error("[balance] save:", e));
+        return next;
+      });
+      setHoldings(prev => {
+        const next = prev.map(h => h.ticker === ticker ? { ...h, qty:Math.max(0, h.qty-qty) } : h).filter(h => h.qty > 0);
+        if (userId) saveHoldings(userId, next).catch((e) => console.error("[holdings] save:", e));
+        return next;
+      });
     }
-    sendEmailNotification({ to:DEMO_USER.email, subject:"Operacion ejecutada - " + side + " " + ticker, body:side + " " + qty + " " + ticker + " a $" + fN(price) + ". Total: $" + fN(total) + ". Fecha: " + new Date().toLocaleString("es-AR") + ". Si no reconoces esta operacion, contacta a SAMAS inmediatamente." });
+    sendEmailNotification({ to:displayUser.email, subject:"Operacion ejecutada - " + side + " " + ticker, body:side + " " + qty + " " + ticker + " a $" + fN(price) + ". Total: $" + fN(total) + ". Fecha: " + new Date().toLocaleString("es-AR") + ". Si no reconoces esta operacion, contacta a SAMAS inmediatamente." });
     setPending(null);
     haptic("success");
-    showToast(side + " " + qty + " " + ticker + " ejecutada. Email enviado a " + DEMO_USER.email, side === "Compra" ? C.green : C.red);
+    showToast(side + " " + qty + " " + ticker + " ejecutada. Email enviado a " + displayUser.email, side === "Compra" ? C.green : C.red);
   };
 
   const handleSetSL = (ticker, price) => {
@@ -5703,13 +5708,120 @@ export default function SAMASApp() {
       return () => clearTimeout(id);
     }
   }, [loggedIn, hasSeenTutorial]);
+  // Write a new PIN hash to profiles and refetch. Called from the PIN
+  // "create" flow. Throws on network/DB errors so the PinLockScreen can
+  // show an inline error and let the user retry.
+  const handleSavePin = async (plainPin) => {
+    if (!sbSession?.user) throw new Error("No session");
+    const hash = await hashPin(plainPin);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ pin_hash: hash, updated_at: new Date().toISOString() })
+      .eq("id", sbSession.user.id);
+    if (error) throw error;
+    await refetchProfile();
+  };
+  // Change UI mode from Settings. Writes profiles.ui_mode and refetches
+  // so the change propagates through the whole app in one render.
+  // Clear the stored PIN hash on the user's profile and force the PIN
+  // gate back. Useful if the user forgot their PIN (or stored a wrong
+  // hash from a previous test session) and trade confirmations stop
+  // working. Pin gate is per-tab (pinUnlocked state) so we also flip
+  // that to false to immediately show the PinLockScreen in create mode.
+  const handleResetPin = async () => {
+    if (!sbSession?.user) return;
+    try {
+      await supabase
+        .from("profiles")
+        .update({ pin_hash: null, updated_at: new Date().toISOString() })
+        .eq("id", sbSession.user.id);
+      await refetchProfile();
+      setPinUnlocked(false);
+      setShowProfile(false);
+      showToast("PIN reiniciado. Creá uno nuevo.", C.gold);
+    } catch (e) {
+      console.error("[reset PIN] failed:", e);
+      showToast("No pudimos reiniciar el PIN.", C.red);
+    }
+  };
+
+  // Wipe all portfolio data for the current user in one shot. Used by
+  // the "Reset account" button in Settings. Deletes holdings, orders,
+  // the accounts row, watchlists (cascades tickers), plans, and zeroes
+  // the JSONB risk rules. Does NOT touch profile basics (email, phone,
+  // pin, ui_mode).
+  const handleResetAccount = async () => {
+    if (!sbSession?.user) return;
+    const uid = sbSession.user.id;
+    try {
+      await Promise.all([
+        supabase.from("holdings").delete().eq("user_id", uid),
+        supabase.from("orders").delete().eq("user_id", uid),
+        supabase.from("accounts").delete().eq("user_id", uid),
+        supabase.from("watchlists").delete().eq("user_id", uid),
+        supabase.from("plans").delete().eq("user_id", uid),
+        supabase.from("profiles").update({ stop_losses: {}, price_alerts: {} }).eq("id", uid),
+      ]);
+      // Reset local state to fresh-account defaults.
+      setHoldings([]);
+      setOrders([]);
+      setBalance(0);
+      setWatchlists([{ id: "default", name: "Mi Watchlist", tickers: [] }]);
+      setSavedPlan(null);
+      setStopLosses({});
+      setPriceAlerts({});
+      showToast("Cuenta reiniciada — sin holdings, sin órdenes, saldo $0.", C.gold);
+    } catch (e) {
+      console.error("[reset] failed:", e);
+      showToast("No pudimos reiniciar la cuenta. Revisá la consola.", C.red);
+    }
+  };
+
+  // Use raw fetch instead of supabase.from(...).update(...) because the
+  // SDK builder occasionally hangs without resolving (observed in
+  // production: rapid repeat toggles → many awaits piling up forever,
+  // never settle, UI stuck on the previous mode). Raw fetch always
+  // resolves so the handler never gets stuck waiting on the SDK.
+  const handleChangeUiMode = async (nextMode) => {
+    if (nextMode !== "principiante" && nextMode !== "profesional") return;
+    const uid = sbSession?.user?.id;
+    const token = sbSession?.access_token;
+    if (!uid || !token) return;
+    try {
+      const resp = await fetch(
+        `${SUPABASE_URL}/rest/v1/profiles?id=eq.${uid}`,
+        {
+          method: "PATCH",
+          headers: {
+            "apikey": SUPABASE_PUBLISHABLE_KEY,
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal",
+          },
+          body: JSON.stringify({
+            ui_mode: nextMode,
+            updated_at: new Date().toISOString(),
+          }),
+        },
+      );
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "");
+        console.error("[ui_mode] update failed:", resp.status, text);
+        return;
+      }
+      await refetchProfile();
+    } catch (e) {
+      console.error("[ui_mode] handler threw:", e);
+    }
+  };
   // Logout → Supabase sign-out triggers onAuthStateChange, which clears
-  // sbSession and therefore flips `loggedIn` false. We also clear the
-  // PIN hash (next user on this device shouldn't inherit it) and reset
-  // local ephemeral state (modals, selected asset, pending trade).
+  // sbSession and therefore flips `loggedIn` false. We keep the PIN
+  // hash so the same user can re-login without setting a new PIN (the
+  // PIN is keyed by user id, so other users on this device don't
+  // inherit it). Reset local ephemeral state (modals, selected asset,
+  // pending trade).
   const handleLogout = async () => {
     try { await supabase.auth.signOut(); } catch (e) { console.error("[auth] signOut", e); }
-    clearPin();
     setPinUnlocked(false);
     setShowProfile(false);
     setTab("portfolio");
@@ -5720,14 +5832,18 @@ export default function SAMASApp() {
 
   // Demo deposit — no payment gateway. Adds to balance and shows confirmation.
   const handleDeposit = (amount, method) => {
-    setBalance(prev => prev + amount);
+    setBalance(prev => {
+      const next = prev + amount;
+      if (userId) saveBalance(userId, next).catch((e) => console.error("[balance] deposit save:", e));
+      return next;
+    });
     const methodLabel = method === "transfer" ? "transferencia" : method === "mp" ? "MercadoPago" : "crypto";
     haptic("success");
     showToast(`$${fN(amount)} acreditados via ${methodLabel}`, C.green);
   };
 
-  const appState = { isDark, loggedIn, needsAuth, needsPinGate, needsWelcome, uiMode, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker };
-  const handlers = { handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte };
+  const appState = { isDark, loggedIn, needsAuth, needsPinGate, needsWelcome, uiMode, displayUser, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker };
+  const handlers = { handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, handleSavePin, handleChangeUiMode, handleResetAccount, handleResetPin, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte };
 
   const outerBg = isDark ? "#080808" : "#050505";
 
@@ -5788,9 +5904,6 @@ export default function SAMASApp() {
       {viewMode === "mobile" ? (
         <div style={{ display:"flex", justifyContent:"center", padding:"20px" }}>
           <ErrorBoundary><MobileApp appState={appState} handlers={handlers} C={C}/></ErrorBoundary>
-          <div style={{ position:"fixed", bottom:16, left:"50%", transform:"translateX(-50%)", background:"rgba(255,255,255,0.05)", backdropFilter:"blur(10px)", borderRadius:20, padding:"7px 18px", color:"rgba(255,255,255,0.35)", fontSize:11, border:"1px solid rgba(255,255,255,0.07)", whiteSpace:"nowrap" }}>
-            Face ID / PIN demo: <strong style={{ color:"rgba(255,255,255,0.6)" }}>4821</strong>
-          </div>
         </div>
       ) : (
         loggedIn ? (
@@ -5802,7 +5915,8 @@ export default function SAMASApp() {
               {needsPinGate && (
                 <PinLockScreen
                   C={C}
-                  mode={hasPinSet() ? "enter" : "create"}
+                  storedPinHash={sbProfile?.pin_hash || null}
+                  onSavePin={handleSavePin}
                   userEmail={sbSession?.user?.email}
                   onSuccess={() => setPinUnlocked(true)}
                   onForgot={handleLogout}
