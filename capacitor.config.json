@@ -10,13 +10,13 @@
   "plugins": {
     "SplashScreen": {
       "launchAutoHide": false,
-      "backgroundColor": "#0E1A12",
+      "backgroundColor": "#0F0F0F",
       "showSpinner": false,
       "splashImmersive": true
     },
     "StatusBar": {
       "style": "DARK",
-      "backgroundColor": "#0E1A12",
+      "backgroundColor": "#0F0F0F",
       "overlaysWebView": true
     }
   },
