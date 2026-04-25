@@ -19,12 +19,16 @@ import { useSupabaseSession, SupabaseAuthFlow } from "./auth/SupabaseAuth.jsx";
 // User data: holdings / orders / balance now live in Supabase. The UI
 // keeps using the same local state shapes — userData.js is the
 // translation + sync layer.
-import { loadUserPortfolio, saveHoldings, saveBalance, appendOrder, saveWatchlists, savePlan, clearPlans, saveStopLosses, savePriceAlerts } from "./lib/userData.js";
+import { loadUserPortfolio, saveHoldings, saveBalance, appendOrder, saveWatchlists, savePlan, clearPlans, saveStopLosses, savePriceAlerts, saveRecurringAporte, savePortfolioHistory, saveLang, saveShowUSD, saveUiDark, saveViewMode } from "./lib/userData.js";
 // PIN gate: standard fintech pattern (Brubank, Ualá). Once the user has
 // a valid Supabase session, the app still locks on every open behind a
 // 4-digit PIN stored hashed in localStorage. Prevents shoulder-surfers
 // from getting into the app even if the browser/phone is unlocked.
 import { hashPin, PinLockScreen } from "./auth/PinLock.jsx";
+// MFA (TOTP). MfaEnrollSection lives in Settings, MfaChallengeView is
+// shown post-login when the user's session is AAL1 but they have a
+// verified TOTP factor.
+import { MfaEnrollSection, MfaChallengeView } from "./auth/Mfa.jsx";
 // Welcome chooser: shown only on first session when profiles.ui_mode
 // is null. User picks "principiante" or "profesional" and the rest
 // of the app reads that choice to decide which surfaces to show.
@@ -4893,35 +4897,10 @@ function ProfileSheet({ displayUser, uiMode, onChangeUiMode, onResetAccount, onR
             the "Reiniciar cuenta" button at the bottom of Settings which
             properly wipes the user's rows in the DB. */}
 
-        <button onClick={() => setShow2FA(v => !v)} style={{ width:"100%", background: twoFAEnabled ? C.green+"18" : C.creamDk, border:"1.5px solid "+(twoFAEnabled?C.green+"44":C.border), borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            <div style={{ width:36, height:36, borderRadius:10, background:(twoFAEnabled?C.green:C.accent)+"22", display:"flex", alignItems:"center", justifyContent:"center" }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={twoFAEnabled?C.green:C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
-            <div><div style={{ fontSize:13, fontWeight:600, color:C.text }}>{t("twofa")}</div><div style={{ fontSize:11, color: twoFAEnabled ? C.green : C.textLt }}>{twoFAEnabled ? "Activada - Authenticator App" : "Recomendado - Aumenta la seguridad"}</div></div>
-          </div>
-          <div style={{ width:40, height:22, borderRadius:11, background:twoFAEnabled?C.green:C.creamDk, border:"1.5px solid "+C.border, position:"relative" }}><div style={{ position:"absolute", top:2, left:twoFAEnabled?18:2, width:14, height:14, borderRadius:"50%", background:twoFAEnabled?"#fff":C.textLt, transition:"left 0.2s" }}/></div>
-        </button>
-
-        {show2FA && (
-          <div style={{ background:C.card, borderRadius:12, border:"1px solid "+C.border, padding:"14px", marginBottom:8 }}>
-            <div style={{ fontSize:12, fontWeight:700, color:C.text, marginBottom:8 }}>Configurar Authenticator App</div>
-            <div style={{ background:C.creamDk, borderRadius:10, padding:"12px", marginBottom:10, textAlign:"center" }}>
-              <div style={{ fontSize:10, color:C.textMd, marginBottom:6 }}>Escanea con Google Authenticator / Authy</div>
-              <div style={{ background:"#fff", borderRadius:8, padding:8, display:"inline-block" }}>
-                <svg width="80" height="80" viewBox="0 0 10 10" fill="none">
-                  {[[0,0],[0,1],[0,2],[1,0],[2,0],[2,1],[2,2],[0,4],[1,4],[2,4],[0,5],[0,6],[1,6],[2,6],[4,0],[5,0],[6,0],[4,1],[6,1],[4,2],[5,2],[6,2],[4,4],[5,4],[6,4],[4,5],[5,5],[4,6],[5,6],[6,6],[3,3],[7,3],[3,7],[7,7],[8,0],[9,0],[8,1],[9,2],[8,3],[9,3],[8,4],[9,5],[8,6],[9,6]].map(([x,y],i) => <rect key={i} x={x} y={y} width="1" height="1" fill="#000"/>)}
-                </svg>
-              </div>
-              <div style={{ fontSize:9, color:C.textLt, marginTop:6, fontFamily:"monospace" }}>COHEN-ABCDEF123456</div>
-            </div>
-            <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, marginBottom:6 }}>CONFIRMA CON TU APP (demo: 4821)</div>
-            <input value={totpCode} onChange={e => setTotpCode(e.target.value.slice(0,6))} placeholder="000000" maxLength={6}
-              style={{ background:C.bg, border:"1.5px solid "+(totpVerified?C.green:C.border), borderRadius:10, padding:"10px", fontSize:18, fontFamily:"monospace", fontWeight:700, color:C.text, outline:"none", width:"100%", boxSizing:"border-box", textAlign:"center", letterSpacing:8, marginBottom:8 }}/>
-            <button onClick={() => { if (totpCode === "123456") { set2FA(true); setTotpVerified(true); setShow2FA(false); } }}
-              style={{ width:"100%", background: totpCode.length >= 4 ? C.green : C.creamDk, color: totpCode.length >= 4 ? "#fff" : C.textLt, border:"none", borderRadius:10, padding:"11px", fontWeight:700, fontSize:13, cursor: totpCode.length >= 4 ? "pointer" : "not-allowed", fontFamily:"inherit" }}>
-              Activar 2FA
-            </button>
-          </div>
-        )}
+        {/* Real 2FA via Supabase Auth MFA. The component manages
+            enroll → QR → verify code → enable, and unenroll. Once
+            verified, login flow asks for a TOTP code on next session. */}
+        <MfaEnrollSection C={C} />
         </>)}
 
         {/* Reset account — destructive dev/testing button. Wipes all
@@ -4995,7 +4974,7 @@ function ProfileSheet({ displayUser, uiMode, onChangeUiMode, onResetAccount, onR
 // MOBILE PHONE WRAPPER
 // ============================================================
 function MobileApp({ appState, handlers, C }) {
-  const { loggedIn, needsAuth, needsPinGate, needsWelcome, uiMode, displayUser, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
+  const { loggedIn, needsAuth, needsMfa, mfaPassed, setMfaPassed, needsPinGate, needsWelcome, uiMode, displayUser, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
   const { handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte } = handlers;
   // Modal state hoisted out of PagePortfolio so the wizard's absolute
   // overlay covers the full phone frame (otherwise it was clipped by the
@@ -5026,6 +5005,7 @@ function MobileApp({ appState, handlers, C }) {
     <div style={{ width:375, height:760, background:C.bg, borderRadius:48, overflow:"hidden", boxShadow:"0 40px 80px rgba(0,0,0,0.7)", display:"flex", flexDirection:"column", border:"9px solid #0a0a0a", position:"relative", flexShrink:0 }}>
       <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:110, height:26, background:"#0a0a0a", borderRadius:"0 0 16px 16px", zIndex:30 }}/>
       {needsAuth && <SupabaseAuthFlow C={C} session={sbSession} profile={sbProfile} onVerified={refetchProfile}/>}
+      {needsMfa && <MfaChallengeView C={C} onSuccess={() => setMfaPassed(true)} onForgot={handlers.handleLogout}/>}
       {needsPinGate && (
         <PinLockScreen
           C={C}
@@ -5119,7 +5099,7 @@ function MobileApp({ appState, handlers, C }) {
 // WEB DASHBOARD LAYOUT
 // ============================================================
 function WebDashboard({ appState, handlers, C }) {
-  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, needsAuth, needsPinGate, needsWelcome, uiMode, displayUser, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, showUSD, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
+  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, needsAuth, needsMfa, mfaPassed, setMfaPassed, needsPinGate, needsWelcome, uiMode, displayUser, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, showUSD, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
   const { setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, setShowProfile, setIsDark, setShowUSD, setLang, finishTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, handleDeposit, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte } = handlers;
   const [sideTab, setSideTab] = useState("portfolio");
   // Objectives modal lives at dashboard level for the same reason as in
@@ -5257,8 +5237,43 @@ export default function SAMASApp() {
   // pinUnlocked is per-tab (useState, not persisted) — the user has to
   // enter the PIN every time they reopen the app.
   const [pinUnlocked, setPinUnlocked] = useState(false);
-  const supabaseReady = !!sbSession && !!sbProfile?.phone_verified;
-  const needsAuth   = !sbLoading && !supabaseReady;
+  // MFA gate: after password login, if the user has a verified TOTP
+  // factor we require an additional code before showing the app. This
+  // lifts the session from AAL1 to AAL2.
+  const [mfaPassed, setMfaPassed] = useState(false);
+  const [mfaRequired, setMfaRequired] = useState(false);
+  useEffect(() => {
+    if (!sbSession?.user) {
+      setMfaPassed(false);
+      setMfaRequired(false);
+      return;
+    }
+    let alive = true;
+    (async () => {
+      try {
+        const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (!alive) return;
+        if (error) {
+          console.error("[mfa] aal check failed:", error);
+          // Be permissive on error so the user isn't locked out.
+          setMfaRequired(false);
+          setMfaPassed(true);
+          return;
+        }
+        const needs = data?.currentLevel === "aal1" && data?.nextLevel === "aal2";
+        setMfaRequired(needs);
+        setMfaPassed(!needs);
+      } catch (e) {
+        console.error("[mfa] aal exception:", e);
+        if (alive) { setMfaRequired(false); setMfaPassed(true); }
+      }
+    })();
+    return () => { alive = false; };
+  }, [sbSession?.access_token]);
+
+  const supabaseReady = !!sbSession && !!sbProfile?.phone_verified && (!mfaRequired || mfaPassed);
+  const needsAuth   = !sbLoading && !supabaseReady && !mfaRequired;
+  const needsMfa    = !sbLoading && !!sbSession && !!sbProfile?.phone_verified && mfaRequired && !mfaPassed;
   const needsPinGate = supabaseReady && !pinUnlocked;
   // ui_mode comes from profiles.ui_mode. null = never chosen → show the
   // WelcomeChooser once the session is fully unlocked. Changeable later
@@ -5286,7 +5301,11 @@ export default function SAMASApp() {
     })();
     return { name: fullName, email, initials };
   }, [sbSession, sbProfile]);
-  const [hasSeenTutorial, setHasSeen] = usePersistedState("samas_seen_tutorial", false);
+  // Tutorial-seen flag lives on profiles.seen_tutorial in Supabase so it
+  // follows the user across devices / browsers / incognito sessions. The
+  // flag is read directly from sbProfile (see useEffect that gates the
+  // popup), and written via raw fetch in finishTutorial (SDK builder
+  // hangs intermittently — same workaround as handleChangeUiMode).
   const [showTutorial, setShowTutorial] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [tab, setTab]                 = useState("portfolio");
@@ -5495,6 +5514,21 @@ export default function SAMASApp() {
         setSavedPlan(snap.plan || null);
         setStopLosses(snap.stopLosses || {});
         setPriceAlerts(snap.priceAlerts || {});
+        // Preferences + recurring + history. Each value can be null
+        // when the DB has no opinion (or fetch errored). In that case
+        // we keep whatever was in localStorage — that's fine because
+        // localStorage is just an instant cache that the next change
+        // will sync up to the DB anyway.
+        if (snap.recurringAporte !== null && snap.recurringAporte !== undefined) {
+          setRecurringAporte(snap.recurringAporte);
+        }
+        if (snap.portfolioHistory !== null && snap.portfolioHistory !== undefined) {
+          setPortfolioHistory(snap.portfolioHistory);
+        }
+        if (snap.lang)              setLang(snap.lang);
+        if (typeof snap.showUSD  === "boolean") setShowUSD(snap.showUSD);
+        if (typeof snap.uiDark   === "boolean") setIsDark(snap.uiDark);
+        if (snap.viewMode)          setViewMode(snap.viewMode);
         if (snap.errors.length > 0) {
           console.warn("[userData] partial load errors:", snap.errors);
         }
@@ -5549,6 +5583,48 @@ export default function SAMASApp() {
     savePriceAlerts(userId, priceAlerts).catch((e) => console.error("[priceAlerts] save:", e));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [priceAlerts, userId]);
+
+  // ----- Preferences + recurring aporte + portfolio history -----
+  // Each save effect mirrors the local state to its corresponding
+  // profile column. Gated on syncedUserIdRef so we never echo back
+  // whatever we just hydrated from the DB. Failures are logged but
+  // not surfaced — the localStorage cache still has the change so
+  // the user's UI stays consistent on this device.
+  useEffect(() => {
+    if (syncedUserIdRef.current !== userId || !userId) return;
+    saveRecurringAporte(userId, recurringAporte).catch((e) => console.error("[recurringAporte] save:", e));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recurringAporte, userId]);
+
+  useEffect(() => {
+    if (syncedUserIdRef.current !== userId || !userId) return;
+    savePortfolioHistory(userId, portfolioHistory).catch((e) => console.error("[portfolioHistory] save:", e));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portfolioHistory, userId]);
+
+  useEffect(() => {
+    if (syncedUserIdRef.current !== userId || !userId) return;
+    saveLang(userId, lang).catch((e) => console.error("[lang] save:", e));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang, userId]);
+
+  useEffect(() => {
+    if (syncedUserIdRef.current !== userId || !userId) return;
+    saveShowUSD(userId, showUSD).catch((e) => console.error("[showUSD] save:", e));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showUSD, userId]);
+
+  useEffect(() => {
+    if (syncedUserIdRef.current !== userId || !userId) return;
+    saveUiDark(userId, isDark).catch((e) => console.error("[uiDark] save:", e));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDark, userId]);
+
+  useEffect(() => {
+    if (syncedUserIdRef.current !== userId || !userId) return;
+    saveViewMode(userId, viewMode).catch((e) => console.error("[viewMode] save:", e));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, userId]);
 
   const handleTrade = trade => { setSelected(null); setPending(trade); };
 
@@ -5701,13 +5777,18 @@ export default function SAMASApp() {
   const handleLogin = () => {};
   const handleSignup = () => {};
   // Tutorial kickoff: show it once, after login, for users who haven't seen
-  // it yet. Triggered by a useEffect that watches `loggedIn`.
+  // it yet. Reads from profiles.seen_tutorial so the flag persists across
+  // devices and browsers (was previously localStorage, which meant every
+  // new login / new device / incognito tab triggered the tutorial again).
+  // Wait until sbProfile has loaded before deciding — otherwise we'd flash
+  // the tutorial briefly for users who have already seen it.
   useEffect(() => {
-    if (loggedIn && !hasSeenTutorial) {
-      const id = setTimeout(() => setShowTutorial(true), 400);
-      return () => clearTimeout(id);
-    }
-  }, [loggedIn, hasSeenTutorial]);
+    if (!loggedIn) return;
+    if (!sbProfile) return; // profile still loading
+    if (sbProfile.seen_tutorial) return;
+    const id = setTimeout(() => setShowTutorial(true), 400);
+    return () => clearTimeout(id);
+  }, [loggedIn, sbProfile]);
   // Write a new PIN hash to profiles and refetch. Called from the PIN
   // "create" flow. Throws on network/DB errors so the PinLockScreen can
   // show an inline error and let the user retry.
@@ -5760,7 +5841,16 @@ export default function SAMASApp() {
         supabase.from("accounts").delete().eq("user_id", uid),
         supabase.from("watchlists").delete().eq("user_id", uid),
         supabase.from("plans").delete().eq("user_id", uid),
-        supabase.from("profiles").update({ stop_losses: {}, price_alerts: {} }).eq("id", uid),
+        // Reset risk rules + recurring aporte + portfolio history. We
+        // intentionally do NOT reset display preferences (lang, dark,
+        // show_usd, view_mode) — those are workspace settings, not
+        // account data, and the user expects them to survive a reset.
+        supabase.from("profiles").update({
+          stop_losses: {},
+          price_alerts: {},
+          recurring_aporte: null,
+          portfolio_history: null,
+        }).eq("id", uid),
       ]);
       // Reset local state to fresh-account defaults.
       setHoldings([]);
@@ -5770,6 +5860,8 @@ export default function SAMASApp() {
       setSavedPlan(null);
       setStopLosses({});
       setPriceAlerts({});
+      setRecurringAporte(null);
+      setPortfolioHistory(null);
       showToast("Cuenta reiniciada — sin holdings, sin órdenes, saldo $0.", C.gold);
     } catch (e) {
       console.error("[reset] failed:", e);
@@ -5828,7 +5920,43 @@ export default function SAMASApp() {
     setSelected(null);
     setPending(null);
   };
-  const finishTutorial = () => { setHasSeen(true); setShowTutorial(false); };
+  // Mark the tutorial as seen for this user. Persists to profiles.seen_tutorial
+  // via raw fetch (SDK .from().update() hangs occasionally on this build —
+  // same workaround as handleChangeUiMode). The popup hides immediately;
+  // refetchProfile() syncs sbProfile so future renders / reloads see the
+  // flag and don't re-trigger the kickoff effect.
+  const finishTutorial = async () => {
+    setShowTutorial(false);
+    const uid = sbSession?.user?.id;
+    const token = sbSession?.access_token;
+    if (!uid || !token) return;
+    try {
+      const resp = await fetch(
+        `${SUPABASE_URL}/rest/v1/profiles?id=eq.${uid}`,
+        {
+          method: "PATCH",
+          headers: {
+            "apikey": SUPABASE_PUBLISHABLE_KEY,
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal",
+          },
+          body: JSON.stringify({
+            seen_tutorial: true,
+            updated_at: new Date().toISOString(),
+          }),
+        },
+      );
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "");
+        console.error("[seen_tutorial] update failed:", resp.status, text);
+        return;
+      }
+      await refetchProfile();
+    } catch (e) {
+      console.error("[seen_tutorial] handler threw:", e);
+    }
+  };
 
   // Demo deposit — no payment gateway. Adds to balance and shows confirmation.
   const handleDeposit = (amount, method) => {
@@ -5842,7 +5970,7 @@ export default function SAMASApp() {
     showToast(`$${fN(amount)} acreditados via ${methodLabel}`, C.green);
   };
 
-  const appState = { isDark, loggedIn, needsAuth, needsPinGate, needsWelcome, uiMode, displayUser, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker };
+  const appState = { isDark, loggedIn, needsAuth, needsMfa, mfaPassed, setMfaPassed, needsPinGate, needsWelcome, uiMode, displayUser, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker };
   const handlers = { handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, handleSavePin, handleChangeUiMode, handleResetAccount, handleResetPin, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte };
 
   const outerBg = isDark ? "#080808" : "#050505";
@@ -5912,6 +6040,7 @@ export default function SAMASApp() {
           <div style={{ display:"flex", justifyContent:"center", alignItems:"center", minHeight:"calc(100vh - 60px)" }}>
             <div style={{ width:420, height:620, position:"relative", borderRadius:20, overflow:"hidden" }}>
               {needsAuth && <SupabaseAuthFlow C={C} session={sbSession} profile={sbProfile} onVerified={refetchProfile}/>}
+              {needsMfa && <MfaChallengeView C={C} onSuccess={() => setMfaPassed(true)} onForgot={handleLogout}/>}
               {needsPinGate && (
                 <PinLockScreen
                   C={C}

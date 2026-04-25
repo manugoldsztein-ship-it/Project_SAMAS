@@ -25,9 +25,57 @@
 // the next change will sync.
 // ============================================================
 
-import { supabase } from "./supabase";
+import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./supabase";
 
 const ARS = "ARS";
+
+// -----------------------------------------------------------
+// RAW-FETCH HELPERS — used by all profile-column writes below
+// because the SDK's `.from('profiles').update(...)` builder
+// occasionally hangs on this build (same workaround as the
+// ui_mode toggle and 2FA enroll). Wrapping fetch with
+// AbortController surfaces a real failure instead of an
+// indefinite spinner.
+// -----------------------------------------------------------
+async function fetchWithTimeout(url, opts = {}, ms = 8000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+async function authToken() {
+  const { data } = await supabase.auth.getSession();
+  return data?.session?.access_token || null;
+}
+
+async function patchProfile(userId, patch) {
+  const token = await authToken();
+  if (!token) throw new Error("No hay sesión activa.");
+  const resp = await fetchWithTimeout(
+    `${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}`,
+    {
+      method: "PATCH",
+      headers: {
+        "apikey": SUPABASE_PUBLISHABLE_KEY,
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal",
+      },
+      body: JSON.stringify({
+        ...patch,
+        updated_at: new Date().toISOString(),
+      }),
+    },
+  );
+  if (!resp.ok) {
+    const txt = await resp.text().catch(() => "");
+    throw new Error(`profiles PATCH ${resp.status}: ${txt}`);
+  }
+}
 
 // -----------------------------------------------------------
 // HOLDINGS
@@ -306,25 +354,84 @@ export async function loadRiskRules(userId) {
 }
 
 export async function saveStopLosses(userId, stopLosses) {
-  const { error } = await supabase
-    .from("profiles")
-    .update({
-      stop_losses: stopLosses || {},
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", userId);
-  if (error) throw error;
+  await patchProfile(userId, { stop_losses: stopLosses || {} });
 }
 
 export async function savePriceAlerts(userId, priceAlerts) {
-  const { error } = await supabase
+  await patchProfile(userId, { price_alerts: priceAlerts || {} });
+}
+
+// -----------------------------------------------------------
+// PREFERENCES + RECURRING APORTE + PORTFOLIO HISTORY
+// -----------------------------------------------------------
+// All of these live on the profiles row. Same lifecycle as risk
+// rules — they're small, always read/written whole, and the user
+// expects them to follow them across devices.
+//
+//   recurring_aporte  — { amount, lastApplied } | null
+//   portfolio_history — [{ date, value }, ...] | null
+//   lang              — 'es' | 'en' | ...
+//   show_usd          — boolean
+//   ui_dark           — boolean
+//   view_mode         — 'mobile' | 'desktop'
+// -----------------------------------------------------------
+export async function loadPreferences(userId) {
+  const { data, error } = await supabase
     .from("profiles")
-    .update({
-      price_alerts: priceAlerts || {},
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", userId);
+    .select("recurring_aporte, portfolio_history, lang, show_usd, ui_dark, view_mode")
+    .eq("id", userId)
+    .maybeSingle();
   if (error) throw error;
+  if (!data) {
+    return {
+      recurringAporte: null,
+      portfolioHistory: null,
+      lang: null,
+      showUSD: null,
+      uiDark: null,
+      viewMode: null,
+    };
+  }
+  return {
+    recurringAporte:  data.recurring_aporte  || null,
+    portfolioHistory: data.portfolio_history || null,
+    // For scalars we return whatever the DB had — including the
+    // server defaults — so the caller can treat null/undefined as
+    // "no opinion" and fall back to its local cache.
+    lang:     data.lang     ?? null,
+    showUSD:  typeof data.show_usd === "boolean" ? data.show_usd : null,
+    uiDark:   typeof data.ui_dark  === "boolean" ? data.ui_dark  : null,
+    viewMode: data.view_mode ?? null,
+  };
+}
+
+export async function saveRecurringAporte(userId, recurringAporte) {
+  await patchProfile(userId, { recurring_aporte: recurringAporte || null });
+}
+
+export async function savePortfolioHistory(userId, history) {
+  // Cap the history at the most recent 365 entries so the JSONB
+  // doesn't grow unbounded over years of use.
+  const trimmed = Array.isArray(history) ? history.slice(-365) : null;
+  await patchProfile(userId, { portfolio_history: trimmed });
+}
+
+export async function saveLang(userId, lang) {
+  if (typeof lang !== "string" || !lang) return;
+  await patchProfile(userId, { lang });
+}
+
+export async function saveShowUSD(userId, showUSD) {
+  await patchProfile(userId, { show_usd: !!showUSD });
+}
+
+export async function saveUiDark(userId, uiDark) {
+  await patchProfile(userId, { ui_dark: !!uiDark });
+}
+
+export async function saveViewMode(userId, viewMode) {
+  if (viewMode !== "mobile" && viewMode !== "desktop") return;
+  await patchProfile(userId, { view_mode: viewMode });
 }
 
 // -----------------------------------------------------------
@@ -333,15 +440,17 @@ export async function savePriceAlerts(userId, priceAlerts) {
 // kill the whole app. Caller decides what to do with each piece.
 // -----------------------------------------------------------
 export async function loadUserPortfolio(userId) {
-  const [holdings, orders, balance, watchlists, plan, risk] = await Promise.allSettled([
+  const [holdings, orders, balance, watchlists, plan, risk, prefs] = await Promise.allSettled([
     loadHoldings(userId),
     loadOrders(userId),
     loadBalance(userId),
     loadWatchlists(userId),
     loadLatestPlan(userId),
     loadRiskRules(userId),
+    loadPreferences(userId),
   ]);
-  const riskVal = risk.status === "fulfilled" ? risk.value : null;
+  const riskVal  = risk.status  === "fulfilled" ? risk.value  : null;
+  const prefsVal = prefs.status === "fulfilled" ? prefs.value : null;
   return {
     holdings:    holdings.status   === "fulfilled" ? holdings.value   : null,
     orders:      orders.status     === "fulfilled" ? orders.value     : null,
@@ -350,7 +459,15 @@ export async function loadUserPortfolio(userId) {
     plan:        plan.status       === "fulfilled" ? plan.value       : null,
     stopLosses:  riskVal ? riskVal.stopLosses  : null,
     priceAlerts: riskVal ? riskVal.priceAlerts : null,
-    errors: [holdings, orders, balance, watchlists, plan, risk]
+    // Preferences. Each can be null = "DB had no opinion / fetch failed",
+    // and the caller should keep its local cache in that case.
+    recurringAporte:  prefsVal ? prefsVal.recurringAporte  : null,
+    portfolioHistory: prefsVal ? prefsVal.portfolioHistory : null,
+    lang:     prefsVal ? prefsVal.lang     : null,
+    showUSD:  prefsVal ? prefsVal.showUSD  : null,
+    uiDark:   prefsVal ? prefsVal.uiDark   : null,
+    viewMode: prefsVal ? prefsVal.viewMode : null,
+    errors: [holdings, orders, balance, watchlists, plan, risk, prefs]
       .filter((r) => r.status === "rejected")
       .map((r) => r.reason),
   };
