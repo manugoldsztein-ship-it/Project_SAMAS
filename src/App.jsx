@@ -1635,14 +1635,38 @@ function WhatIfPanel({ asset, C }) {
 // NewsSection wraps a list of articles with a header + loading /
 // empty / error states. Used both inside AssetDetail (per-ticker)
 // and PageNoticias (mixed feed).
-function NewsCard({ article, C, lang, showTicker, onTickerClick }) {
+// Detect known-bad image URLs client-side as a second line of defense.
+// Server already filters most placeholders in fetch-news; this catches
+// anything that leaked through (cached articles from before the
+// server-side filter was added, mostly).
+function isBadThumbnail(url) {
+  if (!url || typeof url !== "string") return true;
+  const lc = url.toLowerCase();
+  if (lc.includes("s.yimg.com/rz/")) return true;
+  if (lc.includes("s.yimg.com/cv/")) return true;
+  if (lc.includes("yahoo_logo")) return true;
+  if (lc.includes("/pixel")) return true;
+  if (lc.includes("transparent")) return true;
+  if (lc.includes("1x1") || lc.includes("16x16") || lc.includes("32x32")) return true;
+  return false;
+}
+
+function NewsCard({ article, C, lang, showTicker, onTickerClick, onOpen }) {
+  const [imgFailed, setImgFailed] = useState(false);
   if (!article) return null;
   const open = () => {
+    if (onOpen) {
+      onOpen(article);
+      return;
+    }
     if (article.url) {
       try { window.open(article.url, "_blank", "noopener,noreferrer"); }
       catch { /* swallow popup-blocker errors */ }
     }
   };
+  // Image rendering: skip entirely when the URL looks like a known
+  // placeholder, OR when the browser already failed to load it.
+  const showImage = article.image_url && !isBadThumbnail(article.image_url) && !imgFailed;
   return (
     <div
       onClick={open}
@@ -1655,13 +1679,13 @@ function NewsCard({ article, C, lang, showTicker, onTickerClick }) {
       onMouseEnter={(e) => { e.currentTarget.style.borderColor = C.accent + "55"; }}
       onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.border; }}
     >
-      {article.image_url && (
+      {showImage && (
         <div style={{
           width: "100%", aspectRatio: "16 / 9", overflow: "hidden",
           background: C.creamDk, display: "flex", alignItems: "center", justifyContent: "center",
         }}>
           <img src={article.image_url} alt="" loading="lazy"
-            onError={(e) => { e.currentTarget.style.display = "none"; }}
+            onError={() => setImgFailed(true)}
             style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>
         </div>
       )}
@@ -1702,12 +1726,133 @@ function NewsCard({ article, C, lang, showTicker, onTickerClick }) {
   );
 }
 
+// In-app article preview modal. Shows the title + image + summary in
+// a slide-up sheet so the user gets context without immediately
+// jumping to a different app/tab. The "Leer artículo completo" button
+// then opens the original URL externally (we can't iframe most news
+// sites — they set X-Frame-Options: DENY — so an honest "preview +
+// external read" pattern is the cleanest UX).
+function ArticleModal({ article, C, lang, onClose }) {
+  useEffect(() => {
+    if (!article) return;
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [article, onClose]);
+  if (!article) return null;
+  const showImage = article.image_url && !isBadThumbnail(article.image_url);
+  const openExternal = () => {
+    if (!article.url) return;
+    try { window.open(article.url, "_blank", "noopener,noreferrer"); } catch {}
+  };
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 90,
+        background: "rgba(0,0,0,0.7)",
+        display: "flex", alignItems: "flex-end", justifyContent: "center",
+        animation: "fadeIn 120ms ease-out",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%", maxWidth: 480, maxHeight: "90vh",
+          background: C.bg, borderRadius: "20px 20px 0 0",
+          display: "flex", flexDirection: "column",
+          overflow: "hidden",
+          boxShadow: "0 -10px 40px rgba(0,0,0,0.4)",
+        }}
+      >
+        {/* drag handle */}
+        <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 6px" }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: C.border }}/>
+        </div>
+        {/* close button */}
+        <button
+          onClick={onClose}
+          aria-label="Cerrar"
+          style={{
+            position: "absolute", top: 14, right: 14,
+            width: 32, height: 32, borderRadius: 16,
+            background: C.card, border: "1px solid " + C.border,
+            color: C.textMd, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontFamily: "inherit", fontSize: 14, fontWeight: 600, zIndex: 1,
+          }}
+        >✕</button>
+        <div style={{ flex: 1, overflowY: "auto", padding: "0 18px 18px" }}>
+          {/* meta row */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+            {article.ticker && (
+              <span style={{ background: C.gold + "22", color: C.gold, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, borderRadius: 5, padding: "3px 8px", fontFamily: "monospace" }}>
+                {article.ticker}
+              </span>
+            )}
+            {article.source && (
+              <span style={{ fontSize: 11, color: C.textMd, fontWeight: 600 }}>{article.source}</span>
+            )}
+            <span style={{ fontSize: 10, color: C.textLt, marginLeft: "auto" }}>
+              {relativeTime(article.published_at, lang)}
+            </span>
+          </div>
+          {/* title */}
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, lineHeight: 1.35, margin: "0 0 12px" }}>
+            {article.title}
+          </h2>
+          {/* image */}
+          {showImage && (
+            <div style={{
+              width: "100%", aspectRatio: "16 / 9",
+              borderRadius: 14, overflow: "hidden",
+              background: C.creamDk, marginBottom: 12,
+            }}>
+              <img src={article.image_url} alt="" loading="lazy"
+                onError={(e) => { e.currentTarget.parentElement.style.display = "none"; }}
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>
+            </div>
+          )}
+          {/* summary */}
+          {article.summary && (
+            <div style={{ fontSize: 13, color: C.textMd, lineHeight: 1.65, marginBottom: 18 }}>
+              {article.summary}
+            </div>
+          )}
+          {/* CTA */}
+          <button
+            onClick={openExternal}
+            style={{
+              width: "100%", background: C.accent, color: "#fff",
+              border: "none", borderRadius: 12, padding: "13px",
+              fontSize: 14, fontWeight: 800,
+              cursor: "pointer", fontFamily: "inherit",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+              <polyline points="15 3 21 3 21 9"/>
+              <line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+            Leer artículo completo
+          </button>
+          <div style={{ fontSize: 10, color: C.textLt, textAlign: "center", marginTop: 8 }}>
+            Se abre en una pestaña nueva en {article.source || "la fuente original"}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Per-ticker news block — used inside AssetDetail. Lazy-fetches on
 // mount, refetches when the ticker changes. Errors don't block the
 // rest of the screen — we just hide the section gracefully.
 function NewsSection({ ticker, C, lang, max = 5 }) {
   const [articles, setArticles] = useState(null);  // null = loading, [] = none, [...] = data
   const [err, setErr] = useState(null);
+  const [openArticle, setOpenArticle] = useState(null);
   useEffect(() => {
     let alive = true;
     setArticles(null);
@@ -1745,10 +1890,11 @@ function NewsSection({ ticker, C, lang, max = 5 }) {
       {articles && articles.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {articles.slice(0, max).map((a) => (
-            <NewsCard key={a.url} article={a} C={C} lang={lang}/>
+            <NewsCard key={a.url} article={a} C={C} lang={lang} onOpen={setOpenArticle}/>
           ))}
         </div>
       )}
+      <ArticleModal article={openArticle} C={C} lang={lang} onClose={() => setOpenArticle(null)}/>
     </div>
   );
 }
@@ -3796,6 +3942,7 @@ function PageNoticias({ holdings, watchlists, onSelectAsset, C, lang }) {
   const [articles, setArt]    = useState(null);    // null=loading, []=none, [...]=data
   const [err, setErr]         = useState(null);
   const [refreshKey, setRefreshKey] = useState(0); // bumped to trigger refetch
+  const [openArticle, setOpenArticle] = useState(null);
 
   // Debounce the search → activeTicker transition. 350ms is short enough
   // that hitting Enter feels instant but long enough to skip mid-typing
@@ -3954,10 +4101,12 @@ function PageNoticias({ holdings, watchlists, onSelectAsset, C, lang }) {
               lang={lang}
               showTicker={!activeTicker}
               onTickerClick={(tk) => setSearch(tk)}
+              onOpen={setOpenArticle}
             />
           ))}
         </div>
       )}
+      <ArticleModal article={openArticle} C={C} lang={lang} onClose={() => setOpenArticle(null)}/>
     </div>
   );
 }

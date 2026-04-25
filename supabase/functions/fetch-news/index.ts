@@ -95,13 +95,26 @@ const ARG_KEYWORDS: Record<string, string[]> = {
 // not important; we fetch them in parallel and merge. URLs verified
 // against current site layouts as of writing — if any 404s in the
 // future we just skip that feed (graceful failure).
+//
+// Several backup feeds included because publishers regularly rename
+// their RSS endpoints. If a feed 404s we still have others to try.
 const ARG_RSS_FEEDS = [
-  { source: "Ámbito",         url: "https://www.ambito.com/rss/finanzas.xml" },
-  { source: "Ámbito",         url: "https://www.ambito.com/rss/economia.xml" },
-  { source: "Cronista",       url: "https://www.cronista.com/files/rss/finanzas-mercados.xml" },
+  // Ámbito Financiero — multiple sections.
+  { source: "Ámbito",         url: "https://www.ambito.com/rss/pages/home.xml" },
+  { source: "Ámbito",         url: "https://www.ambito.com/contenidos/economia.xml" },
+  { source: "Ámbito",         url: "https://www.ambito.com/contenidos/finanzas.xml" },
+  // El Cronista.
   { source: "Cronista",       url: "https://www.cronista.com/files/rss/economia-politica.xml" },
-  { source: "Infobae",        url: "https://www.infobae.com/economia/feed/" },
-  { source: "La Nación",      url: "https://servicios.lanacion.com.ar/herramientas/rss/categoria-id=347" }, // Economía
+  { source: "Cronista",       url: "https://www.cronista.com/files/rss/finanzas-mercados.xml" },
+  { source: "Cronista",       url: "https://www.cronista.com/files/rss/empresas.xml" },
+  // Infobae.
+  { source: "Infobae",        url: "https://www.infobae.com/economia/rss" },
+  { source: "Infobae",        url: "https://www.infobae.com/feeds/rss/sections/economia.xml" },
+  // La Nación.
+  { source: "La Nación",      url: "https://servicios.lanacion.com.ar/herramientas/rss/categoria-id=347" },
+  { source: "La Nación",      url: "https://www.lanacion.com.ar/arc/outboundfeeds/rss/category/economia/?outputType=xml" },
+  // Bloomberg Línea (Spanish-language Bloomberg coverage of LATAM).
+  { source: "Bloomberg Línea",url: "https://www.bloomberglinea.com/arc/outboundfeeds/rss/?outputType=xml" },
 ];
 
 // ------------------------------------------------------------
@@ -225,7 +238,10 @@ type FinnhubArticle = {
 };
 
 async function fetchFinnhub(ticker: string): Promise<NormalizedArticle[]> {
-  if (!FINNHUB_API_KEY) return [];
+  if (!FINNHUB_API_KEY) {
+    console.log("[fetch-news] FINNHUB_API_KEY missing — skipping finnhub");
+    return [];
+  }
   // Last 14 days. Finnhub requires a from/to range.
   const to = new Date();
   const from = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
@@ -233,19 +249,23 @@ async function fetchFinnhub(ticker: string): Promise<NormalizedArticle[]> {
   const url = `https://finnhub.io/api/v1/company-news?symbol=${encodeURIComponent(ticker)}&from=${fmt(from)}&to=${fmt(to)}&token=${FINNHUB_API_KEY}`;
   try {
     const r = await fetchTimeout(url, {}, 6000);
-    if (!r.ok) return [];
+    if (!r.ok) {
+      console.log(`[fetch-news] finnhub ${ticker} → ${r.status}`);
+      return [];
+    }
     const arr: FinnhubArticle[] = await r.json();
+    console.log(`[fetch-news] finnhub ${ticker}: ${arr?.length || 0} articles`);
     return (arr || []).slice(0, MAX_PER_SOURCE).map((a) => ({
       ticker,
       title: a.headline,
       summary: a.summary,
       url: a.url,
       source: a.source,
-      image_url: a.image || null,
+      image_url: looksLikeBadThumbnail(a.image) ? null : (a.image || null),
       published_at: new Date(a.datetime * 1000).toISOString(),
     }));
   } catch (e) {
-    console.error("[fetch-news] finnhub failed:", e);
+    console.log("[fetch-news] finnhub threw:", (e as Error).message);
     return [];
   }
 }
@@ -254,9 +274,32 @@ async function fetchFinnhub(ticker: string): Promise<NormalizedArticle[]> {
 // Source: Argentine RSS — fetch all feeds in parallel, parse,
 // filter by keywords. Each match gets associated with our ticker.
 // ------------------------------------------------------------
+// Filter known-bad thumbnail patterns. Sources sometimes return logo
+// placeholders instead of real article images (Yahoo's purple "b!"
+// being the most egregious). We scrub those so the client never
+// shows them.
+function looksLikeBadThumbnail(url: string | null): boolean {
+  if (!url) return true;
+  const lc = url.toLowerCase();
+  // Yahoo logo placeholders (the purple "b!" we saw in the wild).
+  if (lc.includes("s.yimg.com/rz/")) return true;
+  if (lc.includes("s.yimg.com/cv/")) return true;
+  if (lc.includes("yahoo_logo")) return true;
+  // Generic 1x1 / tracker pixels.
+  if (lc.endsWith(".gif")) return true;
+  if (lc.includes("/pixel")) return true;
+  if (lc.includes("transparent")) return true;
+  // Very-small thumbnail patterns from feed enclosures (not always
+  // accurate but a reasonable heuristic — we'd rather show no image
+  // than a tiny one that looks broken).
+  if (lc.includes("1x1") || lc.includes("16x16") || lc.includes("32x32")) return true;
+  return false;
+}
+
 async function fetchArgRss(ticker: string, keywords: string[]): Promise<NormalizedArticle[]> {
   const lowers = keywords.map((k) => k.toLowerCase());
   const matchesKeywords = (s: string) => {
+    if (!s) return false;
     const lc = s.toLowerCase();
     return lowers.some((k) => lc.includes(k));
   };
@@ -264,13 +307,23 @@ async function fetchArgRss(ticker: string, keywords: string[]): Promise<Normaliz
   const fetchOne = async (feed: typeof ARG_RSS_FEEDS[number]): Promise<NormalizedArticle[]> => {
     try {
       const r = await fetchTimeout(feed.url, {
-        headers: { "User-Agent": "SAMAS-NewsBot/1.0 (+https://samas.app)" },
+        headers: {
+          // Many RSS endpoints reject suspicious User-Agents. Pretend
+          // to be a real browser (the same UA Firefox sends) so the
+          // server doesn't block us.
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:120.0) Gecko/20100101 Firefox/120.0",
+          "Accept": "application/rss+xml, application/xml, text/xml, */*",
+        },
       }, 5000);
-      if (!r.ok) return [];
+      if (!r.ok) {
+        console.log(`[fetch-news] rss ${feed.source} ${feed.url} → ${r.status}`);
+        return [];
+      }
       const xml = await r.text();
       const items = parseRss(xml);
-      return items
-        .filter((it) => matchesKeywords(it.title) || matchesKeywords(it.description))
+      const matches = items.filter((it) => matchesKeywords(it.title) || matchesKeywords(it.description));
+      console.log(`[fetch-news] rss ${feed.source}: ${items.length} items, ${matches.length} match "${ticker}"`);
+      return matches
         .slice(0, MAX_PER_SOURCE)
         .map((it) => ({
           ticker,
@@ -278,17 +331,19 @@ async function fetchArgRss(ticker: string, keywords: string[]): Promise<Normaliz
           summary: it.description,
           url: it.link,
           source: feed.source,
-          image_url: it.image || null,
+          image_url: looksLikeBadThumbnail(it.image || null) ? null : (it.image || null),
           published_at: parsePubDate(it.pubDate).toISOString(),
         }));
     } catch (e) {
-      console.error(`[fetch-news] rss ${feed.url} failed:`, e);
+      console.log(`[fetch-news] rss ${feed.source} ${feed.url} threw:`, (e as Error).message);
       return [];
     }
   };
 
   const results = await Promise.all(ARG_RSS_FEEDS.map(fetchOne));
-  return results.flat();
+  const flat = results.flat();
+  console.log(`[fetch-news] ARG total for ${ticker}: ${flat.length} articles`);
+  return flat;
 }
 
 // ------------------------------------------------------------
@@ -379,9 +434,25 @@ serve(async (req: Request) => {
     }
 
     // Cache miss — fetch from upstreams.
-    let articles: NormalizedArticle[];
+    // Strategy:
+    //   - ARG ticker: try Argentine RSS first (Spanish, local context),
+    //     fall back to Finnhub with a `.BA` suffix variant if no
+    //     RSS hits (Finnhub does cover some Argentine securities under
+    //     "TICKER.BA"). Last resort: bare ticker on Finnhub.
+    //   - Global ticker: Finnhub directly.
+    // This means even tickers our RSS keyword list misses still
+    // typically return *something* rather than empty.
+    let articles: NormalizedArticle[] = [];
     if (ARG_KEYWORDS[ticker]) {
       articles = await fetchArgRss(ticker, ARG_KEYWORDS[ticker]);
+      if (articles.length === 0) {
+        console.log(`[fetch-news] ARG RSS empty for ${ticker}, trying Finnhub .BA`);
+        articles = await fetchFinnhub(`${ticker}.BA`);
+      }
+      if (articles.length === 0) {
+        console.log(`[fetch-news] Finnhub .BA empty for ${ticker}, trying bare`);
+        articles = await fetchFinnhub(ticker);
+      }
     } else {
       articles = await fetchFinnhub(ticker);
     }
