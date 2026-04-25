@@ -5520,12 +5520,12 @@ function MobileApp({ appState, handlers, C }) {
       })()}
       <div style={{
         background:C.isDark?"#0F0F0F":"#0D1117",
-        // capacitor.config sets StatusBar overlaysWebView=false, so
-        // the webview already starts below the iOS status bar — no
-        // need to also add safe-area-inset-top here. (Doing both was
-        // creating a huge empty gap between status bar and header.)
-        paddingTop: isNativeApp ? 12 : 30,
-        paddingBottom:8,
+        // overlaysWebView is true now (status bar floats over our
+        // webview). Header paddingTop = safe-area-inset-top + a small
+        // breathing-room offset, so SAMAS sits flush below the
+        // status bar without a dead gap.
+        paddingTop: isNativeApp ? "calc(env(safe-area-inset-top) + 6px)" : 30,
+        paddingBottom: isNativeApp ? 6 : 8,
         paddingLeft: isNativeApp ? "max(20px, env(safe-area-inset-left))" : 20,
         paddingRight: isNativeApp ? "max(20px, env(safe-area-inset-right))" : 20,
         display:"flex", alignItems:"center", flexShrink:0, zIndex:10, gap:8,
@@ -5578,10 +5578,14 @@ function MobileApp({ appState, handlers, C }) {
         background:C.isDark?"#0F0F0F":C.card,
         borderTop:"1px solid "+C.border,
         display:"flex",
-        height: isNativeApp ? "calc(78px + env(safe-area-inset-bottom))" : 78,
+        // Tighter on native: nav background ends right at the home
+        // indicator with a small 2px gap so the labels don't kiss
+        // the gesture bar. Previously had 4 + safe-area-inset = ~38pt
+        // of empty space below the labels which read as dead room.
+        height: isNativeApp ? "calc(64px + env(safe-area-inset-bottom))" : 78,
         zIndex:20,
-        paddingTop:6,
-        paddingBottom: isNativeApp ? "calc(4px + env(safe-area-inset-bottom))" : 4,
+        paddingTop: isNativeApp ? 4 : 6,
+        paddingBottom: isNativeApp ? "calc(2px + env(safe-area-inset-bottom))" : 4,
       }}>
         {TABS.map(t => {
           const active = tab === t.id;
