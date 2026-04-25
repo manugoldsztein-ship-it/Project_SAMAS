@@ -5434,22 +5434,21 @@ function MobileApp({ appState, handlers, C }) {
   // so our fake-iPhone frame would just look weird inside an iPhone.
   // Browser preview keeps the 375x760 mock with bezel + faux notch.
   //
-  // We do NOT pad the wrapper with safe-area-inset here — the header
-  // and bottom nav each apply their own inset so the content fills
-  // the full screen and the navy/dark colors of those bars extend
-  // edge-to-edge under the iOS status bar and home indicator (which
-  // is what users expect from a native iOS app).
+  // We use position:fixed + inset:0 to lock the frame to the device
+  // edges. This dodges any height-collapse issue that 100vh / 100dvh
+  // hit when nested inside other flex/scroll containers — fixed +
+  // inset:0 always fills the viewport regardless of the parent chain.
+  //
+  // Each chrome bar (header + bottom nav) applies its own
+  // safe-area-inset so the dark theme extends edge-to-edge under
+  // the status bar and home indicator (the canonical iOS look).
   const frameStyle = isNativeApp
     ? {
-        width: "100vw",
-        height: "100dvh",       // 'dvh' = dynamic viewport height,
-                                // shrinks/grows with the iOS toolbar
-                                // (regular vh leaks past the visible
-                                // area on Safari WebView).
+        position: "fixed",
+        inset: 0,
         background: C.bg,
         display: "flex",
         flexDirection: "column",
-        position: "relative",
         boxSizing: "border-box",
         overflow: "hidden",
       }

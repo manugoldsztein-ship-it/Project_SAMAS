@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>SAMAS — Client Demo</title>
     <meta name="description" content="SAMAS — simulador, cotizaciones y plan de inversion con IA." />
     <meta name="theme-color" content="#0D1117" />
@@ -25,6 +25,15 @@
          wide enough to hide the bug, but on a real device the content
          clipped because some inner divs added padding ON TOP of width:100%. */
       *, *::before, *::after { box-sizing: border-box; }
+      /* iOS auto-zooms when the user taps an input whose font-size
+         is below 16px. Set 16px as the floor on every form control
+         so the page never jumps. The viewport meta has user-scalable
+         turned off too as a belt-and-suspenders. */
+      input, textarea, select { font-size: 16px; }
+      /* Disable double-tap zoom on tappable elements — on iOS the
+         300ms wait for a possible second tap also creates a delay
+         that feels laggy. */
+      html { touch-action: manipulation; }
     </style>
   </head>
   <body>
