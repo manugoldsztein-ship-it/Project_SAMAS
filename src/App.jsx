@@ -5434,21 +5434,18 @@ function MobileApp({ appState, handlers, C }) {
   // so our fake-iPhone frame would just look weird inside an iPhone.
   // Browser preview keeps the 375x760 mock with bezel + faux notch.
   //
-  // We use position:fixed + inset:0 to lock the frame to the device
-  // edges. This dodges any height-collapse issue that 100vh / 100dvh
-  // hit when nested inside other flex/scroll containers — fixed +
-  // inset:0 always fills the viewport regardless of the parent chain.
-  //
-  // Each chrome bar (header + bottom nav) applies its own
-  // safe-area-inset so the dark theme extends edge-to-edge under
-  // the status bar and home indicator (the canonical iOS look).
+  // The safe-area insets are applied at the #root level in index.html,
+  // so every descendant lands inside the safe zone automatically.
+  // Here the wrapper just fills its parent (#root's content area)
+  // with width:100% and height:100%.
   const frameStyle = isNativeApp
     ? {
-        position: "fixed",
-        inset: 0,
+        width: "100%",
+        height: "100%",
         background: C.bg,
         display: "flex",
         flexDirection: "column",
+        position: "relative",
         boxSizing: "border-box",
         overflow: "hidden",
       }
@@ -5520,14 +5517,12 @@ function MobileApp({ appState, handlers, C }) {
       })()}
       <div style={{
         background:C.isDark?"#0F0F0F":"#0D1117",
-        // overlaysWebView is true now (status bar floats over our
-        // webview). Header paddingTop = safe-area-inset-top + a small
-        // breathing-room offset, so SAMAS sits flush below the
-        // status bar without a dead gap.
-        paddingTop: isNativeApp ? "calc(env(safe-area-inset-top) + 6px)" : 30,
-        paddingBottom: isNativeApp ? 6 : 8,
-        paddingLeft: isNativeApp ? "max(20px, env(safe-area-inset-left))" : 20,
-        paddingRight: isNativeApp ? "max(20px, env(safe-area-inset-right))" : 20,
+        // safe-area-inset is on #root (see index.html), so here we
+        // only need normal breathing-room padding.
+        paddingTop: isNativeApp ? 8 : 30,
+        paddingBottom: 8,
+        paddingLeft: 20,
+        paddingRight: 20,
         display:"flex", alignItems:"center", flexShrink:0, zIndex:10, gap:8,
       }}>
         {/* Three-column layout: left + center (SAMAS) + right. Each
@@ -5578,14 +5573,13 @@ function MobileApp({ appState, handlers, C }) {
         background:C.isDark?"#0F0F0F":C.card,
         borderTop:"1px solid "+C.border,
         display:"flex",
-        // Tighter on native: nav background ends right at the home
-        // indicator with a small 2px gap so the labels don't kiss
-        // the gesture bar. Previously had 4 + safe-area-inset = ~38pt
-        // of empty space below the labels which read as dead room.
-        height: isNativeApp ? "calc(64px + env(safe-area-inset-bottom))" : 78,
+        // Compact bottom nav. #root already has safe-area-inset-bottom
+        // padding so we don't need to inflate the height here — the
+        // home indicator sits in #root's padding area, below the nav.
+        height: isNativeApp ? 64 : 78,
         zIndex:20,
         paddingTop: isNativeApp ? 4 : 6,
-        paddingBottom: isNativeApp ? "calc(2px + env(safe-area-inset-bottom))" : 4,
+        paddingBottom: isNativeApp ? 4 : 4,
       }}>
         {TABS.map(t => {
           const active = tab === t.id;

@@ -16,9 +16,29 @@
     <meta name="format-detection" content="telephone=no" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E📈%3C/text%3E%3C/svg%3E" />
     <style>
-      html, body, #root { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+      html, body, #root {
+        margin: 0; padding: 0;
+        height: 100%;
+        overflow: hidden;
+        overscroll-behavior: none;
+      }
       html { -webkit-text-size-adjust: 100%; }
-      body { background: #050505; overscroll-behavior: none; position: fixed; width: 100%; }
+      body { background: #050505; }
+      /* On native (Capacitor) we want the app to fill the viewport AND
+         have the dark theme extend under the iOS status bar / home
+         indicator. `viewport-fit=cover` (set in the meta) lets us read
+         env(safe-area-inset-*); we apply those insets as padding on
+         #root so every descendant naturally lands inside the safe
+         area. The background is set on body so the OS chrome zones
+         show our brand color, not white. */
+      #root {
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
+        background: #050505;
+        box-sizing: border-box;
+      }
       /* Global box-sizing so width:100% + padding doesn't blow past the
          viewport. Fixes content overflowing the right edge on real
          iPhones — the fake-iPhone preview frame in the browser was
