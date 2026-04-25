@@ -5434,18 +5434,18 @@ function MobileApp({ appState, handlers, C }) {
   // so our fake-iPhone frame would just look weird inside an iPhone.
   // Browser preview keeps the 375x760 mock with bezel + faux notch.
   //
-  // The safe-area insets are applied at the #root level in index.html,
-  // so every descendant lands inside the safe zone automatically.
-  // Here the wrapper just fills its parent (#root's content area)
-  // with width:100% and height:100%.
+  // #root has the safe-area-inset padding (see index.html), so we
+  // position the wrapper absolutely with inset:0 — it fills #root's
+  // padding-box (i.e. the inside of the safe area). Using
+  // position:absolute avoids the height:100% cascade problem that
+  // collapsed the wrapper through unsized flex parents.
   const frameStyle = isNativeApp
     ? {
-        width: "100%",
-        height: "100%",
+        position: "absolute",
+        inset: 0,
         background: C.bg,
         display: "flex",
         flexDirection: "column",
-        position: "relative",
         boxSizing: "border-box",
         overflow: "hidden",
       }

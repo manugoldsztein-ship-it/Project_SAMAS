@@ -38,6 +38,10 @@
         padding-right: env(safe-area-inset-right);
         background: #050505;
         box-sizing: border-box;
+        /* Positioned ancestor for the absolutely-positioned MobileApp
+           wrapper, so its inset:0 resolves to #root's padding box (i.e.
+           the safe-area inner edge), not the viewport. */
+        position: relative;
       }
       /* Global box-sizing so width:100% + padding doesn't blow past the
          viewport. Fixes content overflowing the right edge on real
