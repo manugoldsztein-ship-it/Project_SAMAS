@@ -1,0 +1,28 @@
+{
+  "appId": "app.samas.broker",
+  "appName": "SAMAS",
+  "webDir": "dist",
+  "ios": {
+    "contentInset": "always",
+    "scrollEnabled": true,
+    "limitsNavigationsToAppBoundDomains": true
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "backgroundColor": "#0E1A12",
+      "showSpinner": false,
+      "splashImmersive": true
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#0E1A12",
+      "overlaysWebView": false
+    }
+  },
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "https",
+    "cleartext": false
+  }
+}

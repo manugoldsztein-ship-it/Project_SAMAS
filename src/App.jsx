@@ -600,10 +600,20 @@ function useKeyboardShortcuts(setTab, onShowHelp) {
   }, [setTab, onShowHelp]);
 }
 
-// Light-touch haptic feedback for key actions on mobile. Silent no-op where
-// unsupported (desktop browsers, iOS Safari without gesture context, etc.).
-// Keep patterns short and subtle — not every tap should buzz.
+// Light-touch haptic feedback for key actions on mobile.
+// On native iOS/Android (Capacitor wrap) we route through the OS
+// haptic engine — real Taptic Engine on iPhone, vibration motor on
+// Android. In a regular browser we fall back to navigator.vibrate.
+// Either way it's a silent no-op where unsupported.
 function haptic(type = "tap") {
+  // Best-effort native call (fire-and-forget — don't await, the caller
+  // shouldn't have to be async just to buzz a button).
+  hapticNative(
+    type === "confirm" ? "success" :
+    type === "error"   ? "error"   :
+    type === "success" ? "success" :
+    "tap"
+  ).catch(() => {});
   try {
     const v = (typeof navigator !== "undefined") && navigator.vibrate && navigator.vibrate.bind(navigator);
     if (!v) return;

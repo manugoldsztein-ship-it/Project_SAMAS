@@ -1,6 +1,12 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import SAMASApp from "./App.jsx";
+import { initNative } from "./lib/native.js";
+
+// Boot Capacitor integrations as soon as the script loads. No-op on
+// the web — only does work when running inside the iOS/Android wrap.
+// Fire-and-forget; we don't block the React render on it.
+initNative();
 
 // Demo-reset hook: ?reset=1 wipes all SAMAS-persisted state before the app
 // mounts (holdings, orders, balance, watchlists, plan, tutorial flag, etc.).
