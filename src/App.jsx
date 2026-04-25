@@ -1923,6 +1923,50 @@ function AssetDetail({ asset, holding, stopLoss, priceAlert, balance, isInWatchl
   const [done, setDone]           = useState(false);
   const [showSL, setShowSL]       = useState(false);
   const [showAlert, setShowAlert] = useState(false);
+  // Drag-to-dismiss state. The panel's translateY follows the finger
+  // while it's pulling DOWN; passing the threshold on release closes
+  // the sheet. Pulling up does nothing (would compete with the inner
+  // scroll). Touch events here, not React Pointer events, because
+  // pointer-events on iOS can race with native scroll handling.
+  const [dragY, setDragY]         = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef(null);
+  const DISMISS_THRESHOLD = 120; // px — finger has to pull this far.
+
+  const handleTouchStart = (e) => {
+    const t = e.touches?.[0];
+    if (!t) return;
+    dragStartRef.current = { y: t.clientY, time: Date.now() };
+    setIsDragging(true);
+  };
+  const handleTouchMove = (e) => {
+    const start = dragStartRef.current;
+    if (!start) return;
+    const t = e.touches?.[0];
+    if (!t) return;
+    const dy = t.clientY - start.y;
+    if (dy > 0) {
+      // Pull down — apply with rubber-banding (resistance increases
+      // with distance so the user feels they're stretching something).
+      setDragY(dy < 200 ? dy : 200 + (dy - 200) * 0.4);
+    } else {
+      setDragY(0);
+    }
+  };
+  const handleTouchEnd = () => {
+    const start = dragStartRef.current;
+    dragStartRef.current = null;
+    setIsDragging(false);
+    if (!start) return;
+    const elapsed = Date.now() - start.time;
+    // Close if pulled past threshold OR if a quick downward flick.
+    const flick = elapsed < 300 && dragY > 40;
+    if (dragY > DISMISS_THRESHOLD || flick) {
+      onClose();
+    } else {
+      setDragY(0);
+    }
+  };
   const up        = asset.change >= 0;
   const color     = up ? C.green : C.red;
   const qtyNum    = parseInt(qty) || 0;
@@ -1943,13 +1987,60 @@ function AssetDetail({ asset, holding, stopLoss, priceAlert, balance, isInWatchl
     setTimeout(() => { setDone(false); setMode(null); setQty(""); onClose(); }, 1200);
   };
 
+  // Backdrop fade-out and panel slide-down go together so the
+  // dismissal feels like one continuous gesture.
+  const dragProgress = Math.min(1, dragY / DISMISS_THRESHOLD);
+  const backdropOpacity = 0.5 * (1 - dragProgress * 0.7);
+  const panelTransform = `translateY(${dragY}px)`;
+  // No transition while the finger is actively dragging, but spring
+  // back smoothly on release without dismissal.
+  const transition = isDragging ? "none" : "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
+
   return (
     <div style={{ position:"absolute", inset:0, zIndex:40, display:"flex", flexDirection:"column" }}>
       {showSL && <StopLossModal asset={asset} current={stopLoss} onSave={v => { onSetStopLoss(asset.ticker, v); setShowSL(false); }} onClose={() => setShowSL(false)} C={C}/>}
       {showAlert && <PriceAlertModal asset={asset} current={priceAlert} onSave={v => { onSetAlert(asset.ticker, v); setShowAlert(false); }} onClose={() => setShowAlert(false)} C={C}/>}
-      <div onClick={onClose} style={{ flex:"0 0 55px", background:"rgba(0,0,0,0.5)" }}/>
-      <div style={{ flex:1, background:C.bg, borderRadius:"20px 20px 0 0", overflow:"hidden", display:"flex", flexDirection:"column" }}>
-        <div style={{ display:"flex", justifyContent:"center", padding:"10px 0 0" }}><div style={{ width:36, height:4, borderRadius:2, background:C.border }}/></div>
+      <div onClick={onClose} style={{ flex:"0 0 55px", background:`rgba(0,0,0,${backdropOpacity})`, transition: isDragging ? "none" : "background 220ms" }}/>
+      <div
+        style={{
+          flex:1,
+          background:C.bg,
+          borderRadius:"20px 20px 0 0",
+          overflow:"hidden",
+          display:"flex",
+          flexDirection:"column",
+          transform: panelTransform,
+          transition,
+          willChange: "transform",
+        }}
+      >
+        {/* Drag handle — small grey pill at the top, plus a generous
+            32px-tall touch target above and around the inner scroll
+            content. Pulling down on the handle lets the user dismiss
+            with their thumb without having to reach for the X button. */}
+        <div
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchEnd}
+          style={{
+            display:"flex", justifyContent:"center",
+            padding:"10px 0 6px",
+            cursor:"grab",
+            touchAction:"none",
+            // Make the entire header strip (where the ticker + close
+            // button sit) draggable too, so the user can pull anywhere
+            // near the top — but only while dragging actually exceeds
+            // a few pixels.
+            userSelect:"none",
+          }}
+        >
+          <div style={{
+            width:36, height:4, borderRadius:2,
+            background: dragY > 20 ? C.accent : C.border,
+            transition: "background 120ms",
+          }}/>
+        </div>
         <div style={{ flex:1, overflowY:"auto", padding:"0 16px 20px" }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
