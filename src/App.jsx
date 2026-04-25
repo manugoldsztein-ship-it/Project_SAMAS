@@ -29,6 +29,7 @@ import { hashPin, PinLockScreen } from "./auth/PinLock.jsx";
 // shown post-login when the user's session is AAL1 but they have a
 // verified TOTP factor.
 import { MfaEnrollSection, MfaChallengeView } from "./auth/Mfa.jsx";
+import { fetchNewsForTicker, fetchNewsForTickers, relativeTime } from "./lib/news.js";
 // Welcome chooser: shown only on first session when profiles.ui_mode
 // is null. User picks "principiante" or "profesional" and the rest
 // of the app reads that choice to decide which surfaces to show.
@@ -1625,6 +1626,133 @@ function WhatIfPanel({ asset, C }) {
   );
 }
 
+// ============================================================
+// NEWS — components shared by AssetDetail and PageNoticias
+// ============================================================
+// NewsCard renders a single article (image + title + source/time +
+// optional ticker chip). Clicking opens the article in a new tab.
+//
+// NewsSection wraps a list of articles with a header + loading /
+// empty / error states. Used both inside AssetDetail (per-ticker)
+// and PageNoticias (mixed feed).
+function NewsCard({ article, C, lang, showTicker, onTickerClick }) {
+  if (!article) return null;
+  const open = () => {
+    if (article.url) {
+      try { window.open(article.url, "_blank", "noopener,noreferrer"); }
+      catch { /* swallow popup-blocker errors */ }
+    }
+  };
+  return (
+    <div
+      onClick={open}
+      style={{
+        background: C.card, borderRadius: 12, border: "1px solid " + C.border,
+        padding: 0, overflow: "hidden", cursor: "pointer",
+        display: "flex", flexDirection: "column",
+        transition: "border-color 120ms",
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = C.accent + "55"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.border; }}
+    >
+      {article.image_url && (
+        <div style={{
+          width: "100%", aspectRatio: "16 / 9", overflow: "hidden",
+          background: C.creamDk, display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <img src={article.image_url} alt="" loading="lazy"
+            onError={(e) => { e.currentTarget.style.display = "none"; }}
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>
+        </div>
+      )}
+      <div style={{ padding: "11px 13px", display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+          {showTicker && article.ticker && (
+            <span
+              onClick={onTickerClick ? (e) => { e.stopPropagation(); onTickerClick(article.ticker); } : undefined}
+              style={{
+                background: C.gold + "22", color: C.gold,
+                fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
+                borderRadius: 5, padding: "2px 7px", fontFamily: "monospace",
+                cursor: onTickerClick ? "pointer" : "default",
+              }}
+            >
+              {article.ticker}
+            </span>
+          )}
+          {article.source && (
+            <span style={{ fontSize: 10, color: C.textMd, fontWeight: 600 }}>
+              {article.source}
+            </span>
+          )}
+          <span style={{ fontSize: 10, color: C.textLt, marginLeft: "auto" }}>
+            {relativeTime(article.published_at, lang)}
+          </span>
+        </div>
+        <div style={{ fontWeight: 700, fontSize: 13, color: C.text, lineHeight: 1.4 }}>
+          {article.title}
+        </div>
+        {article.summary && (
+          <div style={{ fontSize: 11, color: C.textMd, lineHeight: 1.5 }}>
+            {article.summary.length > 200 ? article.summary.slice(0, 200) + "…" : article.summary}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Per-ticker news block — used inside AssetDetail. Lazy-fetches on
+// mount, refetches when the ticker changes. Errors don't block the
+// rest of the screen — we just hide the section gracefully.
+function NewsSection({ ticker, C, lang, max = 5 }) {
+  const [articles, setArticles] = useState(null);  // null = loading, [] = none, [...] = data
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    setArticles(null);
+    setErr(null);
+    if (!ticker) return;
+    fetchNewsForTicker(ticker)
+      .then((arr) => { if (alive) setArticles(arr || []); })
+      .catch((e) => {
+        console.error("[news] fetch failed:", e);
+        if (alive) { setArticles([]); setErr(e?.message || "error"); }
+      });
+    return () => { alive = false; };
+  }, [ticker]);
+  // Hide silently if there are no articles (rather than showing a
+  // negative-feeling empty state inside an asset detail view).
+  if (articles && articles.length === 0 && !err) return null;
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: C.text }}>Noticias</div>
+        {articles && <div style={{ fontSize: 10, color: C.textLt }}>{articles.length} {articles.length === 1 ? "artículo" : "artículos"}</div>}
+      </div>
+      {articles === null && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {[0, 1].map((i) => (
+            <div key={i} style={{ background: C.card, border: "1px solid " + C.border, borderRadius: 12, height: 60, opacity: 0.5 }}/>
+          ))}
+        </div>
+      )}
+      {err && articles && articles.length === 0 && (
+        <div style={{ fontSize: 11, color: C.textLt, padding: "10px 12px", background: C.card, border: "1px dashed " + C.border, borderRadius: 10 }}>
+          No pudimos traer noticias ahora. Probá de nuevo en un rato.
+        </div>
+      )}
+      {articles && articles.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {articles.slice(0, max).map((a) => (
+            <NewsCard key={a.url} article={a} C={C} lang={lang}/>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AssetDetail({ asset, holding, stopLoss, priceAlert, balance, isInWatchlist, onToggleWatchlist, onClose, onTrade, onSetStopLoss, onSetAlert, C, uiMode }) {
   useEscapeKey(onClose);
   const isPro = uiMode !== "principiante";
@@ -1785,6 +1913,10 @@ function AssetDetail({ asset, holding, stopLoss, priceAlert, balance, isInWatchl
             </div>
           )}
           {done && <div style={{ background:C.green, borderRadius:14, padding:"18px", textAlign:"center", color:"#fff" }}><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display:"block", margin:"0 auto 8px" }}><circle cx="12" cy="12" r="10"/><polyline points="6 12 10 16 18 8"/></svg><div style={{ fontWeight:700, fontSize:15 }}>Procesando orden...</div></div>}
+          {/* Per-ticker news. Lazy-loaded on mount of the detail view.
+              Hidden when there are no articles so the asset card stays
+              tight for tickers our news provider has zero coverage on. */}
+          <NewsSection ticker={asset.ticker} C={C} lang="es" max={5}/>
         </div>
       </div>
     </div>
@@ -2907,28 +3039,43 @@ function PagePortfolio({ holdings, stopLosses, balance, watchlist, onToggleWatch
           {FX.map(fx => <div key={fx.label} style={{ background:"rgba(255,255,255,0.1)", borderRadius:8, padding:"4px 10px" }}><div style={{ color:"rgba(255,255,255,0.5)", fontSize:8, fontWeight:700 }}>USD {fx.label}</div><div style={{ color:"#fff", fontSize:12, fontFamily:"monospace", fontWeight:700 }}>{hideValues ? mask : "u$s"+fN(Math.round(tv/fx.value))}</div></div>)}
         </div>
         {/* Portfolio-value sparkline — shows last ~30 days of history.
-            Hidden when the user flipped the privacy eye off, or when in
-            beginner mode (line charts are one of the first things to
-            overwhelm first-time users). */}
-        {isPro && !hideValues && portfolioHistory && portfolioHistory.length > 1 && (
+            Hidden when:
+              - the user flipped the privacy eye off,
+              - they're in beginner mode (line charts overwhelm new users),
+              - the current portfolio value is 0 (account just funded /
+                reset → showing a chart that ends at 0 is misleading,
+                produces silly numbers like "-99.4%" if there's stale
+                history from before a reset). */}
+        {(() => {
+          // Guard the chart against insane numbers from stale history.
+          // Cases we hide:
+          //   - tv == 0 (account empty / just reset)
+          //   - history < 2 points
+          //   - first point is so small relative to last that the % is
+          //     obviously bogus (≥1000% gain or ≥90% loss): that's not
+          //     a real portfolio swing in 30 days, it's the leftover
+          //     of a previous reset still in the row.
+          if (!isPro || hideValues || tv <= 0) return null;
+          const hist = Array.isArray(portfolioHistory) ? portfolioHistory : [];
+          if (hist.length < 2) return null;
+          const start = hist[0]?.value || 0;
+          const end   = hist[hist.length - 1]?.value || 0;
+          if (start <= 0 || end <= 0) return null;
+          const pct = ((end - start) / start) * 100;
+          if (pct >= 1000 || pct <= -90) return null;
+          const up = end >= start;
+          return (
           <div style={{ marginTop:14, background:"rgba(255,255,255,0.04)", borderRadius:12, padding:"8px 10px 6px", border:"1px solid rgba(255,255,255,0.06)" }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
-              <span style={{ color:"rgba(255,255,255,0.5)", fontSize:8, fontWeight:700, letterSpacing:1, textTransform:"uppercase" }}>Últimos {portfolioHistory.length} días</span>
-              {(() => {
-                const start = portfolioHistory[0]?.value || 0;
-                const end   = portfolioHistory[portfolioHistory.length - 1]?.value || 0;
-                const pct   = start > 0 ? ((end - start) / start) * 100 : 0;
-                const up    = end >= start;
-                return (
-                  <span style={{ fontSize:10, fontWeight:700, color: up ? "#4ADE80" : "#F87171", fontFamily:"monospace" }}>
-                    {up ? "+" : "-"}{Math.abs(pct).toFixed(1)}%
-                  </span>
-                );
-              })()}
+              <span style={{ color:"rgba(255,255,255,0.5)", fontSize:8, fontWeight:700, letterSpacing:1, textTransform:"uppercase" }}>Últimos {hist.length} días</span>
+              <span style={{ fontSize:10, fontWeight:700, color: up ? "#4ADE80" : "#F87171", fontFamily:"monospace" }}>
+                {up ? "+" : "-"}{Math.abs(pct).toFixed(1)}%
+              </span>
             </div>
             <PortfolioSparkline history={portfolioHistory} width={320} height={48}/>
           </div>
-        )}
+          );
+        })()}
         {/* Fund / withdraw actions */}
         <div style={{ marginTop:14, display:"flex", gap:8 }}>
           <button onClick={() => setShowDeposit(true)} style={{ flex:1, background:C.accent, color:"#fff", border:"none", borderRadius:11, padding:"11px", fontWeight:600, fontSize:13, fontFamily:"Sora,sans-serif", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
@@ -3629,163 +3776,188 @@ function loadNewsEndpoint() {
   } catch { return ""; }
 }
 
-function PageNoticias({ holdings, onSelectAsset, C, lang }) {
+// PageNoticias — live news from the fetch-news Edge Function.
+// Default view: mixed feed for tickers the user holds + their watchlists.
+// Search bar: type a ticker → fetch only that ticker.
+// Falls back to a friendly empty state if the user has no tickers and
+// hasn't searched anything.
+function PageNoticias({ holdings, watchlists, onSelectAsset, C, lang }) {
   const t = useT(lang);
-  const [filter, setFilter] = useState("Portafolio");
-  // Sort order. "recientes" = original CNBC-ish order we already have;
-  // "relevancia" = prioritize items that touch a ticker in the user's
-  // portfolio, then ticker count, then original order.
-  const [sort, setSort]     = useState("relevancia");
-  const [news, setNews]     = useState(NEWS);
-  const [status, setStatus] = useState("demo");  // "demo" | "loading" | "ok" | "error"
-  const portT = holdings.map(h => h.ticker);
-  // Track the in-flight request so we can cancel it if the page unmounts
-  // before it resolves (previously an unmount during a slow fetch would
-  // try to setState on a dead component).
-  const fetchN = () => {
-    const endpoint = loadNewsEndpoint();
-    if (!endpoint) {
-      // No proxy configured — keep seeded demo data, don't make a network
-      // call to a hardcoded localhost URL.
-      setNews(NEWS);
-      setStatus("demo");
-      return () => {};
-    }
-    const ac = new AbortController();
-    const timeoutId = setTimeout(() => ac.abort(), 6000);
-    setStatus("loading");
-    fetch(endpoint, { signal: ac.signal })
-      .then(r => r.json())
-      .then(d => {
-        const items = (d.items || [])
-          .map((it, i) => {
-            const title = it.headline || it.title || "";
-            const tickers = ASSETS.filter(a => title.toLowerCase().includes(a.ticker.toLowerCase())).map(a => a.ticker);
-            return { id: i, tickers, cat: "Mercado", src: "CNBC", time: "Reciente", title, body: it.description || it.summary || "", url: it.url || "#" };
-          })
-          .filter(x => x.title);
-        setNews(items.length > 0 ? items : NEWS);
-        setStatus(items.length > 0 ? "ok" : "demo");
-      })
-      .catch(() => { setNews(NEWS); setStatus("error"); })
-      .finally(() => clearTimeout(timeoutId));
-    return () => { clearTimeout(timeoutId); ac.abort(); };
-  };
-  // Filter the news first, then sort. "relevancia" pushes the items that
-  // mention a ticker in the user's portfolio to the top; ties broken by
-  // ticker count (more mentioned = higher) and then original position.
-  let shown = filter === "Portafolio"
-    ? news.filter(n => n.tickers.some(t => portT.includes(t)))
-    : filter === "Todos"
-      ? news
-      : news.filter(n => n.cat === filter);
-  if (sort === "relevancia" && portT.length > 0) {
-    const score = (n) => {
-      const portfolioHits = (n.tickers || []).filter(t => portT.includes(t)).length;
-      return portfolioHits * 100 + (n.tickers || []).length;
+  // Build the union of "tickers I care about" — holdings first (with a
+  // visual flag) plus everything in any watchlist. Used both for the
+  // default mixed feed and for the "is this article relevant to me?"
+  // styling later.
+  const portTickers = (holdings || []).map((h) => h.ticker);
+  const watchTickers = (watchlists || []).flatMap((w) => w.tickers || []);
+  const myTickers = Array.from(new Set([...portTickers, ...watchTickers]));
+
+  const [search, setSearch]   = useState("");      // raw input
+  const [activeTicker, setAT] = useState(null);    // committed search value (null = mixed feed)
+  const [articles, setArt]    = useState(null);    // null=loading, []=none, [...]=data
+  const [err, setErr]         = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0); // bumped to trigger refetch
+
+  // Debounce the search → activeTicker transition. 350ms is short enough
+  // that hitting Enter feels instant but long enough to skip mid-typing
+  // network calls.
+  useEffect(() => {
+    const trimmed = (search || "").trim().toUpperCase();
+    if (trimmed.length === 0) { setAT(null); return; }
+    const id = setTimeout(() => setAT(trimmed), 350);
+    return () => clearTimeout(id);
+  }, [search]);
+
+  // Fetch effect — runs on activeTicker change OR on refreshKey bump.
+  useEffect(() => {
+    let alive = true;
+    setArt(null);
+    setErr(null);
+    const run = async () => {
+      try {
+        if (activeTicker) {
+          const arr = await fetchNewsForTicker(activeTicker);
+          if (!alive) return;
+          setArt(arr || []);
+        } else if (myTickers.length > 0) {
+          const arr = await fetchNewsForTickers(myTickers);
+          if (!alive) return;
+          setArt(arr || []);
+        } else {
+          if (!alive) return;
+          setArt([]);
+        }
+      } catch (e) {
+        console.error("[news] page fetch failed:", e);
+        if (alive) { setErr(e?.message || "error"); setArt([]); }
+      }
     };
-    shown = [...shown].sort((a, b) => score(b) - score(a));
-  }
-  const hasHoldings = portT.length > 0;
+    run();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTicker, refreshKey]);
+
+  const isInPortfolio = (ticker) => portTickers.includes(ticker);
 
   return (
-    <div style={{ padding:"14px 14px 20px" }}>
-      <div style={{ marginBottom:12, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <div><div style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:2 }}>{t("news_title")}</div><div style={{ fontSize:10, color: status==="ok" ? C.green : status==="error" ? C.red : C.textLt }}>{status==="loading" ? t("news_loading") : status==="ok" ? t("news_live") : status==="error" ? t("news_demo") : t("news_demo")}</div></div>
-        <button onClick={fetchN} style={{ background:C.creamDk, border:"1px solid "+C.border, borderRadius:8, padding:"5px 10px", fontSize:11, cursor:"pointer", color:C.textMd, fontFamily:"inherit" }}>Refresh</button>
-      </div>
-
-      {/* Promoted "Mi cartera" pill — distinct from the category pills
-          so the portfolio filter reads as a first-class option instead of
-          one among many. Shows active-holdings count so empty portfolios
-          get honest feedback instead of a silently empty list. */}
-      {hasHoldings && (
+    <div style={{ padding: "14px 14px 20px" }}>
+      <div style={{ marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 2 }}>{t("news_title")}</div>
+          <div style={{ fontSize: 10, color: C.textLt }}>
+            {activeTicker
+              ? <>Buscando: <strong style={{ color: C.text, fontFamily: "monospace" }}>{activeTicker}</strong></>
+              : myTickers.length > 0
+                ? `Mezclando ${myTickers.length} ${myTickers.length === 1 ? "ticker" : "tickers"} de tu cartera y watchlist`
+                : "Buscá por ticker para ver noticias"}
+          </div>
+        </div>
         <button
-          onClick={() => setFilter(filter === "Portafolio" ? "Todos" : "Portafolio")}
-          style={{
-            width:"100%",
-            background: filter === "Portafolio" ? "linear-gradient(135deg, "+C.gold+"33, "+C.accent+"22)" : C.card,
-            border: "1.5px solid " + (filter === "Portafolio" ? C.gold + "66" : C.border),
-            borderRadius: 12,
-            padding: "10px 12px",
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            cursor: "pointer",
-            fontFamily: "inherit",
-            textAlign: "left",
-            marginBottom: 10,
-          }}
+          onClick={() => setRefreshKey((k) => k + 1)}
+          title="Actualizar"
+          style={{ background: C.creamDk, border: "1px solid " + C.border, borderRadius: 8, padding: "5px 10px", fontSize: 11, cursor: "pointer", color: C.textMd, fontFamily: "inherit" }}
         >
-          <div style={{ width:30, height:30, borderRadius:8, background: C.gold + "22", color: C.gold, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-          </div>
-          <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontSize:12.5, fontWeight:700, color:C.text }}>Solo mi cartera</div>
-            <div style={{ fontSize:10, color:C.textMd }}>Noticias que tocan tus {portT.length} {portT.length === 1 ? "activo" : "activos"}</div>
-          </div>
-          <div style={{ width:34, height:20, borderRadius:10, background: filter === "Portafolio" ? C.gold : C.creamDk, position:"relative", flexShrink:0, border:"1.5px solid "+(filter === "Portafolio" ? C.gold : C.border), transition:"background 0.2s" }}>
-            <div style={{ position:"absolute", top:1, left: filter === "Portafolio" ? 15 : 1, width:14, height:14, borderRadius:"50%", background:"#fff", transition:"left 0.2s" }}/>
-          </div>
+          ↻
         </button>
-      )}
-
-      {/* Category filter + sort row */}
-      <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:6, marginBottom:4 }}>
-        {["Todos","Acciones","CEDEAR","ETF","Commodity","Crypto"].map(f => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            style={{ background: f===filter ? C.accent : C.card, color: f===filter ? "#fff" : C.textMd, border:"1.5px solid "+(f===filter?C.accent:C.border), borderRadius:20, padding:"5px 13px", fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap", flexShrink:0 }}
-          >
-            {f}
-          </button>
-        ))}
-      </div>
-      <div style={{ display:"flex", gap:6, fontSize:10, color:C.textLt, marginBottom:8 }}>
-        <span style={{ fontWeight:700, letterSpacing:0.5 }}>Orden:</span>
-        {[["relevancia","Relevancia a mi cartera"], ["recientes","Más recientes"]].map(([k, label]) => (
-          <button
-            key={k}
-            onClick={() => setSort(k)}
-            style={{ background:"transparent", border:"none", padding:0, cursor:"pointer", fontFamily:"inherit", fontSize:10, fontWeight: sort === k ? 800 : 500, color: sort === k ? C.accent : C.textMd, textDecoration: sort === k ? "underline" : "none", textUnderlineOffset:3 }}
-          >
-            {label}
-          </button>
-        ))}
       </div>
 
-      {/* Empty states — distinguishable between "no news for filter" and
-          "you haven't traded yet so there's nothing personalized". */}
-      {shown.length === 0 && filter === "Portafolio" && (
-        <div style={{ textAlign:"center", padding:"24px 12px", background:C.card, border:"1px dashed "+C.border, borderRadius:12, color:C.textLt, fontSize:11, lineHeight:1.5 }}>
-          {hasHoldings
-            ? "Ninguna de las noticias de hoy toca tus activos. Cambiá el filtro o volvé en un rato."
-            : <>No tenés posiciones aún. Comprá algún activo en <strong style={{ color:C.text }}>Mercado</strong> para ver noticias personalizadas acá.</>}
+      {/* Search bar — input + clear chip */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 8,
+        background: C.card, border: "1.5px solid " + (activeTicker ? C.accent + "66" : C.border),
+        borderRadius: 12, padding: "9px 12px", marginBottom: 12,
+      }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textMd} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value.replace(/[^a-zA-Z0-9.\-]/g, "").toUpperCase().slice(0, 15))}
+          placeholder="Buscar noticias por ticker (GGAL, AAPL, BTC...)"
+          style={{
+            flex: 1, background: "transparent", border: "none", outline: "none",
+            color: C.text, fontFamily: "inherit", fontSize: 13, fontWeight: 600,
+            letterSpacing: 0.5,
+          }}
+        />
+        {search && (
+          <button
+            onClick={() => { setSearch(""); }}
+            style={{ background: "transparent", border: "none", color: C.textMd, cursor: "pointer", padding: 0, fontFamily: "inherit", fontSize: 13 }}
+          >
+            ✕
+          </button>
+        )}
+      </div>
+
+      {/* Quick-pick chips of your tickers — one tap to filter without
+          typing. Hidden when you're already filtering or when you have
+          no tickers. */}
+      {!activeTicker && myTickers.length > 0 && (
+        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginBottom: 8 }}>
+          {myTickers.slice(0, 12).map((tk) => (
+            <button
+              key={tk}
+              onClick={() => setSearch(tk)}
+              style={{
+                background: isInPortfolio(tk) ? C.gold + "22" : C.card,
+                color: isInPortfolio(tk) ? C.gold : C.textMd,
+                border: "1.5px solid " + (isInPortfolio(tk) ? C.gold + "55" : C.border),
+                borderRadius: 20, padding: "4px 11px",
+                fontSize: 11, fontWeight: 700, cursor: "pointer",
+                fontFamily: "monospace", letterSpacing: 0.5,
+                whiteSpace: "nowrap", flexShrink: 0,
+              }}
+            >
+              {tk}
+            </button>
+          ))}
         </div>
       )}
-      {shown.length === 0 && filter !== "Portafolio" && <div style={{ textAlign:"center", padding:"40px 0", color:C.textLt }}>No hay noticias para este filtro</div>}
-      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-        {shown.slice(0,30).map((n, idx) => {
-          const related = ASSETS.filter(a => n.tickers.includes(a.ticker));
-          const inPort  = n.tickers.some(t => portT.includes(t));
-          return (
-            <div key={n.id !== undefined ? n.id : idx} style={{ background:C.card, borderRadius:14, border:"1px solid "+(inPort?C.gold+"55":C.border), padding:"13px 14px", position:"relative", overflow:"hidden" }}>
-              {inPort && <div style={{ position:"absolute", top:0, left:0, bottom:0, width:3, background:C.gold, borderRadius:"14px 0 0 14px" }}/>}
-              <div style={{ paddingLeft: inPort ? 6 : 0 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:7, flexWrap:"wrap" }}>
-                  <span style={{ background:C.accent+"22", color:C.accent, fontSize:9, fontWeight:700, borderRadius:5, padding:"2px 7px" }}>{n.cat}</span>
-                  {n.tickers.map(t => <span key={t} style={{ background:portT.includes(t)?C.gold+"22":C.creamDk, color:portT.includes(t)?C.gold:C.textLt, fontSize:9, fontWeight:700, borderRadius:5, padding:"2px 7px", fontFamily:"monospace" }}>{t}</span>)}
-                  <span style={{ marginLeft:"auto", fontSize:10, color:C.textLt }}>{n.src} - {n.time}</span>
-                </div>
-                <div style={{ fontWeight:700, fontSize:13, color:C.text, lineHeight:1.4, marginBottom:5 }}>{n.title}</div>
-                {n.body && <div style={{ fontSize:11, color:C.textMd, lineHeight:1.6, marginBottom:related.length>0?10:0 }}>{n.body.slice(0,180)}{n.body.length>180?"...":""}</div>}
-                {related.length > 0 && <div style={{ display:"flex", gap:7, flexWrap:"wrap" }}>{related.map(a => <button key={a.ticker} onClick={() => onSelectAsset(a)} style={{ background:C.bg, border:"1px solid "+C.border, borderRadius:9, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 }}><span style={{ fontWeight:700, fontSize:11, color:C.text }}>{a.ticker}</span><span style={{ fontSize:11, fontWeight:700, color:a.up?C.green:C.red }}>{a.up?"+":"-"}{Math.abs(a.change).toFixed(1)}%</span></button>)}</div>}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+
+      {/* Loading skeleton — show 3 placeholder cards while we wait */}
+      {articles === null && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {[0, 1, 2].map((i) => (
+            <div key={i} style={{ background: C.card, border: "1px solid " + C.border, borderRadius: 12, height: 120, opacity: 0.5 }}/>
+          ))}
+        </div>
+      )}
+
+      {/* Empty / error states */}
+      {articles && articles.length === 0 && !activeTicker && myTickers.length === 0 && (
+        <div style={{ textAlign: "center", padding: "30px 16px", background: C.card, border: "1px dashed " + C.border, borderRadius: 14, color: C.textMd, fontSize: 12, lineHeight: 1.6 }}>
+          No tenés tickers en tu cartera ni en tus watchlists. Buscá un ticker arriba o agregá algo a una watchlist para ver noticias acá.
+        </div>
+      )}
+      {articles && articles.length === 0 && (activeTicker || myTickers.length > 0) && !err && (
+        <div style={{ textAlign: "center", padding: "30px 16px", background: C.card, border: "1px dashed " + C.border, borderRadius: 14, color: C.textMd, fontSize: 12, lineHeight: 1.6 }}>
+          {activeTicker
+            ? <>No encontramos noticias recientes para <strong style={{ color: C.text, fontFamily: "monospace" }}>{activeTicker}</strong>. Probá otro ticker o volvé en un rato.</>
+            : <>Sin noticias frescas para tus tickers ahora. Probá actualizar en un rato.</>}
+        </div>
+      )}
+      {articles && articles.length === 0 && err && (
+        <div style={{ textAlign: "center", padding: "20px 16px", background: C.red + "11", border: "1px solid " + C.red + "44", borderRadius: 12, color: C.red, fontSize: 12 }}>
+          No pudimos cargar noticias. Probá actualizar.
+        </div>
+      )}
+
+      {/* Article list */}
+      {articles && articles.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {articles.slice(0, 40).map((a) => (
+            <NewsCard
+              key={a.url}
+              article={a}
+              C={C}
+              lang={lang}
+              showTicker={!activeTicker}
+              onTickerClick={(tk) => setSearch(tk)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -4995,7 +5167,7 @@ function MobileApp({ appState, handlers, C }) {
       case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} portfolioHistory={portfolioHistory} recurringAporte={recurringAporte} onSetRecurring={setRecurringAporte} uiMode={uiMode} C={C} showUSD={showUSD} lang={lang}/>;
       case "mercado":    return <PageMercado onSelectAsset={setSelected} C={C} showUSD={showUSD} lang={lang}/>;
       case "favoritos":  return <PageWatchlist watchlists={watchlists} onCreate={createWatchlist} onRename={renameWatchlist} onRemove={removeWatchlist} onRemoveTicker={removeFromWatchlist} onOpenAssetPicker={setAddingToListId} onSelectAsset={setSelected} C={C} showUSD={showUSD}/>;
-      case "noticias":   return <PageNoticias holdings={holdings} onSelectAsset={setSelected} C={C} lang={lang}/>;
+      case "noticias":   return <PageNoticias holdings={holdings} watchlists={watchlists} onSelectAsset={setSelected} C={C} lang={lang}/>;
       case "ideas":      return <PageIdeas C={C} showUSD={showUSD} onSelectAsset={setSelected} lang={lang}/>;
       case "ordenes":    return <PageOrdenes orders={orders} C={C} lang={lang}/>;
       default:           return <PagePortfolio watchlist={watchlist} onToggleWatchlist={toggleWatchlist} holdings={holdings} stopLosses={stopLosses} balance={balance} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} portfolioHistory={portfolioHistory} recurringAporte={recurringAporte} onSetRecurring={setRecurringAporte} uiMode={uiMode} C={C} showUSD={showUSD} lang={lang}/>;
@@ -5117,7 +5289,7 @@ function WebDashboard({ appState, handlers, C }) {
       case "portfolio": return <PagePortfolio holdings={holdings} stopLosses={stopLosses} balance={balance} watchlist={watchlist} onToggleWatchlist={toggleWatchlist} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} portfolioHistory={portfolioHistory} recurringAporte={recurringAporte} onSetRecurring={setRecurringAporte} uiMode={uiMode} C={C} showUSD={showUSD} lang={lang}/>;
       case "mercado":    return <PageMercado onSelectAsset={setSelected} C={C} showUSD={showUSD} lang={lang}/>;
       case "favoritos":  return <PageWatchlist watchlists={watchlists} onCreate={createWatchlist} onRename={renameWatchlist} onRemove={removeWatchlist} onRemoveTicker={removeFromWatchlist} onOpenAssetPicker={setAddingToListId} onSelectAsset={setSelected} C={C} showUSD={showUSD}/>;
-      case "noticias":   return <PageNoticias holdings={holdings} onSelectAsset={setSelected} C={C} lang={lang}/>;
+      case "noticias":   return <PageNoticias holdings={holdings} watchlists={watchlists} onSelectAsset={setSelected} C={C} lang={lang}/>;
       case "ideas":      return <PageIdeas C={C} showUSD={showUSD} onSelectAsset={setSelected} lang={lang}/>;
       case "bonos":      return <PageBonos C={C} showUSD={showUSD} lang={lang}/>;
       case "ordenes":    return <PageOrdenes orders={orders} C={C} lang={lang}/>;
@@ -5401,33 +5573,17 @@ export default function SAMASApp() {
     return s + (a ? h.qty * a.price : 0);
   }, 0);
 
-  // Backfill a synthetic 30-day history on first load so the sparkline has
-  // something interesting to show right away. The walk is seeded from today's
-  // total and drifts with small +/- percent deltas. Purely for demo feel.
-  useEffect(() => {
-    if (portfolioHistory && portfolioHistory.length) return;   // already seeded
-    const today = new Date();
-    const start = new Date(today);
-    start.setDate(start.getDate() - 29);
-    const points = [];
-    const base = Math.max(totalARS, 1);
-    // Random walk ending at base. Use a tiny PRNG so the shape is consistent
-    // once seeded (re-seeding on each load would cause flicker).
-    let v = base * 0.85 + Math.random() * base * 0.05;
-    for (let i = 0; i < 30; i++) {
-      const d = new Date(start);
-      d.setDate(start.getDate() + i);
-      const iso = d.toISOString().slice(0, 10);
-      const drift = (Math.random() - 0.48) * 0.025;            // slight upward bias
-      v = v * (1 + drift);
-      // Snap the final point to exactly today's total so the graph ends where
-      // the user's current value actually is.
-      if (i === 29) v = base;
-      points.push({ date: iso, value: Math.round(v) });
-    }
-    setPortfolioHistory(points);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // History seeding intentionally disabled. We used to backfill a
+  // synthetic 30-day random walk on first mount so the hero sparkline
+  // looked alive. Once we wired the real account flow:
+  //   - new users have totalARS=0 at seed time, so the walk produced
+  //     a flat history at 1 ARS,
+  //   - then the user deposits and trades, snapshot effect appends
+  //     today's real value (e.g. 50,000 ARS),
+  //   - chart now renders +9,239,900% which is obviously broken.
+  // Rather than fight the seeding logic, just don't seed. The
+  // sparkline appears naturally once there are 2+ daily snapshots
+  // recorded by the snapshot effect below.
 
   // Append a new snapshot for today whenever the total materially changes
   // and we're on a fresh day vs. the last snapshot. Dedupe: one per date.
@@ -5834,23 +5990,60 @@ export default function SAMASApp() {
   const handleResetAccount = async () => {
     if (!sbSession?.user) return;
     const uid = sbSession.user.id;
+    const token = sbSession.access_token;
+    if (!token) return;
+    // Helper: raw DELETE/PATCH to PostgREST. The SDK builder
+    // (`supabase.from(...).delete().eq(...)` / `.update(...)`) hangs
+    // intermittently on this build — same root cause as ui_mode +
+    // 2FA + profile fetch. Using raw fetch here guarantees the reset
+    // actually persists. Without this, portfolio_history would never
+    // get nulled in DB and stale data resurfaces on next login.
+    const headers = {
+      "apikey": SUPABASE_PUBLISHABLE_KEY,
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "Prefer": "return=minimal",
+    };
+    const rawDelete = async (table, col) => {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/${table}?${col}=eq.${uid}`,
+        { method: "DELETE", headers },
+      );
+      if (!r.ok && r.status !== 404) {
+        const txt = await r.text().catch(() => "");
+        console.error(`[reset] DELETE ${table} ${r.status}:`, txt);
+      }
+    };
+    const rawPatchProfile = async (patch) => {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/profiles?id=eq.${uid}`,
+        {
+          method: "PATCH", headers,
+          body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() }),
+        },
+      );
+      if (!r.ok) {
+        const txt = await r.text().catch(() => "");
+        console.error(`[reset] PATCH profiles ${r.status}:`, txt);
+      }
+    };
     try {
       await Promise.all([
-        supabase.from("holdings").delete().eq("user_id", uid),
-        supabase.from("orders").delete().eq("user_id", uid),
-        supabase.from("accounts").delete().eq("user_id", uid),
-        supabase.from("watchlists").delete().eq("user_id", uid),
-        supabase.from("plans").delete().eq("user_id", uid),
+        rawDelete("holdings", "user_id"),
+        rawDelete("orders", "user_id"),
+        rawDelete("accounts", "user_id"),
+        rawDelete("watchlists", "user_id"),
+        rawDelete("plans", "user_id"),
         // Reset risk rules + recurring aporte + portfolio history. We
         // intentionally do NOT reset display preferences (lang, dark,
         // show_usd, view_mode) — those are workspace settings, not
         // account data, and the user expects them to survive a reset.
-        supabase.from("profiles").update({
+        rawPatchProfile({
           stop_losses: {},
           price_alerts: {},
           recurring_aporte: null,
           portfolio_history: null,
-        }).eq("id", uid),
+        }),
       ]);
       // Reset local state to fresh-account defaults.
       setHoldings([]);

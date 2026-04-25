@@ -57,21 +57,51 @@ export function useSupabaseSession() {
   const [loading, setLoading] = useState(true);
 
   // Load the profile row for the current user (or null if no user).
+  // Uses raw fetch to PostgREST instead of the SDK's `.from(...).select()`
+  // builder. The builder occasionally hangs without ever dispatching a
+  // request on this build (same root cause as the ui_mode + 2FA SDK
+  // hangs already worked around). Raw fetch always returns or fails
+  // explicitly within the timeout — we never get stuck on a blank app
+  // because the profile never loaded.
   async function loadProfile(currentSession) {
     if (!currentSession?.user) {
       setProfile(null);
       return;
     }
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", currentSession.user.id)
-      .maybeSingle();
-    if (error) {
-      console.error("[auth] profile fetch error:", error);
+    const userId = currentSession.user.id;
+    const token = currentSession.access_token;
+    if (!token) {
       setProfile(null);
-    } else {
-      setProfile(data || null);
+      return;
+    }
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const resp = await fetch(
+        `${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=*`,
+        {
+          method: "GET",
+          headers: {
+            "apikey": SUPABASE_PUBLISHABLE_KEY,
+            "Authorization": `Bearer ${token}`,
+            "Accept": "application/json",
+          },
+          signal: ctrl.signal,
+        },
+      );
+      if (!resp.ok) {
+        const txt = await resp.text().catch(() => "");
+        console.error("[auth] profile fetch error:", resp.status, txt);
+        setProfile(null);
+        return;
+      }
+      const arr = await resp.json();
+      setProfile(Array.isArray(arr) && arr.length > 0 ? arr[0] : null);
+    } catch (e) {
+      console.error("[auth] profile fetch threw:", e);
+      setProfile(null);
+    } finally {
+      clearTimeout(t);
     }
   }
 
