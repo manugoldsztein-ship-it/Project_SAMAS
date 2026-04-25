@@ -5425,9 +5425,14 @@ function MobileApp({ appState, handlers, C }) {
           />
         );
       })()}
-      <div style={{ background:C.isDark?"#0F0F0F":"#0D1117", paddingTop:30, paddingBottom:8, paddingLeft:20, paddingRight:20, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0, zIndex:10 }}>
+      <div style={{ background:C.isDark?"#0F0F0F":"#0D1117", paddingTop:isNativeApp?12:30, paddingBottom:8, paddingLeft:20, paddingRight:20, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0, zIndex:10 }}>
         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-          <span style={{ color:"rgba(255,255,255,0.6)", fontSize:12, fontWeight:600 }}>{new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})}</span>
+          {/* Show app-rendered clock only in browser preview. On native
+              the OS status bar already shows the time at the top, so a
+              second clock here is redundant + steals horizontal space. */}
+          {!isNativeApp && (
+            <span style={{ color:"rgba(255,255,255,0.6)", fontSize:12, fontWeight:600 }}>{new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})}</span>
+          )}
           {finnhub?.live && (
             <div title={`${finnhub.count} activos en vivo`} style={{ display:"flex", alignItems:"center", gap:3, background:C.accent+"22", border:"1px solid "+C.accent+"55", borderRadius:8, padding:"1px 5px" }}>
               <div style={{ width:5, height:5, borderRadius:3, background:C.accent }}/>
@@ -5448,18 +5453,50 @@ function MobileApp({ appState, handlers, C }) {
           simpler "Dólar MEP" note inside each page where relevant). */}
       {uiMode !== "principiante" && <TickerBanner C={C}/>}
       {uiMode !== "principiante" && <FXStrip C={C} totalARS={totalARS}/>}
-      <div style={{ flex:1, overflowY:"auto", paddingBottom:84 }}>{renderPage()}</div>
-      <div style={{ position:"absolute", bottom:0, left:0, right:0, background:C.isDark?"#0F0F0F":C.card, borderTop:"1px solid "+C.border, display:"flex", height:78, zIndex:20, paddingTop:6, paddingBottom:4 }}>
+      {/* Reserve space at the bottom of the scroll area so content
+          doesn't disappear behind the fixed nav. On native we add the
+          home-indicator safe-area inset so the last list item clears
+          the iOS gesture bar. */}
+      <div style={{ flex:1, overflowY:"auto", paddingBottom: isNativeApp ? "calc(84px + env(safe-area-inset-bottom))" : 84 }}>{renderPage()}</div>
+      <div style={{
+        position:"absolute", bottom:0, left:0, right:0,
+        background:C.isDark?"#0F0F0F":C.card,
+        borderTop:"1px solid "+C.border,
+        display:"flex",
+        height: isNativeApp ? "calc(78px + env(safe-area-inset-bottom))" : 78,
+        zIndex:20,
+        paddingTop:6,
+        paddingBottom: isNativeApp ? "calc(4px + env(safe-area-inset-bottom))" : 4,
+      }}>
         {TABS.map(t => {
           const active = tab === t.id;
           const badge = t.id==="ordenes"&&orders.length>0 ? orders.length : t.id==="noticias"&&tab!=="noticias" ? newsBadge : 0;
           return (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{ flex:1, background:"transparent", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:4, position:"relative", fontFamily:"inherit", padding:"4px 0" }}>
+            <button key={t.id} onClick={() => setTab(t.id)} style={{
+              flex:1, minWidth:0, // minWidth:0 lets flex children actually shrink, otherwise
+                                  // long labels like "Portafolio" overflow and get clipped by
+                                  // the parent overflow:hidden on small screens.
+              background:"transparent", border:"none", cursor:"pointer",
+              display:"flex", flexDirection:"column",
+              alignItems:"center", justifyContent:"center",
+              gap:4, position:"relative",
+              fontFamily:"inherit", padding:"4px 2px",
+              overflow:"hidden",
+            }}>
               {badge > 0 && <div style={{ position:"absolute", top:8, right:"24%", minWidth:18, height:18, borderRadius:9, background:t.id==="noticias"?C.gold:C.red, color:"#fff", fontSize:10, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center", padding:"0 5px" }}>{badge}</div>}
-              <div style={{ width:46, height:32, borderRadius:16, background: active ? C.accent + "22" : "transparent", display:"flex", alignItems:"center", justifyContent:"center", transition:"background 0.2s" }}>
+              <div style={{ width:46, height:32, borderRadius:16, background: active ? C.accent + "22" : "transparent", display:"flex", alignItems:"center", justifyContent:"center", transition:"background 0.2s", flexShrink:0 }}>
                 <TabIcon id={t.id} active={active} C={C} bigger/>
               </div>
-              <span style={{ fontSize:11, fontWeight:active?700:500, color:active?C.accent:C.textLt, letterSpacing:0.2 }}>{t.label}</span>
+              <span style={{
+                fontSize:10, fontWeight:active?700:500,
+                color:active?C.accent:C.textLt,
+                letterSpacing:0.2,
+                whiteSpace:"nowrap",
+                maxWidth:"100%",
+                overflow:"hidden",
+                textOverflow:"ellipsis",
+                textAlign:"center",
+              }}>{t.label}</span>
             </button>
           );
         })}
