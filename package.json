@@ -10,6 +10,7 @@
     "build:cap": "VITE_CAPACITOR=1 vite build",
     "cap:sync": "VITE_CAPACITOR=1 vite build && cap sync ios",
     "cap:open": "cap open ios",
+    "cap:assets": "capacitor-assets generate --ios",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -26,6 +27,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^8.3.1",
     "@vitejs/plugin-react": "^4.3.1",
     "vite": "^5.4.0",

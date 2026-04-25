@@ -30,6 +30,7 @@ import { hashPin, PinLockScreen } from "./auth/PinLock.jsx";
 // verified TOTP factor.
 import { MfaEnrollSection, MfaChallengeView } from "./auth/Mfa.jsx";
 import { fetchNewsForTicker, fetchNewsForTickers, relativeTime } from "./lib/news.js";
+import { isNative as isNativeApp, hapticNative } from "./lib/native.js";
 // Welcome chooser: shown only on first session when profiles.ui_mode
 // is null. User picks "principiante" or "profesional" and the rest
 // of the app reads that choice to decide which surfaces to show.
@@ -5337,9 +5338,45 @@ function MobileApp({ appState, handlers, C }) {
       default:           return <PagePortfolio watchlist={watchlist} onToggleWatchlist={toggleWatchlist} holdings={holdings} stopLosses={stopLosses} balance={balance} onSelectAsset={setSelected} onDeposit={handleDeposit} onOpenObjectives={() => setShowObjectives(true)} savedPlan={savedPlan} onClearPlan={() => setSavedPlan(null)} portfolioHistory={portfolioHistory} recurringAporte={recurringAporte} onSetRecurring={setRecurringAporte} uiMode={uiMode} C={C} showUSD={showUSD} lang={lang}/>;
     }
   };
+  // Native shells (Capacitor wrap) get a full-viewport canvas — the
+  // OS provides the real device chrome (bezel, notch, home indicator)
+  // so our fake-iPhone frame would just look weird inside an iPhone.
+  // Browser preview keeps the 375x760 mock with bezel + faux notch.
+  const frameStyle = isNativeApp
+    ? {
+        width: "100vw",
+        height: "100vh",
+        background: C.bg,
+        display: "flex",
+        flexDirection: "column",
+        position: "relative",
+        // Respect the real notch + home indicator. CSS env() keeps
+        // content out of the unsafe zones automatically.
+        paddingTop: "env(safe-area-inset-top)",
+        paddingBottom: "env(safe-area-inset-bottom)",
+        paddingLeft: "env(safe-area-inset-left)",
+        paddingRight: "env(safe-area-inset-right)",
+        boxSizing: "border-box",
+        overflow: "hidden",
+      }
+    : {
+        width: 375,
+        height: 760,
+        background: C.bg,
+        borderRadius: 48,
+        overflow: "hidden",
+        boxShadow: "0 40px 80px rgba(0,0,0,0.7)",
+        display: "flex",
+        flexDirection: "column",
+        border: "9px solid #0a0a0a",
+        position: "relative",
+        flexShrink: 0,
+      };
   return (
-    <div style={{ width:375, height:760, background:C.bg, borderRadius:48, overflow:"hidden", boxShadow:"0 40px 80px rgba(0,0,0,0.7)", display:"flex", flexDirection:"column", border:"9px solid #0a0a0a", position:"relative", flexShrink:0 }}>
-      <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:110, height:26, background:"#0a0a0a", borderRadius:"0 0 16px 16px", zIndex:30 }}/>
+    <div style={frameStyle}>
+      {!isNativeApp && (
+        <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:110, height:26, background:"#0a0a0a", borderRadius:"0 0 16px 16px", zIndex:30 }}/>
+      )}
       {needsAuth && <SupabaseAuthFlow C={C} session={sbSession} profile={sbProfile} onVerified={refetchProfile}/>}
       {needsMfa && <MfaChallengeView C={C} onSuccess={() => setMfaPassed(true)} onForgot={handlers.handleLogout}/>}
       {needsPinGate && (
@@ -6378,16 +6415,24 @@ export default function SAMASApp() {
         }
       `}</style>
 
-      <div style={{ display:"flex", justifyContent:"center", gap:12, padding:"16px 0 8px", position:"sticky", top:0, zIndex:200, background:outerBg, borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
-        {[["mobile","Movil"],["web","Web"]].map(([v, l]) => (
-          <button key={v} onClick={() => setViewMode(v)} style={{ background: v===viewMode ? "#16C784" : "rgba(255,255,255,0.07)", color: v===viewMode ? "#fff" : "rgba(255,255,255,0.5)", border:"none", borderRadius:10, padding:"6px 20px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
-        ))}
-      </div>
+      {/* Movil/Web preview toggle — only useful while previewing in a
+          desktop browser. On native iOS/Android the device IS the
+          mobile context, so we hide it entirely. */}
+      {!isNativeApp && (
+        <div style={{ display:"flex", justifyContent:"center", gap:12, padding:"16px 0 8px", position:"sticky", top:0, zIndex:200, background:outerBg, borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
+          {[["mobile","Movil"],["web","Web"]].map(([v, l]) => (
+            <button key={v} onClick={() => setViewMode(v)} style={{ background: v===viewMode ? "#16C784" : "rgba(255,255,255,0.07)", color: v===viewMode ? "#fff" : "rgba(255,255,255,0.5)", border:"none", borderRadius:10, padding:"6px 20px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
+          ))}
+        </div>
+      )}
 
       {showShortcuts && <ShortcutsHelpModal onClose={() => setShowShortcuts(false)} C={C}/>}
 
-      {viewMode === "mobile" ? (
-        <div style={{ display:"flex", justifyContent:"center", padding:"20px" }}>
+      {/* On native, force the mobile shell — desktop layout never makes
+          sense inside an iOS app. Also drop the desktop-style outer
+          padding so the app fills the device edge-to-edge. */}
+      {(isNativeApp || viewMode === "mobile") ? (
+        <div style={{ display:"flex", justifyContent:"center", padding: isNativeApp ? 0 : "20px" }}>
           <ErrorBoundary><MobileApp appState={appState} handlers={handlers} C={C}/></ErrorBoundary>
         </div>
       ) : (
