@@ -23,24 +23,17 @@
         overscroll-behavior: none;
       }
       html { -webkit-text-size-adjust: 100%; }
-      /* Background matches the header / bottom-nav chrome color
-         (#0F0F0F). Why: #root has padding equal to the iOS safe-area
-         insets, so the strip ABOVE the header (status bar zone) and
-         the strip BELOW the bottom nav (home-indicator zone) show
-         through to body's color. By matching the chrome color the
-         visual transition is seamless — the status bar feels like a
-         natural extension of the header instead of a contrasting band. */
+      /* CNBC-style chrome: header and bottom nav extend edge-to-edge
+         through the iOS status-bar / home-indicator zones, with their
+         own internal safe-area-inset padding so the actual content
+         (logo, icons) sits inside the safe area. body just provides
+         the fallback dark color while React mounts. */
       body { background: #0F0F0F; }
       #root {
-        padding-top: env(safe-area-inset-top);
-        padding-bottom: env(safe-area-inset-bottom);
-        padding-left: env(safe-area-inset-left);
-        padding-right: env(safe-area-inset-right);
         background: #0F0F0F;
         box-sizing: border-box;
         /* Positioned ancestor for the absolutely-positioned MobileApp
-           wrapper, so its inset:0 resolves to #root's padding box (i.e.
-           the safe-area inner edge), not the viewport. */
+           wrapper. */
         position: relative;
       }
       /* Global box-sizing so width:100% + padding doesn't blow past the
