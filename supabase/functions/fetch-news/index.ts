@@ -43,6 +43,27 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 // caller's JWT as "Invalid" because the service role bypasses RLS and
 // the auth.getUser() helper expects to be in a user-scoped context.
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+// Anthropic — optional. If set, articles are auto-translated to the
+// caller's lang using Claude Haiku (cheap + fast). If missing, we
+// just return articles in their source language and skip translation
+// silently — no error, just no translation.
+const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
+const ANTHROPIC_MODEL = Deno.env.get("ANTHROPIC_MODEL") ?? "claude-haiku-4-5-20251001";
+
+// Languages the app supports. We only translate to ones in this list.
+const SUPPORTED_LANGS = new Set(["es", "en", "pt", "it", "fr", "de", "zh", "ru", "he", "ar"]);
+const LANG_NAMES: Record<string, string> = {
+  es: "Spanish (Argentine, neutral, no slang)",
+  en: "English",
+  pt: "Portuguese (Brazilian)",
+  it: "Italian",
+  fr: "French",
+  de: "German",
+  zh: "Simplified Chinese",
+  ru: "Russian",
+  he: "Hebrew",
+  ar: "Arabic",
+};
 
 const CACHE_TTL_MS = 15 * 60 * 1000;        // 15 minutes
 const MAX_PER_SOURCE = 25;                   // cap per source per fetch
@@ -357,7 +378,223 @@ type NormalizedArticle = {
   source: string | null;
   image_url: string | null;
   published_at: string; // ISO
+  source_lang?: string;
+  translations?: Record<string, { title?: string; summary?: string }>;
 };
+
+// ------------------------------------------------------------
+// Translation — Claude Haiku via Anthropic API
+// ------------------------------------------------------------
+// Batches multiple articles into one API call to save tokens. Returns
+// a parallel array of translations or null entries for ones that
+// failed to translate. We accept partial failure — translated items
+// override originals, untranslated keep originals.
+type TranslationItem = { title: string; summary: string };
+
+async function translateBatch(
+  items: TranslationItem[],
+  toLang: string,
+): Promise<(TranslationItem | null)[]> {
+  if (!ANTHROPIC_API_KEY) {
+    console.log("[fetch-news] ANTHROPIC_API_KEY not set — skipping translation");
+    return items.map(() => null);
+  }
+  if (items.length === 0) return [];
+  const langName = LANG_NAMES[toLang] || toLang;
+  // Build a strict prompt: numbered JSON array in/out, one entry per
+  // article. Asking the model to produce JSON keeps parsing simple
+  // and lets it batch many items in a single call cheaply.
+  const userPrompt = [
+    `Translate the following news article excerpts to ${langName}.`,
+    `Keep proper nouns, ticker symbols, company names, and currency amounts unchanged.`,
+    `Preserve a neutral, professional tone appropriate for a financial broker app.`,
+    `Output ONLY a JSON array of objects with shape {"title": "...", "summary": "..."}, in the same order as the input. Do not include any commentary, headers, or markdown.`,
+    ``,
+    `Input:`,
+    JSON.stringify(items.map((it, i) => ({ i, title: it.title, summary: it.summary })), null, 2),
+  ].join("\n");
+  try {
+    const r = await fetchTimeout("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: ANTHROPIC_MODEL,
+        max_tokens: 4000,
+        messages: [{ role: "user", content: userPrompt }],
+      }),
+    }, 12000);
+    if (!r.ok) {
+      const txt = await r.text().catch(() => "");
+      console.log(`[fetch-news] anthropic ${r.status}:`, txt.slice(0, 200));
+      return items.map(() => null);
+    }
+    const json = await r.json();
+    const text = json?.content?.[0]?.text || "";
+    // Tolerate markdown code fences in the response.
+    const jsonText = text.replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
+    const parsed = JSON.parse(jsonText);
+    if (!Array.isArray(parsed)) {
+      console.log("[fetch-news] anthropic returned non-array");
+      return items.map(() => null);
+    }
+    return items.map((_, i) => {
+      const t = parsed[i];
+      if (t && typeof t.title === "string" && typeof t.summary === "string") {
+        return { title: t.title, summary: t.summary };
+      }
+      return null;
+    });
+  } catch (e) {
+    console.log("[fetch-news] translation threw:", (e as Error).message);
+    return items.map(() => null);
+  }
+}
+
+// Decide what language an article is written in based on its source.
+// Coarse heuristic but reliable for the sources we use.
+function detectSourceLang(source: string | null | undefined): string {
+  if (!source) return "en";
+  const lc = source.toLowerCase();
+  if (lc.includes("ámbito") || lc.includes("ambito") || lc.includes("cronista")
+      || lc.includes("infobae") || lc.includes("nación") || lc.includes("nacion")
+      || lc.includes("bloomberg línea") || lc.includes("bloomberg linea")) {
+    return "es";
+  }
+  return "en";
+}
+
+// Apply translations for the given lang to a batch of articles. Articles
+// already in the user's lang get returned as-is. Articles with a cached
+// translation get the cached version. Articles missing the translation
+// are translated via Anthropic, then upserted back to DB so subsequent
+// lookups for the same lang are free.
+type DbArticleRow = {
+  id?: string;
+  ticker?: string;
+  title: string;
+  summary: string | null;
+  url: string;
+  source: string | null;
+  image_url: string | null;
+  published_at: string;
+  fetched_at?: string;
+  translations?: Record<string, { title?: string; summary?: string }> | null;
+  source_lang?: string | null;
+};
+
+type ReturnedArticle = {
+  ticker?: string;
+  title: string;
+  summary: string | null;
+  url: string;
+  source: string | null;
+  image_url: string | null;
+  published_at: string;
+};
+
+async function applyTranslations(
+  admin: ReturnType<typeof createClient>,
+  rows: DbArticleRow[],
+  lang: string | null,
+): Promise<ReturnedArticle[]> {
+  if (!lang) {
+    // No lang requested → return originals.
+    return rows.map((r) => ({
+      ticker: (r as any).ticker,
+      title: r.title,
+      summary: r.summary,
+      url: r.url,
+      source: r.source,
+      image_url: r.image_url,
+      published_at: r.published_at,
+    }));
+  }
+
+  // Decide which rows need translation. Skip:
+  //   - rows whose source_lang already matches the target lang,
+  //   - rows that already have a cached translation for the target lang.
+  const toTranslate: { row: DbArticleRow; idx: number }[] = [];
+  const result: ReturnedArticle[] = rows.map((r, idx) => {
+    const srcLang = r.source_lang || detectSourceLang(r.source);
+    if (srcLang === lang) {
+      return {
+        ticker: (r as any).ticker,
+        title: r.title,
+        summary: r.summary,
+        url: r.url,
+        source: r.source,
+        image_url: r.image_url,
+        published_at: r.published_at,
+      };
+    }
+    const cached = r.translations?.[lang];
+    if (cached?.title && cached?.summary) {
+      return {
+        ticker: (r as any).ticker,
+        title: cached.title,
+        summary: cached.summary,
+        url: r.url,
+        source: r.source,
+        image_url: r.image_url,
+        published_at: r.published_at,
+      };
+    }
+    toTranslate.push({ row: r, idx });
+    // Placeholder — overwritten below.
+    return {
+      ticker: (r as any).ticker,
+      title: r.title,
+      summary: r.summary,
+      url: r.url,
+      source: r.source,
+      image_url: r.image_url,
+      published_at: r.published_at,
+    };
+  });
+
+  if (toTranslate.length === 0) return result;
+
+  const translations = await translateBatch(
+    toTranslate.map(({ row }) => ({
+      title: row.title,
+      summary: row.summary || "",
+    })),
+    lang,
+  );
+
+  // Patch the result + collect updates for DB.
+  const updates: { id: string; translations: Record<string, { title: string; summary: string }> }[] = [];
+  for (let i = 0; i < toTranslate.length; i++) {
+    const t = translations[i];
+    const { row, idx } = toTranslate[i];
+    if (t) {
+      result[idx].title = t.title;
+      result[idx].summary = t.summary;
+      if (row.id) {
+        const merged = { ...(row.translations || {}), [lang]: { title: t.title, summary: t.summary } };
+        updates.push({ id: row.id, translations: merged });
+      }
+    }
+  }
+
+  // Persist new translations back to the cache. Best-effort — failures
+  // here just mean the next call re-translates; not a user-visible bug.
+  if (updates.length > 0) {
+    for (const u of updates) {
+      const { error } = await admin
+        .from("articles")
+        .update({ translations: u.translations })
+        .eq("id", u.id);
+      if (error) console.log("[fetch-news] translation update failed:", error.message);
+    }
+  }
+
+  return result;
+}
 
 // ------------------------------------------------------------
 // Main handler
@@ -413,6 +650,9 @@ serve(async (req: Request) => {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    // Optional lang. If unset or unsupported, we don't translate.
+    const langRaw: unknown = body?.lang;
+    const lang = (typeof langRaw === "string" && SUPPORTED_LANGS.has(langRaw)) ? langRaw : null;
 
     // Service-role client for cache reads/writes.
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
@@ -421,14 +661,15 @@ serve(async (req: Request) => {
     const cacheCutoff = new Date(Date.now() - CACHE_TTL_MS).toISOString();
     const { data: cached, error: cacheErr } = await admin
       .from("articles")
-      .select("title, summary, url, source, image_url, published_at, fetched_at")
+      .select("id, title, summary, url, source, image_url, published_at, fetched_at, translations, source_lang")
       .eq("ticker", ticker)
       .gte("fetched_at", cacheCutoff)
       .order("published_at", { ascending: false })
       .limit(MAX_RETURN);
 
     if (!cacheErr && cached && cached.length > 0) {
-      return new Response(JSON.stringify({ articles: cached, source: "cache" }), {
+      const out = await applyTranslations(admin, cached, lang);
+      return new Response(JSON.stringify({ articles: out, source: "cache" }), {
         status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -469,11 +710,19 @@ serve(async (req: Request) => {
     articles.sort((a, b) => +new Date(b.published_at) - +new Date(a.published_at));
     articles = articles.slice(0, MAX_RETURN);
 
-    // Upsert into cache. Tolerate insert errors (e.g. uniqueness on
-    // (ticker, url) for older rows) — we still return what we fetched.
+    // Upsert into cache. We tag each row with its source_lang so future
+    // requests can skip translation when the requested lang matches.
+    // Tolerate insert errors — we still return what we fetched.
     if (articles.length > 0) {
       const rows = articles.map((a) => ({
-        ...a,
+        ticker: a.ticker,
+        title: a.title,
+        summary: a.summary,
+        url: a.url,
+        source: a.source,
+        image_url: a.image_url,
+        published_at: a.published_at,
+        source_lang: detectSourceLang(a.source),
         fetched_at: new Date().toISOString(),
       }));
       const { error: upErr } = await admin
@@ -482,7 +731,19 @@ serve(async (req: Request) => {
       if (upErr) console.error("[fetch-news] upsert failed:", upErr);
     }
 
-    return new Response(JSON.stringify({ articles, source: "fresh" }), {
+    // Re-fetch from DB so we have the row IDs (needed to write
+    // translations back) and any pre-existing translations from
+    // earlier fetches with a different lang.
+    const { data: persisted } = await admin
+      .from("articles")
+      .select("id, ticker, title, summary, url, source, image_url, published_at, fetched_at, translations, source_lang")
+      .eq("ticker", ticker)
+      .order("published_at", { ascending: false })
+      .limit(MAX_RETURN);
+
+    const out = await applyTranslations(admin, persisted || [], lang);
+
+    return new Response(JSON.stringify({ articles: out, source: "fresh" }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

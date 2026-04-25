@@ -47,10 +47,12 @@ async function fetchTimeout(url, opts = {}, ms = 12000) {
   }
 }
 
-export async function fetchNewsForTicker(ticker) {
+export async function fetchNewsForTicker(ticker, lang) {
   if (!ticker) return [];
   const token = await authToken();
   if (!token) throw new Error("No hay sesión activa.");
+  const body = { ticker: ticker.trim().toUpperCase() };
+  if (lang) body.lang = lang;
   const resp = await fetchTimeout(FUNCTION_URL, {
     method: "POST",
     headers: {
@@ -58,8 +60,11 @@ export async function fetchNewsForTicker(ticker) {
       "Authorization": `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ ticker: ticker.trim().toUpperCase() }),
-  });
+    body: JSON.stringify(body),
+  // Translation upstream takes a few seconds — bump the client
+  // timeout from 12s to 25s for the first call to a fresh lang.
+  // Subsequent calls hit the translation cache and are fast.
+  }, 25000);
   if (!resp.ok) {
     const txt = await resp.text().catch(() => "");
     throw new Error(`fetch-news ${resp.status}: ${txt}`);
@@ -74,10 +79,10 @@ export async function fetchNewsForTicker(ticker) {
 // Limits to MAX_TICKERS_AT_ONCE to avoid hammering the Edge Function — the
 // per-call cache makes this cheap, but no point being wasteful.
 const MAX_TICKERS_AT_ONCE = 12;
-export async function fetchNewsForTickers(tickers) {
+export async function fetchNewsForTickers(tickers, lang) {
   const list = (Array.isArray(tickers) ? tickers : []).filter(Boolean).slice(0, MAX_TICKERS_AT_ONCE);
   if (list.length === 0) return [];
-  const settled = await Promise.allSettled(list.map((t) => fetchNewsForTicker(t)));
+  const settled = await Promise.allSettled(list.map((t) => fetchNewsForTicker(t, lang)));
   const all = [];
   const seen = new Set();
   for (const r of settled) {

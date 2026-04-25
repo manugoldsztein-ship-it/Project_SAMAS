@@ -27,8 +27,23 @@ create table if not exists public.articles (
   image_url     text,
   published_at  timestamptz not null,
   fetched_at    timestamptz not null default now(),
+  -- Translations cache. Shape: { "<lang>": { "title": "...", "summary": "..." } }
+  -- Filled on demand by the fetch-news Edge Function when a user
+  -- requests a different language than the article's source language.
+  translations  jsonb not null default '{}'::jsonb,
+  -- Detected source language ('en', 'es', ...). Used to skip
+  -- translation when the user's lang already matches the source.
+  source_lang   text,
   unique (ticker, url)
 );
+
+-- Backfill column on existing rows (in case someone applied the
+-- table-create version of this script before the translations column
+-- was added).
+alter table public.articles
+  add column if not exists translations jsonb not null default '{}'::jsonb;
+alter table public.articles
+  add column if not exists source_lang text;
 
 create index if not exists articles_ticker_pub
   on public.articles (ticker, published_at desc);

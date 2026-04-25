@@ -1863,14 +1863,14 @@ function NewsSection({ ticker, C, lang, max = 5 }) {
     setArticles(null);
     setErr(null);
     if (!ticker) return;
-    fetchNewsForTicker(ticker)
+    fetchNewsForTicker(ticker, lang)
       .then((arr) => { if (alive) setArticles(arr || []); })
       .catch((e) => {
         console.error("[news] fetch failed:", e);
         if (alive) { setArticles([]); setErr(e?.message || "error"); }
       });
     return () => { alive = false; };
-  }, [ticker]);
+  }, [ticker, lang]);
   // Hide silently if there are no articles (rather than showing a
   // negative-feeling empty state inside an asset detail view).
   if (articles && articles.length === 0 && !err) return null;
@@ -1904,7 +1904,7 @@ function NewsSection({ ticker, C, lang, max = 5 }) {
   );
 }
 
-function AssetDetail({ asset, holding, stopLoss, priceAlert, balance, isInWatchlist, onToggleWatchlist, onClose, onTrade, onSetStopLoss, onSetAlert, C, uiMode }) {
+function AssetDetail({ asset, holding, stopLoss, priceAlert, balance, isInWatchlist, onToggleWatchlist, onClose, onTrade, onSetStopLoss, onSetAlert, C, uiMode, lang }) {
   useEscapeKey(onClose);
   const isPro = uiMode !== "principiante";
   const [mode, setMode]           = useState(null);
@@ -2067,7 +2067,7 @@ function AssetDetail({ asset, holding, stopLoss, priceAlert, balance, isInWatchl
           {/* Per-ticker news. Lazy-loaded on mount of the detail view.
               Hidden when there are no articles so the asset card stays
               tight for tickers our news provider has zero coverage on. */}
-          <NewsSection ticker={asset.ticker} C={C} lang="es" max={5}/>
+          <NewsSection ticker={asset.ticker} C={C} lang={lang || "es"} max={5}/>
         </div>
       </div>
     </div>
@@ -3967,11 +3967,11 @@ function PageNoticias({ holdings, watchlists, onSelectAsset, C, lang }) {
     const run = async () => {
       try {
         if (activeTicker) {
-          const arr = await fetchNewsForTicker(activeTicker);
+          const arr = await fetchNewsForTicker(activeTicker, lang);
           if (!alive) return;
           setArt(arr || []);
         } else if (myTickers.length > 0) {
-          const arr = await fetchNewsForTickers(myTickers);
+          const arr = await fetchNewsForTickers(myTickers, lang);
           if (!alive) return;
           setArt(arr || []);
         } else {
@@ -3986,7 +3986,7 @@ function PageNoticias({ holdings, watchlists, onSelectAsset, C, lang }) {
     run();
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTicker, refreshKey]);
+  }, [activeTicker, refreshKey, lang]);
 
   const isInPortfolio = (ticker) => portTickers.includes(ticker);
 
@@ -5352,7 +5352,7 @@ function MobileApp({ appState, handlers, C }) {
       {showTutorial && <OnboardingTutorial onClose={finishTutorial} onComplete={finishTutorial} setTab={setTab} setShowUSD={setShowUSD} setShowProfile={setShowProfile} currentTab={tab} uiMode={uiMode} C={C}/>}
       {showProfile && <ProfileSheet displayUser={displayUser} uiMode={uiMode} onChangeUiMode={handlers.handleChangeUiMode} onResetAccount={handlers.handleResetAccount} onResetPin={handlers.handleResetPin} onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} C={C}/>}
       {toast && <div className="samas-slide-up" style={{ position:"absolute", top:34, left:14, right:14, zIndex:50, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 14px", fontSize:12, fontWeight:700, boxShadow:"0 10px 30px rgba(0,0,0,0.35)" }}>{toast.msg}</div>}
-      {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} uiMode={uiMode} C={C}/>}
+      {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} uiMode={uiMode} lang={lang} C={C}/>}
       {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} displayUser={displayUser} storedPinHash={sbProfile?.pin_hash || null} C={C}/>}
       {showObjectives && <ObjectivesWizard onClose={() => setShowObjectives(false)} onSave={setSavedPlan} savedPlan={savedPlan} C={C}/>}
       {pickerTicker && (
@@ -5496,7 +5496,7 @@ function WebDashboard({ appState, handlers, C }) {
           </div>
         </div>
         <div style={{ flex:1, position:"relative", minWidth:0 }}>
-          {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} uiMode={uiMode} C={C}/>}
+          {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} uiMode={uiMode} lang={lang} C={C}/>}
           {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} isWeb={true} displayUser={displayUser} storedPinHash={sbProfile?.pin_hash || null} C={C}/>}
           {showProfile && <ProfileSheet displayUser={displayUser} uiMode={uiMode} onChangeUiMode={handlers.handleChangeUiMode} onResetAccount={handlers.handleResetAccount} onResetPin={handlers.handleResetPin} onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} C={C}/>}
           {toast && <div className="samas-slide-up" style={{ position:"fixed", top:70, left:"50%", transform:"translateX(-50%)", zIndex:99, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 20px", fontSize:13, fontWeight:700, boxShadow:"0 8px 32px rgba(0,0,0,0.3)" }}>{toast.msg}</div>}
