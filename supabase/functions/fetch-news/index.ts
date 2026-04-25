@@ -316,20 +316,30 @@ serve(async (req: Request) => {
     // Auth: caller must have a valid Supabase JWT.
     const authHeader = req.headers.get("Authorization") || "";
     if (!authHeader.startsWith("Bearer ")) {
+      console.log("[fetch-news] Missing Bearer prefix:", authHeader.slice(0, 20));
       return new Response(JSON.stringify({ error: "Missing JWT" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    // Verify the JWT belongs to a logged-in user. We don't need their
-    // ID for anything else (the article cache is shared). Use the ANON
-    // key here — getUser() on a service-role client rejects the caller's
-    // JWT as "Invalid" because service-role bypasses RLS.
-    const userClient = createClient(SUPABASE_URL, ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: userData, error: userErr } = await userClient.auth.getUser();
+    // Verify the JWT. Pass the token explicitly to getUser() — that
+    // form is the most reliable and works regardless of how the
+    // client was constructed. We use the ANON key for the client
+    // because getUser() on a service-role client rejects user JWTs.
+    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    if (!ANON_KEY) {
+      console.log("[fetch-news] SUPABASE_ANON_KEY env var is empty");
+      return new Response(JSON.stringify({ error: "Server misconfigured: ANON_KEY missing" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const userClient = createClient(SUPABASE_URL, ANON_KEY);
+    const { data: userData, error: userErr } = await userClient.auth.getUser(token);
     if (userErr || !userData?.user) {
-      return new Response(JSON.stringify({ error: "Invalid JWT" }), {
+      console.log("[fetch-news] getUser failed:", userErr?.message, "tokenPrefix:", token.slice(0, 30));
+      return new Response(JSON.stringify({
+        error: "Invalid JWT",
+        detail: userErr?.message || "no user returned",
+      }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
