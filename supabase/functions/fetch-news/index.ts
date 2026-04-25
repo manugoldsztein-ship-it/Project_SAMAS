@@ -112,30 +112,15 @@ const ARG_KEYWORDS: Record<string, string[]> = {
   BYMA:   ["BYMA", "Bolsas y Mercados Argentinos"],
 };
 
-// Argentine RSS feeds — finance / markets sections only. Order is
-// not important; we fetch them in parallel and merge. URLs verified
-// against current site layouts as of writing — if any 404s in the
-// future we just skip that feed (graceful failure).
-//
-// Several backup feeds included because publishers regularly rename
-// their RSS endpoints. If a feed 404s we still have others to try.
+// Argentine RSS feeds — finance / markets sections only. We keep the
+// list small (one strong feed per publisher) so the parallel fetch
+// completes quickly. The previous list of 12 made every uncached
+// query wait ~5s for the slowest source.
 const ARG_RSS_FEEDS = [
-  // Ámbito Financiero — multiple sections.
-  { source: "Ámbito",         url: "https://www.ambito.com/rss/pages/home.xml" },
-  { source: "Ámbito",         url: "https://www.ambito.com/contenidos/economia.xml" },
   { source: "Ámbito",         url: "https://www.ambito.com/contenidos/finanzas.xml" },
-  // El Cronista.
-  { source: "Cronista",       url: "https://www.cronista.com/files/rss/economia-politica.xml" },
   { source: "Cronista",       url: "https://www.cronista.com/files/rss/finanzas-mercados.xml" },
-  { source: "Cronista",       url: "https://www.cronista.com/files/rss/empresas.xml" },
-  // Infobae.
   { source: "Infobae",        url: "https://www.infobae.com/economia/rss" },
-  { source: "Infobae",        url: "https://www.infobae.com/feeds/rss/sections/economia.xml" },
-  // La Nación.
   { source: "La Nación",      url: "https://servicios.lanacion.com.ar/herramientas/rss/categoria-id=347" },
-  { source: "La Nación",      url: "https://www.lanacion.com.ar/arc/outboundfeeds/rss/category/economia/?outputType=xml" },
-  // Bloomberg Línea (Spanish-language Bloomberg coverage of LATAM).
-  { source: "Bloomberg Línea",url: "https://www.bloomberglinea.com/arc/outboundfeeds/rss/?outputType=xml" },
 ];
 
 // ------------------------------------------------------------
@@ -335,7 +320,9 @@ async function fetchArgRss(ticker: string, keywords: string[]): Promise<Normaliz
           "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:120.0) Gecko/20100101 Firefox/120.0",
           "Accept": "application/rss+xml, application/xml, text/xml, */*",
         },
-      }, 5000);
+        // Short per-source timeout: a slow feed shouldn't drag down
+        // the whole response. 3s is enough for any healthy RSS host.
+      }, 3000);
       if (!r.ok) {
         console.log(`[fetch-news] rss ${feed.source} ${feed.url} → ${r.status}`);
         return [];

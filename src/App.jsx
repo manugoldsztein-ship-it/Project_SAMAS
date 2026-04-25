@@ -5516,8 +5516,14 @@ function MobileApp({ appState, handlers, C }) {
           />
         );
       })()}
-      <div style={{ background:C.isDark?"#0F0F0F":"#0D1117", paddingTop:isNativeApp?12:30, paddingBottom:8, paddingLeft:20, paddingRight:20, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0, zIndex:10 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+      <div style={{ background:C.isDark?"#0F0F0F":"#0D1117", paddingTop:isNativeApp?12:30, paddingBottom:8, paddingLeft:20, paddingRight:20, display:"flex", alignItems:"center", flexShrink:0, zIndex:10, gap:8 }}>
+        {/* Three-column layout: left + center (SAMAS) + right. Each
+            outer column is flex:1 with the same justify so the center
+            stays optically centered regardless of how many badges
+            live in the left/right slots (e.g. on native we hide the
+            clock — the left slot becomes empty and without flex:1 the
+            SAMAS logo would slide off-center to the left). */}
+        <div style={{ flex:"1 1 0", display:"flex", alignItems:"center", gap:6, justifyContent:"flex-start", minWidth:0 }}>
           {/* Show app-rendered clock only in browser preview. On native
               the OS status bar already shows the time at the top, so a
               second clock here is redundant + steals horizontal space. */}
@@ -5531,10 +5537,12 @@ function MobileApp({ appState, handlers, C }) {
             </div>
           )}
         </div>
-        <SAMASLogo textColor="#FFFFFF"/>
-        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+        <div style={{ flex:"0 0 auto", display:"flex", justifyContent:"center" }}>
+          <SAMASLogo textColor="#FFFFFF"/>
+        </div>
+        <div style={{ flex:"1 1 0", display:"flex", alignItems:"center", gap:6, justifyContent:"flex-end", minWidth:0 }}>
           <CurrencyToggle showUSD={showUSD} onToggle={() => setShowUSD(v => !v)} C={C}/>
-          <button onClick={() => setShowProfile(true)} style={{ background:"transparent", border:"none", cursor:"pointer", padding:0 }}>
+          <button onClick={() => setShowProfile(true)} style={{ background:"transparent", border:"none", cursor:"pointer", padding:0, flexShrink:0 }}>
             <div style={{ width:28, height:28, borderRadius:8, background:"#0D111733", border:"1.5px solid #0D111766", display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:800, color:C.goldLt }}>{displayUser.initials}</div>
           </button>
         </div>
@@ -5544,13 +5552,13 @@ function MobileApp({ appState, handlers, C }) {
           simpler "Dólar MEP" note inside each page where relevant). */}
       {uiMode !== "principiante" && <TickerBanner C={C}/>}
       {uiMode !== "principiante" && <FXStrip C={C} totalARS={totalARS}/>}
-      {/* Reserve space at the bottom of the scroll area so content
-          doesn't disappear behind the fixed nav. On native we add the
-          home-indicator safe-area inset so the last list item clears
-          the iOS gesture bar. */}
-      <div style={{ flex:1, overflowY:"auto", paddingBottom: isNativeApp ? "calc(84px + env(safe-area-inset-bottom))" : 84 }}>{renderPage()}</div>
+      {/* Scrollable page content. With the bottom nav now part of the
+          flex flow (below) instead of absolute-positioned, this area
+          is exactly the right size — no padding hack needed and no
+          dead scroll area at the bottom when content is short. */}
+      <div style={{ flex:1, overflowY:"auto", minHeight:0 }}>{renderPage()}</div>
       <div style={{
-        position:"absolute", bottom:0, left:0, right:0,
+        flexShrink:0,
         background:C.isDark?"#0F0F0F":C.card,
         borderTop:"1px solid "+C.border,
         display:"flex",
