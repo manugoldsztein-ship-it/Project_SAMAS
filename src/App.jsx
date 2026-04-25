@@ -30,7 +30,7 @@ import { hashPin, PinLockScreen } from "./auth/PinLock.jsx";
 // verified TOTP factor.
 import { MfaEnrollSection, MfaChallengeView } from "./auth/Mfa.jsx";
 import { fetchNewsForTicker, fetchNewsForTickers, relativeTime } from "./lib/news.js";
-import { isNative as isNativeApp, hapticNative } from "./lib/native.js";
+import { isNative as isNativeApp, hapticNative, updateNativeTheme, hideNativeSplash } from "./lib/native.js";
 // Welcome chooser: shown only on first session when profiles.ui_mode
 // is null. User picks "principiante" or "profesional" and the rest
 // of the app reads that choice to decide which surfaces to show.
@@ -1127,10 +1127,10 @@ function sendEmailNotification({ to, subject, body }) {
 function TickerBanner({ C }) {
   const items = ASSETS.filter(a => a.cat === "ETF" || a.cat === "Commodity" || a.cat === "Crypto");
   const all = [...items, ...items, ...items];
-  // On native we use pure black so this banner blends with the
-  // header / status-bar zone above it — one continuous dark surface.
-  // On web preview keep the original navy accent.
-  const bg = isNativeApp ? "#000000" : C.navy;
+  // On native, match the chrome color to keep the top region
+  // continuous: black in dark mode, off-white in light mode.
+  // On web preview keep the navy accent.
+  const bg = isNativeApp ? (C.isDark ? "#000000" : "#F7F7F5") : C.navy;
   return (
     <div style={{ background:bg, height:28, overflow:"hidden", position:"relative", flexShrink:0 }}>
       <style>{"@keyframes tkS{from{transform:translateX(0)}to{transform:translateX(-33.33%)}} .tks{display:flex;animation:tkS 50s linear infinite;width:max-content;}"}</style>
@@ -1155,10 +1155,8 @@ function TickerBanner({ C }) {
 // ============================================================
 function FXStrip({ C, totalARS }) {
   const [showConv, setShowConv] = useState(false);
-  // Match the rest of the chrome surface on native (black). On web
-  // keep the cream-dark contrast so the strip pops against the
-  // mockup frame.
-  const stripBg = isNativeApp ? "#000000" : C.creamDk;
+  // Match the chrome color for theme on native; cream-dark on web.
+  const stripBg = isNativeApp ? (C.isDark ? "#000000" : "#F7F7F5") : C.creamDk;
   return (
     <div>
       <div style={{ background:stripBg, borderBottom:"1px solid " + C.border, display:"flex", height:40, flexShrink:0 }}>
@@ -5470,29 +5468,49 @@ function MobileApp({ appState, handlers, C }) {
         position: "relative",
         flexShrink: 0,
       };
+  // Early return when ANY auth/PIN/welcome gate is active — render
+  // ONLY the gate, never the main app underneath. Previously the
+  // main content rendered behind the gate as an absolute overlay
+  // which leaked the portfolio briefly before the gate painted on
+  // top (security + visual bug). With early return there's nothing
+  // to peek at.
+  const gateActive = needsAuth || needsMfa || needsPinGate || needsWelcome;
+  if (gateActive) {
+    const gateFrameStyle = isNativeApp
+      ? { ...frameStyle, background: "#000000" }
+      : frameStyle;
+    return (
+      <div style={gateFrameStyle}>
+        {!isNativeApp && (
+          <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:110, height:26, background:"#0a0a0a", borderRadius:"0 0 16px 16px", zIndex:30 }}/>
+        )}
+        {needsAuth && <SupabaseAuthFlow C={C} session={sbSession} profile={sbProfile} onVerified={refetchProfile}/>}
+        {needsMfa && <MfaChallengeView C={C} onSuccess={() => setMfaPassed(true)} onForgot={handlers.handleLogout}/>}
+        {needsPinGate && (
+          <PinLockScreen
+            C={C}
+            storedPinHash={sbProfile?.pin_hash || null}
+            onSavePin={handlers.handleSavePin}
+            userEmail={sbSession?.user?.email}
+            onSuccess={() => setPinUnlocked(true)}
+            onForgot={handlers.handleLogout}
+          />
+        )}
+        {needsWelcome && (
+          <WelcomeChooser
+            C={C}
+            userId={sbSession?.user?.id}
+            onDone={() => refetchProfile()}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div style={frameStyle}>
       {!isNativeApp && (
         <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:110, height:26, background:"#0a0a0a", borderRadius:"0 0 16px 16px", zIndex:30 }}/>
-      )}
-      {needsAuth && <SupabaseAuthFlow C={C} session={sbSession} profile={sbProfile} onVerified={refetchProfile}/>}
-      {needsMfa && <MfaChallengeView C={C} onSuccess={() => setMfaPassed(true)} onForgot={handlers.handleLogout}/>}
-      {needsPinGate && (
-        <PinLockScreen
-          C={C}
-          storedPinHash={sbProfile?.pin_hash || null}
-          onSavePin={handlers.handleSavePin}
-          userEmail={sbSession?.user?.email}
-          onSuccess={() => setPinUnlocked(true)}
-          onForgot={handlers.handleLogout}
-        />
-      )}
-      {needsWelcome && (
-        <WelcomeChooser
-          C={C}
-          userId={sbSession?.user?.id}
-          onDone={() => refetchProfile()}
-        />
       )}
       {showTutorial && <OnboardingTutorial onClose={finishTutorial} onComplete={finishTutorial} setTab={setTab} setShowUSD={setShowUSD} setShowProfile={setShowProfile} currentTab={tab} uiMode={uiMode} C={C}/>}
       {showProfile && <ProfileSheet displayUser={displayUser} uiMode={uiMode} onChangeUiMode={handlers.handleChangeUiMode} onResetAccount={handlers.handleResetAccount} onResetPin={handlers.handleResetPin} onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} C={C}/>}
@@ -5524,11 +5542,11 @@ function MobileApp({ appState, handlers, C }) {
         );
       })()}
       <div style={{
-        // Pure black header so it's visually continuous with the iOS
-        // safe-area / Dynamic Island zone above (also black). No
-        // visible 'step' between the OS chrome and our header — same
-        // pattern CNBC uses.
-        background: isNativeApp ? "#000000" : (C.isDark?"#0F0F0F":"#0D1117"),
+        // On native: match the safe-area zones so the chrome reads
+        // as one continuous block. Dark mode → black (matches the
+        // Dynamic Island). Light mode → off-white (matches the rest
+        // of the app's bg).
+        background: isNativeApp ? (C.isDark ? "#000000" : "#F7F7F5") : (C.isDark?"#0F0F0F":"#0D1117"),
         paddingTop: isNativeApp ? 8 : 30,
         paddingBottom: 8,
         paddingLeft: 20,
@@ -5580,10 +5598,9 @@ function MobileApp({ appState, handlers, C }) {
       <div style={{ flex:1, overflowY:"auto", minHeight:0, overscrollBehavior:"contain", WebkitOverflowScrolling:"touch" }}>{renderPage()}</div>
       <div style={{
         flexShrink:0,
-        // Pure black bottom nav so it merges with the home-indicator
-        // safe-area zone below (also black). One continuous dark
-        // surface from labels through the iOS gesture bar.
-        background: isNativeApp ? "#000000" : (C.isDark?"#0F0F0F":C.card),
+        // Theme-aware nav: dark mode → black to merge with the home
+        // indicator zone, light mode → off-white to merge.
+        background: isNativeApp ? (C.isDark ? "#000000" : "#F7F7F5") : (C.isDark?"#0F0F0F":C.card),
         // No top border on native — that 1px line creates a visible
         // step between content and nav. Browser preview keeps the
         // border for the iPhone-mockup aesthetic.
@@ -6139,6 +6156,23 @@ export default function SAMASApp() {
     saveUiDark(userId, isDark).catch((e) => console.error("[uiDark] save:", e));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDark, userId]);
+
+  // Push the theme into the iOS chrome (StatusBar plugin + body bg
+  // for the safe-area zones). Runs on every theme change so toggling
+  // dark/light immediately repaints the whole device chrome to match.
+  useEffect(() => {
+    updateNativeTheme(isDark).catch(() => {});
+  }, [isDark]);
+
+  // Hide the iOS splash screen once auth state is resolved. We hold
+  // the splash through Supabase boot so the user sees logo → final
+  // screen with no flash of empty chrome in between. Once Supabase
+  // returns (loading=false), we know what to render and can drop
+  // the splash.
+  useEffect(() => {
+    if (sbLoading) return;
+    hideNativeSplash().catch(() => {});
+  }, [sbLoading]);
 
   useEffect(() => {
     if (syncedUserIdRef.current !== userId || !userId) return;

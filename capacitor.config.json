@@ -12,7 +12,9 @@
       "launchAutoHide": false,
       "backgroundColor": "#000000",
       "showSpinner": false,
-      "splashImmersive": true
+      "splashImmersive": true,
+      "launchShowDuration": 0,
+      "fadeOutDuration": 200
     },
     "StatusBar": {
       "style": "DARK",

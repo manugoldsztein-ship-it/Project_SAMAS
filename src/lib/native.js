@@ -33,12 +33,13 @@ export const isNative =
 export async function initNative() {
   if (!isNative) return;
 
-  // Hide the splash screen now that React has mounted. Without this
-  // the splash stays up until the OS times it out (~30s on iOS).
-  try {
-    const { SplashScreen } = await import("@capacitor/splash-screen");
-    await SplashScreen.hide();
-  } catch (e) { console.warn("[native] splash hide:", e); }
+  // Splash screen hide is deferred until the app actually has its
+  // auth state resolved (see hideNativeSplash in App.jsx). Hiding
+  // here on initNative — before React mounts — would show a blank
+  // viewport for the 500ms-2s it takes to mount + auth check, which
+  // looks like the app is broken. With the splash held until ready,
+  // the user goes from logo → real screen with no flash of blank
+  // chrome in between.
 
   // Paint the status bar to match our dark hero so it doesn't sit
   // awkwardly white against the black header.
@@ -59,6 +60,50 @@ export async function initNative() {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     });
   } catch (e) { console.warn("[native] backbutton:", e); }
+}
+
+// ----------------------------------------------------------
+// Hide the splash screen once the React app is ready. Call from
+// the top-level component AFTER auth state resolves so the user
+// goes directly from logo to the right screen with no flash of
+// blank webview in between.
+let _splashHidden = false;
+export async function hideNativeSplash() {
+  if (_splashHidden) return;
+  _splashHidden = true;
+  if (!isNative) return;
+  try {
+    const { SplashScreen } = await import("@capacitor/splash-screen");
+    await SplashScreen.hide();
+  } catch (e) { console.warn("[native] splash hide:", e); }
+}
+
+// ----------------------------------------------------------
+// Theme update — keep iOS chrome color in sync with app theme.
+// ----------------------------------------------------------
+// Call whenever the user toggles dark/light mode. Updates:
+//   - body + #root background (so safe-area zones match)
+//   - StatusBar plugin background (for the OS chrome behind the
+//     status bar text on Android; iOS uses overlay so it follows
+//     the underlying webview color)
+//   - StatusBar text color (Style.Dark = light text on dark bg,
+//     Style.Light = dark text on light bg)
+export async function updateNativeTheme(isDark) {
+  if (typeof document !== "undefined") {
+    const bg = isDark ? "#000000" : "#F7F7F5";
+    document.documentElement.style.background = bg;
+    document.body.style.background = bg;
+    const root = document.getElementById("root");
+    if (root) root.style.background = bg;
+  }
+  if (!isNative) return;
+  try {
+    const { StatusBar, Style } = await import("@capacitor/status-bar");
+    await StatusBar.setStyle({ style: isDark ? Style.Dark : Style.Light });
+    if (StatusBar.setBackgroundColor) {
+      await StatusBar.setBackgroundColor({ color: isDark ? "#000000" : "#F7F7F5" });
+    }
+  } catch (e) { console.warn("[native] theme update:", e); }
 }
 
 // ----------------------------------------------------------
