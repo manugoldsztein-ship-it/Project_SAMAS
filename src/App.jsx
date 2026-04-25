@@ -5433,20 +5433,23 @@ function MobileApp({ appState, handlers, C }) {
   // OS provides the real device chrome (bezel, notch, home indicator)
   // so our fake-iPhone frame would just look weird inside an iPhone.
   // Browser preview keeps the 375x760 mock with bezel + faux notch.
+  //
+  // We do NOT pad the wrapper with safe-area-inset here — the header
+  // and bottom nav each apply their own inset so the content fills
+  // the full screen and the navy/dark colors of those bars extend
+  // edge-to-edge under the iOS status bar and home indicator (which
+  // is what users expect from a native iOS app).
   const frameStyle = isNativeApp
     ? {
         width: "100vw",
-        height: "100vh",
+        height: "100dvh",       // 'dvh' = dynamic viewport height,
+                                // shrinks/grows with the iOS toolbar
+                                // (regular vh leaks past the visible
+                                // area on Safari WebView).
         background: C.bg,
         display: "flex",
         flexDirection: "column",
         position: "relative",
-        // Respect the real notch + home indicator. CSS env() keeps
-        // content out of the unsafe zones automatically.
-        paddingTop: "env(safe-area-inset-top)",
-        paddingBottom: "env(safe-area-inset-bottom)",
-        paddingLeft: "env(safe-area-inset-left)",
-        paddingRight: "env(safe-area-inset-right)",
         boxSizing: "border-box",
         overflow: "hidden",
       }
@@ -5516,7 +5519,18 @@ function MobileApp({ appState, handlers, C }) {
           />
         );
       })()}
-      <div style={{ background:C.isDark?"#0F0F0F":"#0D1117", paddingTop:isNativeApp?12:30, paddingBottom:8, paddingLeft:20, paddingRight:20, display:"flex", alignItems:"center", flexShrink:0, zIndex:10, gap:8 }}>
+      <div style={{
+        background:C.isDark?"#0F0F0F":"#0D1117",
+        // On native: safe-area-inset-top pushes the row BELOW the iOS
+        // status bar (notch + clock zone), and we add 8px of breathing
+        // room. On browser preview just use 30px since there's no
+        // status bar to worry about.
+        paddingTop: isNativeApp ? "calc(env(safe-area-inset-top) + 8px)" : 30,
+        paddingBottom:8,
+        paddingLeft: isNativeApp ? "calc(env(safe-area-inset-left) + 20px)" : 20,
+        paddingRight: isNativeApp ? "calc(env(safe-area-inset-right) + 20px)" : 20,
+        display:"flex", alignItems:"center", flexShrink:0, zIndex:10, gap:8,
+      }}>
         {/* Three-column layout: left + center (SAMAS) + right. Each
             outer column is flex:1 with the same justify so the center
             stays optically centered regardless of how many badges
