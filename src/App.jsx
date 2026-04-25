@@ -5516,9 +5516,11 @@ function MobileApp({ appState, handlers, C }) {
         );
       })()}
       <div style={{
-        background:C.isDark?"#0F0F0F":"#0D1117",
-        // Safe-area-inset is on #root (see index.html). Header just
-        // needs normal breathing-room padding.
+        // Pure black header so it's visually continuous with the iOS
+        // safe-area / Dynamic Island zone above (also black). No
+        // visible 'step' between the OS chrome and our header — same
+        // pattern CNBC uses.
+        background: isNativeApp ? "#000000" : (C.isDark?"#0F0F0F":"#0D1117"),
         paddingTop: isNativeApp ? 8 : 30,
         paddingBottom: 8,
         paddingLeft: 20,
@@ -5570,11 +5572,12 @@ function MobileApp({ appState, handlers, C }) {
       <div style={{ flex:1, overflowY:"auto", minHeight:0, overscrollBehavior:"contain", WebkitOverflowScrolling:"touch" }}>{renderPage()}</div>
       <div style={{
         flexShrink:0,
-        background:C.isDark?"#0F0F0F":C.card,
+        // Pure black bottom nav so it merges with the home-indicator
+        // safe-area zone below (also black). One continuous dark
+        // surface from labels through the iOS gesture bar.
+        background: isNativeApp ? "#000000" : (C.isDark?"#0F0F0F":C.card),
         borderTop:"1px solid "+C.border,
         display:"flex",
-        // Safe-area-inset is on #root. Nav just needs to fit icons
-        // and labels comfortably.
         height: isNativeApp ? 70 : 78,
         zIndex:20,
         paddingTop: 6,
