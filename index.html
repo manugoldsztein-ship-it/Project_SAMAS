@@ -16,9 +16,9 @@
     <meta name="format-detection" content="telephone=no" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E📈%3C/text%3E%3C/svg%3E" />
     <style>
-      html, body, #root { margin: 0; padding: 0; min-height: 100%; }
+      html, body, #root { margin: 0; padding: 0; height: 100%; overflow: hidden; }
       html { -webkit-text-size-adjust: 100%; }
-      body { background: #050505; overscroll-behavior-y: contain; }
+      body { background: #050505; overscroll-behavior: none; position: fixed; width: 100%; }
       /* Global box-sizing so width:100% + padding doesn't blow past the
          viewport. Fixes content overflowing the right edge on real
          iPhones — the fake-iPhone preview frame in the browser was

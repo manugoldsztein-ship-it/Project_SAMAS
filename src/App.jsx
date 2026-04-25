@@ -5520,14 +5520,14 @@ function MobileApp({ appState, handlers, C }) {
       })()}
       <div style={{
         background:C.isDark?"#0F0F0F":"#0D1117",
-        // On native: safe-area-inset-top pushes the row BELOW the iOS
-        // status bar (notch + clock zone), and we add 8px of breathing
-        // room. On browser preview just use 30px since there's no
-        // status bar to worry about.
-        paddingTop: isNativeApp ? "calc(env(safe-area-inset-top) + 8px)" : 30,
+        // capacitor.config sets StatusBar overlaysWebView=false, so
+        // the webview already starts below the iOS status bar — no
+        // need to also add safe-area-inset-top here. (Doing both was
+        // creating a huge empty gap between status bar and header.)
+        paddingTop: isNativeApp ? 12 : 30,
         paddingBottom:8,
-        paddingLeft: isNativeApp ? "calc(env(safe-area-inset-left) + 20px)" : 20,
-        paddingRight: isNativeApp ? "calc(env(safe-area-inset-right) + 20px)" : 20,
+        paddingLeft: isNativeApp ? "max(20px, env(safe-area-inset-left))" : 20,
+        paddingRight: isNativeApp ? "max(20px, env(safe-area-inset-right))" : 20,
         display:"flex", alignItems:"center", flexShrink:0, zIndex:10, gap:8,
       }}>
         {/* Three-column layout: left + center (SAMAS) + right. Each
@@ -5568,8 +5568,11 @@ function MobileApp({ appState, handlers, C }) {
       {/* Scrollable page content. With the bottom nav now part of the
           flex flow (below) instead of absolute-positioned, this area
           is exactly the right size — no padding hack needed and no
-          dead scroll area at the bottom when content is short. */}
-      <div style={{ flex:1, overflowY:"auto", minHeight:0 }}>{renderPage()}</div>
+          dead scroll area at the bottom when content is short.
+          overscroll-behavior:contain stops the iOS rubber-band scroll
+          from leaking up to the parent (which would visually shift
+          the header / bottom nav along with the gesture). */}
+      <div style={{ flex:1, overflowY:"auto", minHeight:0, overscrollBehavior:"contain", WebkitOverflowScrolling:"touch" }}>{renderPage()}</div>
       <div style={{
         flexShrink:0,
         background:C.isDark?"#0F0F0F":C.card,
