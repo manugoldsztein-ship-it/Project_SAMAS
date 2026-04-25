@@ -38,6 +38,11 @@ const corsHeaders = {
 const FINNHUB_API_KEY = Deno.env.get("FINNHUB_API_KEY") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// ANON key — used for the user-JWT verification client. Calling
+// auth.getUser() on a client created with the SERVICE_KEY rejects the
+// caller's JWT as "Invalid" because the service role bypasses RLS and
+// the auth.getUser() helper expects to be in a user-scoped context.
+const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 const CACHE_TTL_MS = 15 * 60 * 1000;        // 15 minutes
 const MAX_PER_SOURCE = 25;                   // cap per source per fetch
@@ -316,8 +321,10 @@ serve(async (req: Request) => {
       });
     }
     // Verify the JWT belongs to a logged-in user. We don't need their
-    // ID for anything else (the article cache is shared).
-    const userClient = createClient(SUPABASE_URL, SERVICE_KEY, {
+    // ID for anything else (the article cache is shared). Use the ANON
+    // key here — getUser() on a service-role client rejects the caller's
+    // JWT as "Invalid" because service-role bypasses RLS.
+    const userClient = createClient(SUPABASE_URL, ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
     });
     const { data: userData, error: userErr } = await userClient.auth.getUser();
