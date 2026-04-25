@@ -1749,7 +1749,11 @@ function ArticleModal({ article, C, lang, onClose }) {
     <div
       onClick={onClose}
       style={{
-        position: "fixed", inset: 0, zIndex: 90,
+        // `absolute` (not `fixed`) so the backdrop and sheet stay
+        // contained within the app's frame in desktop preview / phone
+        // mockup wrappers. The nearest positioned ancestor (the app
+        // root) is the scrolling/overlay boundary.
+        position: "absolute", inset: 0, zIndex: 90,
         background: "rgba(0,0,0,0.7)",
         display: "flex", alignItems: "flex-end", justifyContent: "center",
         animation: "fadeIn 120ms ease-out",
@@ -1758,11 +1762,12 @@ function ArticleModal({ article, C, lang, onClose }) {
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: "100%", maxWidth: 480, maxHeight: "90vh",
+          width: "100%", maxWidth: 480, maxHeight: "90%",
           background: C.bg, borderRadius: "20px 20px 0 0",
           display: "flex", flexDirection: "column",
           overflow: "hidden",
           boxShadow: "0 -10px 40px rgba(0,0,0,0.4)",
+          position: "relative",
         }}
       >
         {/* drag handle */}
