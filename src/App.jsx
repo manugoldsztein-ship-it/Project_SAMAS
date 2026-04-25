@@ -1127,8 +1127,12 @@ function sendEmailNotification({ to, subject, body }) {
 function TickerBanner({ C }) {
   const items = ASSETS.filter(a => a.cat === "ETF" || a.cat === "Commodity" || a.cat === "Crypto");
   const all = [...items, ...items, ...items];
+  // On native we use pure black so this banner blends with the
+  // header / status-bar zone above it — one continuous dark surface.
+  // On web preview keep the original navy accent.
+  const bg = isNativeApp ? "#000000" : C.navy;
   return (
-    <div style={{ background:C.navy, height:28, overflow:"hidden", position:"relative", flexShrink:0 }}>
+    <div style={{ background:bg, height:28, overflow:"hidden", position:"relative", flexShrink:0 }}>
       <style>{"@keyframes tkS{from{transform:translateX(0)}to{transform:translateX(-33.33%)}} .tks{display:flex;animation:tkS 50s linear infinite;width:max-content;}"}</style>
       <div style={{ position:"absolute", left:0, top:0, bottom:0, zIndex:5, background:C.accent, display:"flex", alignItems:"center", padding:"0 8px", fontSize:8, fontWeight:900, color:"#fff", letterSpacing:1.5 }}>LIVE</div>
       <div style={{ marginLeft:38, height:"100%", overflow:"hidden" }}>
@@ -1151,9 +1155,13 @@ function TickerBanner({ C }) {
 // ============================================================
 function FXStrip({ C, totalARS }) {
   const [showConv, setShowConv] = useState(false);
+  // Match the rest of the chrome surface on native (black). On web
+  // keep the cream-dark contrast so the strip pops against the
+  // mockup frame.
+  const stripBg = isNativeApp ? "#000000" : C.creamDk;
   return (
     <div>
-      <div style={{ background:C.creamDk, borderBottom:"1px solid " + C.border, display:"flex", height:40, flexShrink:0 }}>
+      <div style={{ background:stripBg, borderBottom:"1px solid " + C.border, display:"flex", height:40, flexShrink:0 }}>
         {FX.map((fx, i) => (
           <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", borderRight: i < FX.length-1 ? "1px solid " + C.border : "none", cursor:"pointer" }} onClick={() => setShowConv(v => !v)}>
             <div style={{ fontSize:8, fontWeight:700, color:C.textLt }}>USD {fx.label}</div>
@@ -5576,7 +5584,10 @@ function MobileApp({ appState, handlers, C }) {
         // safe-area zone below (also black). One continuous dark
         // surface from labels through the iOS gesture bar.
         background: isNativeApp ? "#000000" : (C.isDark?"#0F0F0F":C.card),
-        borderTop:"1px solid "+C.border,
+        // No top border on native — that 1px line creates a visible
+        // step between content and nav. Browser preview keeps the
+        // border for the iPhone-mockup aesthetic.
+        borderTop: isNativeApp ? "none" : "1px solid "+C.border,
         display:"flex",
         height: isNativeApp ? 70 : 78,
         zIndex:20,
