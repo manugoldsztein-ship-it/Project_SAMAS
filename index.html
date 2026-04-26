@@ -23,21 +23,23 @@
         overscroll-behavior: none;
       }
       html { -webkit-text-size-adjust: 100%; }
-      /* #root absorbs the iOS safe-area insets (status bar zone +
-         home-indicator zone). The wrapper inside is position:absolute;
-         inset:0 so it fills #root's PADDING BOX — i.e. the inside of
-         the safe area. Visually that means: the SAMAS header sits at
-         the bottom edge of the status bar zone (no gap), and the bg
-         color of the safe-area zones matches the chrome bars so it
-         reads as one continuous dark surface from the very top of
-         the screen down to where the content begins. */
-      body { background: #000000; }
+      /* #root fills the entire screen edge-to-edge. We DO NOT pad with
+         safe-area-inset-top/bottom here — that responsibility lives on
+         the chrome elements themselves (header adds inset-top to its
+         padding-top; bottom nav adds inset-bottom to its padding-bottom).
+         Doing it that way means the chrome BACKGROUND extends to the
+         very edges of the screen (under the status bar, under the home
+         indicator), while the chrome CONTENT sits in the safe area.
+         That's the modern iOS edge-to-edge pattern.
+
+         We keep left/right insets at #root because for landscape /
+         iPhone-with-rounded-corners cases they're cosmetic (they push
+         the entire app inward by the corner radius). */
+      body { background: #0F0F0F; }
       #root {
-        padding-top: env(safe-area-inset-top);
-        padding-bottom: env(safe-area-inset-bottom);
         padding-left: env(safe-area-inset-left);
         padding-right: env(safe-area-inset-right);
-        background: #000000;
+        background: #0F0F0F;
         box-sizing: border-box;
         position: relative;
       }

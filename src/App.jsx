@@ -1127,10 +1127,10 @@ function sendEmailNotification({ to, subject, body }) {
 function TickerBanner({ C }) {
   const items = ASSETS.filter(a => a.cat === "ETF" || a.cat === "Commodity" || a.cat === "Crypto");
   const all = [...items, ...items, ...items];
-  // On native, match the chrome color to keep the top region
-  // continuous: black in dark mode, off-white in light mode.
-  // On web preview keep the navy accent.
-  const bg = isNativeApp ? (C.isDark ? "#000000" : "#F7F7F5") : C.navy;
+  // Same dark color as the rest of the chrome on native — header and
+  // FXStrip use #0F0F0F too, so the top of the screen reads as one
+  // continuous band. On web preview keeps the navy accent.
+  const bg = isNativeApp ? "#0F0F0F" : C.navy;
   return (
     <div style={{ background:bg, height:28, overflow:"hidden", position:"relative", flexShrink:0 }}>
       <style>{"@keyframes tkS{from{transform:translateX(0)}to{transform:translateX(-33.33%)}} .tks{display:flex;animation:tkS 50s linear infinite;width:max-content;}"}</style>
@@ -1155,15 +1155,25 @@ function TickerBanner({ C }) {
 // ============================================================
 function FXStrip({ C, totalARS }) {
   const [showConv, setShowConv] = useState(false);
-  // Match the chrome color for theme on native; cream-dark on web.
-  const stripBg = isNativeApp ? (C.isDark ? "#000000" : "#F7F7F5") : C.creamDk;
+  // Chrome strip: same dark color as the header on native so the top
+  // of the app reads as one continuous black band from the status bar
+  // through the FX rates. On web preview keeps the cream-dark to look
+  // like the iPhone-mockup chrome.
+  const stripBg = isNativeApp ? "#0F0F0F" : C.creamDk;
+  // Light text + muted divider regardless of theme — the strip lives on
+  // dark chrome on native, so we hard-code light tones instead of using
+  // C.text/C.textLt/C.border which flip to dark in light mode and would
+  // disappear against the dark bg.
+  const labelCol = isNativeApp ? "#9CA3AF" : C.textLt;
+  const valueCol = isNativeApp ? "#F4F6F4" : C.text;
+  const divider  = isNativeApp ? "rgba(255,255,255,0.08)" : C.border;
   return (
     <div>
-      <div style={{ background:stripBg, borderBottom:"1px solid " + C.border, display:"flex", height:40, flexShrink:0 }}>
+      <div style={{ background:stripBg, borderBottom:"1px solid " + divider, display:"flex", height:40, flexShrink:0 }}>
         {FX.map((fx, i) => (
-          <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", borderRight: i < FX.length-1 ? "1px solid " + C.border : "none", cursor:"pointer" }} onClick={() => setShowConv(v => !v)}>
-            <div style={{ fontSize:8, fontWeight:700, color:C.textLt }}>USD {fx.label}</div>
-            <div style={{ fontSize:12, fontWeight:800, fontFamily:"monospace", color:C.text }}>${fN(fx.value)}</div>
+          <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", borderRight: i < FX.length-1 ? "1px solid " + divider : "none", cursor:"pointer" }} onClick={() => setShowConv(v => !v)}>
+            <div style={{ fontSize:8, fontWeight:700, color:labelCol }}>USD {fx.label}</div>
+            <div style={{ fontSize:12, fontWeight:800, fontFamily:"monospace", color:valueCol }}>${fN(fx.value)}</div>
             <div style={{ fontSize:8, fontWeight:700, color: fx.up ? C.green : C.red }}>{fx.up ? "+" : "-"}{Math.abs(fx.change).toFixed(1)}%</div>
           </div>
         ))}
@@ -5710,13 +5720,24 @@ function MobileApp({ appState, handlers, C }) {
         );
       })()}
       <div style={{
-        // On native: match the safe-area zones so the chrome reads
-        // as one continuous block. Dark mode → black (matches the
-        // Dynamic Island). Light mode → off-white (matches the rest
-        // of the app's bg).
-        background: isNativeApp ? (C.isDark ? "#000000" : "#F7F7F5") : (C.isDark?"#0F0F0F":"#0D1117"),
-        paddingTop: isNativeApp ? 8 : 30,
-        paddingBottom: 8,
+        // Single dark color for the chrome — same on light & dark mode
+        // so the safe-area zone reads as part of the header continuously.
+        background: "#0F0F0F",
+        // 1px subtle border so the header has a visible identity as a
+        // nav-bar separated from the TickerBanner / FXStrip below.
+        // Matches the divider color used inside the chrome strips.
+        borderBottom: isNativeApp
+          ? "1px solid rgba(255,255,255,0.08)"
+          : "none",
+        // KEY: paddingTop = device safe-area inset + 14px breathing
+        // room below the status bar / Dynamic Island. env() is
+        // device-aware (~59px on Pro Max DI, ~47px on regular notch,
+        // ~20px on SE, 0 on web) so the SAMAS logo sits at the same
+        // VISUAL distance from the status bar on every iPhone.
+        paddingTop: isNativeApp
+          ? "calc(env(safe-area-inset-top) + 14px)"
+          : 30,
+        paddingBottom: 12,
         paddingLeft: 20,
         paddingRight: 20,
         display:"flex", alignItems:"center", flexShrink:0, zIndex:10, gap:8,
@@ -5766,18 +5787,25 @@ function MobileApp({ appState, handlers, C }) {
       <div style={{ flex:1, overflowY:"auto", minHeight:0, overscrollBehavior:"contain", WebkitOverflowScrolling:"touch" }}>{renderPage()}</div>
       <div style={{
         flexShrink:0,
-        // Theme-aware nav: dark mode → black to merge with the home
-        // indicator zone, light mode → off-white to merge.
-        background: isNativeApp ? (C.isDark ? "#000000" : "#F7F7F5") : (C.isDark?"#0F0F0F":C.card),
-        // No top border on native — that 1px line creates a visible
-        // step between content and nav. Browser preview keeps the
-        // border for the iPhone-mockup aesthetic.
+        // Single dark color for the chrome — matches the header.
+        background: "#0F0F0F",
+        // No top border on native — the chrome reads as one piece.
         borderTop: isNativeApp ? "none" : "1px solid "+C.border,
         display:"flex",
-        height: isNativeApp ? 70 : 78,
+        // Use minHeight (not height) on native so the bar can grow to
+        // include the home-indicator safe-area inset below the labels.
+        // The visible content area stays ~58px tall (minHeight 70 - 6
+        // top - 6 bottom); the inset adds extra height under that so
+        // the BACKGROUND extends down to the very bottom of the screen
+        // and the home indicator sits ON TOP of the nav bar (the way
+        // every modern iOS app does it). On web preview env() is 0 so
+        // height stays at 78.
+        minHeight: isNativeApp ? 70 : 78,
         zIndex:20,
         paddingTop: 6,
-        paddingBottom: 6,
+        paddingBottom: isNativeApp
+          ? "calc(env(safe-area-inset-bottom) + 6px)"
+          : 6,
       }}>
         {TABS.map(t => {
           const active = tab === t.id;
