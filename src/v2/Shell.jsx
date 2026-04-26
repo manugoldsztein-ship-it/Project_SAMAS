@@ -16,6 +16,7 @@ import React, { useState } from "react";
 import { SAMAS_THEME, FONT } from "./theme.js";
 import { SamasTabBar } from "./shared.jsx";
 import { WalletPage } from "./Wallet.jsx";
+import { BrokerPage } from "./Broker.jsx";
 
 export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleDark }) {
   const [tab, setTab] = useState("wallet");
@@ -49,7 +50,7 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
           />
         );
       case "broker":
-        return <Placeholder T={T} title="Invertir" subtitle="Tu plataforma de trading" />;
+        return <BrokerPage T={T} />;
       case "social":
         return <Placeholder T={T} title="Social" subtitle="Feed de traders y trades" />;
       case "news":
