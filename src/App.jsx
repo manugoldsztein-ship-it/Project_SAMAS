@@ -35,6 +35,11 @@ import { isNative as isNativeApp, hapticNative, updateNativeTheme, hideNativeSpl
 // is null. User picks "principiante" or "profesional" and the rest
 // of the app reads that choice to decide which surfaces to show.
 import { WelcomeChooser } from "./auth/WelcomeChooser.jsx";
+// v2 shell — Wallet-first design. Renders only on native (or when
+// the user explicitly picks "v2" from the web preview toggle). Lives
+// in src/v2/ alongside the legacy code so we can iterate without
+// breaking what already works.
+import { SamasShell } from "./v2/Shell.jsx";
 
 // ============================================================
 // THEME
@@ -6108,7 +6113,11 @@ export default function SAMASApp() {
   const [recurringAporte, setRecurringAporte] = usePersistedState("samas_recurring_aporte", null);
   const [pendingTrade, setPending]    = useState(null);
   const [toast, setToast]             = useState(null);
-  const [viewMode, setViewMode]       = usePersistedState("samas_view_mode", "mobile");
+  // viewMode default: "v2" on native (iPhone testers see the new
+  // Wallet-first shell automatically), "mobile" on web (legacy mock-
+  // iPhone preview keeps working). Either platform can switch via the
+  // toggle bar at the top of the app.
+  const [viewMode, setViewMode]       = usePersistedState("samas_view_mode", isNativeApp ? "v2" : "mobile");
   const [finnhubKey, setFinnhubKey]   = useState(() => loadKey());
   const [emailjsCfg, setEmailjsCfg]   = useState(() => loadEmailjsConfig());
   // Anthropic (Claude) — BYOK. Same pattern as Finnhub: localStorage-backed,
@@ -6808,12 +6817,14 @@ export default function SAMASApp() {
         }
       `}</style>
 
-      {/* Movil/Web preview toggle — only useful while previewing in a
-          desktop browser. On native iOS/Android the device IS the
-          mobile context, so we hide it entirely. */}
+      {/* viewMode toggle — three options:
+            mobile = legacy iPhone shell (current production look)
+            web    = legacy desktop dashboard layout
+            v2     = new Wallet-first shell (under iteration)
+          Only visible on web preview; native always renders v2. */}
       {!isNativeApp && (
         <div style={{ display:"flex", justifyContent:"center", gap:12, padding:"16px 0 8px", position:"sticky", top:0, zIndex:200, background:outerBg, borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
-          {[["mobile","Movil"],["web","Web"]].map(([v, l]) => (
+          {[["mobile","Movil"],["web","Web"],["v2","SAMAS v2"]].map(([v, l]) => (
             <button key={v} onClick={() => setViewMode(v)} style={{ background: v===viewMode ? "#16C784" : "rgba(255,255,255,0.07)", color: v===viewMode ? "#fff" : "rgba(255,255,255,0.5)", border:"none", borderRadius:10, padding:"6px 20px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
           ))}
         </div>
@@ -6821,10 +6832,34 @@ export default function SAMASApp() {
 
       {showShortcuts && <ShortcutsHelpModal onClose={() => setShowShortcuts(false)} C={C}/>}
 
-      {/* On native, force the mobile shell — desktop layout never makes
-          sense inside an iOS app. Also drop the desktop-style outer
-          padding so the app fills the device edge-to-edge. */}
-      {(isNativeApp || viewMode === "mobile") ? (
+      {/* v2 shell (Wallet-first) renders in two cases:
+            - native (iPhone testers see the new design by default)
+            - web preview, when the user picks "SAMAS v2" from the toggle
+          On native we render Shell directly — its position:absolute
+          inset:0 fills the safe-area-padded #root box. On web preview
+          we wrap it in a 390x800 phone-shape frame so it reads like
+          the existing Movil preview. */}
+      {(isNativeApp || viewMode === "v2") && loggedIn ? (
+        isNativeApp ? (
+          <ErrorBoundary>
+            <SamasShell user={displayUser} isDark={isDark} isNativeApp={true}/>
+          </ErrorBoundary>
+        ) : (
+          <div style={{ display:"flex", justifyContent:"center", padding: "20px" }}>
+            <div style={{
+              width: 390, height: 800,
+              position: "relative",
+              borderRadius: 48, overflow: "hidden",
+              border: "9px solid #0a0a0a",
+              boxShadow: "0 40px 80px rgba(0,0,0,0.7)",
+            }}>
+              <ErrorBoundary>
+                <SamasShell user={displayUser} isDark={isDark} isNativeApp={false}/>
+              </ErrorBoundary>
+            </div>
+          </div>
+        )
+      ) : (isNativeApp || viewMode === "mobile") ? (
         <div style={{ display:"flex", justifyContent:"center", padding: isNativeApp ? 0 : "20px" }}>
           <ErrorBoundary><MobileApp appState={appState} handlers={handlers} C={C}/></ErrorBoundary>
         </div>
