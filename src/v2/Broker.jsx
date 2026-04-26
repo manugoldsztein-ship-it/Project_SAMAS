@@ -1,143 +1,136 @@
 // ============================================================
-// SAMAS v2 — Broker (Invertir) screen
+// SAMAS v2 — Broker (Invertir) — nested sub-shell
 // ============================================================
-// Tab #2 in the shell. Three sub-views inside, switched via a
-// segmented control:
+// When the user taps "Invertir" on the main shell, the entire screen
+// turns into this BrokerShell. It has:
 //
-//   Mi cartera  → holdings + total value + per-asset gain
-//   Mercado     → full asset universe (filterable by category)
-//   Lista       → user's watchlists (TBD; shows stub for now)
+//   - A header with a "← Volver" arrow that pops back to the main
+//     shell, plus a section title.
+//   - 4 sub-tabs at the bottom (replacing the main shell's nav while
+//     the user is inside Invertir):
 //
-// Tapping any asset row opens AssetSheet — a bottom modal with the
-// quote + buy/sell input. AssetSheet talks to broker.placeOrder()
-// directly; on success this page refreshes its data.
+//        Portafolio   holdings + total + buy/sell
+//        Mercado      full asset list, filterable
+//        Watchlist    saved lists
+//        Órdenes      open + recent orders (cancel from here)
 //
-// Uses the v2 design tokens (T) + v2 API contracts. No legacy code
-// imported. When Cohen's API arrives we just swap the bodies in
-// api/broker.js — this file doesn't change.
+//   - The main Shell hides its own bottom nav while we're rendered
+//     (it short-circuits to <BrokerShell/> when tab === "broker").
+//
+// Tapping any asset row anywhere inside opens the AssetSheet — a
+// bottom modal with the live quote + buy/sell input. Confirming
+// calls broker.placeOrder() and refreshes the affected sub-page.
 // ============================================================
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { FONT, fmtMoney, fmtPct } from "./theme.js";
 import { Ico } from "./icons.jsx";
-import { ChromeBtn, Pill, SectionHead, Sparkline, SAMAS_SPARKS } from "./shared.jsx";
+import { Pill, SectionHead, Sparkline, SAMAS_SPARKS } from "./shared.jsx";
 import { broker as brokerApi } from "./api/index.js";
 
-const TABS = [
-  { id: "cartera", label: "Mi cartera" },
-  { id: "mercado", label: "Mercado" },
-  { id: "lista",   label: "Lista" },
+// Sub-tabs metadata — drives both the bottom nav and the content
+// switch in the top-level <BrokerShell/> render.
+const SUB_TABS = [
+  { id: "portafolio", label: "Portafolio", icon: Ico.Briefcase },
+  { id: "mercado",    label: "Mercado",    icon: Ico.Chart },
+  { id: "watchlist",  label: "Watchlist",  icon: Ico.Star },
+  { id: "ordenes",    label: "Órdenes",    icon: Ico.List },
 ];
 
-export function BrokerPage({ T }) {
-  const [tab, setTab] = useState("cartera");
+// ----------------------------------------------------------
+// Top-level BrokerShell — replaces the main Shell entirely while
+// the user is inside Invertir.
+// ----------------------------------------------------------
+export function BrokerShell({ T, isNativeApp = false, onBack }) {
+  const [tab, setTab] = useState("portafolio");
+  const [selectedAsset, setSelectedAsset] = useState(null);
+
+  // Lift broker data here so all sub-tabs see the same snapshot and
+  // a single refresh() call after a successful order updates everyone.
   const [portfolio, setPortfolio] = useState(null);
   const [assets, setAssets] = useState([]);
   const [watchlists, setWatchlists] = useState([]);
-  const [selectedAsset, setSelectedAsset] = useState(null); // for AssetSheet
+  const [orders, setOrders] = useState([]);
 
   const refresh = useCallback(async () => {
     try {
-      const [p, a, wl] = await Promise.all([
+      const [p, a, wl, o] = await Promise.all([
         brokerApi.getPortfolio(),
         brokerApi.getAssets(),
         brokerApi.getWatchlists(),
+        brokerApi.getOrders({ status: "all" }),
       ]);
-      setPortfolio(p); setAssets(a); setWatchlists(wl);
+      setPortfolio(p); setAssets(a); setWatchlists(wl); setOrders(o);
     } catch (e) { console.error("[broker] load:", e); }
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  return (
-    <div style={{ paddingBottom: 110 }}>
-      {/* ---------- header ---------- */}
-      <div style={{
-        padding: "calc(env(safe-area-inset-top) + 20px) 20px 0",
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-      }}>
-        <div>
-          <div style={{
-            fontFamily: FONT.display, fontSize: 28, fontWeight: 700,
-            color: T.text, letterSpacing: -0.6,
-          }}>Invertir</div>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <ChromeBtn T={T}><Ico.Search size={18}/></ChromeBtn>
-          <ChromeBtn T={T}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-              <path d="M22 3H2l8 9.5V19l4 2v-8.5L22 3z"/>
-            </svg>
-          </ChromeBtn>
-        </div>
-      </div>
+  // Sub-nav bottom inset same logic as main shell — float 12px above
+  // the home-indicator zone.
+  const navBottom = isNativeApp
+    ? "calc(env(safe-area-inset-bottom) + 12px)"
+    : 12;
 
-      {/* ---------- portfolio summary ---------- */}
-      {portfolio && (
-        <div style={{
-          margin: "20px 16px 0", padding: 22, borderRadius: 24,
-          background: `linear-gradient(155deg, ${T.surfaceHi} 0%, ${T.surface} 60%)`,
-          border: `1px solid ${T.border}`, position: "relative", overflow: "hidden",
+  return (
+    <div style={{
+      position: "absolute", inset: 0,
+      background: T.bg, color: T.text,
+      overflow: "hidden",
+      display: "flex", flexDirection: "column",
+      fontFamily: FONT.sans,
+    }}>
+      {/* ---------- header with back arrow ---------- */}
+      <div style={{
+        flexShrink: 0,
+        // safe-area-aware top inset (same as Wallet)
+        padding: "calc(env(safe-area-inset-top) + 14px) 16px 12px",
+        display: "flex", alignItems: "center", gap: 12,
+        background: T.bg, // sits above the scrollable content
+        borderBottom: `1px solid ${T.border}`,
+        zIndex: 5,
+      }}>
+        <button onClick={onBack} style={{
+          width: 40, height: 40, borderRadius: 12,
+          background: T.surface, border: `1px solid ${T.border}`,
+          color: T.text, cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center",
         }}>
+          <Ico.Back size={18}/>
+        </button>
+        <div style={{ flex: 1 }}>
           <div style={{
-            position: "absolute", top: -60, right: -40, width: 200, height: 200,
-            borderRadius: "50%", background: T.accent, opacity: 0.10, filter: "blur(40px)",
-          }}/>
-          <div style={{ position: "relative", zIndex: 1 }}>
-            <div style={{
-              fontFamily: FONT.sans, fontSize: 11, color: T.textDim,
-              marginBottom: 6, letterSpacing: 0.6, fontWeight: 700,
-            }}>
-              VALOR DE CARTERA
-            </div>
-            <div style={{
-              fontFamily: FONT.display, fontSize: 36, fontWeight: 700, color: T.text,
-              letterSpacing: -1.2, fontVariantNumeric: "tabular-nums", marginBottom: 10,
-            }}>
-              US${fmtMoney(portfolio.totalUsd, "USD")}
-            </div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              <Pill T={T} color={T.accent} bg={T.accentSoft}>+US$160.27</Pill>
-              <Pill T={T} color={T.accent} bg={T.accentSoft}>+2.34%</Pill>
-              <Pill T={T}>30 días</Pill>
-            </div>
+            fontFamily: FONT.display, fontSize: 22, fontWeight: 700,
+            color: T.text, letterSpacing: -0.4,
+          }}>Invertir</div>
+          <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute }}>
+            {SUB_TABS.find((t) => t.id === tab)?.label}
           </div>
         </div>
-      )}
-
-      {/* ---------- segmented control ---------- */}
-      <div style={{
-        margin: "20px 16px 0", padding: 4,
-        background: T.surface, borderRadius: 14, border: `1px solid ${T.border}`,
-        display: "flex", gap: 4,
-      }}>
-        {TABS.map((t) => {
-          const active = t.id === tab;
-          return (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{
-              flex: 1, padding: "10px 0", borderRadius: 10,
-              background: active ? T.bg : "transparent",
-              border: active ? `1px solid ${T.border}` : "1px solid transparent",
-              color: active ? T.text : T.textMute,
-              fontFamily: FONT.sans, fontSize: 13, fontWeight: 600,
-              cursor: "pointer",
-            }}>{t.label}</button>
-          );
-        })}
       </div>
 
-      {/* ---------- tab content ---------- */}
-      <div style={{ marginTop: 16 }}>
-        {tab === "cartera" && (
-          <CarteraView T={T} portfolio={portfolio} onSelectAsset={setSelectedAsset} />
+      {/* ---------- scrollable content ---------- */}
+      <div style={{
+        flex: 1, overflowY: "auto",
+        overscrollBehavior: "contain",
+        WebkitOverflowScrolling: "touch",
+      }}>
+        {tab === "portafolio" && (
+          <PortafolioView T={T} portfolio={portfolio} onSelectAsset={setSelectedAsset} />
         )}
         {tab === "mercado" && (
           <MercadoView T={T} assets={assets} onSelectAsset={setSelectedAsset} />
         )}
-        {tab === "lista" && (
-          <ListaView T={T} watchlists={watchlists} assets={assets} onSelectAsset={setSelectedAsset} />
+        {tab === "watchlist" && (
+          <WatchlistView T={T} watchlists={watchlists} assets={assets} onSelectAsset={setSelectedAsset} />
+        )}
+        {tab === "ordenes" && (
+          <OrdenesView T={T} orders={orders} onRefresh={refresh} />
         )}
       </div>
+
+      {/* ---------- sub-nav bottom bar ---------- */}
+      <SubNav T={T} tab={tab} setTab={setTab} bottomInset={navBottom} />
 
       {/* ---------- asset sheet ---------- */}
       {selectedAsset && (
@@ -153,39 +146,114 @@ export function BrokerPage({ T }) {
 }
 
 // ----------------------------------------------------------
-// Mi cartera — list of holdings with per-asset gain.
+// SubNav — bottom nav scoped to the Invertir section. Same shape as
+// SamasTabBar but with the broker-specific tab list.
 // ----------------------------------------------------------
-function CarteraView({ T, portfolio, onSelectAsset }) {
-  if (!portfolio) return <Loader T={T}/>;
-  if (portfolio.holdings.length === 0) {
-    return (
-      <Empty T={T}
-        title="Aún no tenés posiciones"
-        subtitle="Tocá un activo en Mercado para hacer tu primera compra."
-      />
-    );
-  }
+function SubNav({ T, tab, setTab, bottomInset }) {
   return (
-    <div style={{ margin: "0 16px" }}>
-      {portfolio.holdings.map((h, i) => (
-        <AssetRow
-          key={h.ticker}
-          T={T}
-          asset={h}
-          subline={`${h.qty} u · prom. ${h.currency === "ARS" ? "$" : "US$"}${fmtMoney(h.avgCost, h.currency)}`}
-          rightTop={`${h.currency === "ARS" ? "$" : "US$"}${fmtMoney(h.value, h.currency)}`}
-          rightBottom={fmtPct(h.gainPct)}
-          rightBottomColor={h.gainPct >= 0 ? T.accent : T.danger}
-          isLast={i === portfolio.holdings.length - 1}
-          onClick={() => onSelectAsset(h)}
-        />
-      ))}
+    <div style={{
+      position: "absolute", left: 12, right: 12, bottom: bottomInset,
+      zIndex: 40,
+      borderRadius: 28, padding: "10px 8px",
+      background: T.surface,
+      border: `1px solid ${T.border}`,
+      boxShadow: "0 12px 30px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.04) inset",
+      display: "flex", justifyContent: "space-around", alignItems: "center",
+    }}>
+      {SUB_TABS.map((t) => {
+        const active = t.id === tab;
+        const TabIco = t.icon;
+        return (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            background: "none", border: "none", cursor: "pointer", padding: "6px 8px",
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+            color: active ? T.accent : T.textMute, position: "relative",
+            fontFamily: FONT.sans, fontSize: 10, fontWeight: 600, letterSpacing: 0.2,
+          }}>
+            {active && (
+              <div style={{
+                position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)",
+                width: 24, height: 3, borderRadius: 2, background: T.accent,
+              }} />
+            )}
+            <TabIco size={20} sw={active ? 2 : 1.7} />
+            <span>{t.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
 // ----------------------------------------------------------
-// Mercado — full universe + category filter pills.
+// Portafolio — total + holdings list.
+// ----------------------------------------------------------
+function PortafolioView({ T, portfolio, onSelectAsset }) {
+  if (!portfolio) return <Loader T={T}/>;
+
+  return (
+    <div style={{ paddingBottom: 110 }}>
+      {/* portfolio summary card */}
+      <div style={{
+        margin: "16px", padding: 22, borderRadius: 24,
+        background: `linear-gradient(155deg, ${T.surfaceHi} 0%, ${T.surface} 60%)`,
+        border: `1px solid ${T.border}`, position: "relative", overflow: "hidden",
+      }}>
+        <div style={{
+          position: "absolute", top: -60, right: -40, width: 200, height: 200,
+          borderRadius: "50%", background: T.accent, opacity: 0.10, filter: "blur(40px)",
+        }}/>
+        <div style={{ position: "relative", zIndex: 1 }}>
+          <div style={{
+            fontFamily: FONT.sans, fontSize: 11, color: T.textDim,
+            marginBottom: 6, letterSpacing: 0.6, fontWeight: 700,
+          }}>VALOR DE CARTERA</div>
+          <div style={{
+            fontFamily: FONT.display, fontSize: 36, fontWeight: 700, color: T.text,
+            letterSpacing: -1.2, fontVariantNumeric: "tabular-nums", marginBottom: 10,
+          }}>
+            US${fmtMoney(portfolio.totalUsd, "USD")}
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <Pill T={T} color={T.accent} bg={T.accentSoft}>+US$160.27</Pill>
+            <Pill T={T} color={T.accent} bg={T.accentSoft}>+2.34%</Pill>
+            <Pill T={T}>30 días</Pill>
+          </div>
+        </div>
+      </div>
+
+      {/* holdings */}
+      <div style={{ margin: "0 16px 16px" }}>
+        <SectionHead T={T} title="Mis posiciones" action={`${portfolio.holdings.length} activos`} />
+      </div>
+      {portfolio.holdings.length === 0 ? (
+        <Empty T={T}
+          title="Aún no tenés posiciones"
+          subtitle="Tocá Mercado para ver activos disponibles y hacer tu primera compra."
+        />
+      ) : (
+        <div style={{ margin: "0 16px" }}>
+          {portfolio.holdings.map((h, i) => (
+            <AssetRow
+              key={h.ticker}
+              T={T}
+              asset={h}
+              subline={`${h.qty} u · prom. ${h.currency === "ARS" ? "$" : "US$"}${fmtMoney(h.avgCost, h.currency)}`}
+              rightTop={`${h.currency === "ARS" ? "$" : "US$"}${fmtMoney(h.value, h.currency)}`}
+              rightBottom={fmtPct(h.gainPct)}
+              rightBottomColor={h.gainPct >= 0 ? T.accent : T.danger}
+              isLast={i === portfolio.holdings.length - 1}
+              onClick={() => onSelectAsset(h)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------
+// Mercado — full universe with category filter.
 // ----------------------------------------------------------
 function MercadoView({ T, assets, onSelectAsset }) {
   const [cat, setCat] = useState("Todas");
@@ -196,10 +264,11 @@ function MercadoView({ T, assets, onSelectAsset }) {
   const filtered = cat === "Todas" ? assets : assets.filter((a) => a.category === cat);
 
   if (assets.length === 0) return <Loader T={T}/>;
+
   return (
-    <>
+    <div style={{ paddingBottom: 110 }}>
       <div style={{
-        display: "flex", gap: 8, padding: "0 16px 12px",
+        display: "flex", gap: 8, padding: "16px 16px 12px",
         overflowX: "auto", scrollbarWidth: "none",
       }}>
         {cats.map((c) => {
@@ -231,36 +300,29 @@ function MercadoView({ T, assets, onSelectAsset }) {
           />
         ))}
       </div>
-    </>
+    </div>
   );
 }
 
 // ----------------------------------------------------------
-// Lista — watchlists. For now just shows the first list with its
-// tickers; the full watchlist mgmt UI is Phase 2.5 / future.
+// Watchlist — first list (full mgmt UI is Phase 2.5).
 // ----------------------------------------------------------
-function ListaView({ T, watchlists, assets, onSelectAsset }) {
+function WatchlistView({ T, watchlists, assets, onSelectAsset }) {
   if (!watchlists.length) {
-    return (
-      <Empty T={T}
-        title="Sin listas"
-        subtitle="Las listas te dejan agrupar activos para seguirlos. Próximamente."
-      />
-    );
+    return <Empty T={T} title="Sin listas" subtitle="Próximamente." />;
   }
   const list = watchlists[0];
   const items = list.tickers.map((tk) => assets.find((a) => a.ticker === tk)).filter(Boolean);
   return (
-    <div style={{ margin: "0 16px" }}>
-      <SectionHead T={T} title={list.name} action={`${items.length} activos`} />
-      <div style={{ marginTop: 8 }}>
-        {items.length === 0 ? (
-          <Empty T={T}
-            title="Lista vacía"
-            subtitle="Agregá activos desde Mercado tocando el ícono de estrella."
-          />
-        ) : (
-          items.map((a, i) => (
+    <div style={{ paddingBottom: 110 }}>
+      <div style={{ margin: "16px" }}>
+        <SectionHead T={T} title={list.name} action={`${items.length} activos`} />
+      </div>
+      {items.length === 0 ? (
+        <Empty T={T} title="Lista vacía" subtitle="Agregá activos desde Mercado." />
+      ) : (
+        <div style={{ margin: "0 16px" }}>
+          {items.map((a, i) => (
             <AssetRow
               key={a.ticker}
               T={T}
@@ -272,19 +334,119 @@ function ListaView({ T, watchlists, assets, onSelectAsset }) {
               isLast={i === items.length - 1}
               onClick={() => onSelectAsset(a)}
             />
-          ))
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------
+// Órdenes — list of submitted orders, with cancel button on open ones.
+// ----------------------------------------------------------
+function OrdenesView({ T, orders, onRefresh }) {
+  const [busyId, setBusyId] = useState(null);
+
+  async function cancel(orderId) {
+    setBusyId(orderId);
+    try {
+      await brokerApi.cancelOrder(orderId);
+      await onRefresh();
+    } catch (e) { alert(e.message); }
+    setBusyId(null);
+  }
+
+  if (orders.length === 0) {
+    return (
+      <div style={{ padding: "16px", paddingBottom: 110 }}>
+        <SectionHead T={T} title="Órdenes" action="0 totales" />
+        <Empty T={T} title="No hay órdenes" subtitle="Tus operaciones aparecen acá una vez que las envíes." />
+      </div>
+    );
+  }
+
+  // Group by status: open first, then filled, then cancelled.
+  const ordered = [
+    ...orders.filter((o) => o.status === "open"),
+    ...orders.filter((o) => o.status === "filled"),
+    ...orders.filter((o) => o.status === "cancelled"),
+  ];
+
+  return (
+    <div style={{ paddingBottom: 110 }}>
+      <div style={{ margin: "16px" }}>
+        <SectionHead T={T} title="Órdenes" action={`${orders.length} totales`} />
+      </div>
+      <div style={{
+        margin: "0 16px", borderRadius: 18,
+        background: T.surface, border: `1px solid ${T.border}`, overflow: "hidden",
+      }}>
+        {ordered.map((o, i) => (
+          <OrderRow
+            key={o.id} T={T} order={o}
+            isLast={i === ordered.length - 1}
+            busy={busyId === o.id}
+            onCancel={() => cancel(o.id)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OrderRow({ T, order, isLast, busy, onCancel }) {
+  const sideColor = order.side === "buy" ? T.accent : T.danger;
+  const sideSoft  = order.side === "buy" ? T.accentSoft : T.dangerSoft;
+  const sideLabel = order.side === "buy" ? "COMPRA" : "VENTA";
+  const statusLabel =
+    order.status === "open" ? "Pendiente"
+    : order.status === "filled" ? "Ejecutada"
+    : "Cancelada";
+  const statusColor =
+    order.status === "open" ? T.warn
+    : order.status === "filled" ? T.accent
+    : T.textMute;
+
+  return (
+    <div style={{
+      padding: "14px 16px", display: "flex", alignItems: "center", gap: 12,
+      borderBottom: isLast ? "none" : `1px solid ${T.border}`,
+    }}>
+      <Pill T={T} color={sideColor} bg={sideSoft}>{sideLabel}</Pill>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, color: T.text,
+        }}>
+          {order.ticker} <span style={{ color: T.textMute, fontWeight: 500 }}>· {order.qty} u</span>
+        </div>
+        <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute }}>
+          {order.type === "market" ? "Mercado" : `Límite $${fmtMoney(order.limitPrice || 0)}`}
+          {" · "}
+          {order.atLabel}
+        </div>
+      </div>
+      <div style={{ textAlign: "right" }}>
+        <div style={{ fontFamily: FONT.mono, fontSize: 12, fontWeight: 700, color: statusColor }}>
+          {statusLabel}
+        </div>
+        {order.status === "open" && (
+          <button onClick={onCancel} disabled={busy} style={{
+            marginTop: 4, padding: "4px 10px", borderRadius: 8,
+            background: "transparent", border: `1px solid ${T.border}`,
+            color: T.danger, fontFamily: FONT.sans, fontSize: 11, fontWeight: 600,
+            cursor: busy ? "default" : "pointer",
+          }}>Cancelar</button>
         )}
       </div>
     </div>
   );
 }
 
-// ----------------------------------------------------------
-// Reusable row: tile + ticker + sublabel + right values.
-// ----------------------------------------------------------
+// ============================================================
+// Shared row + AssetSheet + helpers
+// ============================================================
+
 function AssetRow({ T, asset, subline, rightTop, rightBottom, rightBottomColor, isLast, onClick }) {
-  // Pick a deterministic tint per ticker so each asset has a stable
-  // visual identity. Hash ticker → hue.
   const hue = hashString(asset.ticker) % 360;
   const tile = `oklch(0.55 0.14 ${hue})`;
   return (
@@ -296,12 +458,10 @@ function AssetRow({ T, asset, subline, rightTop, rightBottom, rightBottomColor, 
       cursor: "pointer", textAlign: "left",
     }}>
       <div style={{
-        width: 40, height: 40, borderRadius: 12,
-        background: tile,
+        width: 40, height: 40, borderRadius: 12, background: tile,
         display: "flex", alignItems: "center", justifyContent: "center",
         color: "#06170D",
-        fontFamily: FONT.mono, fontSize: 11, fontWeight: 800,
-        flexShrink: 0,
+        fontFamily: FONT.mono, fontSize: 11, fontWeight: 800, flexShrink: 0,
       }}>{asset.ticker.slice(0, 4)}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
@@ -313,28 +473,18 @@ function AssetRow({ T, asset, subline, rightTop, rightBottom, rightBottomColor, 
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}>{subline}</div>
       </div>
-      {/* Sparkline visual placeholder — same accent color, distinguishes
-          gainers (bull) from losers (bear). Real series come later. */}
       <Sparkline
         data={(rightBottom || "").startsWith("-") ? SAMAS_SPARKS.bear : SAMAS_SPARKS.bull}
-        color={rightBottomColor}
-        w={50} h={20} sw={1.5}
+        color={rightBottomColor} w={50} h={20} sw={1.5}
       />
       <div style={{ textAlign: "right", marginLeft: 8, minWidth: 70 }}>
-        <div style={{
-          fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: T.text,
-        }}>{rightTop}</div>
-        <div style={{
-          fontFamily: FONT.mono, fontSize: 11, fontWeight: 600, color: rightBottomColor,
-        }}>{rightBottom}</div>
+        <div style={{ fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: T.text }}>{rightTop}</div>
+        <div style={{ fontFamily: FONT.mono, fontSize: 11, fontWeight: 600, color: rightBottomColor }}>{rightBottom}</div>
       </div>
     </button>
   );
 }
 
-// ----------------------------------------------------------
-// AssetSheet — buy/sell modal.
-// ----------------------------------------------------------
 function AssetSheet({ T, asset, onClose, onDone }) {
   const [side, setSide] = useState("buy");
   const [qtyStr, setQtyStr] = useState("");
@@ -403,7 +553,6 @@ function AssetSheet({ T, asset, onClose, onDone }) {
           padding: "8px 20px",
           paddingBottom: "calc(env(safe-area-inset-bottom) + 24px)",
         }}>
-          {/* Price + delta */}
           <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 16 }}>
             <span style={{
               fontFamily: FONT.display, fontSize: 28, fontWeight: 700, color: T.text,
@@ -420,7 +569,6 @@ function AssetSheet({ T, asset, onClose, onDone }) {
             <DoneScreen T={T} done={done} side={side} qty={qty} ticker={asset.ticker} onClose={onDone} />
           ) : (
             <>
-              {/* Side toggle */}
               <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
                 {[
                   { id: "buy",  label: "Comprar", color: T.accent,  soft: T.accentSoft },
@@ -439,7 +587,6 @@ function AssetSheet({ T, asset, onClose, onDone }) {
                 })}
               </div>
 
-              {/* Type toggle */}
               <div style={{
                 display: "flex", gap: 4, padding: 4,
                 background: T.surface, border: `1px solid ${T.border}`,
@@ -462,17 +609,14 @@ function AssetSheet({ T, asset, onClose, onDone }) {
                 })}
               </div>
 
-              {/* Qty input */}
               <NumberInput T={T} label="Cantidad" value={qtyStr} onChange={setQtyStr} placeholder="0" />
 
-              {/* Limit price input — only when type=limit */}
               {type === "limit" && (
                 <div style={{ marginTop: 12 }}>
                   <NumberInput T={T} label={`Precio límite (${asset.currency})`} value={limitStr} onChange={setLimitStr} placeholder={String(asset.price)} />
                 </div>
               )}
 
-              {/* Estimated total */}
               <div style={{
                 marginTop: 14, padding: "12px 14px", borderRadius: 12,
                 background: T.surface, border: `1px solid ${T.border}`,
@@ -503,7 +647,6 @@ function AssetSheet({ T, asset, onClose, onDone }) {
   );
 }
 
-// Done screen inside AssetSheet — shown after a successful order.
 function DoneScreen({ T, done, side, qty, ticker, onClose }) {
   return (
     <div style={{ textAlign: "center", padding: "24px 0 8px" }}>
@@ -535,9 +678,6 @@ function DoneScreen({ T, done, side, qty, ticker, onClose }) {
   );
 }
 
-// ----------------------------------------------------------
-// Tiny shared helpers (loader, empty, hash, NumberInput)
-// ----------------------------------------------------------
 function Loader({ T }) {
   return (
     <div style={{ padding: 30, textAlign: "center", color: T.textMute, fontFamily: FONT.sans, fontSize: 13 }}>
@@ -545,6 +685,7 @@ function Loader({ T }) {
     </div>
   );
 }
+
 function Empty({ T, title, subtitle }) {
   return (
     <div style={{ margin: "0 16px", padding: "32px 24px", borderRadius: 22, background: T.surface, border: `1px solid ${T.border}`, textAlign: "center" }}>
@@ -553,11 +694,13 @@ function Empty({ T, title, subtitle }) {
     </div>
   );
 }
+
 function hashString(s) {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = ((h << 5) - h) + s.charCodeAt(i);
   return Math.abs(h);
 }
+
 function NumberInput({ T, label, value, onChange, placeholder }) {
   return (
     <label style={{ display: "block" }}>

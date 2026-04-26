@@ -16,7 +16,7 @@ import React, { useState } from "react";
 import { SAMAS_THEME, FONT } from "./theme.js";
 import { SamasTabBar } from "./shared.jsx";
 import { WalletPage } from "./Wallet.jsx";
-import { BrokerPage } from "./Broker.jsx";
+import { BrokerShell } from "./Broker.jsx";
 
 export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleDark }) {
   const [tab, setTab] = useState("wallet");
@@ -35,6 +35,23 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
     ? "calc(env(safe-area-inset-bottom) + 12px)"
     : 12;
 
+  // ---------- short-circuit: Broker is a NESTED sub-shell ----------
+  // When the user taps "Invertir", we replace the entire main shell
+  // with BrokerShell. BrokerShell has its OWN bottom nav (Portafolio
+  // / Mercado / Watchlist / Órdenes) and a back arrow at the top to
+  // return us here. The main 4-tab nav is hidden while inside Broker
+  // — this gives the iOS-style "drill down into a section" feel the
+  // legacy app had, without coupling the two navs together.
+  if (tab === "broker") {
+    return (
+      <BrokerShell
+        T={T}
+        isNativeApp={isNativeApp}
+        onBack={() => setTab("wallet")}
+      />
+    );
+  }
+
   const renderTab = () => {
     switch (tab) {
       case "wallet":
@@ -49,8 +66,6 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
             onToggleDark={onToggleDark}
           />
         );
-      case "broker":
-        return <BrokerPage T={T} />;
       case "social":
         return <Placeholder T={T} title="Social" subtitle="Feed de traders y trades" />;
       case "news":
@@ -75,19 +90,13 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
       <div style={{
         flex: 1,
         overflowY: "auto",
-        // overscrollBehavior:contain prevents the rubber-band on iOS
-        // from pulling the parent — without it, dragging past the top
-        // of a list jiggles the whole shell including the tab bar.
         overscrollBehavior: "contain",
         WebkitOverflowScrolling: "touch",
       }}>
         {renderTab()}
       </div>
 
-      {/* ---------- floating tab bar ----------
-          Sits absolute over the scroll container so it stays put while
-          the page underneath scrolls. The page reserves bottom space
-          via its own paddingBottom so content doesn't end up under it. */}
+      {/* ---------- floating tab bar ---------- */}
       <SamasTabBar tab={tab} setTab={setTab} T={T} bottomInset={tabBarBottom} />
     </div>
   );
