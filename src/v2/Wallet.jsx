@@ -26,7 +26,7 @@ import {
 } from "./shared.jsx";
 import { wallet as walletApi, card as cardApi, broker as brokerApi } from "./api/index.js";
 
-export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible }) {
+export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark }) {
   // ----------- data state -----------
   const [balance, setBalance] = useState(null);
   const [fx, setFx] = useState(null);
@@ -83,6 +83,11 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible }
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          {onToggleDark && (
+            <ChromeBtn T={T} onClick={onToggleDark}>
+              {isDark ? <Ico.Sun size={18}/> : <Ico.Moon size={18}/>}
+            </ChromeBtn>
+          )}
           <ChromeBtn T={T}><Ico.Search size={18}/></ChromeBtn>
           <ChromeBtn T={T} dot><Ico.Bell size={18}/></ChromeBtn>
         </div>

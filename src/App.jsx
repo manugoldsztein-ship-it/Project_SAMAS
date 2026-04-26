@@ -6842,7 +6842,7 @@ export default function SAMASApp() {
       {(isNativeApp || viewMode === "v2") && loggedIn ? (
         isNativeApp ? (
           <ErrorBoundary>
-            <SamasShell user={displayUser} isDark={isDark} isNativeApp={true}/>
+            <SamasShell user={displayUser} isDark={isDark} isNativeApp={true} onToggleDark={() => setIsDark(d => !d)}/>
           </ErrorBoundary>
         ) : (
           <div style={{ display:"flex", justifyContent:"center", padding: "20px" }}>
@@ -6854,7 +6854,7 @@ export default function SAMASApp() {
               boxShadow: "0 40px 80px rgba(0,0,0,0.7)",
             }}>
               <ErrorBoundary>
-                <SamasShell user={displayUser} isDark={isDark} isNativeApp={false}/>
+                <SamasShell user={displayUser} isDark={isDark} isNativeApp={false} onToggleDark={() => setIsDark(d => !d)}/>
               </ErrorBoundary>
             </div>
           </div>

@@ -38,6 +38,8 @@ export const Ico = {
   Trend:  (p) => <Icon d="M23 6l-9.5 9.5-5-5L1 18M17 6h6v6" {...p}/>,
   Fire:   (p) => <Icon d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1.4-2.6 0-5.6 2-7 .5 2.5 2 4.5 4 6 2 1.5 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.5.5-3 1.5-4.5.4 1.7 1.5 3 3 3.5z" {...p}/>,
   Back:   (p) => <Icon d="M19 12H5m7 7l-7-7 7-7" {...p}/>,
+  Sun:  (p) => <Icon d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10z" {...p}/>,
+  Moon: (p) => <Icon d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" {...p}/>,
   Logo: ({ size = 28, color = "currentColor" }) => (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
       <path d="M16 2L4 9v14l12 7 12-7V9L16 2z" stroke={color} strokeWidth="1.8" strokeLinejoin="round"/>
