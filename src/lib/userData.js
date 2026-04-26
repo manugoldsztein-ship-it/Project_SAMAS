@@ -439,6 +439,26 @@ export async function saveViewMode(userId, viewMode) {
 // Returns nulls for sections that errored, so partial loads don't
 // kill the whole app. Caller decides what to do with each piece.
 // -----------------------------------------------------------
+// -----------------------------------------------------------
+// SESSION MANAGEMENT — list / revoke active auth sessions
+// -----------------------------------------------------------
+// Both call RPCs defined in supabase/sessions_rpc.sql. The RPCs
+// are SECURITY DEFINER so they can read/write the auth schema
+// (which is normally locked away from authenticated users). The
+// WHERE user_id = auth.uid() inside the RPC body keeps each user
+// limited to their own sessions.
+
+export async function listMySessions() {
+  const { data, error } = await supabase.rpc("list_my_sessions");
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+export async function revokeMySession(sessionId) {
+  const { error } = await supabase.rpc("revoke_my_session", { session_id: sessionId });
+  if (error) throw error;
+}
+
 export async function loadUserPortfolio(userId) {
   const [holdings, orders, balance, watchlists, plan, risk, prefs] = await Promise.allSettled([
     loadHoldings(userId),

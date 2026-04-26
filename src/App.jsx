@@ -19,7 +19,7 @@ import { useSupabaseSession, SupabaseAuthFlow } from "./auth/SupabaseAuth.jsx";
 // User data: holdings / orders / balance now live in Supabase. The UI
 // keeps using the same local state shapes — userData.js is the
 // translation + sync layer.
-import { loadUserPortfolio, saveHoldings, saveBalance, appendOrder, saveWatchlists, savePlan, clearPlans, saveStopLosses, savePriceAlerts, saveRecurringAporte, savePortfolioHistory, saveLang, saveShowUSD, saveUiDark, saveViewMode } from "./lib/userData.js";
+import { loadUserPortfolio, saveHoldings, saveBalance, appendOrder, saveWatchlists, savePlan, clearPlans, saveStopLosses, savePriceAlerts, saveRecurringAporte, savePortfolioHistory, saveLang, saveShowUSD, saveUiDark, saveViewMode, listMySessions, revokeMySession } from "./lib/userData.js";
 // PIN gate: standard fintech pattern (Brubank, Ualá). Once the user has
 // a valid Supabase session, the app still locks on every open behind a
 // 4-digit PIN stored hashed in localStorage. Prevents shoulder-surfers
@@ -5086,6 +5086,158 @@ function LoginScreen({ onLogin, onSignup, emailjsCfg, C, isWeb = false }) {
 // ============================================================
 // PROFILE SHEET
 // ============================================================
+// ============================================================
+// SESSIONS — list active sessions across devices, revoke remotely
+// ============================================================
+// Reads from auth.sessions via the list_my_sessions RPC (defined in
+// supabase/sessions_rpc.sql). Each row knows whether it's the current
+// session (the one this app instance is using) so we can disable
+// revoke for it — otherwise the user would log themselves out
+// mid-tap, which is never the user's intent.
+function SessionsSection({ C }) {
+  const [items, setItems]     = useState(null);   // null=loading, []=none, [...]=data
+  const [err, setErr]         = useState(null);
+  const [revoking, setRevoking] = useState(null);  // session id currently being revoked
+  const [expanded, setExpanded] = useState(false);
+
+  const load = async () => {
+    setErr(null);
+    setItems(null);
+    try {
+      const rows = await listMySessions();
+      setItems(rows);
+    } catch (e) {
+      console.error("[sessions] load:", e);
+      setErr(e?.message || "error");
+      setItems([]);
+    }
+  };
+
+  useEffect(() => {
+    if (expanded) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded]);
+
+  const revoke = async (id) => {
+    setRevoking(id);
+    try {
+      await revokeMySession(id);
+      // Optimistic: drop the row immediately.
+      setItems(prev => (prev || []).filter(s => s.id !== id));
+    } catch (e) {
+      console.error("[sessions] revoke:", e);
+      alert(e?.message || "No pudimos cerrar esa sesión.");
+    }
+    setRevoking(null);
+  };
+
+  // Best-effort device-name parser from User-Agent. iOS / Android /
+  // Mac / Windows are recognizable enough that the user can pick out
+  // 'oh that's my old phone'. Falls back to 'Otro dispositivo' for
+  // anything weird (curl, scrapers, etc.).
+  const parseDevice = (ua) => {
+    if (!ua) return "Dispositivo desconocido";
+    if (/iPhone/.test(ua))  return "iPhone";
+    if (/iPad/.test(ua))    return "iPad";
+    if (/Macintosh/.test(ua)) return "Mac";
+    if (/Android/.test(ua)) return "Android";
+    if (/Windows/.test(ua)) return "Windows";
+    if (/Linux/.test(ua))   return "Linux";
+    return "Otro dispositivo";
+  };
+  const fmtDate = (iso) => {
+    if (!iso) return "";
+    try {
+      const d = new Date(iso);
+      const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+      if (days === 0) return "Hoy";
+      if (days === 1) return "Ayer";
+      if (days < 7)   return `hace ${days} días`;
+      return d.toLocaleDateString("es-AR", { day:"numeric", month:"short" });
+    } catch { return iso; }
+  };
+
+  const wrapperStyle = {
+    background: C.creamDk, border: "1.5px solid " + C.border, borderRadius: 14,
+    padding: "13px 16px", marginBottom: 8, fontFamily: "inherit",
+  };
+
+  if (!expanded) {
+    return (
+      <button
+        onClick={() => setExpanded(true)}
+        style={{ ...wrapperStyle, width: "100%", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", textAlign: "left" }}
+      >
+        <div style={{ width: 36, height: 36, borderRadius: 10, background: C.accent + "22", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Dispositivos y sesiones</div>
+          <div style={{ fontSize: 11, color: C.textLt }}>Ver dónde tenés tu cuenta abierta</div>
+        </div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    );
+  }
+
+  return (
+    <div style={wrapperStyle}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <div style={{ flex: 1, fontSize: 13, fontWeight: 700, color: C.text }}>Dispositivos y sesiones</div>
+        <button onClick={load} disabled={items === null} title="Actualizar" style={{ background: "transparent", border: "1px solid " + C.border, borderRadius: 8, padding: "4px 8px", fontSize: 11, color: C.textMd, cursor: "pointer", fontFamily: "inherit" }}>↻</button>
+        <button onClick={() => setExpanded(false)} style={{ background: "transparent", border: "none", color: C.textMd, cursor: "pointer", fontSize: 16, padding: 0, fontFamily: "inherit" }}>✕</button>
+      </div>
+
+      {items === null && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {[0, 1].map(i => <div key={i} style={{ height: 50, background: C.card, border: "1px solid " + C.border, borderRadius: 10, opacity: 0.5 }}/>)}
+        </div>
+      )}
+      {err && items && items.length === 0 && (
+        <div style={{ fontSize: 11, color: C.red, padding: "8px 0" }}>{err}</div>
+      )}
+      {items && items.length === 0 && !err && (
+        <div style={{ fontSize: 11, color: C.textLt, padding: "10px 0", textAlign: "center" }}>No hay sesiones activas para mostrar.</div>
+      )}
+      {items && items.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {items.map(s => {
+            const isCurrent = !!s.is_current;
+            const device = parseDevice(s.user_agent);
+            return (
+              <div key={s.id} style={{ background: C.card, border: "1px solid " + (isCurrent ? C.accent + "55" : C.border), borderRadius: 10, padding: "10px 12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: (isCurrent ? C.accent : C.textLt) + "22", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={isCurrent ? C.accent : C.textMd} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{device}</span>
+                      {isCurrent && <span style={{ fontSize: 9, fontWeight: 800, color: C.accent, background: C.accent + "22", padding: "1px 6px", borderRadius: 4 }}>ACTUAL</span>}
+                    </div>
+                    <div style={{ fontSize: 10, color: C.textLt, marginTop: 2 }}>
+                      {s.ip ? `${s.ip} · ` : ""}Última actividad: {fmtDate(s.updated_at || s.created_at)}
+                    </div>
+                  </div>
+                  {!isCurrent && (
+                    <button
+                      onClick={() => revoke(s.id)}
+                      disabled={revoking === s.id}
+                      style={{ background: "transparent", border: "1px solid " + C.red + "55", color: C.red, borderRadius: 8, padding: "5px 9px", fontSize: 11, fontWeight: 700, cursor: revoking === s.id ? "default" : "pointer", fontFamily: "inherit", flexShrink: 0 }}
+                    >
+                      {revoking === s.id ? "..." : "Cerrar"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProfileSheet({ displayUser, uiMode, onChangeUiMode, onResetAccount, onResetPin, onClose, onLogout, onToggleDark, isDark, lang, setLang, C }) {
   useEscapeKey(onClose);
   // U = the authenticated user (fallback to DEMO_USER shape if no real
@@ -5369,7 +5521,16 @@ function ProfileSheet({ displayUser, uiMode, onChangeUiMode, onResetAccount, onR
           </button>
         )}
 
-        {onResetAccount && (
+        {/* Active sessions / device management. Always visible —
+            user should be able to see + revoke logins from any
+            other device they own. */}
+        <SessionsSection C={C}/>
+
+        {/* Account-reset is destructive and intentionally hidden on
+            native to nudge the user toward doing it from the web,
+            where they can see the full picture. The button still
+            renders in browser preview / desktop dashboards. */}
+        {onResetAccount && !isNativeApp && (
           <button
             onClick={async () => {
               const ok = await confirm({
@@ -5380,6 +5541,7 @@ function ProfileSheet({ displayUser, uiMode, onChangeUiMode, onResetAccount, onR
                 danger: true,
               });
               if (ok) {
+                onResetAccount();
               }
             }}
             style={{ width:"100%", marginTop:4, background: C.red+"14", border:"1.5px solid "+C.red+"55", borderRadius:12, padding:"12px", display:"flex", alignItems:"center", justifyContent:"center", gap:8, fontWeight:700, fontSize:13, cursor:"pointer", color:C.red, fontFamily:"inherit" }}
