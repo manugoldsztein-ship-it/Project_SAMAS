@@ -60,6 +60,25 @@ export async function initNative() {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     });
   } catch (e) { console.warn("[native] backbutton:", e); }
+
+  // Keyboard handling — when the iOS keyboard appears, scroll the
+  // focused input into view so it isn't hidden behind the keyboard.
+  // The @capacitor/keyboard plugin (configured in capacitor.config.json
+  // with resize: body) auto-resizes the webview, but inputs that are
+  // already off-screen still need a scroll nudge.
+  try {
+    document.addEventListener("focusin", (e) => {
+      const el = e.target;
+      if (!el || !(el.matches?.("input, textarea, select"))) return;
+      // Wait one frame so the keyboard has time to start animating
+      // before we measure positions.
+      setTimeout(() => {
+        try {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        } catch {}
+      }, 50);
+    });
+  } catch (e) { console.warn("[native] focus handler:", e); }
 }
 
 // ----------------------------------------------------------

@@ -1766,11 +1766,14 @@ function ArticleModal({ article, C, lang, onClose }) {
     <div
       onClick={onClose}
       style={{
-        // `absolute` (not `fixed`) so the backdrop and sheet stay
-        // contained within the app's frame in desktop preview / phone
-        // mockup wrappers. The nearest positioned ancestor (the app
-        // root) is the scrolling/overlay boundary.
-        position: "absolute", inset: 0, zIndex: 90,
+        // `fixed` on native so the backdrop covers the entire device
+        // viewport (including past the bottom-nav) — otherwise the
+        // modal is bounded by its scroll container and the CTA gets
+        // clipped behind the nav. On web preview keep `absolute` so
+        // the sheet stays inside the iPhone-mockup frame.
+        position: isNativeApp ? "fixed" : "absolute",
+        inset: 0,
+        zIndex: 9999,
         background: "rgba(0,0,0,0.7)",
         display: "flex", alignItems: "flex-end", justifyContent: "center",
         animation: "fadeIn 120ms ease-out",
@@ -1785,6 +1788,9 @@ function ArticleModal({ article, C, lang, onClose }) {
           overflow: "hidden",
           boxShadow: "0 -10px 40px rgba(0,0,0,0.4)",
           position: "relative",
+          // On native, respect the iOS home indicator zone so the
+          // CTA button stays above the gesture bar.
+          paddingBottom: isNativeApp ? "env(safe-area-inset-bottom)" : 0,
         }}
       >
         {/* drag handle */}

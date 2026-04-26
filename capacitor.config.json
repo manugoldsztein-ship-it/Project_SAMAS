@@ -20,6 +20,11 @@
       "style": "DARK",
       "backgroundColor": "#000000",
       "overlaysWebView": true
+    },
+    "Keyboard": {
+      "resize": "body",
+      "style": "DARK",
+      "resizeOnFullScreen": true
     }
   },
   "server": {
