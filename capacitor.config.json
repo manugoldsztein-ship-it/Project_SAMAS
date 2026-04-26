@@ -3,7 +3,7 @@
   "appName": "SAMAS",
   "webDir": "dist",
   "ios": {
-    "contentInset": "always",
+    "contentInset": "never",
     "scrollEnabled": true,
     "limitsNavigationsToAppBoundDomains": true
   },
