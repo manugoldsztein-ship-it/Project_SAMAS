@@ -194,6 +194,7 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true }) 
             ccy={ccy}
             setCcy={setCcy}
             proMode={proMode}
+            savedPlan={savedPlan}
             onSelectAsset={setSelectedAsset}
             onOpenAIPlan={() => setShowAIWizard(true)}
           />
@@ -241,7 +242,20 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true }) 
         <ObjectivesWizard
           C={C}
           savedPlan={savedPlan}
-          onClose={() => setShowAIWizard(false)}
+          onClose={() => {
+            setShowAIWizard(false);
+            // Belt-and-suspenders: re-read from localStorage on close.
+            // If the wizard called onSave, this is a no-op. If something
+            // skipped onSave (e.g. user hit Listo before generating),
+            // we still pick up whatever the wizard wrote.
+            try {
+              const raw = localStorage.getItem("samas_v2_ai_plan");
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && parsed.strategy) setSavedPlan(parsed);
+              }
+            } catch {}
+          }}
           onSave={(p) => {
             setSavedPlan(p);
             try { localStorage.setItem("samas_v2_ai_plan", JSON.stringify(p)); } catch {}
@@ -296,7 +310,7 @@ function SubNav({ T, tab, setTab, bottomInset }) {
 // Portafolio — total + ARS/USD toggle + ticker banner + distribución +
 // holdings + top/bottom movers + AI plan card.
 // ----------------------------------------------------------
-function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, onOpenAIPlan, proMode = true }) {
+function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, onOpenAIPlan, savedPlan, proMode = true }) {
   if (!portfolio) return <Loader T={T}/>;
 
   const ccySym = ccy === "ARS" ? "$" : "US$";
@@ -362,8 +376,10 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
       </div>
 
       {/* AI Plan card — links to the goal-planning wizard. Always
-          shown so the user can find the wizard regardless of mode. */}
-      <AIPlanCard T={T} onOpen={onOpenAIPlan} />
+          shown so the user can find the wizard regardless of mode.
+          When the user already has a saved plan, the card morphs into
+          a summary of their strategy + target. */}
+      <AIPlanCard T={T} onOpen={onOpenAIPlan} savedPlan={savedPlan} />
 
       {/* Distribución bar — % per holding of total cartera. Only in
           Pro mode (gated by the settings toggle). */}
@@ -412,6 +428,7 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
 function MercadoView({ T, assets, onSelectAsset }) {
   const [cat, setCat] = useState("Todas");
   const [query, setQuery] = useState("");
+  const [showCompare, setShowCompare] = useState(false);
   const cats = useMemo(() => {
     const s = new Set(assets.map((a) => a.category));
     return ["Todas", ...Array.from(s)];
@@ -437,9 +454,10 @@ function MercadoView({ T, assets, onSelectAsset }) {
 
   return (
     <div style={{ paddingBottom: 110 }}>
-      {/* Search input at the top of Mercado. */}
-      <div style={{ padding: "16px 16px 8px" }}>
+      {/* Search + Comparar at the top of Mercado. */}
+      <div style={{ padding: "16px 16px 8px", display: "flex", gap: 8 }}>
         <div style={{
+          flex: 1,
           display: "flex", alignItems: "center", gap: 10,
           padding: "10px 14px", borderRadius: 14,
           background: T.surface, border: `1px solid ${T.border}`,
@@ -461,6 +479,12 @@ function MercadoView({ T, assets, onSelectAsset }) {
             }}>×</button>
           )}
         </div>
+        <button onClick={() => setShowCompare(true)} style={{
+          padding: "0 14px", borderRadius: 14,
+          background: T.surface, border: `1px solid ${T.border}`,
+          color: T.text, fontFamily: FONT.sans, fontSize: 12, fontWeight: 700,
+          cursor: "pointer", whiteSpace: "nowrap",
+        }}>Comparar</button>
       </div>
 
       <div style={{
@@ -500,6 +524,195 @@ function MercadoView({ T, assets, onSelectAsset }) {
           ))
         )}
       </div>
+
+      {showCompare && (
+        <CompareSheet T={T} assets={assets} onClose={() => setShowCompare(false)} />
+      )}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------
+// CompareSheet — pick up to 3 assets and see them side-by-side. Useful
+// for "should I buy AAPL or MSFT" type decisions. Each column shows
+// price, 24h %, currency, category. Tap a chip to remove.
+// ----------------------------------------------------------
+function CompareSheet({ T, assets, onClose }) {
+  const [picked, setPicked] = useState([]);
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return assets.filter((a) => {
+      if (picked.includes(a.ticker)) return false;
+      if (!q) return true;
+      return a.ticker.toLowerCase().includes(q) || (a.name || "").toLowerCase().includes(q);
+    }).slice(0, 30);
+  }, [assets, picked, query]);
+
+  const items = picked.map((tk) => assets.find((a) => a.ticker === tk)).filter(Boolean);
+
+  function add(tk) {
+    if (picked.length >= 3) return;
+    setPicked([...picked, tk]);
+    setQuery("");
+  }
+  function remove(tk) {
+    setPicked(picked.filter((x) => x !== tk));
+  }
+
+  return (
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
+      position: "fixed", inset: 0, zIndex: 100,
+      background: "rgba(0,0,0,0.65)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+    }}>
+      <div style={{
+        width: "100%", maxWidth: 540, maxHeight: "90dvh",
+        background: T.bgElev, color: T.text,
+        borderTopLeftRadius: 28, borderTopRightRadius: 28,
+        border: `1px solid ${T.border}`, borderBottom: "none",
+        display: "flex", flexDirection: "column", overflow: "hidden",
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: "18px 20px 12px",
+          borderBottom: `1px solid ${T.border}`,
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div>
+            <div style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text }}>
+              Comparar activos
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute, marginTop: 2 }}>
+              Hasta 3 activos lado a lado
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            background: T.surface, border: `1px solid ${T.border}`,
+            width: 32, height: 32, borderRadius: 10, color: T.textMute,
+            display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Picked chips */}
+        {picked.length > 0 && (
+          <div style={{ padding: "10px 16px", display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {picked.map((tk) => (
+              <button key={tk} onClick={() => remove(tk)} style={{
+                padding: "6px 10px", borderRadius: 999,
+                background: T.accentSoft, border: `1px solid ${T.accent}`,
+                color: T.accent, fontFamily: FONT.sans, fontSize: 12, fontWeight: 700,
+                cursor: "pointer",
+              }}>{tk} ×</button>
+            ))}
+          </div>
+        )}
+
+        {/* Side-by-side comparison */}
+        {items.length > 0 && (
+          <div style={{
+            margin: "8px 16px", padding: 12, borderRadius: 14,
+            background: T.surface, border: `1px solid ${T.border}`,
+            display: "grid",
+            gridTemplateColumns: `repeat(${items.length}, 1fr)`,
+            gap: 10,
+          }}>
+            {items.map((a) => (
+              <div key={a.ticker}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: 8,
+                  background: tileForCategory(a.category),
+                  fontFamily: FONT.mono, fontSize: 9, fontWeight: 800, color: "#06170D",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  marginBottom: 8,
+                }}>{a.ticker.slice(0,4)}</div>
+                <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text }}>{a.ticker}</div>
+                <div style={{ fontFamily: FONT.sans, fontSize: 10, color: T.textMute, marginBottom: 8 }}>{a.category}</div>
+                <Stat T={T} label="Precio" value={`${a.currency === "ARS" ? "$" : "US$"}${fmtMoney(a.price, a.currency)}`} mono />
+                <Stat T={T} label="24h"
+                  value={fmtPct(a.changePct)}
+                  color={a.changePct >= 0 ? T.accent : T.danger}
+                  mono />
+                <Stat T={T} label="Moneda" value={a.currency} />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Search + add */}
+        {picked.length < 3 && (
+          <div style={{ padding: "10px 16px 0" }}>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "10px 14px", borderRadius: 12,
+              background: T.surface, border: `1px solid ${T.border}`,
+            }}>
+              <Ico.Search size={14} stroke={T.textMute}/>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Agregar activo"
+                style={{
+                  flex: 1, background: "transparent", border: "none", outline: "none",
+                  color: T.text, fontFamily: FONT.sans, fontSize: 13,
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Pickable list */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "8px 16px 16px" }}>
+          {picked.length >= 3 ? (
+            <div style={{ padding: 16, textAlign: "center", color: T.textMute, fontFamily: FONT.sans, fontSize: 12 }}>
+              Llegaste al máximo. Quitá uno para agregar otro.
+            </div>
+          ) : (
+            filtered.map((a) => (
+              <button key={a.ticker} onClick={() => add(a.ticker)} style={{
+                width: "100%", padding: "8px 4px", background: "transparent",
+                border: "none", borderBottom: `1px solid ${T.border}`,
+                display: "flex", alignItems: "center", gap: 10,
+                cursor: "pointer", textAlign: "left",
+              }}>
+                <div style={{
+                  width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+                  background: tileForCategory(a.category),
+                  fontFamily: FONT.mono, fontSize: 9, fontWeight: 800, color: "#06170D",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>{a.ticker.slice(0,4)}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text }}>{a.ticker}</div>
+                  <div style={{
+                    fontFamily: FONT.sans, fontSize: 11, color: T.textMute,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>{a.name}</div>
+                </div>
+                <div style={{ fontFamily: FONT.mono, fontSize: 11, color: a.changePct >= 0 ? T.accent : T.danger }}>
+                  {fmtPct(a.changePct)}
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Stat({ T, label, value, color, mono }) {
+  return (
+    <div style={{ marginBottom: 6 }}>
+      <div style={{ fontFamily: FONT.sans, fontSize: 9, color: T.textMute, fontWeight: 600, letterSpacing: 0.4, textTransform: "uppercase" }}>{label}</div>
+      <div style={{
+        fontFamily: mono ? FONT.mono : FONT.sans, fontSize: 12, fontWeight: 700,
+        color: color || T.text,
+      }}>{value}</div>
     </div>
   );
 }
@@ -611,7 +824,7 @@ function WatchlistView({ T, watchlists, assets, onSelectAsset, onRefresh }) {
 
       {/* Tickers */}
       {items.length === 0 ? (
-        <Empty T={T} title="Lista vacía" subtitle="Agregá activos desde Mercado." />
+        <Empty T={T} title="Lista vacía" subtitle="Tocá + Agregar activo abajo o desde Mercado." />
       ) : (
         <div style={{ margin: "0 16px" }}>
           {items.map((a, i) => (
@@ -627,6 +840,18 @@ function WatchlistView({ T, watchlists, assets, onSelectAsset, onRefresh }) {
               onClick={() => onSelectAsset(a)}
             />
           ))}
+        </div>
+      )}
+
+      {/* + Agregar activo — picker that adds an asset to this list. */}
+      {selected && (
+        <div style={{ margin: "16px" }}>
+          <button onClick={() => setModal("add-asset")} style={{
+            width: "100%", padding: 14, borderRadius: 14,
+            background: "transparent", border: `1.5px dashed ${T.border}`,
+            color: T.textMute, fontFamily: FONT.sans, fontSize: 13, fontWeight: 600,
+            cursor: "pointer",
+          }}>+ Agregar activo</button>
         </div>
       )}
 
@@ -661,6 +886,20 @@ function WatchlistView({ T, watchlists, assets, onSelectAsset, onRefresh }) {
           onClose={() => setModal(null)}
           onConfirm={async () => {
             await brokerApi.removeWatchlist(selected.id);
+            await onRefresh();
+            setModal(null);
+          }}
+        />
+      )}
+      {modal === "add-asset" && selected && (
+        <AddAssetModal
+          T={T}
+          assets={assets}
+          excludeTickers={selected.tickers}
+          listName={selected.name}
+          onClose={() => setModal(null)}
+          onPick={async (ticker) => {
+            await brokerApi.addToWatchlist(selected.id, ticker);
             await onRefresh();
             setModal(null);
           }}
@@ -801,6 +1040,9 @@ function ConfirmModal({ T, title, message, confirmLabel = "Confirmar", danger, o
 // ----------------------------------------------------------
 function OrdenesView({ T, orders, alerts, stops, holdings, onRefresh }) {
   const [busyKey, setBusyKey] = useState(null);
+  // Filter the four sections by status. "Todas" shows the full
+  // structured view (default). Other tabs collapse to a single section.
+  const [filter, setFilter] = useState("all");
 
   async function cancelOrder(orderId) {
     setBusyKey(`order:${orderId}`);
@@ -822,8 +1064,16 @@ function OrdenesView({ T, orders, alerts, stops, holdings, onRefresh }) {
   }
 
   const openOrders = orders.filter((o) => o.status === "open");
+  const filledOrders = orders.filter((o) => o.status === "filled");
+  const cancelledOrders = orders.filter((o) => o.status === "cancelled" || o.status === "canceled");
   const recentOrders = orders.filter((o) => o.status !== "open").slice(0, 20);
   const totalActive = openOrders.length + alerts.length + stops.length;
+
+  const showOrders   = filter === "all" || filter === "open";
+  const showAlerts   = filter === "all" || filter === "alerts";
+  const showStops    = filter === "all" || filter === "stops";
+  const showFilled   = filter === "all" || filter === "filled";
+  const showCancelled = filter === "cancelled";
 
   // Empty state — vertically centered in the available area.
   if (totalActive === 0 && recentOrders.length === 0) {
@@ -854,13 +1104,42 @@ function OrdenesView({ T, orders, alerts, stops, holdings, onRefresh }) {
     );
   }
 
+  const FILTERS = [
+    { id: "all",       label: "Todas" },
+    { id: "open",      label: `Pendientes${openOrders.length ? ` (${openOrders.length})` : ""}` },
+    { id: "alerts",    label: `Alertas${alerts.length ? ` (${alerts.length})` : ""}` },
+    { id: "stops",     label: `Stops${stops.length ? ` (${stops.length})` : ""}` },
+    { id: "filled",    label: "Ejecutadas" },
+    { id: "cancelled", label: "Canceladas" },
+  ];
+
   return (
     <div style={{ paddingBottom: 110 }}>
       <div style={{ margin: "16px" }}>
         <SectionHead T={T} title="Órdenes" action={`${totalActive} activas`} />
       </div>
 
-      {openOrders.length > 0 && (
+      {/* Filter pills — segmented control across all order/alert types. */}
+      <div style={{
+        display: "flex", gap: 8, padding: "0 16px 12px",
+        overflowX: "auto", scrollbarWidth: "none",
+      }}>
+        {FILTERS.map((f) => {
+          const active = f.id === filter;
+          return (
+            <button key={f.id} onClick={() => setFilter(f.id)} style={{
+              flexShrink: 0, padding: "7px 14px", borderRadius: 999,
+              background: active ? T.accentSoft : T.surface,
+              border: `1px solid ${active ? T.accent : T.border}`,
+              color: active ? T.accent : T.textMute,
+              fontFamily: FONT.sans, fontSize: 12, fontWeight: 600,
+              cursor: "pointer", whiteSpace: "nowrap",
+            }}>{f.label}</button>
+          );
+        })}
+      </div>
+
+      {showOrders && openOrders.length > 0 && (
         <Group T={T} title="Órdenes pendientes">
           {openOrders.map((o, i) => (
             <OrderRow
@@ -873,7 +1152,7 @@ function OrdenesView({ T, orders, alerts, stops, holdings, onRefresh }) {
         </Group>
       )}
 
-      {alerts.length > 0 && (
+      {showAlerts && alerts.length > 0 && (
         <Group T={T} title="Alertas de precio">
           {alerts.map((a, i) => (
             <AlertRow
@@ -886,7 +1165,7 @@ function OrdenesView({ T, orders, alerts, stops, holdings, onRefresh }) {
         </Group>
       )}
 
-      {stops.length > 0 && (
+      {showStops && stops.length > 0 && (
         <Group T={T} title="Stop losses">
           {stops.map((s, i) => (
             <StopRow
@@ -899,7 +1178,7 @@ function OrdenesView({ T, orders, alerts, stops, holdings, onRefresh }) {
         </Group>
       )}
 
-      {recentOrders.length > 0 && (
+      {filter === "all" && recentOrders.length > 0 && (
         <Group T={T} title="Histórico">
           {recentOrders.map((o, i) => (
             <OrderRow
@@ -908,6 +1187,28 @@ function OrdenesView({ T, orders, alerts, stops, holdings, onRefresh }) {
             />
           ))}
         </Group>
+      )}
+
+      {filter === "filled" && filledOrders.length > 0 && (
+        <Group T={T} title="Ejecutadas">
+          {filledOrders.map((o, i) => (
+            <OrderRow key={o.id} T={T} order={o} isLast={i === filledOrders.length - 1} />
+          ))}
+        </Group>
+      )}
+
+      {showCancelled && (
+        cancelledOrders.length > 0 ? (
+          <Group T={T} title="Canceladas">
+            {cancelledOrders.map((o, i) => (
+              <OrderRow key={o.id} T={T} order={o} isLast={i === cancelledOrders.length - 1} />
+            ))}
+          </Group>
+        ) : (
+          <div style={{ padding: 30, textAlign: "center", color: T.textMute, fontFamily: FONT.sans, fontSize: 13 }}>
+            Sin órdenes canceladas.
+          </div>
+        )
       )}
     </div>
   );
@@ -1428,6 +1729,113 @@ function AssetSheet({ T, asset, holding = null, onClose, onDone, watchlists = []
 // WatchlistPicker — modal that lets the user toggle this asset's
 // membership across all of their watchlists with checkmarks.
 // ----------------------------------------------------------
+// ----------------------------------------------------------
+// AddAssetModal — picker that lists every asset in the universe so the
+// user can add one to a specific watchlist directly from the Watchlist
+// tab (alternative to going to Mercado, opening AssetSheet, and using
+// the star icon). Includes search to find tickers fast.
+// ----------------------------------------------------------
+function AddAssetModal({ T, assets, excludeTickers = [], listName, onClose, onPick }) {
+  const [query, setQuery] = useState("");
+  const [busy, setBusy] = useState(false);
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return assets.filter((a) => {
+      if (excludeTickers.includes(a.ticker)) return false;
+      if (!q) return true;
+      return a.ticker.toLowerCase().includes(q) || (a.name || "").toLowerCase().includes(q);
+    });
+  }, [assets, excludeTickers, query]);
+
+  return (
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
+      position: "fixed", inset: 0, zIndex: 110,
+      background: "rgba(0,0,0,0.6)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+    }}>
+      <div style={{
+        width: "100%", maxWidth: 540, maxHeight: "85dvh",
+        background: T.bgElev, color: T.text,
+        borderTopLeftRadius: 28, borderTopRightRadius: 28,
+        border: `1px solid ${T.border}`, borderBottom: "none",
+        overflow: "hidden", display: "flex", flexDirection: "column",
+      }}>
+        <div style={{ padding: "20px 20px 12px" }}>
+          <div style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text, marginBottom: 4 }}>
+            Agregar a {listName || "lista"}
+          </div>
+          <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute, marginBottom: 12 }}>
+            Tocá un activo para agregarlo a esta lista.
+          </div>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 10,
+            padding: "10px 14px", borderRadius: 12,
+            background: T.surface, border: `1px solid ${T.border}`,
+          }}>
+            <Ico.Search size={16} stroke={T.textMute} />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar por ticker o nombre"
+              style={{
+                flex: 1, background: "transparent", border: "none", outline: "none",
+                color: T.text, fontFamily: FONT.sans, fontSize: 14,
+              }}
+            />
+          </div>
+        </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: "0 12px 12px" }}>
+          {filtered.length === 0 ? (
+            <div style={{ padding: 30, textAlign: "center", color: T.textMute, fontFamily: FONT.sans, fontSize: 13 }}>
+              No hay más activos para agregar.
+            </div>
+          ) : (
+            filtered.map((a, i) => (
+              <button
+                key={a.ticker}
+                disabled={busy}
+                onClick={async () => { setBusy(true); try { await onPick(a.ticker); } catch (e) { alert(e.message); setBusy(false); } }}
+                style={{
+                  width: "100%", padding: "10px 8px", background: "transparent",
+                  border: "none", borderBottom: `1px solid ${T.border}`,
+                  display: "flex", alignItems: "center", gap: 12,
+                  cursor: busy ? "default" : "pointer", textAlign: "left",
+                }}
+              >
+                <div style={{
+                  width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                  background: tileForCategory(a.category),
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "#06170D",
+                  fontFamily: FONT.mono, fontSize: 10, fontWeight: 800,
+                }}>{a.ticker.slice(0, 4)}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, color: T.text }}>
+                    {a.ticker}
+                  </div>
+                  <div style={{
+                    fontFamily: FONT.sans, fontSize: 12, color: T.textMute,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>{a.name}</div>
+                </div>
+                <div style={{ fontFamily: FONT.mono, fontSize: 12, color: T.textMute }}>
+                  {a.currency === "ARS" ? "$" : "US$"}{fmtMoney(a.price, a.currency)}
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+        <button onClick={onClose} style={{
+          padding: 14, background: T.surface, border: "none",
+          color: T.text, fontFamily: FONT.sans, fontSize: 14, fontWeight: 600,
+          cursor: "pointer",
+        }}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
 function WatchlistPicker({ T, ticker, watchlists, onClose, onChange }) {
   const [busyId, setBusyId] = useState(null);
 
@@ -1977,7 +2385,97 @@ function TickerBanner({ T, assets }) {
 // alert so the user sees the surface; we can wire the real wizard in
 // a follow-up pass once it's been ported to the v2 theme.
 // ----------------------------------------------------------
-function AIPlanCard({ T, onOpen }) {
+function AIPlanCard({ T, onOpen, savedPlan }) {
+  // If the user already ran the wizard, show a summary of their plan
+  // (strategy + objective + horizon) instead of the generic prompt.
+  // Tapping still opens the wizard so they can review or adjust.
+  if (savedPlan && savedPlan.strategy) {
+    const strategyLabel = {
+      conservadora: "Conservadora",
+      moderada: "Moderada",
+      agresiva: "Agresiva",
+    }[savedPlan.strategy] || savedPlan.strategy;
+    const stratColor = {
+      conservadora: "#0EA5E9",
+      moderada: T.accent,
+      agresiva: "#F7931A",
+    }[savedPlan.strategy] || T.accent;
+    const profile = savedPlan._profile || {};
+    const target = profile.targetAmount || 0;
+    const horizon = profile.horizonYears || 0;
+    const currency = profile.currency || "ARS";
+    const sym = currency === "USD" ? "US$" : "$";
+
+    async function share(e) {
+      e.stopPropagation();
+      const allocation = (savedPlan.allocation || [])
+        .map((a) => `• ${a.name}: ${a.percent}%`).join("\n");
+      const text = [
+        `Mi plan en SAMAS:`,
+        `Estrategia: ${strategyLabel}`,
+        `Objetivo: ${sym}${Math.round(target).toLocaleString("es-AR")} en ${horizon} ${horizon === 1 ? "año" : "años"}`,
+        ``,
+        `Asignación:`,
+        allocation,
+      ].join("\n");
+      try {
+        if (navigator.share) {
+          await navigator.share({ title: "Mi plan en SAMAS", text });
+        } else if (navigator.clipboard) {
+          await navigator.clipboard.writeText(text);
+          alert("Plan copiado al portapapeles.");
+        }
+      } catch (_) { /* user cancelled */ }
+    }
+
+    return (
+      <div onClick={onOpen || (() => {})} style={{
+        margin: "16px", padding: 16, borderRadius: 22,
+        background: `linear-gradient(135deg, ${stratColor}1F 0%, ${T.surface} 70%)`,
+        border: `1px solid ${stratColor}55`,
+        display: "flex", alignItems: "center", gap: 14, cursor: "pointer",
+      }}>
+        <div style={{
+          width: 48, height: 48, borderRadius: 12, flexShrink: 0,
+          background: T.bg, border: `1px solid ${T.border}`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          color: stratColor,
+        }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2" fill="currentColor"/>
+          </svg>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontFamily: FONT.sans, fontSize: 11, color: T.textMute,
+            letterSpacing: 0.6, fontWeight: 700, textTransform: "uppercase", marginBottom: 2,
+          }}>Tu plan · {strategyLabel}</div>
+          <div style={{
+            fontFamily: FONT.display, fontSize: 16, fontWeight: 700, color: T.text,
+            letterSpacing: -0.3,
+          }}>
+            {sym}{Math.round(target).toLocaleString("es-AR")} en {horizon} {horizon === 1 ? "año" : "años"}
+          </div>
+          <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+            Tocá para revisar o ajustar
+          </div>
+        </div>
+        <button onClick={share} aria-label="Compartir plan" style={{
+          width: 34, height: 34, borderRadius: 10, flexShrink: 0,
+          background: T.bg, border: `1px solid ${T.border}`,
+          color: T.text, display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: "pointer",
+        }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+          </svg>
+        </button>
+      </div>
+    );
+  }
+
+  // No plan yet — show the prompt to run the wizard.
   return (
     <div style={{
       margin: "16px",

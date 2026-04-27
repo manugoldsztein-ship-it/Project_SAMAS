@@ -12,24 +12,36 @@
 // end-to-end and we can iterate one tab at a time.
 // ============================================================
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { SAMAS_THEME, FONT } from "./theme.js";
 import { SamasTabBar } from "./shared.jsx";
 import { WalletPage } from "./Wallet.jsx";
 import { BrokerShell } from "./Broker.jsx";
+import { SocialPage } from "./Social.jsx";
+import { Onboarding } from "./Onboarding.jsx";
+// 2FA enrollment from the legacy auth code. Same component, hosted in
+// a v2-themed modal so the Authenticator-app TOTP setup feels native
+// to the new UI.
+import { MfaEnrollSection } from "../auth/Mfa.jsx";
 
 // localStorage flag for the Pro mode toggle. Default ON — power users
 // see the full broker surface (ticker banner, distribución, top movers)
 // out of the box. Flip OFF for a simpler beginner view.
 const PRO_KEY = "samas_v2_pro_mode";
 
-export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleDark }) {
+export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleDark, onLogout }) {
   const [tab, setTab] = useState("wallet");
   // balanceVisible is lifted here (not inside WalletPage) so the
   // user's choice persists when they navigate to another tab and
   // come back. Same UX as Brubank / MercadoPago.
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
+  // Onboarding shows on first launch and once dismissed it never
+  // re-appears (samas_v2_onboarded=true in localStorage).
+  const [needsOnboarding, setNeedsOnboarding] = useState(() => {
+    if (typeof localStorage === "undefined") return false;
+    return localStorage.getItem("samas_v2_onboarded") !== "true";
+  });
   const [proMode, setProMode] = useState(() => {
     if (typeof localStorage === "undefined") return true;
     const v = localStorage.getItem(PRO_KEY);
@@ -50,6 +62,17 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
   const tabBarBottom = isNativeApp
     ? "calc(env(safe-area-inset-bottom) + 12px)"
     : 12;
+
+  // ---------- short-circuit: Onboarding (first launch) ----------
+  if (needsOnboarding) {
+    return (
+      <Onboarding
+        T={T}
+        isNativeApp={isNativeApp}
+        onDone={() => setNeedsOnboarding(false)}
+      />
+    );
+  }
 
   // ---------- short-circuit: Broker is a NESTED sub-shell ----------
   // When the user taps "Invertir", we replace the entire main shell
@@ -85,7 +108,7 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
           />
         );
       case "social":
-        return <Placeholder T={T} title="Social" subtitle="Feed de traders y trades" />;
+        return <SocialPage T={T} />;
       case "news":
         return <Placeholder T={T} title="Noticias" subtitle="Mercados, Argentina, cripto" />;
       default:
@@ -117,7 +140,7 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
       {/* ---------- floating tab bar ---------- */}
       <SamasTabBar tab={tab} setTab={setTab} T={T} bottomInset={tabBarBottom} />
 
-      {/* ---------- settings sheet (Pro toggle, etc.) ---------- */}
+      {/* ---------- settings sheet (Pro toggle, 2FA, logout, etc.) ---------- */}
       {showSettings && (
         <SettingsSheet
           T={T}
@@ -126,6 +149,7 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
           setProMode={setProMode}
           isDark={isDark}
           onToggleDark={onToggleDark}
+          onLogout={onLogout}
           onClose={() => setShowSettings(false)}
           isNativeApp={isNativeApp}
         />
@@ -140,7 +164,20 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
 // full ProfileSheet from legacy, it's a focused settings panel for
 // the toggles the user actually flips often.
 // ----------------------------------------------------------
-function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onClose, isNativeApp }) {
+function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onLogout, onClose, isNativeApp }) {
+  const [show2FA, setShow2FA] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
+
+  // Adapter: map v2 theme `T` -> legacy theme `C` shape that the
+  // MfaEnrollSection expects. Same trick as the AI wizard.
+  const C = useMemo(() => ({
+    bg: T.bgElev, card: T.surface, creamDk: T.surface,
+    border: T.border, accent: T.accent,
+    text: T.text, textMd: T.textMute, textLt: T.textDim,
+    green: T.accent, red: T.danger, gold: "#C9A84C",
+    isDark: true,
+  }), [T]);
+
   return (
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
       position: "fixed", inset: 0, zIndex: 100,
@@ -148,12 +185,13 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onC
       display: "flex", alignItems: "flex-end", justifyContent: "center",
     }}>
       <div style={{
-        width: "100%", maxWidth: 540,
+        width: "100%", maxWidth: 540, maxHeight: "92dvh",
         background: T.bgElev, color: T.text,
         borderTopLeftRadius: 28, borderTopRightRadius: 28,
         border: `1px solid ${T.border}`, borderBottom: "none",
         padding: "20px 20px",
         paddingBottom: isNativeApp ? "calc(env(safe-area-inset-bottom) + 24px)" : 24,
+        overflowY: "auto",
       }}>
         {/* Drag handle */}
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}>
@@ -202,6 +240,46 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onC
           />
         )}
 
+        {/* 2FA row — opens the legacy MfaEnrollSection in a sub-modal. */}
+        <button onClick={() => setShow2FA(true)} style={{
+          width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 8,
+          background: T.surface, border: `1px solid ${T.border}`,
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          cursor: "pointer", textAlign: "left",
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text }}>
+              Autenticación 2FA
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+              Recomendado · Authenticator App
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
+
+        {/* Logout row — destructive style, two-step confirm. */}
+        {onLogout && (
+          <button
+            onClick={() => setConfirmLogout(true)}
+            style={{
+              width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 8,
+              background: T.surface, border: `1px solid ${T.danger}55`,
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              cursor: "pointer", textAlign: "left",
+            }}
+          >
+            <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.danger }}>
+              Cerrar sesión
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.danger} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
+            </svg>
+          </button>
+        )}
+
         <button onClick={onClose} style={{
           width: "100%", marginTop: 14, padding: 14, borderRadius: 14,
           background: T.surface, border: `1px solid ${T.border}`,
@@ -209,6 +287,80 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onC
           cursor: "pointer",
         }}>Listo</button>
       </div>
+
+      {/* 2FA enrollment sub-sheet */}
+      {show2FA && (
+        <div onClick={(e) => { if (e.target === e.currentTarget) setShow2FA(false); }} style={{
+          position: "fixed", inset: 0, zIndex: 110,
+          background: "rgba(0,0,0,0.7)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          padding: 16,
+        }}>
+          <div style={{
+            width: "100%", maxWidth: 540, maxHeight: "92dvh",
+            background: T.bgElev, color: T.text,
+            borderRadius: 22, border: `1px solid ${T.border}`,
+            overflow: "hidden", display: "flex", flexDirection: "column",
+          }}>
+            <div style={{
+              padding: "18px 20px", display: "flex", alignItems: "center", justifyContent: "space-between",
+              borderBottom: `1px solid ${T.border}`,
+            }}>
+              <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: T.text }}>
+                Autenticación 2FA
+              </div>
+              <button onClick={() => setShow2FA(false)} style={{
+                background: T.surface, border: `1px solid ${T.border}`,
+                width: 30, height: 30, borderRadius: 10, color: T.textMute,
+                display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+            <div style={{ padding: 16, overflowY: "auto", flex: 1 }}>
+              <MfaEnrollSection C={C} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Logout confirm */}
+      {confirmLogout && (
+        <div onClick={(e) => { if (e.target === e.currentTarget) setConfirmLogout(false); }} style={{
+          position: "fixed", inset: 0, zIndex: 120,
+          background: "rgba(0,0,0,0.7)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          padding: 16,
+        }}>
+          <div style={{
+            width: "100%", maxWidth: 420,
+            background: T.bgElev, color: T.text,
+            borderRadius: 22, border: `1px solid ${T.border}`,
+            padding: 20,
+          }}>
+            <div style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text, marginBottom: 8 }}>
+              ¿Cerrar sesión?
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, lineHeight: 1.5, marginBottom: 18 }}>
+              Vas a tener que volver a ingresar email, contraseña y PIN cuando vuelvas.
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setConfirmLogout(false)} style={{
+                flex: 1, padding: 14, borderRadius: 14,
+                background: T.surface, border: `1px solid ${T.border}`,
+                color: T.text, fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, cursor: "pointer",
+              }}>Cancelar</button>
+              <button onClick={() => { setConfirmLogout(false); onClose(); onLogout(); }} style={{
+                flex: 1, padding: 14, borderRadius: 14,
+                background: T.danger, color: "#FFFFFF",
+                fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, border: "none", cursor: "pointer",
+              }}>Cerrar sesión</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

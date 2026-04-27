@@ -6846,9 +6846,36 @@ export default function SAMASApp() {
           3. Logged in, appShell === "pro" → legacy MobileApp (advanced UI)
           4. Web mobile preview → MobileApp wrapped in phone frame
           5. Web desktop → WebDashboard */}
-      {!loggedIn ? (
-        <div style={{ display:"flex", justifyContent:"center", alignItems:"center", minHeight: isNativeApp ? "100%" : "calc(100vh - 60px)" }}>
-          <div style={{ width: isNativeApp ? "100%" : 420, height: isNativeApp ? "100%" : 620, position:"relative", borderRadius: isNativeApp ? 0 : 20, overflow:"hidden" }}>
+      {sbLoading ? (
+        // While Supabase resolves the cached session, show a simple
+        // SAMAS splash so the user never sees a black void between the
+        // native splash hiding and the auth flow rendering.
+        <div style={{
+          position: isNativeApp ? "absolute" : "relative",
+          inset: isNativeApp ? 0 : "auto",
+          minHeight: isNativeApp ? undefined : "calc(100vh - 60px)",
+          display:"flex", flexDirection:"column",
+          alignItems:"center", justifyContent:"center",
+          background: C.bg, color: C.text, gap: 12,
+          fontFamily: "Inter, system-ui, sans-serif",
+        }}>
+          <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: -0.5 }}>SAMAS</div>
+          <div style={{ fontSize: 12, color: C.textMd }}>Cargando…</div>
+        </div>
+      ) : !loggedIn ? (
+        // Auth / PIN / MFA / welcome — full-bleed on native, framed on web.
+        // Native: explicit 100dvh + position:relative so the screens'
+        // own position:absolute can find a containing block with real
+        // dimensions. Earlier we tried `position:absolute; inset:0` here
+        // but that created a containing block with no explicit height
+        // on some iOS WebView layouts, leaving the PIN pad rendered but
+        // visually invisible (user could type but saw nothing).
+        isNativeApp ? (
+          <div style={{
+            position: "relative",
+            width: "100%", height: "100dvh",
+            background: C.bg,
+          }}>
             {needsAuth && <SupabaseAuthFlow C={C} session={sbSession} profile={sbProfile} onVerified={refetchProfile}/>}
             {needsMfa && <MfaChallengeView C={C} onSuccess={() => setMfaPassed(true)} onForgot={handleLogout}/>}
             {needsPinGate && (
@@ -6869,7 +6896,31 @@ export default function SAMASApp() {
               />
             )}
           </div>
-        </div>
+        ) : (
+          <div style={{ display:"flex", justifyContent:"center", alignItems:"center", minHeight:"calc(100vh - 60px)" }}>
+            <div style={{ width:420, height:620, position:"relative", borderRadius:20, overflow:"hidden" }}>
+              {needsAuth && <SupabaseAuthFlow C={C} session={sbSession} profile={sbProfile} onVerified={refetchProfile}/>}
+              {needsMfa && <MfaChallengeView C={C} onSuccess={() => setMfaPassed(true)} onForgot={handleLogout}/>}
+              {needsPinGate && (
+                <PinLockScreen
+                  C={C}
+                  storedPinHash={sbProfile?.pin_hash || null}
+                  onSavePin={handleSavePin}
+                  userEmail={sbSession?.user?.email}
+                  onSuccess={() => setPinUnlocked(true)}
+                  onForgot={handleLogout}
+                />
+              )}
+              {needsWelcome && (
+                <WelcomeChooser
+                  C={C}
+                  userId={sbSession?.user?.id}
+                  onDone={() => refetchProfile()}
+                />
+              )}
+            </div>
+          </div>
+        )
       ) : (isNativeApp || viewMode === "v2") ? (
         isNativeApp ? (
           <ErrorBoundary>
@@ -6878,6 +6929,7 @@ export default function SAMASApp() {
               isDark={isDark}
               isNativeApp={true}
               onToggleDark={() => setIsDark(d => !d)}
+              onLogout={handleLogout}
             />
           </ErrorBoundary>
         ) : (
@@ -6895,6 +6947,7 @@ export default function SAMASApp() {
                   isDark={isDark}
                   isNativeApp={false}
                   onToggleDark={() => setIsDark(d => !d)}
+                  onLogout={handleLogout}
                 />
               </ErrorBoundary>
             </div>
