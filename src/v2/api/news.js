@@ -14,6 +14,16 @@
 // ============================================================
 
 import { jitter } from "./_mock.js";
+// Real news comes from the existing Supabase Edge Function `fetch-news`
+// that we shipped in the legacy app — Finnhub for global tickers, RSS
+// fallback for Argentine sources, all cached server-side. Same wrapper
+// the legacy MobileApp used. We keep the v2 mock as a fallback for
+// when there's no auth session yet (demo mode).
+import { fetchNewsForTickers } from "../../lib/news.js";
+// Pull the user's holdings + watchlists so we can ask for news about
+// tickers they actually care about. Same broker mock everywhere else
+// uses — when the real broker API lands, this swaps automatically.
+import * as brokerApi from "./broker.js";
 
 // ----------------------------------------------------------
 // Mock catalog. The Categorized list mirrors the design's filter
@@ -75,14 +85,89 @@ const TICKER_BAR = [
 // ----------------------------------------------------------
 
 /**
- * getCategorizedNews({ category, limit }) — paginated news list.
+ * getCategorizedNews({ category, limit }) — real news from the
+ * fetch-news Edge Function, bucketed into the v2 category model.
  *
- * Production: calls the existing `fetch-news` edge function with the
- * category as a filter.
+ * The legacy Edge Function fetches per-ticker (Finnhub for global +
+ * RSS for AR sources). We feed it the user's holdings + every ticker
+ * across their watchlists, then bucket each article by ticker class:
  *
- * @returns {Promise<Array<NewsItem>>}
+ *    BTC / ETH                   → Cripto
+ *    GGAL / YPF / PAMP / BBAR... → Argentina
+ *    AAPL / NVDA / MSFT / ...    → Tech
+ *    USO / GLD / SLV / YPF       → Energía
+ *    SPY / QQQ / IWM / EWZ       → Mercados
+ *    everything else              → Mercados
+ *
+ * If the Edge Function fails (no session, network down, demo mode) we
+ * silently fall back to the curated mock catalog so the tab still has
+ * something to show.
  */
 export async function getCategorizedNews({ category = "Todo", limit = 30 } = {}) {
+  // Build the universe of "tickers I care about". Holdings come via
+  // getPortfolio (which enriches each holding with live data) and
+  // watchlists are flat ticker arrays.
+  let tickers = [];
+  try {
+    const [portfolio, watchlists] = await Promise.all([
+      brokerApi.getPortfolio ? brokerApi.getPortfolio() : Promise.resolve({ holdings: [] }),
+      brokerApi.getWatchlists ? brokerApi.getWatchlists() : Promise.resolve([]),
+    ]);
+    const set = new Set();
+    (portfolio?.holdings || []).forEach((h) => h?.ticker && set.add(h.ticker));
+    (watchlists || []).forEach((w) =>
+      (w?.tickers || []).forEach((t) => t && set.add(t))
+    );
+    tickers = Array.from(set);
+  } catch { /* fall through */ }
+
+  // No tickers OR fetch fails → use the curated mock so the user
+  // never sees an empty news tab.
+  if (tickers.length === 0) {
+    return mockFeed({ category, limit });
+  }
+
+  let real = [];
+  try {
+    real = await fetchNewsForTickers(tickers);
+  } catch (e) {
+    console.warn("[news] real fetch failed, using mock:", e?.message);
+    return mockFeed({ category, limit });
+  }
+  if (!real || real.length === 0) {
+    return mockFeed({ category, limit });
+  }
+
+  // Map from Edge Function shape -> v2 NewsItem shape, bucketed by category.
+  const items = real.map((a, i) => {
+    const tk = (a.ticker || "").toUpperCase();
+    const cat = bucketCategory(tk);
+    const at = a.published_at ? +new Date(a.published_at) : Date.now();
+    return {
+      id: a.url || `n_real_${i}`,
+      category: cat,
+      title: a.title || "",
+      summary: a.summary || "",
+      tickers: [tk].filter(Boolean),
+      source: a.source || "",
+      url: a.url || null,
+      imageUrl: a.image_url || null,
+      hot: false,
+      at,
+      timeLabel: relativeTimeShort(at),
+    };
+  });
+
+  const filtered = category === "Todo"
+    ? items
+    : items.filter((n) => n.category === category);
+  return filtered.slice(0, limit);
+}
+
+// ----------------------------------------------------------
+// Fallback for demo mode / no tickers / fetch failure.
+// ----------------------------------------------------------
+async function mockFeed({ category, limit }) {
   await jitter(150, 350);
   let rows = NEWS;
   if (category && category !== "Todo") {
@@ -99,6 +184,23 @@ export async function getCategorizedNews({ category = "Todo", limit = 30 } = {})
     at: n.at,
     timeLabel: relativeTimeShort(n.at),
   }));
+}
+
+// Bucket a ticker into the v2 News tab's category set. Hardcoded per
+// ticker class because the Edge Function doesn't return a category.
+const CRYPTO_TICKERS = new Set(["BTC", "ETH", "SOL", "ADA", "DOT", "MATIC"]);
+const AR_TICKERS = new Set(["GGAL", "YPF", "PAMP", "BBAR", "ALUA", "MIRG", "EDN", "TGSU2", "AL30", "GD30"]);
+const TECH_TICKERS = new Set(["AAPL", "NVDA", "TSLA", "MSFT", "GOOGL", "AMZN", "META", "NFLX"]);
+const ENERGY_TICKERS = new Set(["USO", "GLD", "SLV", "YPF", "PAMP", "EDN", "XOM", "CVX"]);
+const ETF_TICKERS = new Set(["SPY", "QQQ", "IWM", "EWZ", "DIA", "EFA"]);
+function bucketCategory(ticker) {
+  const t = (ticker || "").toUpperCase();
+  if (CRYPTO_TICKERS.has(t)) return "Cripto";
+  if (AR_TICKERS.has(t))     return "Argentina";
+  if (TECH_TICKERS.has(t))   return "Tech";
+  if (ENERGY_TICKERS.has(t)) return "Energía";
+  if (ETF_TICKERS.has(t))    return "Mercados";
+  return "Mercados";
 }
 
 /**

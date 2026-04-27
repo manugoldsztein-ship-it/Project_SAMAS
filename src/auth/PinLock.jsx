@@ -74,10 +74,18 @@ function Pad({ C, value, onChange, error }) {
           onChange(cleaned);
         }}
         style={{
+          // Hidden input that captures keystrokes — the visible UI is
+          // the dots above. We push it off-screen AND make the caret
+          // transparent because iOS sometimes leaks a 1-pixel blue
+          // blinking caret through opacity:0 inputs.
           position: "absolute",
           opacity: 0,
           pointerEvents: "none",
           width: 1, height: 1,
+          caretColor: "transparent",
+          color: "transparent",
+          left: -9999,
+          top: -9999,
         }}
       />
       <div
