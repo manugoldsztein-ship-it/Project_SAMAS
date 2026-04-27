@@ -26,7 +26,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { FONT, fmtMoney, fmtPct } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import { Pill, SectionHead, Sparkline, SAMAS_SPARKS } from "./shared.jsx";
-import { broker as brokerApi } from "./api/index.js";
+import { broker as brokerApi, wallet as walletApi } from "./api/index.js";
 // The Objetivos wizard is shared with the legacy MobileApp UI. It
 // expects a legacy-shape theme `C`, so we pass an adapter built from
 // the v2 theme `T` to keep its visual language in sync with the new UI.
@@ -1503,14 +1503,24 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
   // Existing alert / stop for this asset, loaded once on open.
   const [alert, setAlert] = useState(null);
   const [stop, setStop] = useState(null);
+  // Wallet balance in the asset's currency. Drives the "Disponible"
+  // line + the inline insufficient-funds warning so the user can see
+  // before tapping Review whether they can actually afford the order.
+  const [cashAvailable, setCashAvailable] = useState(null);
   useEffect(() => {
     let alive = true;
     Promise.all([
       brokerApi.getAlertFor(asset.ticker),
       brokerApi.getStopFor(asset.ticker),
-    ]).then(([a, s]) => { if (alive) { setAlert(a); setStop(s); } });
+      walletApi.getBalance(),
+    ]).then(([a, s, b]) => {
+      if (!alive) return;
+      setAlert(a); setStop(s);
+      const v = asset.currency === "ARS" ? b?.ars : b?.usd;
+      setCashAvailable(typeof v === "number" ? v : null);
+    });
     return () => { alive = false; };
-  }, [asset.ticker]);
+  }, [asset.ticker, asset.currency]);
 
   // Whether the user owns this asset (only then can they set a stop or sell).
   const ownsIt = !!holding && holding.qty > 0;
@@ -1791,17 +1801,90 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
                 </span>
               </div>
 
+              {/* Available-balance / holding hint + inline insufficient
+                  warning. Shown below the total so the user always knows
+                  whether they can afford the trade BEFORE tapping Review.
+                  - Buy: their cash balance in the asset's currency.
+                  - Sell: how many units they currently hold.
+                  When qty > available, we tint the row red and disable
+                  the Review button so they can't tap into a guaranteed
+                  rejection. */}
+              {(() => {
+                if (side === "buy") {
+                  if (cashAvailable == null) return null;
+                  const over = qty > 0 && totalEst > cashAvailable;
+                  return (
+                    <div style={{
+                      marginTop: 8, padding: "10px 14px", borderRadius: 12,
+                      background: over ? T.dangerSoft : T.surface,
+                      border: `1px solid ${over ? T.danger + "55" : T.border}`,
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                    }}>
+                      <span style={{
+                        fontFamily: FONT.sans, fontSize: 11, fontWeight: 600,
+                        color: over ? T.danger : T.textMute,
+                      }}>
+                        {over
+                          ? `Te faltan ${ccySym}${fmtMoney(totalEst - cashAvailable, asset.currency)}`
+                          : "Disponible"}
+                      </span>
+                      <span style={{
+                        fontFamily: FONT.mono, fontSize: 12, fontWeight: 700,
+                        color: over ? T.danger : T.text,
+                      }}>
+                        {ccySym}{fmtMoney(cashAvailable, asset.currency)}
+                      </span>
+                    </div>
+                  );
+                }
+                // sell
+                const haveQty = holding?.qty || 0;
+                const over = qty > 0 && qty > haveQty;
+                return (
+                  <div style={{
+                    marginTop: 8, padding: "10px 14px", borderRadius: 12,
+                    background: over ? T.dangerSoft : T.surface,
+                    border: `1px solid ${over ? T.danger + "55" : T.border}`,
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                  }}>
+                    <span style={{
+                      fontFamily: FONT.sans, fontSize: 11, fontWeight: 600,
+                      color: over ? T.danger : T.textMute,
+                    }}>
+                      {over ? `Te faltan ${qty - haveQty} u` : "Tenencia"}
+                    </span>
+                    <span style={{
+                      fontFamily: FONT.mono, fontSize: 12, fontWeight: 700,
+                      color: over ? T.danger : T.text,
+                    }}>
+                      {haveQty} {asset.ticker}
+                    </span>
+                  </div>
+                );
+              })()}
+
               {err && <div style={{ marginTop: 12, color: T.danger, fontFamily: FONT.sans, fontSize: 12 }}>{err}</div>}
 
-              <button onClick={openConfirm} disabled={qty <= 0} style={{
-                width: "100%", marginTop: 18, padding: 16, borderRadius: 14,
-                background: side === "buy" ? T.accent : T.danger,
-                color: side === "buy" ? T.accentInk : "#FFFFFF",
-                fontFamily: FONT.sans, fontSize: 15, fontWeight: 700, border: "none",
-                cursor: "pointer", opacity: qty <= 0 ? 0.6 : 1,
-              }}>
-                {tr("asset.review", lang)}
-              </button>
+              {/* Review button disabled not just on zero qty but also
+                  when the user is over their available cash / holding —
+                  no point letting them tap through to a rejection. */}
+              {(() => {
+                const overBuy  = side === "buy"  && cashAvailable != null && qty > 0 && totalEst > cashAvailable;
+                const overSell = side === "sell" && qty > 0 && qty > (holding?.qty || 0);
+                const blocked = qty <= 0 || overBuy || overSell;
+                return (
+                  <button onClick={openConfirm} disabled={blocked} style={{
+                    width: "100%", marginTop: 18, padding: 16, borderRadius: 14,
+                    background: side === "buy" ? T.accent : T.danger,
+                    color: side === "buy" ? T.accentInk : "#FFFFFF",
+                    fontFamily: FONT.sans, fontSize: 15, fontWeight: 700, border: "none",
+                    cursor: blocked ? "default" : "pointer",
+                    opacity: blocked ? 0.5 : 1,
+                  }}>
+                    {tr("asset.review", lang)}
+                  </button>
+                );
+              })()}
                 </>
               )}
             </>
