@@ -212,8 +212,30 @@ function bucketCategory(ticker) {
  * fails or the user has no session.
  */
 export async function searchNewsByTicker(query) {
-  const ticker = (query || "").trim().toUpperCase();
-  if (!ticker) return [];
+  const raw = (query || "").trim();
+  if (!raw) return [];
+  // Resolve "NVIDIA" / "Apple" / "Tesla" to their tickers. Some users
+  // type the company name instead of the symbol — the Edge Function
+  // only understands symbols, so we normalize before calling it.
+  let ticker = raw.toUpperCase();
+  try {
+    if (brokerApi.getAssets) {
+      const assets = await brokerApi.getAssets();
+      const upperRaw = raw.toUpperCase();
+      // Exact ticker match first (typical case: user typed "NVDA").
+      const exact = assets.find((a) => a.ticker.toUpperCase() === upperRaw);
+      if (exact) ticker = exact.ticker;
+      else {
+        // Name match — case-insensitive contains. "Nvidia" → NVDA,
+        // "Apple Inc" → AAPL, "tesla" → TSLA, "bitcoin" → BTC, etc.
+        const byName = assets.find((a) =>
+          (a.name || "").toLowerCase().includes(raw.toLowerCase())
+        );
+        if (byName) ticker = byName.ticker;
+      }
+    }
+  } catch { /* fall through with raw uppercase */ }
+
   let real = [];
   try {
     real = await fetchNewsForTicker(ticker);

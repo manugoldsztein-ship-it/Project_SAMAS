@@ -248,22 +248,49 @@ function QrCode({ uri, size = 200 }) {
 }
 
 // Inline 6-digit code input — splits into 6 boxes for visual clarity.
+// Includes a "Pegar" button that reads the clipboard so the user can
+// copy from Authenticator and not have to alt-tab back to read each
+// digit manually.
 function CodeInput({ C, value, onChange, error, disabled }) {
   const ref = useRef(null);
   useEffect(() => { ref.current?.focus(); }, []);
+
+  async function pasteFromClipboard() {
+    try {
+      const text = await navigator.clipboard.readText();
+      const digits = (text || "").replace(/\D/g, "").slice(0, 6);
+      if (digits) onChange(digits);
+      ref.current?.focus();
+    } catch (_) {
+      // iOS WebView may block clipboard access if the page didn't get
+      // a recent user gesture. The button click counts, but be safe.
+    }
+  }
+
   return (
-    <div onClick={() => ref.current?.focus()} style={{ display: "flex", justifyContent: "center", gap: 6, cursor: "text" }}>
-      <input
-        ref={ref}
-        type="text"
-        inputMode="numeric"
-        autoComplete="one-time-code"
-        maxLength={6}
-        value={value}
-        disabled={!!disabled}
-        onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, 6))}
-        style={{ position: "absolute", opacity: 0, pointerEvents: "none", width: 1, height: 1 }}
-      />
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+      <div onClick={() => ref.current?.focus()} style={{ display: "flex", justifyContent: "center", gap: 6, cursor: "text" }}>
+        <input
+          ref={ref}
+          type="text"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          maxLength={6}
+          value={value}
+          disabled={!!disabled}
+          onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          onPaste={(e) => {
+            // Make sure pasted strings get sanitized exactly the same
+            // way as typed digits. The default would set the raw text.
+            const text = (e.clipboardData || window.clipboardData)?.getData("text") || "";
+            const digits = text.replace(/\D/g, "").slice(0, 6);
+            if (digits) {
+              e.preventDefault();
+              onChange(digits);
+            }
+          }}
+          style={{ position: "absolute", opacity: 0, pointerEvents: "none", width: 1, height: 1, caretColor: "transparent" }}
+        />
       {[0, 1, 2, 3, 4, 5].map((i) => (
         <div
           key={i}
@@ -282,6 +309,31 @@ function CodeInput({ C, value, onChange, error, disabled }) {
           {value[i] || ""}
         </div>
       ))}
+      </div>
+
+      {/* Paste-from-clipboard button so the user doesn't need to
+          alt-tab back to Authenticator and read each digit. */}
+      <button
+        type="button"
+        onClick={pasteFromClipboard}
+        disabled={!!disabled}
+        style={{
+          padding: "6px 12px", borderRadius: 999,
+          background: "transparent",
+          border: "1px solid " + C.border,
+          color: C.textMd,
+          fontFamily: "inherit", fontSize: 11, fontWeight: 600,
+          cursor: disabled ? "default" : "pointer",
+          display: "inline-flex", alignItems: "center", gap: 6,
+        }}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+        </svg>
+        Pegar código
+      </button>
     </div>
   );
 }

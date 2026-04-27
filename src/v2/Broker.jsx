@@ -2054,7 +2054,7 @@ function AlertForm({ T, asset, existing, onSaved, onRemoved }) {
       ) : (
         <NumberInput T={T} label="Porcentaje (+ sube · − baja)"
           value={pctStr} onChange={setPctStr}
-          placeholder="5" />
+          placeholder="5" allowSign />
       )}
 
       {/* Live preview — what we'll actually save */}
@@ -2168,7 +2168,7 @@ function StopForm({ T, asset, existing, ownsIt, onSaved, onRemoved }) {
       </div>
 
       {type === "pct" ? (
-        <NumberInput T={T} label="Porcentaje (negativo)" value={pctStr} onChange={setPctStr} placeholder="-10" />
+        <NumberInput T={T} label="Porcentaje (negativo)" value={pctStr} onChange={setPctStr} placeholder="-10" allowSign />
       ) : (
         <NumberInput T={T} label={`Precio gatillo (${asset.currency})`} value={priceStr} onChange={setPriceStr} placeholder={String(asset.price * 0.9)} />
       )}
@@ -2668,15 +2668,28 @@ function hashString(s) {
   return Math.abs(h);
 }
 
-function NumberInput({ T, label, value, onChange, placeholder }) {
+function NumberInput({ T, label, value, onChange, placeholder, allowSign = false }) {
+  // Sanitize keystrokes: digits + decimal separator always allowed.
+  // When allowSign is true (% inputs for stop-loss / alert), accept a
+  // single leading "-" so the user can express negative values.
+  const sanitize = (raw) => {
+    if (allowSign) {
+      let s = raw.replace(/[^\d.,-]/g, "").replace(",", ".");
+      // Keep at most one "-", and only at position 0.
+      const isNeg = s.startsWith("-");
+      s = s.replace(/-/g, "");
+      return (isNeg ? "-" : "") + s;
+    }
+    return raw.replace(/[^\d.,]/g, "").replace(",", ".");
+  };
   return (
     <label style={{ display: "block" }}>
       <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginBottom: 6, letterSpacing: 0.4 }}>{label}</div>
       <input
         type="text"
-        inputMode="decimal"
+        inputMode={allowSign ? "text" : "decimal"}
         value={value}
-        onChange={(e) => onChange(e.target.value.replace(/[^\d.,]/g, "").replace(",", "."))}
+        onChange={(e) => onChange(sanitize(e.target.value))}
         placeholder={placeholder}
         style={{
           width: "100%", boxSizing: "border-box",
