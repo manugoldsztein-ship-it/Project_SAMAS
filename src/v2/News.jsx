@@ -209,9 +209,19 @@ export function NewsPage({ T }) {
 
       {/* Feed */}
       <div style={{ margin: "0 16px" }}>
-        {loading && items.length === 0 ? (
-          <div style={{ padding: 30, textAlign: "center", color: T.textMute, fontFamily: FONT.sans, fontSize: 13 }}>
-            Cargando noticias...
+        {loading ? (
+          <div style={{
+            padding: 30, textAlign: "center", color: T.textMute,
+            fontFamily: FONT.sans, fontSize: 13,
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 12,
+          }}>
+            <div style={{
+              width: 22, height: 22, borderRadius: 999,
+              border: `2px solid ${T.border}`, borderTopColor: T.accent,
+              animation: "samas-spin 700ms linear infinite",
+            }}/>
+            <div>{query ? `Buscando noticias de ${query.toUpperCase()}…` : "Cargando noticias…"}</div>
+            <style>{`@keyframes samas-spin { to { transform: rotate(360deg); } }`}</style>
           </div>
         ) : visible.length === 0 ? (
           <div style={{
@@ -242,9 +252,33 @@ export function NewsPage({ T }) {
 // ----------------------------------------------------------
 function NewsCard({ T, item }) {
   const [expanded, setExpanded] = useState(false);
+
+  // Open the real article URL (when item.url is present, i.e. came
+  // from the fetch-news Edge Function). On Capacitor iOS, target=_blank
+  // + window.open with the system flag pops out to Safari instead of
+  // navigating inside the WebView.
+  function openArticle() {
+    if (!item.url) return;
+    try {
+      // Capacitor recognizes _system as "open in OS browser".
+      window.open(item.url, "_system", "noopener,noreferrer");
+    } catch {
+      // Fallback for plain web preview.
+      window.open(item.url, "_blank", "noopener,noreferrer");
+    }
+  }
+
+  // Card click behavior:
+  //   - If we have a URL (real article from fetch-news) → open it.
+  //   - Otherwise (mock items) → expand the summary inline.
+  function onCardClick() {
+    if (item.url) openArticle();
+    else setExpanded((e) => !e);
+  }
+
   return (
     <button
-      onClick={() => setExpanded((e) => !e)}
+      onClick={onCardClick}
       style={{
         width: "100%", textAlign: "left",
         padding: 14, marginBottom: 8, borderRadius: 18,
@@ -252,7 +286,7 @@ function NewsCard({ T, item }) {
         cursor: "pointer", display: "block",
       }}
     >
-      {/* Top row: hot badge / category / time */}
+      {/* Top row: hot badge / category / time + open-in-browser hint */}
       <div style={{
         display: "flex", alignItems: "center", gap: 8, marginBottom: 8,
         flexWrap: "wrap",
@@ -281,7 +315,7 @@ function NewsCard({ T, item }) {
         lineHeight: 1.35, marginBottom: 6,
       }}>{item.title}</div>
 
-      {/* Summary — clamped at 2 lines unless expanded. */}
+      {/* Summary — clamped at 2 lines unless expanded (mock only). */}
       <div style={{
         fontFamily: FONT.sans, fontSize: 13, color: T.textMute,
         lineHeight: 1.5,
@@ -306,6 +340,20 @@ function NewsCard({ T, item }) {
             fontFamily: FONT.mono, fontSize: 10, fontWeight: 700,
           }}>{tk}</span>
         ))}
+        {/* "Leer →" affordance when there's a real URL. */}
+        {item.url && (
+          <span style={{
+            marginLeft: "auto",
+            display: "flex", alignItems: "center", gap: 4,
+            fontFamily: FONT.sans, fontSize: 11, fontWeight: 700, color: T.accent,
+          }}>
+            Leer
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M7 17L17 7M7 7h10v10"/>
+            </svg>
+          </span>
+        )}
       </div>
     </button>
   );
