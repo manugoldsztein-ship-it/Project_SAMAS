@@ -101,6 +101,19 @@ const V2 = {
     "broker.subnav.orders": "Órdenes",
     "news.title": "Noticias",
 
+    "broker.portfolio_value": "VALOR DE CARTERA",
+    "broker.fx.official": "Oficial",
+    "broker.holdings_title": "Mis posiciones",
+    "broker.assets_count": "{n} activos",
+    "broker.qty_avg": "prom.",
+    "broker.your_plan": "Tu plan",
+    "broker.target_in_years": "en {n} años",
+    "broker.target_in_year": "en 1 año",
+    "broker.tap_review": "Tocá para revisar o ajustar",
+    "broker.strategy.conservative": "Conservadora",
+    "broker.strategy.moderate": "Moderada",
+    "broker.strategy.aggressive": "Agresiva",
+
   },
 
   en: {
@@ -181,6 +194,19 @@ const V2 = {
     "broker.subnav.list": "Watchlist",
     "broker.subnav.orders": "Orders",
     "news.title": "News",
+
+    "broker.portfolio_value": "PORTFOLIO VALUE",
+    "broker.fx.official": "Official",
+    "broker.holdings_title": "My holdings",
+    "broker.assets_count": "{n} assets",
+    "broker.qty_avg": "avg.",
+    "broker.your_plan": "Your plan",
+    "broker.target_in_years": "in {n} years",
+    "broker.target_in_year": "in 1 year",
+    "broker.tap_review": "Tap to review or adjust",
+    "broker.strategy.conservative": "Conservative",
+    "broker.strategy.moderate": "Moderate",
+    "broker.strategy.aggressive": "Aggressive",
 
   },
 
@@ -263,6 +289,19 @@ const V2 = {
     "broker.subnav.orders": "Ordens",
     "news.title": "Notícias",
 
+    "broker.portfolio_value": "VALOR DA CARTEIRA",
+    "broker.fx.official": "Oficial",
+    "broker.holdings_title": "Minhas posições",
+    "broker.assets_count": "{n} ativos",
+    "broker.qty_avg": "méd.",
+    "broker.your_plan": "Teu plano",
+    "broker.target_in_years": "em {n} anos",
+    "broker.target_in_year": "em 1 ano",
+    "broker.tap_review": "Toque para rever ou ajustar",
+    "broker.strategy.conservative": "Conservadora",
+    "broker.strategy.moderate": "Moderada",
+    "broker.strategy.aggressive": "Agressiva",
+
   },
 
   it: {
@@ -323,6 +362,19 @@ const V2 = {
     "broker.subnav.list": "Lista",
     "broker.subnav.orders": "Ordini",
     "news.title": "Notizie",
+
+    "broker.portfolio_value": "VALORE PORTAFOGLIO",
+    "broker.fx.official": "Ufficiale",
+    "broker.holdings_title": "Le mie posizioni",
+    "broker.assets_count": "{n} asset",
+    "broker.qty_avg": "med.",
+    "broker.your_plan": "Il tuo piano",
+    "broker.target_in_years": "in {n} anni",
+    "broker.target_in_year": "in 1 anno",
+    "broker.tap_review": "Tocca per rivedere o aggiustare",
+    "broker.strategy.conservative": "Conservatrice",
+    "broker.strategy.moderate": "Moderata",
+    "broker.strategy.aggressive": "Aggressiva",
 
   },
 
@@ -385,6 +437,19 @@ const V2 = {
     "broker.subnav.orders": "Ordres",
     "news.title": "Actualités",
 
+    "broker.portfolio_value": "VALEUR DU PORTEFEUILLE",
+    "broker.fx.official": "Officiel",
+    "broker.holdings_title": "Mes positions",
+    "broker.assets_count": "{n} actifs",
+    "broker.qty_avg": "moy.",
+    "broker.your_plan": "Ton plan",
+    "broker.target_in_years": "dans {n} ans",
+    "broker.target_in_year": "dans 1 an",
+    "broker.tap_review": "Touche pour revoir ou ajuster",
+    "broker.strategy.conservative": "Conservatrice",
+    "broker.strategy.moderate": "Modérée",
+    "broker.strategy.aggressive": "Agressive",
+
   },
 
   de: {
@@ -445,6 +510,19 @@ const V2 = {
     "broker.subnav.list": "Watchlist",
     "broker.subnav.orders": "Aufträge",
     "news.title": "News",
+
+    "broker.portfolio_value": "PORTFOLIO-WERT",
+    "broker.fx.official": "Offiziell",
+    "broker.holdings_title": "Meine Positionen",
+    "broker.assets_count": "{n} Werte",
+    "broker.qty_avg": "Ø",
+    "broker.your_plan": "Dein Plan",
+    "broker.target_in_years": "in {n} Jahren",
+    "broker.target_in_year": "in 1 Jahr",
+    "broker.tap_review": "Tippen zum Überprüfen oder Anpassen",
+    "broker.strategy.conservative": "Konservativ",
+    "broker.strategy.moderate": "Moderat",
+    "broker.strategy.aggressive": "Aggressiv",
 
   },
 
@@ -507,6 +585,19 @@ const V2 = {
     "broker.subnav.orders": "订单",
     "news.title": "新闻",
 
+    "broker.portfolio_value": "投资组合价值",
+    "broker.fx.official": "官方价",
+    "broker.holdings_title": "我的持仓",
+    "broker.assets_count": "{n} 个资产",
+    "broker.qty_avg": "均价",
+    "broker.your_plan": "你的计划",
+    "broker.target_in_years": "{n} 年内",
+    "broker.target_in_year": "1 年内",
+    "broker.tap_review": "点击查看或调整",
+    "broker.strategy.conservative": "保守型",
+    "broker.strategy.moderate": "稳健型",
+    "broker.strategy.aggressive": "激进型",
+
   },
 
   ru: {
@@ -567,6 +658,19 @@ const V2 = {
     "broker.subnav.list": "Список",
     "broker.subnav.orders": "Заявки",
     "news.title": "Новости",
+
+    "broker.portfolio_value": "СТОИМОСТЬ ПОРТФЕЛЯ",
+    "broker.fx.official": "Официальный",
+    "broker.holdings_title": "Мои позиции",
+    "broker.assets_count": "{n} активов",
+    "broker.qty_avg": "сред.",
+    "broker.your_plan": "Твой план",
+    "broker.target_in_years": "за {n} лет",
+    "broker.target_in_year": "за 1 год",
+    "broker.tap_review": "Нажми для просмотра или редактирования",
+    "broker.strategy.conservative": "Консервативная",
+    "broker.strategy.moderate": "Умеренная",
+    "broker.strategy.aggressive": "Агрессивная",
 
   },
 
@@ -629,6 +733,19 @@ const V2 = {
     "broker.subnav.orders": "注文",
     "news.title": "ニュース",
 
+    "broker.portfolio_value": "ポートフォリオ価値",
+    "broker.fx.official": "公式",
+    "broker.holdings_title": "保有銘柄",
+    "broker.assets_count": "{n} 銘柄",
+    "broker.qty_avg": "平均",
+    "broker.your_plan": "あなたのプラン",
+    "broker.target_in_years": "{n} 年で",
+    "broker.target_in_year": "1 年で",
+    "broker.tap_review": "タップして確認・調整",
+    "broker.strategy.conservative": "保守的",
+    "broker.strategy.moderate": "中庸",
+    "broker.strategy.aggressive": "積極的",
+
   },
 
   he: {
@@ -689,6 +806,19 @@ const V2 = {
     "broker.subnav.list": "רשימה",
     "broker.subnav.orders": "הזמנות",
     "news.title": "חדשות",
+
+    "broker.portfolio_value": "ערך התיק",
+    "broker.fx.official": "רשמי",
+    "broker.holdings_title": "הפוזיציות שלי",
+    "broker.assets_count": "{n} נכסים",
+    "broker.qty_avg": "ממוצע",
+    "broker.your_plan": "התוכנית שלך",
+    "broker.target_in_years": "בעוד {n} שנים",
+    "broker.target_in_year": "בעוד שנה",
+    "broker.tap_review": "הקש לבדיקה או התאמה",
+    "broker.strategy.conservative": "שמרנית",
+    "broker.strategy.moderate": "מאוזנת",
+    "broker.strategy.aggressive": "אגרסיבית",
 
   },
 
@@ -751,6 +881,19 @@ const V2 = {
     "broker.subnav.orders": "الطلبات",
     "news.title": "الأخبار",
 
+    "broker.portfolio_value": "قيمة المحفظة",
+    "broker.fx.official": "رسمي",
+    "broker.holdings_title": "مراكزي",
+    "broker.assets_count": "{n} أصول",
+    "broker.qty_avg": "متوسط",
+    "broker.your_plan": "خطتك",
+    "broker.target_in_years": "خلال {n} سنوات",
+    "broker.target_in_year": "خلال سنة",
+    "broker.tap_review": "اضغط للمراجعة أو التعديل",
+    "broker.strategy.conservative": "متحفظة",
+    "broker.strategy.moderate": "متوازنة",
+    "broker.strategy.aggressive": "مغامرة",
+
   },
 
   ko: {
@@ -811,6 +954,19 @@ const V2 = {
     "broker.subnav.list": "목록",
     "broker.subnav.orders": "주문",
     "news.title": "뉴스",
+
+    "broker.portfolio_value": "포트폴리오 가치",
+    "broker.fx.official": "공식",
+    "broker.holdings_title": "내 포지션",
+    "broker.assets_count": "{n} 자산",
+    "broker.qty_avg": "평균",
+    "broker.your_plan": "당신의 플랜",
+    "broker.target_in_years": "{n} 년 안에",
+    "broker.target_in_year": "1년 안에",
+    "broker.tap_review": "탭하여 확인 또는 조정",
+    "broker.strategy.conservative": "보수형",
+    "broker.strategy.moderate": "중도형",
+    "broker.strategy.aggressive": "공격형",
 
   },
 };

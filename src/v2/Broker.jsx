@@ -248,6 +248,7 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true, la
             onSelectAsset={setSelectedAsset}
             onOpenAIPlan={() => setShowAIWizard(true)}
             onGoToMercado={() => setTab("mercado")}
+            lang={lang}
           />
         )}
         {tab === "mercado" && (
@@ -361,7 +362,7 @@ function SubNav({ T, tab, setTab, bottomInset, lang = "es" }) {
 // Portafolio — total + ARS/USD toggle + ticker banner + distribución +
 // holdings + top/bottom movers + AI plan card.
 // ----------------------------------------------------------
-function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, onOpenAIPlan, savedPlan, proMode = true, onGoToMercado }) {
+function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, onOpenAIPlan, savedPlan, proMode = true, onGoToMercado, lang = "es" }) {
   if (!portfolio) return <Loader T={T}/>;
 
   const ccySym = ccy === "ARS" ? "$" : "US$";
@@ -387,7 +388,7 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
             <div style={{
               fontFamily: FONT.sans, fontSize: 11, color: T.textDim,
               letterSpacing: 0.6, fontWeight: 700,
-            }}>VALOR DE CARTERA</div>
+            }}>{tr("broker.portfolio_value", lang)}</div>
             {/* ARS / USD toggle */}
             <div style={{
               display: "flex", gap: 4, padding: 4,
@@ -413,14 +414,14 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             <Pill T={T} color={T.accent} bg={T.accentSoft}>+{ccySym}{fmtMoney(total * 0.0234, ccy)}</Pill>
             <Pill T={T} color={T.accent} bg={T.accentSoft}>+2.34%</Pill>
-            <Pill T={T}>30 días</Pill>
+            <Pill T={T}>{tr("wallet.last_30d", lang)}</Pill>
           </div>
           {fx && (
             <div style={{
               marginTop: 12, fontFamily: FONT.mono, fontSize: 11, color: T.textMute,
               fontVariantNumeric: "tabular-nums",
             }}>
-              MEP ${fx.mep.value.toFixed(0)} · CCL ${fx.ccl.value.toFixed(0)} · Oficial ${fx.oficial.value.toFixed(0)}
+              MEP ${fx.mep.value.toFixed(0)} · CCL ${fx.ccl.value.toFixed(0)} · {tr("broker.fx.official", lang)} ${fx.oficial.value.toFixed(0)}
             </div>
           )}
         </div>
@@ -440,7 +441,7 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
 
       {/* holdings */}
       <div style={{ margin: "0 16px 16px" }}>
-        <SectionHead T={T} title="Mis posiciones" action={`${portfolio.holdings.length} activos`} />
+        <SectionHead T={T} title={tr("broker.holdings_title", lang)} action={tr("broker.assets_count", lang, { n: portfolio.holdings.length })} />
       </div>
       {portfolio.holdings.length === 0 ? (
         <Empty T={T}
@@ -457,7 +458,7 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
               key={h.ticker}
               T={T}
               asset={h}
-              subline={`${h.qty} u · prom. ${h.currency === "ARS" ? "$" : "US$"}${fmtMoney(h.avgCost, h.currency)}`}
+              subline={`${h.qty} u · ${tr("broker.qty_avg", lang)} ${h.currency === "ARS" ? "$" : "US$"}${fmtMoney(h.avgCost, h.currency)}`}
               rightTop={`${h.currency === "ARS" ? "$" : "US$"}${fmtMoney(h.value, h.currency)}`}
               rightBottom={fmtPct(h.gainPct)}
               rightBottomColor={h.gainPct >= 0 ? T.accent : T.danger}
@@ -2523,11 +2524,12 @@ function AIPlanCard({ T, onOpen, savedPlan }) {
   // (strategy + objective + horizon) instead of the generic prompt.
   // Tapping still opens the wizard so they can review or adjust.
   if (savedPlan && savedPlan.strategy) {
-    const strategyLabel = {
-      conservadora: "Conservadora",
-      moderada: "Moderada",
-      agresiva: "Agresiva",
-    }[savedPlan.strategy] || savedPlan.strategy;
+    const strategyKey = {
+      conservadora: "broker.strategy.conservative",
+      moderada:     "broker.strategy.moderate",
+      agresiva:     "broker.strategy.aggressive",
+    }[savedPlan.strategy];
+    const strategyLabel = strategyKey ? tr(strategyKey, lang) : savedPlan.strategy;
     const stratColor = {
       conservadora: "#0EA5E9",
       moderada: T.accent,
@@ -2582,15 +2584,15 @@ function AIPlanCard({ T, onOpen, savedPlan }) {
           <div style={{
             fontFamily: FONT.sans, fontSize: 11, color: T.textMute,
             letterSpacing: 0.6, fontWeight: 700, textTransform: "uppercase", marginBottom: 2,
-          }}>Tu plan · {strategyLabel}</div>
+          }}>{tr("broker.your_plan", lang)} · {strategyLabel}</div>
           <div style={{
             fontFamily: FONT.display, fontSize: 16, fontWeight: 700, color: T.text,
             letterSpacing: -0.3,
           }}>
-            {sym}{Math.round(target).toLocaleString("es-AR")} en {horizon} {horizon === 1 ? "año" : "años"}
+            {sym}{Math.round(target).toLocaleString("es-AR")} {horizon === 1 ? tr("broker.target_in_year", lang) : tr("broker.target_in_years", lang, { n: horizon })}
           </div>
           <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
-            Tocá para revisar o ajustar
+            {tr("broker.tap_review", lang)}
           </div>
         </div>
         <button onClick={share} aria-label="Compartir plan" style={{
