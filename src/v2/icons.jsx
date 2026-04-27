@@ -43,11 +43,23 @@ export const Ico = {
   Briefcase: (p) => <Icon d="M3 7h18v13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7zm5-4h8a2 2 0 0 1 2 2v2H6V5a2 2 0 0 1 2-2zM3 13h18" {...p}/>,
   Sun:  (p) => <Icon d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10z" {...p}/>,
   Moon: (p) => <Icon d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" {...p}/>,
-  Logo: ({ size = 28, color = "currentColor" }) => (
-    <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
-      <path d="M16 2L4 9v14l12 7 12-7V9L16 2z" stroke={color} strokeWidth="1.8" strokeLinejoin="round"/>
-      <path d="M11 13l5 3 5-3M16 16v6" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-      <circle cx="16" cy="11" r="1.4" fill={color}/>
+  // SAMAS brand mark — two open Cs forming an "S" with a green dot
+  // in the middle gap. Matches the company logo. The animated variant
+  // lives in SamasLogo.jsx; this one is the static version used in
+  // chrome (headers, splash, etc.).
+  Logo: ({ size = 28, color = "currentColor", dotColor = "#22C55E" }) => (
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" aria-hidden="true">
+      <path
+        d="M 71.66 34.18 A 22 22 0 1 0 53.82 59.66"
+        stroke={color} strokeWidth="11"
+        strokeLinecap="round" strokeLinejoin="round"
+      />
+      <path
+        d="M 28.34 65.82 A 22 22 0 1 0 46.18 40.34"
+        stroke={color} strokeWidth="11"
+        strokeLinecap="round" strokeLinejoin="round"
+      />
+      <circle cx="50" cy="50" r="7" fill={dotColor}/>
     </svg>
   ),
 };

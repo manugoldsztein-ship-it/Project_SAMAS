@@ -40,6 +40,11 @@ import { WelcomeChooser } from "./auth/WelcomeChooser.jsx";
 // in src/v2/ alongside the legacy code so we can iterate without
 // breaking what already works.
 import { SamasShell } from "./v2/Shell.jsx";
+// Intro animation — full-screen splash with the SAMAS brand mark
+// (two open Cs + green dot) plus a WebAudio whoosh + chime. Shown
+// once per session (sessionStorage flag) so it doesn't replay on hot
+// reloads, but always plays on a cold launch.
+import { Intro } from "./v2/Intro.jsx";
 
 // ============================================================
 // THEME
@@ -6777,6 +6782,20 @@ export default function SAMASApp() {
 
   const outerBg = isDark ? "#080808" : "#050505";
 
+  // Intro animation — runs once per session. We use sessionStorage so a
+  // hot reload during development doesn't replay it, but every cold
+  // launch (process restart) gets the full animation. The intro renders
+  // ON TOP of the rest of the UI so the auth/PIN/shell can keep loading
+  // underneath; when it fades out the next screen is already prepared.
+  const [showIntro, setShowIntro] = useState(() => {
+    if (typeof sessionStorage === "undefined") return true;
+    return sessionStorage.getItem("samas_intro_seen") !== "true";
+  });
+  const dismissIntro = () => {
+    try { sessionStorage.setItem("samas_intro_seen", "true"); } catch {}
+    setShowIntro(false);
+  };
+
   return (
     <div style={{ minHeight:"100vh", background:outerBg, fontFamily:"Sora,sans-serif" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap');
@@ -6960,6 +6979,10 @@ export default function SAMASApp() {
       ) : (
         <ErrorBoundary><WebDashboard appState={appState} handlers={handlers} C={C}/></ErrorBoundary>
       )}
+
+      {/* Intro animation overlay — covers everything above for ~2.3s
+          on the first render of each session, then fades out. */}
+      {showIntro && <Intro onDone={dismissIntro} />}
     </div>
   );
 }
