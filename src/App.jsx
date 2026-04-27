@@ -1,9 +1,13 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
 // AI surface is intentionally narrow: one wizard that does compound interest
 // projection + income/expenses breakdown + strategy pick. No general chat,
 // no sentiment analysis — per product spec the AI's only job is that flow.
-import { ObjectivesWizard } from "./ai/ObjectivesWizard.jsx";
+//
+// Lazy-loaded: only renders when the user taps the AI plan card. Saves
+// the wizard's payload (including its math helpers) from the eager
+// bundle.
+const ObjectivesWizard = lazy(() => import("./ai/ObjectivesWizard.jsx").then((m) => ({ default: m.ObjectivesWizard })));
 import { InfoBadge } from "./ai/glossary.jsx";
 import {
   loadAnthropicKey, saveAnthropicKey,
@@ -15,7 +19,11 @@ import {
 // the demo-PIN LoginScreen. See src/auth/SupabaseAuth.jsx for the UI, and
 // src/lib/supabase.js for the client configuration.
 import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./lib/supabase.js";
-import { useSupabaseSession, SupabaseAuthFlow } from "./auth/SupabaseAuth.jsx";
+// useSupabaseSession is the eager hook (called on every render); the
+// flow itself is the heavy form tree, lazy-loaded so it stays out of
+// the main bundle for already-authenticated users.
+import { useSupabaseSession } from "./auth/SupabaseAuth.jsx";
+const SupabaseAuthFlow = lazy(() => import("./auth/SupabaseAuth.jsx").then((m) => ({ default: m.SupabaseAuthFlow })));
 // User data: holdings / orders / balance now live in Supabase. The UI
 // keeps using the same local state shapes — userData.js is the
 // translation + sync layer.
@@ -28,7 +36,9 @@ import { hashPin, PinLockScreen } from "./auth/PinLock.jsx";
 // MFA (TOTP). MfaEnrollSection lives in Settings, MfaChallengeView is
 // shown post-login when the user's session is AAL1 but they have a
 // verified TOTP factor.
-import { MfaEnrollSection, MfaChallengeView } from "./auth/Mfa.jsx";
+// 2FA enrollment + challenge views — only rendered during their flows.
+const MfaEnrollSection = lazy(() => import("./auth/Mfa.jsx").then((m) => ({ default: m.MfaEnrollSection })));
+const MfaChallengeView = lazy(() => import("./auth/Mfa.jsx").then((m) => ({ default: m.MfaChallengeView })));
 import { fetchNewsForTicker, fetchNewsForTickers, relativeTime } from "./lib/news.js";
 import { isNative as isNativeApp, hapticNative, updateNativeTheme, hideNativeSplash } from "./lib/native.js";
 import { isPushEnabled, registerPush, setupPushListeners, clearPushLocal } from "./lib/push.js";
@@ -5502,7 +5512,7 @@ function ProfileSheet({ displayUser, uiMode, onChangeUiMode, onResetAccount, onR
         {/* Real 2FA via Supabase Auth MFA. The component manages
             enroll → QR → verify code → enable, and unenroll. Once
             verified, login flow asks for a TOTP code on next session. */}
-        <MfaEnrollSection C={C} />
+        <Suspense fallback={null}><MfaEnrollSection C={C} /></Suspense>
         </>)}
 
         {/* Reset account — destructive dev/testing button. Wipes all
@@ -5662,8 +5672,8 @@ function MobileApp({ appState, handlers, C }) {
         {!isNativeApp && (
           <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:110, height:26, background:"#0a0a0a", borderRadius:"0 0 16px 16px", zIndex:30 }}/>
         )}
-        {needsAuth && <SupabaseAuthFlow C={C} session={sbSession} profile={sbProfile} onVerified={refetchProfile}/>}
-        {needsMfa && <MfaChallengeView C={C} onSuccess={() => setMfaPassed(true)} onForgot={handlers.handleLogout}/>}
+        {needsAuth && (<Suspense fallback={null}><SupabaseAuthFlow C={C} session={sbSession} profile={sbProfile} onVerified={refetchProfile}/></Suspense>)}
+        {needsMfa && (<Suspense fallback={null}><MfaChallengeView C={C} onSuccess={() => setMfaPassed(true)} onForgot={handlers.handleLogout}/></Suspense>)}
         {needsPinGate && (
           <PinLockScreen
             C={C}
@@ -5695,7 +5705,7 @@ function MobileApp({ appState, handlers, C }) {
       {toast && <div className="samas-slide-up" style={{ position:"absolute", top:34, left:14, right:14, zIndex:50, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 14px", fontSize:12, fontWeight:700, boxShadow:"0 10px 30px rgba(0,0,0,0.35)" }}>{toast.msg}</div>}
       {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} uiMode={uiMode} lang={lang} C={C}/>}
       {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} displayUser={displayUser} storedPinHash={sbProfile?.pin_hash || null} C={C}/>}
-      {showObjectives && <ObjectivesWizard onClose={() => setShowObjectives(false)} onSave={setSavedPlan} savedPlan={savedPlan} C={C}/>}
+      {showObjectives && (<Suspense fallback={null}><ObjectivesWizard onClose={() => setShowObjectives(false)} onSave={setSavedPlan} savedPlan={savedPlan} C={C}/></Suspense>)}
       {pickerTicker && (
         <WatchlistPickerModal
           ticker={pickerTicker}
@@ -5924,7 +5934,7 @@ function WebDashboard({ appState, handlers, C }) {
           {showProfile && <ProfileSheet displayUser={displayUser} uiMode={uiMode} onChangeUiMode={handlers.handleChangeUiMode} onResetAccount={handlers.handleResetAccount} onResetPin={handlers.handleResetPin} onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} appShell={appShell} onChangeAppShell={setAppShell} C={C}/>}
           {toast && <div className="samas-slide-up" style={{ position:"fixed", top:70, left:"50%", transform:"translateX(-50%)", zIndex:99, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 20px", fontSize:13, fontWeight:700, boxShadow:"0 8px 32px rgba(0,0,0,0.3)" }}>{toast.msg}</div>}
           <div style={{ overflowY:"auto", height:"calc(100vh - 56px)" }}>{renderPage()}</div>
-          {showObjectives && <ObjectivesWizard onClose={() => setShowObjectives(false)} onSave={setSavedPlan} savedPlan={savedPlan} C={C}/>}
+          {showObjectives && (<Suspense fallback={null}><ObjectivesWizard onClose={() => setShowObjectives(false)} onSave={setSavedPlan} savedPlan={savedPlan} C={C}/></Suspense>)}
           {pickerTicker && (
             <WatchlistPickerModal
               ticker={pickerTicker}
@@ -6946,8 +6956,8 @@ export default function SAMASApp() {
             width: "100%", height: "100dvh",
             background: C.bg,
           }}>
-            {needsAuth && <SupabaseAuthFlow C={C} session={sbSession} profile={sbProfile} onVerified={refetchProfile}/>}
-            {needsMfa && <MfaChallengeView C={C} onSuccess={() => setMfaPassed(true)} onForgot={handleLogout}/>}
+            {needsAuth && (<Suspense fallback={null}><SupabaseAuthFlow C={C} session={sbSession} profile={sbProfile} onVerified={refetchProfile}/></Suspense>)}
+            {needsMfa && (<Suspense fallback={null}><MfaChallengeView C={C} onSuccess={() => setMfaPassed(true)} onForgot={handleLogout}/></Suspense>)}
             {needsPinGate && (
               <PinLockScreen
                 C={C}
@@ -6969,8 +6979,8 @@ export default function SAMASApp() {
         ) : (
           <div style={{ display:"flex", justifyContent:"center", alignItems:"center", minHeight:"calc(100vh - 60px)" }}>
             <div style={{ width:420, height:620, position:"relative", borderRadius:20, overflow:"hidden" }}>
-              {needsAuth && <SupabaseAuthFlow C={C} session={sbSession} profile={sbProfile} onVerified={refetchProfile}/>}
-              {needsMfa && <MfaChallengeView C={C} onSuccess={() => setMfaPassed(true)} onForgot={handleLogout}/>}
+              {needsAuth && (<Suspense fallback={null}><SupabaseAuthFlow C={C} session={sbSession} profile={sbProfile} onVerified={refetchProfile}/></Suspense>)}
+              {needsMfa && (<Suspense fallback={null}><MfaChallengeView C={C} onSuccess={() => setMfaPassed(true)} onForgot={handleLogout}/></Suspense>)}
               {needsPinGate && (
                 <PinLockScreen
                   C={C}
