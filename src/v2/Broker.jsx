@@ -1492,10 +1492,17 @@ function AssetSheet({ T, asset, holding = null, onClose, onDone, watchlists = []
     }}>
       <div style={{
         width: "100%", maxWidth: 540,
+        // dvh shrinks with the iOS keyboard; capping at 92dvh keeps a
+        // small backdrop strip visible (so the user knows they can tap
+        // outside to close) and lets the content scroll internally
+        // when the keyboard pushes up.
+        maxHeight: "92dvh",
         background: T.bgElev, color: T.text,
         borderTopLeftRadius: 28, borderTopRightRadius: 28,
         border: `1px solid ${T.border}`, borderBottom: "none",
-        overflow: "hidden",
+        overflowY: "auto",
+        overscrollBehavior: "contain",
+        WebkitOverflowScrolling: "touch",
       }}>
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -2731,6 +2738,15 @@ function NumberInput({ T, label, value, onChange, placeholder, prefix }) {
           inputMode="decimal"
           value={value}
           onChange={(e) => onChange(sanitize(e.target.value))}
+          onFocus={(e) => {
+            // Scroll into view so the iOS keyboard doesn't cover the
+            // field when it pops up. 320ms gives the keyboard animation
+            // a moment so we measure the post-resize viewport.
+            const el = e.target;
+            setTimeout(() => {
+              try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch {}
+            }, 320);
+          }}
           placeholder={placeholder}
           style={{
             flex: 1, boxSizing: "border-box",
