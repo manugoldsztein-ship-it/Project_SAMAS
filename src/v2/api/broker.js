@@ -173,9 +173,13 @@ export async function getPortfolio() {
     };
   }).filter(Boolean);
 
-  // Total in ARS = sum of (value if ARS else value * MEP)
-  const totalArs = enriched.reduce((s, h) => s + (h.currency === "ARS" ? h.value : h.value * mepRate), 0);
-  const totalUsd = totalArs / mepRate;
+  // Total in ARS = sum of (value if ARS else value * MEP). Guard
+  // against mepRate=0/NaN/Infinity coming from a bad upstream FX
+  // payload — without it totalUsd silently becomes Infinity/NaN and
+  // every USD readout in the UI breaks.
+  const safeMep = Number.isFinite(mepRate) && mepRate > 0 ? mepRate : 1;
+  const totalArs = enriched.reduce((s, h) => s + (h.currency === "ARS" ? h.value : h.value * safeMep), 0);
+  const totalUsd = totalArs / safeMep;
 
   return { holdings: enriched, totalArs, totalUsd };
 }

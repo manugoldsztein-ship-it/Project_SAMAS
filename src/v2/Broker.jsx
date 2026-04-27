@@ -1662,6 +1662,7 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
               err={err}
               onCancel={() => { setConfirm(null); setErr(null); }}
               onConfirm={confirmAndPlace}
+              lang={lang}
             />
           ) : (
             <>
@@ -2338,7 +2339,7 @@ function StopForm({ T, asset, existing, ownsIt, onSaved, onRemoved }) {
 // every line item (price, comisión, IVA, derechos de mercado) so the
 // user knows exactly what they're paying / receiving.
 // ----------------------------------------------------------
-function ConfirmOrderStep({ T, asset, confirm, busy, err, onCancel, onConfirm }) {
+function ConfirmOrderStep({ T, asset, confirm, busy, err, onCancel, onConfirm, lang = "es" }) {
   const ccySym = asset.currency === "ARS" ? "$" : "US$";
   const fee = confirm.fees;
   const isBuy = confirm.side === "buy";

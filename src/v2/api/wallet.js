@@ -253,8 +253,11 @@ export async function withdraw({ amount, ccy = "ARS", destinationCbu, destinatio
 export async function swap({ from, to, amountFrom, rate }) {
   await jitter();
   if (from === to) throw new Error("Origen y destino deben diferir.");
-  if (!amountFrom || amountFrom <= 0) throw new Error("Monto inválido.");
-  if (!rate || rate <= 0) throw new Error("Tipo de cambio inválido.");
+  if (!Number.isFinite(amountFrom) || amountFrom <= 0) throw new Error("Monto inválido.");
+  // Guard against rate=0, rate=Infinity, NaN — the math below would
+  // otherwise silently produce 0, Infinity, or NaN and the swap would
+  // appear to succeed with a bogus output.
+  if (!Number.isFinite(rate) || rate <= 0) throw new Error("Tipo de cambio inválido.");
 
   const fromCents = Math.round(amountFrom * 100);
   const fromKey = from === "ARS" ? "ars_centavos" : "usd_cents";
