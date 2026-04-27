@@ -33,6 +33,7 @@ import { broker as brokerApi } from "./api/index.js";
 import { ObjectivesWizard } from "../ai/ObjectivesWizard.jsx";
 // iOS-style swipe-from-left-edge back gesture.
 import { useEdgeSwipeBack } from "./useEdgeSwipeBack.js";
+import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { toast } from "./toast.jsx";
 
 // Sub-tabs metadata — drives both the bottom nav and the content
@@ -138,6 +139,9 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true }) 
 
   // iOS-style swipe-from-left-edge back to the main wallet shell.
   const { bind: swipeBind, style: swipeStyle } = useEdgeSwipeBack(onBack);
+  // Pull-to-refresh for the inner scroll. Re-fetches portfolio +
+  // assets + watchlists + orders + alerts + stops.
+  const { bind: ptrBind, indicator: ptrIndicator } = usePullToRefresh(refresh);
 
   return (
     <div {...swipeBind} style={{
@@ -206,11 +210,12 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true }) 
       )}
 
       {/* ---------- scrollable content ---------- */}
-      <div style={{
+      <div {...ptrBind} style={{
         flex: 1, overflowY: "auto",
         overscrollBehavior: "contain",
         WebkitOverflowScrolling: "touch",
       }}>
+        {ptrIndicator}
         {tab === "portafolio" && (
           <PortafolioView
             T={T}

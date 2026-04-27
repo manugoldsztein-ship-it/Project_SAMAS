@@ -20,6 +20,8 @@ import { FONT } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import { social as socialApi } from "./api/index.js";
 import { useEdgeSwipeBack } from "./useEdgeSwipeBack.js";
+import { usePullToRefresh } from "./usePullToRefresh.jsx";
+import { setRefreshHandler, callRefreshFor } from "./refreshRegistry.js";
 
 const SUB_TABS = [
   { id: "feed",     label: "Feed",     icon: Ico.Comment },
@@ -41,6 +43,10 @@ export function SocialPage({ T, isNativeApp = false, onBack }) {
 
   // iOS-style swipe-from-left-edge back to the wallet shell.
   const { bind: swipeBind, style: swipeStyle } = useEdgeSwipeBack(onBack);
+  // Pull-to-refresh — calls the active sub-tab's registered handler.
+  const { bind: ptrBind, indicator: ptrIndicator } = usePullToRefresh(
+    () => callRefreshFor(`social-${tab}`)
+  );
 
   return (
     <div {...swipeBind} style={{
@@ -94,11 +100,12 @@ export function SocialPage({ T, isNativeApp = false, onBack }) {
       </div>
 
       {/* Scrollable content */}
-      <div style={{
+      <div {...ptrBind} style={{
         flex: 1, overflowY: "auto",
         overscrollBehavior: "contain",
         WebkitOverflowScrolling: "touch",
       }}>
+        {ptrIndicator}
         {tab === "feed"     && <FeedView T={T} />}
         {tab === "search"   && <SearchView T={T} />}
         {tab === "messages" && <MessagesView T={T} />}
@@ -180,6 +187,7 @@ function FeedView({ T }) {
   }, [tab]);
 
   useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => setRefreshHandler("social-feed", refresh), [refresh]);
 
   async function publish() {
     setErr(null);
@@ -320,6 +328,7 @@ function SearchView({ T }) {
   }, [query]);
 
   useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => setRefreshHandler("social-search", refresh), [refresh]);
 
   async function toggleFollow(u) {
     try {

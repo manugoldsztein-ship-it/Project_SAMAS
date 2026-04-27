@@ -20,6 +20,7 @@ import { FONT } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import { news as newsApi } from "./api/index.js";
 import { Skeleton } from "./shared.jsx";
+import { setRefreshHandler } from "./refreshRegistry.js";
 
 export function NewsPage({ T }) {
   const [items, setItems] = useState([]);
@@ -47,6 +48,10 @@ export function NewsPage({ T }) {
   }, [cat]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // Register refresh so the Shell's pull-to-refresh can invoke it
+  // when the user pulls down from the top of the news feed.
+  useEffect(() => setRefreshHandler("news", refresh), [refresh]);
 
   // Debounced ticker search — when the user types, after 350ms idle
   // we hit the Edge Function for fresh news on that ticker. Empty

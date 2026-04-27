@@ -26,6 +26,8 @@ const SocialPage  = lazy(() => import("./Social.jsx").then((m) => ({ default: m.
 const NewsPage    = lazy(() => import("./News.jsx").then((m) => ({ default: m.NewsPage })));
 const MfaEnrollSection = lazy(() => import("../auth/Mfa.jsx").then((m) => ({ default: m.MfaEnrollSection })));
 import { Onboarding } from "./Onboarding.jsx";
+import { usePullToRefresh } from "./usePullToRefresh.jsx";
+import { callRefreshFor } from "./refreshRegistry.js";
 
 // localStorage flag for the Pro mode toggle. Default ON — power users
 // see the full broker surface (ticker banner, distribución, top movers)
@@ -150,14 +152,9 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
       color: T.text,
     }}>
       {/* ---------- scrollable page content ---------- */}
-      <div style={{
-        flex: 1,
-        overflowY: "auto",
-        overscrollBehavior: "contain",
-        WebkitOverflowScrolling: "touch",
-      }}>
+      <ScrollWithPTR T={T} tab={tab}>
         {renderTab()}
-      </div>
+      </ScrollWithPTR>
 
       {/* ---------- floating tab bar ---------- */}
       <SamasTabBar tab={tab} setTab={setTab} T={T} bottomInset={tabBarBottom} />
@@ -469,6 +466,30 @@ function Placeholder({ T, title, subtitle }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------
+// ScrollWithPTR — the page-level scroll container for the wallet/
+// news tabs. Wraps the active tab content with the pull-to-refresh
+// hook; when the user pulls past the threshold we call the refresh
+// handler that the active tab registered via setRefreshHandler.
+// ----------------------------------------------------------
+function ScrollWithPTR({ T, tab, children }) {
+  const { bind, indicator } = usePullToRefresh(() => callRefreshFor(tab));
+  return (
+    <div
+      {...bind}
+      style={{
+        flex: 1,
+        overflowY: "auto",
+        overscrollBehavior: "contain",
+        WebkitOverflowScrolling: "touch",
+      }}
+    >
+      {indicator}
+      {children}
     </div>
   );
 }

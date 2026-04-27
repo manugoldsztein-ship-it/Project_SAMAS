@@ -26,6 +26,7 @@ import {
 } from "./shared.jsx";
 import { wallet as walletApi, card as cardApi, broker as brokerApi } from "./api/index.js";
 import { toast } from "./toast.jsx";
+import { setRefreshHandler } from "./refreshRegistry.js";
 
 export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark, onOpenSettings }) {
   // ----------- data state -----------
@@ -59,6 +60,10 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // Register refresh under the "wallet" tab id so the parent Shell's
+  // pull-to-refresh can invoke it.
+  useEffect(() => setRefreshHandler("wallet", refresh), [refresh]);
 
   // ----------- derived -----------
   const userName = user?.name?.split(" ")[0] || "Usuario";
