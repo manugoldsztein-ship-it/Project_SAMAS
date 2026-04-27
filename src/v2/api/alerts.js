@@ -107,6 +107,18 @@ function isMissingTableError(error) {
   return msg.includes("does not exist") || msg.includes("schema cache");
 }
 
+// Console spam guard. The Broker shell calls getPriceAlerts() on every
+// pull-to-refresh, every BrokerShell mount, and every order placement.
+// Logging a warning each time floods the Xcode console. Print once,
+// stay quiet thereafter — the user has the info, the warning has done
+// its job. A new session resets the flag.
+let _missingTableWarned = false;
+function warnMissingTableOnce() {
+  if (_missingTableWarned) return;
+  _missingTableWarned = true;
+  console.warn("[alerts] price_alerts table not migrated yet — returning []. Apply supabase/price_alerts.sql to enable.");
+}
+
 /**
  * getPriceAlerts({ activeOnly }) — list alerts for the current user.
  *   Default activeOnly=true so the Órdenes tab shows only what's still
@@ -120,10 +132,7 @@ export async function getPriceAlerts({ activeOnly = true } = {}) {
   if (activeOnly) q = q.eq("active", true).is("fired_at", null);
   const { data, error } = await q;
   if (error) {
-    if (isMissingTableError(error)) {
-      console.warn("[alerts] price_alerts table not migrated yet — returning []");
-      return [];
-    }
+    if (isMissingTableError(error)) { warnMissingTableOnce(); return []; }
     throw new Error(error.message);
   }
   return (data || []).map(rowToAlert);
@@ -141,7 +150,7 @@ export async function getFiredAlerts(limit = 20) {
     .order("fired_at", { ascending: false })
     .limit(limit);
   if (error) {
-    if (isMissingTableError(error)) return [];
+    if (isMissingTableError(error)) { warnMissingTableOnce(); return []; }
     throw new Error(error.message);
   }
   return (data || []).map(rowToAlert);
