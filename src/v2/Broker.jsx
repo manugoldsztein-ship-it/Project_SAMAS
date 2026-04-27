@@ -286,6 +286,7 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true, la
           onDone={() => { setSelectedAsset(null); refresh(); }}
           watchlists={watchlists}
           onWatchlistsChange={refresh}
+          lang={lang}
         />
       )}
 
@@ -1471,7 +1472,7 @@ function AssetRow({ T, asset, subline, rightTop, rightBottom, rightBottomColor, 
   );
 }
 
-function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: rawOnDone, watchlists = [], onWatchlistsChange }) {
+function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: rawOnDone, watchlists = [], onWatchlistsChange, lang = "es" }) {
   // Wrap close + done callbacks so we play a slide-down exit animation
   // before the parent unmounts the sheet. The CSS transition lives on
   // the inner sheet div (transform translateY).
@@ -1732,8 +1733,8 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
 
               <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
                 {[
-                  { id: "buy",  label: "Comprar", color: T.accent,  soft: T.accentSoft },
-                  { id: "sell", label: "Vender",  color: T.danger,  soft: T.dangerSoft },
+                  { id: "buy",  label: tr("asset.buy",  lang), color: T.accent,  soft: T.accentSoft },
+                  { id: "sell", label: tr("asset.sell", lang), color: T.danger,  soft: T.dangerSoft },
                 ].map((s) => {
                   const active = s.id === side;
                   return (
@@ -1754,8 +1755,8 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
                 borderRadius: 12, marginBottom: 14,
               }}>
                 {[
-                  { id: "market", label: "Mercado" },
-                  { id: "limit",  label: "Límite" },
+                  { id: "market", label: tr("asset.market", lang) },
+                  { id: "limit",  label: tr("asset.limit",  lang) },
                 ].map((t) => {
                   const active = t.id === type;
                   return (
@@ -1770,11 +1771,11 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
                 })}
               </div>
 
-              <NumberInput T={T} label="Cantidad" value={qtyStr} onChange={setQtyStr} placeholder="0" />
+              <NumberInput T={T} label={tr("asset.qty", lang)} value={qtyStr} onChange={setQtyStr} placeholder="0" />
 
               {type === "limit" && (
                 <div style={{ marginTop: 12 }}>
-                  <NumberInput T={T} label={`Precio límite (${asset.currency})`} value={limitStr} onChange={setLimitStr} placeholder={String(asset.price)} />
+                  <NumberInput T={T} label={`${tr("asset.price", lang)} ${tr("asset.limit", lang).toLowerCase()} (${asset.currency})`} value={limitStr} onChange={setLimitStr} placeholder={String(asset.price)} />
                 </div>
               )}
 
@@ -1783,7 +1784,7 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
                 background: T.surface, border: `1px solid ${T.border}`,
                 display: "flex", justifyContent: "space-between", alignItems: "center",
               }}>
-                <span style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute }}>Total estimado</span>
+                <span style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute }}>{tr("asset.total", lang)}</span>
                 <span style={{ fontFamily: FONT.mono, fontSize: 14, fontWeight: 700, color: T.text }}>
                   {qty > 0 ? `${ccySym}${fmtMoney(totalEst, asset.currency)}` : "—"}
                 </span>
@@ -1798,7 +1799,7 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
                 fontFamily: FONT.sans, fontSize: 15, fontWeight: 700, border: "none",
                 cursor: "pointer", opacity: qty <= 0 ? 0.6 : 1,
               }}>
-                {side === "buy" ? `Revisar compra` : `Revisar venta`}
+                {tr("asset.review", lang)}
               </button>
                 </>
               )}
@@ -2020,7 +2021,7 @@ function WatchlistPicker({ T, ticker, watchlists, onClose, onChange }) {
           background: T.surface, border: "none",
           color: T.text, fontFamily: FONT.sans, fontSize: 14, fontWeight: 600,
           cursor: "pointer",
-        }}>Listo</button>
+        }}>{tr("settings.done", lang)}</button>
       </div>
     </div>
   );
@@ -2374,11 +2375,11 @@ function ConfirmOrderStep({ T, asset, confirm, busy, err, onCancel, onConfirm })
         background: T.surface, border: `1px solid ${T.border}`,
         marginBottom: 14,
       }}>
-        <Row label="Cantidad" value={`${fmtMoney(confirm.qty, asset.currency)} ${asset.ticker}`} />
-        <Row label="Tipo de orden" value={confirm.type === "limit" ? "Límite" : "Mercado"} />
+        <Row label={tr("asset.qty", lang)} value={`${fmtMoney(confirm.qty, asset.currency)} ${asset.ticker}`} />
+        <Row label={tr("asset.market", lang) + " / " + tr("asset.limit", lang)} value={confirm.type === "limit" ? tr("asset.limit", lang) : tr("asset.market", lang)} />
         <Row label="Precio" value={`${ccySym}${fmtMoney(confirm.price, asset.currency)}`} />
         <div style={{ height: 1, background: T.border, margin: "6px 0" }} />
-        <Row label="Subtotal" value={`${ccySym}${fmtMoney(fee.subtotal, asset.currency)}`} />
+        <Row label={tr("asset.subtotal", lang)} value={`${ccySym}${fmtMoney(fee.subtotal, asset.currency)}`} />
         <Row label="Comisión (0,5%)" value={`${ccySym}${fmtMoney(fee.commission, asset.currency)}`} />
         <Row label="IVA s/comisión (21%)" value={`${ccySym}${fmtMoney(fee.iva, asset.currency)}`} />
         <Row label="Derechos de mercado" value={`${ccySym}${fmtMoney(fee.marketDuty, asset.currency)}`} />
