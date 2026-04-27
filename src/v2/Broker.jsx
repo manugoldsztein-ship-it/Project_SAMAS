@@ -431,7 +431,7 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
           shown so the user can find the wizard regardless of mode.
           When the user already has a saved plan, the card morphs into
           a summary of their strategy + target. */}
-      <AIPlanCard T={T} onOpen={onOpenAIPlan} savedPlan={savedPlan} />
+      <AIPlanCard T={T} onOpen={onOpenAIPlan} savedPlan={savedPlan} lang={lang} />
 
       {/* Distribución bar — % per holding of total cartera. Only in
           Pro mode (gated by the settings toggle). */}
@@ -2519,7 +2519,7 @@ function TickerBanner({ T, assets }) {
 // alert so the user sees the surface; we can wire the real wizard in
 // a follow-up pass once it's been ported to the v2 theme.
 // ----------------------------------------------------------
-function AIPlanCard({ T, onOpen, savedPlan }) {
+function AIPlanCard({ T, onOpen, savedPlan, lang = "es" }) {
   // If the user already ran the wizard, show a summary of their plan
   // (strategy + objective + horizon) instead of the generic prompt.
   // Tapping still opens the wizard so they can review or adjust.
