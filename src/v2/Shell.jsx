@@ -30,7 +30,7 @@ import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { callRefreshFor } from "./refreshRegistry.js";
 import {
   isBiometricAvailable, authenticateWithBiometric,
-  isBiometricEnabled, setBiometricEnabled,
+  isBiometricEnabled, setBiometricEnabled, debugBiometric,
 } from "../lib/biometric.js";
 import { toast } from "./toast.jsx";
 
@@ -294,16 +294,28 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
           />
         )}
 
-        {/* Face ID / Touch ID — only when device supports it. */}
-        {bioType !== "none" && (
-          <SettingsToggle
-            T={T}
-            title={bioType === "face" ? "Face ID" : bioType === "fingerprint" ? "Touch ID" : "Biometría"}
-            subtitle="Desbloqueá SAMAS sin tipear el PIN"
-            value={bioOn}
-            onChange={toggleBiometric}
-          />
-        )}
+        {/* Face ID / Touch ID — visible always so the user can see it
+            exists. Subtitle changes based on detection state so we can
+            diagnose problems in the field. Tapping when unavailable
+            opens a diagnostic toast. */}
+        <SettingsToggle
+          T={T}
+          title={bioType === "face" ? "Face ID" : bioType === "fingerprint" ? "Touch ID" : "Biometría"}
+          subtitle={
+            bioType === "none"
+              ? "No detectada · Tocá para diagnosticar"
+              : "Desbloqueá SAMAS sin tipear el PIN"
+          }
+          value={bioOn}
+          onChange={async (next) => {
+            if (bioType === "none") {
+              const dbg = await debugBiometric();
+              toast.info(`Plugin: ${dbg.plugin ? "OK" : "no cargado"} · ${dbg.info ? "info: " + JSON.stringify(dbg.info).slice(0, 80) : dbg.error || "sin info"}`, { duration: 6000 });
+              return;
+            }
+            return toggleBiometric(next);
+          }}
+        />
 
         {/* 2FA row — opens the legacy MfaEnrollSection in a sub-modal. */}
         <button onClick={() => setShow2FA(true)} style={{
