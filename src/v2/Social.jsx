@@ -19,6 +19,7 @@ import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { FONT } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import { social as socialApi } from "./api/index.js";
+import { useEdgeSwipeBack } from "./useEdgeSwipeBack.js";
 
 const SUB_TABS = [
   { id: "feed",     label: "Feed",     icon: Ico.Comment },
@@ -38,13 +39,17 @@ export function SocialPage({ T, isNativeApp = false, onBack }) {
     ? "calc(env(safe-area-inset-bottom) + 12px)"
     : 12;
 
+  // iOS-style swipe-from-left-edge back to the wallet shell.
+  const { bind: swipeBind, style: swipeStyle } = useEdgeSwipeBack(onBack);
+
   return (
-    <div style={{
+    <div {...swipeBind} style={{
       position: "absolute", inset: 0,
       background: T.bg, color: T.text,
       overflow: "hidden",
       display: "flex", flexDirection: "column",
       fontFamily: FONT.sans,
+      ...swipeStyle,
     }}>
       {/* Header — back arrow + mini SAMAS logo + section title */}
       <div style={{

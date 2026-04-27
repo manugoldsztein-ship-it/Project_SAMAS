@@ -31,6 +31,8 @@ import { broker as brokerApi } from "./api/index.js";
 // expects a legacy-shape theme `C`, so we pass an adapter built from
 // the v2 theme `T` to keep its visual language in sync with the new UI.
 import { ObjectivesWizard } from "../ai/ObjectivesWizard.jsx";
+// iOS-style swipe-from-left-edge back gesture.
+import { useEdgeSwipeBack } from "./useEdgeSwipeBack.js";
 
 // Sub-tabs metadata — drives both the bottom nav and the content
 // switch in the top-level <BrokerShell/> render.
@@ -133,13 +135,17 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true }) 
     ? "calc(env(safe-area-inset-bottom) + 12px)"
     : 12;
 
+  // iOS-style swipe-from-left-edge back to the main wallet shell.
+  const { bind: swipeBind, style: swipeStyle } = useEdgeSwipeBack(onBack);
+
   return (
-    <div style={{
+    <div {...swipeBind} style={{
       position: "absolute", inset: 0,
       background: T.bg, color: T.text,
       overflow: "hidden",
       display: "flex", flexDirection: "column",
       fontFamily: FONT.sans,
+      ...swipeStyle,
     }}>
       {/* ---------- header with back arrow ---------- */}
       <div style={{
