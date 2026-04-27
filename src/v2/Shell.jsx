@@ -28,6 +28,11 @@ const MfaEnrollSection = lazy(() => import("../auth/Mfa.jsx").then((m) => ({ def
 import { Onboarding } from "./Onboarding.jsx";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { callRefreshFor } from "./refreshRegistry.js";
+import {
+  isBiometricAvailable, authenticateWithBiometric,
+  isBiometricEnabled, setBiometricEnabled,
+} from "../lib/biometric.js";
+import { toast } from "./toast.jsx";
 
 // localStorage flag for the Pro mode toggle. Default ON — power users
 // see the full broker surface (ticker banner, distribución, top movers)
@@ -186,6 +191,36 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
 function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onLogout, onClose, isNativeApp }) {
   const [show2FA, setShow2FA] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
+  // Biometric state — capability detection on mount + current opt-in
+  // pref. The toggle is hidden entirely on devices without biometric
+  // (e.g. web preview, simulator without Face ID configured).
+  const [bioType, setBioType] = useState("none");
+  const [bioOn, setBioOn] = useState(isBiometricEnabled());
+  useEffect(() => {
+    let alive = true;
+    isBiometricAvailable().then((t) => { if (alive) setBioType(t); });
+    return () => { alive = false; };
+  }, []);
+  async function toggleBiometric(next) {
+    if (!next) {
+      // Disabling — no need to prompt.
+      setBiometricEnabled(false);
+      setBioOn(false);
+      toast.info("Face ID desactivado.");
+      return;
+    }
+    // Enabling — confirm with the actual biometric so we don't enable
+    // for a user whose face isn't enrolled / who can't authenticate.
+    try {
+      const ok = await authenticateWithBiometric("Confirmá para activar Face ID");
+      if (!ok) return;
+      setBiometricEnabled(true);
+      setBioOn(true);
+      toast.success(`${bioType === "face" ? "Face ID" : "Touch ID"} activado.`);
+    } catch (e) {
+      toast.error("No pudimos verificar tu biometría.");
+    }
+  }
 
   // Adapter: map v2 theme `T` -> legacy theme `C` shape that the
   // MfaEnrollSection expects. Same trick as the AI wizard.
@@ -256,6 +291,17 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
             subtitle={isDark ? "Pasar a tema claro" : "Pasar a tema oscuro"}
             value={isDark}
             onChange={() => onToggleDark()}
+          />
+        )}
+
+        {/* Face ID / Touch ID — only when device supports it. */}
+        {bioType !== "none" && (
+          <SettingsToggle
+            T={T}
+            title={bioType === "face" ? "Face ID" : bioType === "fingerprint" ? "Touch ID" : "Biometría"}
+            subtitle="Desbloqueá SAMAS sin tipear el PIN"
+            value={bioOn}
+            onChange={toggleBiometric}
           />
         )}
 

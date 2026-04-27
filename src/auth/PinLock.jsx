@@ -18,6 +18,9 @@
 // ============================================================
 
 import { useEffect, useRef, useState } from "react";
+import {
+  isBiometricAvailable, authenticateWithBiometric, isBiometricEnabled,
+} from "../lib/biometric.js";
 
 // Clean up any PIN hashes from the old device-local scheme. Harmless
 // to re-run — if the keys don't exist, nothing happens.
@@ -112,6 +115,40 @@ export function PinLockScreen({ C, storedPinHash, onSavePin, onSuccess, onForgot
   const [firstPin, setFirstPin] = useState("");
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [biometricType, setBiometricType] = useState("none"); // "face" | "fingerprint" | "iris" | "none"
+  const triedBioRef = useRef(false);
+
+  // On mount in enter mode, if Face ID / Touch ID is enabled and the
+  // device supports it, trigger the prompt automatically. Cancelling
+  // (or any error) just falls through to the PIN pad. We only try
+  // once per mount so the user can't get stuck in a prompt loop.
+  useEffect(() => {
+    if (mode !== "enter") return;
+    if (triedBioRef.current) return;
+    let alive = true;
+    (async () => {
+      const type = await isBiometricAvailable();
+      if (!alive) return;
+      setBiometricType(type);
+      if (type === "none" || !isBiometricEnabled()) return;
+      triedBioRef.current = true;
+      try {
+        const ok = await authenticateWithBiometric("Desbloqueá SAMAS");
+        if (alive && ok) onSuccess();
+      } catch (_) {
+        // Fall through to PIN pad silently.
+      }
+    })();
+    return () => { alive = false; };
+  }, [mode]);
+
+  // Manual re-trigger (the "Usar Face ID" button below the dots).
+  async function tryBiometric() {
+    try {
+      const ok = await authenticateWithBiometric("Desbloqueá SAMAS");
+      if (ok) onSuccess();
+    } catch (_) {}
+  }
 
   useEffect(() => {
     if (pin.length !== 4) return;
@@ -206,6 +243,38 @@ export function PinLockScreen({ C, storedPinHash, onSavePin, onSuccess, onForgot
         }}>
           {err || "·"}
         </div>
+
+        {/* Face ID / Touch ID quick-action — only in enter mode, only
+            when the device supports it AND the user has it enabled. */}
+        {stage === "enter" && biometricType !== "none" && isBiometricEnabled() && (
+          <button
+            onClick={tryBiometric}
+            style={{
+              background: C.accent + "18", border: `1px solid ${C.accent}55`,
+              borderRadius: 999, padding: "8px 16px",
+              color: C.accent, fontSize: 12, fontWeight: 700,
+              cursor: "pointer", fontFamily: "inherit",
+              display: "inline-flex", alignItems: "center", gap: 6,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {biometricType === "face" ? (
+                <>
+                  <rect x="3" y="3" width="18" height="18" rx="3"/>
+                  <path d="M9 9h.01M15 9h.01M9 15c.5.5 1.5 1 3 1s2.5-.5 3-1"/>
+                </>
+              ) : (
+                <>
+                  <path d="M2 12c0-5.5 4.5-10 10-10s10 4.5 10 10"/>
+                  <path d="M6 12a6 6 0 0 1 12 0v4"/>
+                  <path d="M10 12v4a2 2 0 1 0 4 0"/>
+                </>
+              )}
+            </svg>
+            Usar {biometricType === "face" ? "Face ID" : "Touch ID"}
+          </button>
+        )}
 
         {stage === "enter" && (
           <button
