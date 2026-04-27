@@ -38,6 +38,7 @@ import {
 } from "../lib/push.js";
 import { supabase } from "../lib/supabase.js";
 import { LANGUAGES } from "../lib/languages.js";
+import { t as tr } from "../lib/i18n.js";
 import { toast } from "./toast.jsx";
 
 // localStorage flag for the Pro mode toggle. Default ON — power users
@@ -138,6 +139,7 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
             isDark={isDark}
             onToggleDark={onToggleDark}
             onOpenSettings={() => setShowSettings(true)}
+            lang={lang}
           />
         );
       case "news":
@@ -168,7 +170,7 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
       </ScrollWithPTR>
 
       {/* ---------- floating tab bar ---------- */}
-      <SamasTabBar tab={tab} setTab={setTab} T={T} bottomInset={tabBarBottom} />
+      <SamasTabBar tab={tab} setTab={setTab} T={T} bottomInset={tabBarBottom} lang={lang} />
 
       {/* ---------- settings sheet (Pro toggle, 2FA, logout, etc.) ---------- */}
       {showSettings && (
@@ -377,8 +379,8 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
         {/* Pro mode row */}
         <SettingsToggle
           T={T}
-          title="Modo Pro"
-          subtitle="Banner en vivo, distribución y top movers"
+          title={tr("settings.pro_mode", lang)}
+          subtitle={tr("settings.pro_mode_sub", lang)}
           value={proMode}
           onChange={setProMode}
         />
@@ -387,8 +389,8 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
         {onToggleDark && (
           <SettingsToggle
             T={T}
-            title={isDark ? "Modo claro" : "Modo oscuro"}
-            subtitle={isDark ? "Pasar a tema claro" : "Pasar a tema oscuro"}
+            title={isDark ? tr("settings.light_mode", lang) : tr("settings.dark_mode", lang)}
+            subtitle={isDark ? tr("settings.theme_to_light", lang) : tr("settings.theme_to_dark", lang)}
             value={isDark}
             onChange={() => onToggleDark()}
           />
@@ -415,7 +417,7 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
             >
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text }}>
-                  Idioma
+                  {tr("settings.language", lang)}
                 </div>
                 <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
                   {activeLanguage.label}
@@ -495,11 +497,11 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
             or a real lack of hardware. */}
         <SettingsToggle
           T={T}
-          title={bioType === "face" ? "Face ID" : bioType === "fingerprint" ? "Touch ID" : "Biometría"}
+          title={bioType === "face" ? tr("settings.faceid", lang) : bioType === "fingerprint" ? tr("settings.touchid", lang) : tr("settings.biometry", lang)}
           subtitle={
             bioType === "none"
-              ? (bioDiag || "Detectando…")
-              : "Desbloqueá SAMAS sin tipear el PIN"
+              ? (bioDiag || tr("settings.bio_detecting", lang))
+              : tr("settings.bio_unlock", lang)
           }
           value={bioOn}
           onChange={async (next) => {
@@ -519,13 +521,13 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
         {isNativeApp && (
           <SettingsToggle
             T={T}
-            title="Notificaciones push"
+            title={tr("settings.push", lang)}
             subtitle={
-              pushBusy ? "Procesando…" :
-              pushPerm === "denied" ? "Bloqueadas · Activá desde Ajustes de iOS" :
-              pushPerm === "unsupported" ? "No disponibles en este dispositivo" :
-              pushOn ? "Alertas de precio y noticias" :
-              "Recibí avisos cuando un activo toca tu objetivo"
+              pushBusy ? tr("settings.push.busy", lang) :
+              pushPerm === "denied" ? tr("settings.push.denied", lang) :
+              pushPerm === "unsupported" ? tr("settings.push.unsupported", lang) :
+              pushOn ? tr("settings.push.on_sub", lang) :
+              tr("settings.push.off_sub", lang)
             }
             value={pushOn}
             onChange={togglePush}
@@ -541,10 +543,10 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
         }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text }}>
-              Autenticación 2FA
+              {tr("settings.mfa", lang)}
             </div>
             <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
-              Recomendado · Authenticator App
+              {tr("settings.mfa_sub", lang)}
             </div>
           </div>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -564,7 +566,7 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
             }}
           >
             <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.danger }}>
-              Cerrar sesión
+              {tr("settings.logout", lang)}
             </div>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.danger} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
@@ -577,7 +579,7 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
           background: T.surface, border: `1px solid ${T.border}`,
           color: T.text, fontFamily: FONT.sans, fontSize: 14, fontWeight: 600,
           cursor: "pointer",
-        }}>Listo</button>
+        }}>{tr("settings.done", lang)}</button>
       </div>
 
       {/* 2FA enrollment sub-sheet */}
@@ -599,7 +601,7 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
               borderBottom: `1px solid ${T.border}`,
             }}>
               <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: T.text }}>
-                Autenticación 2FA
+                {tr("settings.mfa", lang)}
               </div>
               <button onClick={() => setShow2FA(false)} style={{
                 background: T.surface, border: `1px solid ${T.border}`,
@@ -635,22 +637,22 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
             padding: 20,
           }}>
             <div style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text, marginBottom: 8 }}>
-              ¿Cerrar sesión?
+              {tr("settings.logout_confirm", lang)}
             </div>
             <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, lineHeight: 1.5, marginBottom: 18 }}>
-              Vas a tener que volver a ingresar email, contraseña y PIN cuando vuelvas.
+              {tr("settings.logout_confirm_sub", lang)}
             </div>
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={() => setConfirmLogout(false)} style={{
                 flex: 1, padding: 14, borderRadius: 14,
                 background: T.surface, border: `1px solid ${T.border}`,
                 color: T.text, fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, cursor: "pointer",
-              }}>Cancelar</button>
+              }}>{tr("settings.logout_cancel", lang)}</button>
               <button onClick={() => { setConfirmLogout(false); onClose(); onLogout(); }} style={{
                 flex: 1, padding: 14, borderRadius: 14,
                 background: T.danger, color: "#FFFFFF",
                 fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, border: "none", cursor: "pointer",
-              }}>Cerrar sesión</button>
+              }}>{tr("settings.logout_yes", lang)}</button>
             </div>
           </div>
         </div>

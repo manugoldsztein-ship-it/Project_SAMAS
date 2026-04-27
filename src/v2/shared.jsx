@@ -9,6 +9,7 @@
 import React from "react";
 import { FONT } from "./theme.js";
 import { Ico } from "./icons.jsx";
+import { t as tr } from "../lib/i18n.js";
 
 // ----------------------------------------------------------
 // Sparkline — single polyline, no axes / labels.
@@ -51,13 +52,14 @@ export const SAMAS_SPARKS = {
 // Sits 12px above the home indicator with a soft drop shadow + 1px
 // border so it reads as a card on top of the page content. The active
 // tab gets the accent color and a 24x3 indicator bar above its icon.
+// Tab labels translate based on the user's chosen language.
 // ----------------------------------------------------------
-export function SamasTabBar({ tab, setTab, T, bottomInset = 12 }) {
+export function SamasTabBar({ tab, setTab, T, bottomInset = 12, lang = "es" }) {
   const tabs = [
-    { id: "wallet", label: "Wallet",   ico: Ico.Wallet },
-    { id: "broker", label: "Invertir", ico: Ico.Chart  },
-    { id: "social", label: "Social",   ico: Ico.Users  },
-    { id: "news",   label: "Noticias", ico: Ico.News   },
+    { id: "wallet", label: tr("tab.wallet", lang), ico: Ico.Wallet },
+    { id: "broker", label: tr("tab.invest", lang), ico: Ico.Chart  },
+    { id: "social", label: tr("tab.social", lang), ico: Ico.Users  },
+    { id: "news",   label: tr("tab.news",   lang), ico: Ico.News   },
   ];
   return (
     <div style={{

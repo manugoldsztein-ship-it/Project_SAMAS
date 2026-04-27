@@ -27,8 +27,9 @@ import {
 import { wallet as walletApi, card as cardApi, broker as brokerApi } from "./api/index.js";
 import { toast } from "./toast.jsx";
 import { setRefreshHandler } from "./refreshRegistry.js";
+import { t as tr } from "../lib/i18n.js";
 
-export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark, onOpenSettings }) {
+export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark, onOpenSettings, lang = "es" }) {
   // ----------- data state -----------
   const [balance, setBalance] = useState(null);
   const [fx, setFx] = useState(null);
@@ -94,7 +95,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
         >
           <Avatar color={avatarColor} initials={userInitials} size={42} />
           <div>
-            <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute }}>Hola</div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute }}>{tr("greeting_prefix", lang)}</div>
             <div style={{ fontFamily: FONT.sans, fontSize: 16, fontWeight: 700, color: T.text }}>{userName}</div>
           </div>
         </button>
