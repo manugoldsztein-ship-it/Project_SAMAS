@@ -26,7 +26,7 @@ import {
 } from "./shared.jsx";
 import { wallet as walletApi, card as cardApi, broker as brokerApi } from "./api/index.js";
 
-export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark, appShell = "principal", onChangeAppShell }) {
+export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark, onOpenSettings }) {
   // ----------- data state -----------
   const [balance, setBalance] = useState(null);
   const [fx, setFx] = useState(null);
@@ -75,13 +75,20 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
         padding: "calc(env(safe-area-inset-top) + 20px) 20px 0",
         display: "flex", justifyContent: "space-between", alignItems: "center",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <button
+          onClick={onOpenSettings}
+          style={{
+            display: "flex", alignItems: "center", gap: 12,
+            background: "transparent", border: "none", padding: 0,
+            cursor: onOpenSettings ? "pointer" : "default", textAlign: "left",
+          }}
+        >
           <Avatar color={avatarColor} initials={userInitials} size={42} />
           <div>
             <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute }}>Hola</div>
             <div style={{ fontFamily: FONT.sans, fontSize: 16, fontWeight: 700, color: T.text }}>{userName}</div>
           </div>
-        </div>
+        </button>
         <div style={{ display: "flex", gap: 8 }}>
           {onToggleDark && (
             <ChromeBtn T={T} onClick={onToggleDark}>
@@ -193,53 +200,6 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
         }}>
           <Quote T={T} label="DÓLAR MEP"     value={fx.mep.value}     delta={fx.mep.change} />
           <Quote T={T} label="DÓLAR OFICIAL" value={fx.oficial.value} delta={fx.oficial.change} />
-        </div>
-      )}
-
-      {/* ---------- AI plan card (mirrors the legacy banner) ---------- */}
-      <div
-        onClick={() => alert("Próximamente: SAMAS IA arma tu plan personalizado.")}
-        style={{
-          margin: "28px 16px 0", padding: 16, borderRadius: 22, cursor: "pointer",
-          background: `linear-gradient(135deg, ${T.accentSoft} 0%, ${T.surface} 70%)`,
-          border: `1px solid ${T.accent}33`,
-          display: "flex", alignItems: "center", gap: 14,
-        }}
-      >
-        <div style={{
-          width: 48, height: 48, borderRadius: 12, flexShrink: 0,
-          background: T.bg, border: `1px solid ${T.border}`,
-          display: "flex", alignItems: "center", justifyContent: "center", color: T.accent,
-        }}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2" fill="currentColor"/>
-          </svg>
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
-            <span style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 700, color: T.text }}>
-              Armar mi plan con IA
-            </span>
-            <span style={{
-              fontFamily: FONT.mono, fontSize: 9, fontWeight: 700, letterSpacing: 0.6,
-              padding: "2px 6px", borderRadius: 4,
-              background: T.accent, color: T.accentInk,
-            }}>NUEVO</span>
-          </div>
-          <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute, lineHeight: 1.4 }}>
-            Análisis de ingresos, gastos y objetivo para diseñar tu estrategia.
-          </div>
-        </div>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="9 18 15 12 9 6"/>
-        </svg>
-      </div>
-
-      {/* ---------- virtual card ---------- */}
-      {card && (
-        <div style={{ margin: "28px 16px 0" }}>
-          <SectionHead T={T} title="Mi tarjeta" action="Ver detalles" onAction={() => setActiveModal("card")} />
-          <CardPreview T={T} card={card} onClick={() => setActiveModal("card")} />
         </div>
       )}
 

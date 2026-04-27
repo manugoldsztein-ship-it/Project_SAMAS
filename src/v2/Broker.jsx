@@ -41,7 +41,7 @@ const SUB_TABS = [
 // Top-level BrokerShell — replaces the main Shell entirely while
 // the user is inside Invertir.
 // ----------------------------------------------------------
-export function BrokerShell({ T, isNativeApp = false, onBack }) {
+export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true }) {
   const [tab, setTab] = useState("portafolio");
   const [selectedAsset, setSelectedAsset] = useState(null);
 
@@ -142,6 +142,15 @@ export function BrokerShell({ T, isNativeApp = false, onBack }) {
         </div>
       </div>
 
+      {/* ---------- sticky live ticker banner ----------
+          Outside the scrollable region so it stays pinned at the top
+          across all sub-tabs and through scroll. Filtered to ETFs +
+          commodities + cripto only (no individual stocks). Hidden when
+          the user turns Pro mode off. */}
+      {proMode && (
+        <TickerBanner T={T} assets={assets} />
+      )}
+
       {/* ---------- scrollable content ---------- */}
       <div style={{
         flex: 1, overflowY: "auto",
@@ -156,6 +165,7 @@ export function BrokerShell({ T, isNativeApp = false, onBack }) {
             fx={fx}
             ccy={ccy}
             setCcy={setCcy}
+            proMode={proMode}
             onSelectAsset={setSelectedAsset}
           />
         )}
@@ -244,7 +254,7 @@ function SubNav({ T, tab, setTab, bottomInset }) {
 // Portafolio — total + ARS/USD toggle + ticker banner + distribución +
 // holdings + top/bottom movers + AI plan card.
 // ----------------------------------------------------------
-function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset }) {
+function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, proMode = true }) {
   if (!portfolio) return <Loader T={T}/>;
 
   const ccySym = ccy === "ARS" ? "$" : "US$";
@@ -252,10 +262,6 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset }
 
   return (
     <div style={{ paddingBottom: 110 }}>
-      {/* Live ticker banner — scrolling row of selected assets at the
-          top of Portafolio, like the legacy Pro view. */}
-      <TickerBanner T={T} assets={assets} />
-
       {/* portfolio summary card */}
       <div style={{
         margin: "16px", padding: 22, borderRadius: 24,
@@ -313,11 +319,13 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset }
         </div>
       </div>
 
-      {/* AI Plan card — links to the goal-planning wizard. */}
+      {/* AI Plan card — links to the goal-planning wizard. Always
+          shown so the user can find the wizard regardless of mode. */}
       <AIPlanCard T={T} />
 
-      {/* Distribución bar — % per holding of total cartera. */}
-      {portfolio.holdings.length > 0 && (
+      {/* Distribución bar — % per holding of total cartera. Only in
+          Pro mode (gated by the settings toggle). */}
+      {proMode && portfolio.holdings.length > 0 && (
         <DistribucionBar T={T} holdings={portfolio.holdings} totalUsd={portfolio.totalUsd} />
       )}
 
@@ -348,8 +356,8 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset }
         </div>
       )}
 
-      {/* Top / bottom movers across the whole asset universe. */}
-      {assets.length > 0 && (
+      {/* Top / bottom movers across the whole asset universe. Pro only. */}
+      {proMode && assets.length > 0 && (
         <TopMovers T={T} assets={assets} onSelectAsset={onSelectAsset} />
       )}
     </div>
@@ -1850,12 +1858,16 @@ function DoneScreen({ T, done, side, qty, ticker, onClose }) {
 // rolls smoothly via CSS animation.
 // ----------------------------------------------------------
 function TickerBanner({ T, assets }) {
-  // Pick a representative cross-section: a few CEDEARs / ETFs / cripto.
+  // ETFs + commodities + cripto only — these are "the market" at a
+  // glance. We deliberately skip individual stocks (AAPL, TSLA, etc.)
+  // since those belong to Mercado/Top movers, not the macro snapshot.
   const pick = useMemo(() => {
     if (!assets || assets.length === 0) return [];
-    const wanted = ["SPY", "QQQ", "AAPL", "NVDA", "TSLA", "GLD", "BTC", "ETH"];
+    const wanted = ["SPY", "QQQ", "IWM", "EWZ", "GLD", "SLV", "USO", "BTC", "ETH"];
     const found = wanted.map((tk) => assets.find((a) => a.ticker === tk)).filter(Boolean);
-    return found.length ? found : assets.slice(0, 6);
+    if (found.length) return found;
+    // Fallback: filter by category if specific tickers aren't seeded.
+    return assets.filter((a) => ["ETF", "COMMOD", "CRYPTO"].includes(a.category));
   }, [assets]);
 
   if (pick.length === 0) return null;
