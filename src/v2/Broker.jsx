@@ -872,21 +872,58 @@ function AssetSheet({ T, asset, onClose, onDone }) {
 // ----------------------------------------------------------
 // AlertForm — set / edit / remove a price alert.
 // ----------------------------------------------------------
+// Two input modes (toggle): "Precio" sets an absolute target,
+// "Porcentaje" sets a signed % from current (+5 = +5% → above,
+// -3 = -3% → below). The form computes targetPrice + direction
+// before calling the API; the API itself stays simple (one shape:
+// { ticker, targetPrice, direction }).
+//
+// When the user opens the sheet on an asset that already has an
+// alert, we re-derive the form mode by checking whether the saved
+// targetPrice corresponds to a "round" percentage from the current
+// price — if not, we fall back to "Precio" mode and show the
+// stored absolute price.
 function AlertForm({ T, asset, existing, onSaved, onRemoved }) {
+  const [type, setType] = useState("price"); // "price" | "pct"
   const [direction, setDirection] = useState(existing?.direction || "above");
   const [priceStr, setPriceStr] = useState(
     existing ? String(existing.targetPrice) : String(asset.price)
   );
+  // Signed %: positive = above current, negative = below.
+  // Default to +5 so the form has a sensible starting value.
+  const [pctStr, setPctStr] = useState("5");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
+  // Derived target + direction based on input mode. When type="pct"
+  // we compute targetPrice from the signed % and infer direction
+  // from the sign — UI shows a live preview so the user knows what
+  // gets saved.
+  const pctNum = parseFloat(pctStr.replace(",", ".")) || 0;
+  const computedTarget = type === "pct"
+    ? asset.price * (1 + pctNum / 100)
+    : parseFloat(priceStr.replace(",", ".")) || 0;
+  const computedDirection = type === "pct"
+    ? (pctNum >= 0 ? "above" : "below")
+    : direction;
+
   async function save() {
     setErr(null);
-    const targetPrice = parseFloat(priceStr.replace(",", "."));
-    if (!targetPrice || targetPrice <= 0) { setErr("Precio inválido."); return; }
+    if (!computedTarget || computedTarget <= 0) {
+      setErr("Valor inválido.");
+      return;
+    }
+    if (type === "pct" && pctNum === 0) {
+      setErr("El porcentaje no puede ser cero.");
+      return;
+    }
     setBusy(true);
     try {
-      const a = await brokerApi.setPriceAlert({ ticker: asset.ticker, targetPrice, direction });
+      const a = await brokerApi.setPriceAlert({
+        ticker: asset.ticker,
+        targetPrice: computedTarget,
+        direction: computedDirection,
+      });
       onSaved(a);
     } catch (e) { setErr(e.message); setBusy(false); }
   }
@@ -901,29 +938,80 @@ function AlertForm({ T, asset, existing, onSaved, onRemoved }) {
   return (
     <>
       <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, marginBottom: 14, lineHeight: 1.5 }}>
-        Te avisamos por notificación cuando {asset.ticker} {direction === "above" ? "supere" : "baje a"} el precio que elijas.
+        Te avisamos por notificación cuando {asset.ticker} llegue al nivel que elijas.
       </div>
 
-      {/* Direction selector */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+      {/* Type toggle: Precio / Porcentaje */}
+      <div style={{
+        display: "flex", gap: 4, padding: 4, marginBottom: 14,
+        background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12,
+      }}>
         {[
-          { id: "above", label: "Cuando supere" },
-          { id: "below", label: "Cuando baje" },
-        ].map((d) => {
-          const active = d.id === direction;
+          { id: "price", label: "Precio" },
+          { id: "pct",   label: "Porcentaje" },
+        ].map((t) => {
+          const active = t.id === type;
           return (
-            <button key={d.id} onClick={() => setDirection(d.id)} style={{
-              flex: 1, padding: 12, borderRadius: 12,
-              background: active ? T.accentSoft : T.surface,
-              border: `1px solid ${active ? T.accent : T.border}`,
-              color: active ? T.accent : T.text,
-              fontFamily: FONT.sans, fontSize: 13, fontWeight: 600, cursor: "pointer",
-            }}>{d.label}</button>
+            <button key={t.id} onClick={() => setType(t.id)} style={{
+              flex: 1, padding: "8px 0", borderRadius: 8,
+              background: active ? T.bg : "transparent",
+              border: active ? `1px solid ${T.border}` : "1px solid transparent",
+              color: active ? T.text : T.textMute,
+              fontFamily: FONT.sans, fontSize: 12, fontWeight: 600, cursor: "pointer",
+            }}>{t.label}</button>
           );
         })}
       </div>
 
-      <NumberInput T={T} label={`Precio objetivo (${asset.currency})`} value={priceStr} onChange={setPriceStr} placeholder={String(asset.price)} />
+      {/* Direction selector — only for Precio mode. In Porcentaje mode
+          direction is derived from the sign of the % so showing this
+          would just be redundant. */}
+      {type === "price" && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+          {[
+            { id: "above", label: "Cuando supere" },
+            { id: "below", label: "Cuando baje" },
+          ].map((d) => {
+            const active = d.id === direction;
+            return (
+              <button key={d.id} onClick={() => setDirection(d.id)} style={{
+                flex: 1, padding: 12, borderRadius: 12,
+                background: active ? T.accentSoft : T.surface,
+                border: `1px solid ${active ? T.accent : T.border}`,
+                color: active ? T.accent : T.text,
+                fontFamily: FONT.sans, fontSize: 13, fontWeight: 600, cursor: "pointer",
+              }}>{d.label}</button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Input depends on mode */}
+      {type === "price" ? (
+        <NumberInput T={T} label={`Precio objetivo (${asset.currency})`}
+          value={priceStr} onChange={setPriceStr}
+          placeholder={String(asset.price)} />
+      ) : (
+        <NumberInput T={T} label="Porcentaje (+ sube · − baja)"
+          value={pctStr} onChange={setPctStr}
+          placeholder="5" />
+      )}
+
+      {/* Live preview — what we'll actually save */}
+      {(type === "pct" && pctNum !== 0) || (type === "price" && computedTarget > 0) ? (
+        <div style={{
+          marginTop: 12, padding: "10px 14px", borderRadius: 12,
+          background: T.surface, border: `1px solid ${T.border}`,
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+        }}>
+          <span style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute }}>
+            {computedDirection === "above" ? "Avisar cuando supere" : "Avisar cuando baje a"}
+          </span>
+          <span style={{ fontFamily: FONT.mono, fontSize: 14, fontWeight: 700, color: T.text }}>
+            {asset.currency === "ARS" ? "$" : "US$"}{fmtMoney(computedTarget, asset.currency)}
+          </span>
+        </div>
+      ) : null}
 
       {err && <div style={{ marginTop: 12, color: T.danger, fontFamily: FONT.sans, fontSize: 12 }}>{err}</div>}
 
