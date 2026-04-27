@@ -32,6 +32,11 @@ import {
   isBiometricAvailable, authenticateWithBiometric,
   isBiometricEnabled, setBiometricEnabled, debugBiometric,
 } from "../lib/biometric.js";
+import {
+  isPushEnabled, setPushEnabled,
+  registerPush, getPushPermission, clearPushLocal,
+} from "../lib/push.js";
+import { supabase } from "../lib/supabase.js";
 import { toast } from "./toast.jsx";
 
 // localStorage flag for the Pro mode toggle. Default ON — power users
@@ -196,11 +201,99 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
   // (e.g. web preview, simulator without Face ID configured).
   const [bioType, setBioType] = useState("none");
   const [bioOn, setBioOn] = useState(isBiometricEnabled());
+  // bioDiag is only surfaced when bioType ends up as "none" so the
+  // user can see WHY (plugin missing / not enrolled / hardware error).
+  const [bioDiag, setBioDiag] = useState("");
   useEffect(() => {
     let alive = true;
-    isBiometricAvailable().then((t) => { if (alive) setBioType(t); });
+    (async () => {
+      try {
+        const t = await isBiometricAvailable();
+        if (!alive) return;
+        setBioType(t);
+        if (t === "none") {
+          const dbg = await debugBiometric();
+          if (!alive) return;
+          const summary = dbg.plugin
+            ? (dbg.info ? "Hardware no disponible o sin enrolar" : `Error: ${dbg.error}`)
+            : "Plugin no disponible";
+          setBioDiag(summary);
+        }
+      } catch (e) {
+        setBioDiag(`Error: ${e?.message || String(e)}`);
+      }
+    })();
     return () => { alive = false; };
   }, []);
+  // Push notifications state — current opt-in flag + the iOS
+  // permission grant. They can disagree: a user can revoke the iOS
+  // permission from System Settings while our flag is still "true",
+  // in which case the toggle in our UI should reflect the OS reality.
+  const [pushOn, setPushOn] = useState(isPushEnabled());
+  const [pushPerm, setPushPerm] = useState("prompt"); // granted | denied | prompt | unsupported
+  const [pushBusy, setPushBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    getPushPermission().then((p) => { if (alive) setPushPerm(p); });
+    return () => { alive = false; };
+  }, []);
+  async function togglePush(next) {
+    if (pushBusy) return;
+    setPushBusy(true);
+    try {
+      if (!next) {
+        // User flipping off: drop the local flag AND best-effort delete
+        // any device_tokens row for this device so we stop receiving
+        // pushes immediately. We don't ask iOS to revoke perms — that
+        // requires a trip to Settings and isn't something we want to
+        // bug the user about.
+        clearPushLocal();
+        setPushOn(false);
+        try {
+          if (user?.id) {
+            await supabase.from("device_tokens")
+              .delete()
+              .eq("user_id", user.id)
+              .eq("platform", "ios");
+          }
+        } catch (_) {}
+        toast.info("Notificaciones desactivadas.");
+        return;
+      }
+      // Enabling — set the flag first so the App.jsx effect picks up
+      // and registers, then run register here too in case the user is
+      // already past that effect (e.g. toggling on, off, on again in
+      // one session).
+      setPushEnabled(true);
+      const { permission, token } = await registerPush(async (t) => {
+        if (!user?.id) return;
+        await supabase.from("device_tokens").upsert({
+          user_id: user.id, token: t, platform: "ios",
+          last_seen: new Date().toISOString(),
+        }, { onConflict: "token" });
+      });
+      setPushPerm(permission);
+      if (permission === "granted" && token) {
+        setPushOn(true);
+        toast.success("Notificaciones activadas.");
+      } else if (permission === "denied") {
+        setPushOn(false);
+        clearPushLocal();
+        toast.error("Permiso denegado. Activalo desde Ajustes de iOS.");
+      } else {
+        setPushOn(false);
+        clearPushLocal();
+        toast.error("No pudimos activar las notificaciones.");
+      }
+    } catch (e) {
+      toast.error(`Push: ${e?.message || String(e)}`);
+      clearPushLocal();
+      setPushOn(false);
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
   async function toggleBiometric(next) {
     if (!next) {
       // Disabling — no need to prompt.
@@ -294,28 +387,48 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
           />
         )}
 
-        {/* Face ID / Touch ID — visible always so the user can see it
-            exists. Subtitle changes based on detection state so we can
-            diagnose problems in the field. Tapping when unavailable
-            opens a diagnostic toast. */}
+        {/* Face ID / Touch ID — when the device doesn't have biometry
+            available we still show the row but with the reason in the
+            subtitle, so users (and us) know whether it's a setup issue
+            or a real lack of hardware. */}
         <SettingsToggle
           T={T}
           title={bioType === "face" ? "Face ID" : bioType === "fingerprint" ? "Touch ID" : "Biometría"}
           subtitle={
             bioType === "none"
-              ? "No detectada · Tocá para diagnosticar"
+              ? (bioDiag || "Detectando…")
               : "Desbloqueá SAMAS sin tipear el PIN"
           }
           value={bioOn}
           onChange={async (next) => {
-            if (bioType === "none") {
-              const dbg = await debugBiometric();
-              toast.info(`Plugin: ${dbg.plugin ? "OK" : "no cargado"} · ${dbg.info ? "info: " + JSON.stringify(dbg.info).slice(0, 80) : dbg.error || "sin info"}`, { duration: 6000 });
-              return;
+            if (bioType === "none") return;
+            try {
+              await toggleBiometric(next);
+            } catch (e) {
+              toast.error(`Toggle error: ${e?.message || String(e)}`, { duration: 8000 });
             }
-            return toggleBiometric(next);
           }}
         />
+
+        {/* Push notifications — only show on native (the web build can't
+            register for APNs). The subtitle reflects iOS permission
+            state so the user knows where to go if they need to grant it
+            from System Settings. */}
+        {isNativeApp && (
+          <SettingsToggle
+            T={T}
+            title="Notificaciones push"
+            subtitle={
+              pushBusy ? "Procesando…" :
+              pushPerm === "denied" ? "Bloqueadas · Activá desde Ajustes de iOS" :
+              pushPerm === "unsupported" ? "No disponibles en este dispositivo" :
+              pushOn ? "Alertas de precio y noticias" :
+              "Recibí avisos cuando un activo toca tu objetivo"
+            }
+            value={pushOn}
+            onChange={togglePush}
+          />
+        )}
 
         {/* 2FA row — opens the legacy MfaEnrollSection in a sub-modal. */}
         <button onClick={() => setShow2FA(true)} style={{

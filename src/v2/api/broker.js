@@ -384,40 +384,50 @@ export async function removeWatchlist(id) {
 // loop. The Órdenes view shows the pending alerts/stops so the
 // user can see them and remove them.
 
+// ----- Price alerts -----
+// Delegated to ./alerts.js, which persists to public.price_alerts in
+// Supabase (so the check-price-alerts cron can match and fire pushes,
+// and so alerts roam across the user's devices).
+//
+// We attach the matching ASSETS row on read so the Órdenes view can
+// show the asset name + last price without re-joining client-side.
+
+import * as alertsApi from "./alerts.js";
+
 /**
- * setPriceAlert({ ticker, targetPrice, direction }) — fire when
- * the asset's price crosses targetPrice in `direction`.
- * @returns {Promise<{ ticker, targetPrice, direction, createdAt }>}
+ * setPriceAlert({ ticker, targetPrice, direction, currency, note }) —
+ * @returns {Promise<{ id, ticker, targetPrice, direction, currency, createdAt, ... }>}
  */
-export async function setPriceAlert({ ticker, targetPrice, direction = "above" }) {
-  await jitter();
-  const a = ASSETS.find((x) => x.ticker === ticker);
+export async function setPriceAlert(args) {
+  const a = ASSETS.find((x) => x.ticker === args?.ticker);
   if (!a) throw new Error("Ticker no encontrado.");
-  if (!targetPrice || targetPrice <= 0) throw new Error("Precio objetivo inválido.");
-  if (direction !== "above" && direction !== "below") throw new Error("Dirección inválida.");
-
-  const alert = { ticker, targetPrice, direction, createdAt: Date.now() };
-  saveState({ ...state, alerts: { ...state.alerts, [ticker]: alert } });
-  return alert;
+  return alertsApi.setPriceAlert(args);
 }
 
 /**
- * removePriceAlert(ticker) — delete the alert for this ticker.
+ * removePriceAlert(idOrTicker) — accepts a UUID (preferred) or
+ * a ticker (deletes all alerts on that ticker).
  */
-export async function removePriceAlert(ticker) {
-  await jitter();
-  const next = { ...state, alerts: { ...state.alerts } };
-  delete next.alerts[ticker];
-  saveState(next);
-  return { ok: true };
+export async function removePriceAlert(idOrTicker) {
+  return alertsApi.removePriceAlert(idOrTicker);
 }
 
 /**
- * getPriceAlerts() — flat list of all active alerts.
+ * getPriceAlerts({ activeOnly }) — list of alerts with the
+ * matching asset row attached for convenience.
  */
-export async function getPriceAlerts() {
-  await jitter();
-  return Object.values(state.alerts).map((a) => ({
+export async function getPriceAlerts(opts = {}) {
+  const list = await alertsApi.getPriceAlerts(opts);
+  return list.map((a) => ({
+    ...a,
+    asset: ASSETS.find((x) => x.ticker === a.ticker),
+  }));
+}
+
+/** getFiredAlerts() — recently fired alerts (history view). */
+export async function getFiredAlerts(limit) {
+  const list = await alertsApi.getFiredAlerts(limit);
+  return list.map((a) => ({
     ...a,
     asset: ASSETS.find((x) => x.ticker === a.ticker),
   }));

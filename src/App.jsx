@@ -31,6 +31,7 @@ import { hashPin, PinLockScreen } from "./auth/PinLock.jsx";
 import { MfaEnrollSection, MfaChallengeView } from "./auth/Mfa.jsx";
 import { fetchNewsForTicker, fetchNewsForTickers, relativeTime } from "./lib/news.js";
 import { isNative as isNativeApp, hapticNative, updateNativeTheme, hideNativeSplash } from "./lib/native.js";
+import { isPushEnabled, registerPush, setupPushListeners, clearPushLocal } from "./lib/push.js";
 // Welcome chooser: shown only on first session when profiles.ui_mode
 // is null. User picks "principiante" or "profesional" and the rest
 // of the app reads that choice to decide which surfaces to show.
@@ -6563,6 +6564,67 @@ export default function SAMASApp() {
     const id = setTimeout(() => setShowTutorial(true), 400);
     return () => clearTimeout(id);
   }, [loggedIn, sbProfile]);
+
+  // ----------------------------------------------------------
+  // PUSH NOTIFICATIONS — register on login, listen for messages
+  // ----------------------------------------------------------
+  // The user has to opt in via Settings (`samas_push_enabled` flag)
+  // before we trigger the iOS prompt. Once they do, every subsequent
+  // launch silently re-registers (iOS may rotate the APNs token after
+  // restores / TestFlight / "forget device") and upserts the latest
+  // token to public.device_tokens so the send-push function can find
+  // it. If the user denies permission later in iOS Settings the next
+  // registerPush() returns { permission: "denied", token: null } and
+  // we just stop trying.
+  useEffect(() => {
+    if (!loggedIn || !isNativeApp) return;
+    if (!isPushEnabled()) return;
+    let cleanup = () => {};
+    let alive = true;
+    (async () => {
+      try {
+        const { permission, token } = await registerPush(async (t) => {
+          // Persist to device_tokens so the cron knows where to push.
+          // Upsert by token (UNIQUE constraint) — if a previous user
+          // logged out on this device, the row reassigns to the new
+          // user_id atomically.
+          if (!sbSession?.user?.id) return;
+          await supabase.from("device_tokens").upsert({
+            user_id: sbSession.user.id,
+            token: t,
+            platform: "ios",
+            last_seen: new Date().toISOString(),
+          }, { onConflict: "token" });
+        });
+        if (!alive) return;
+        if (permission !== "granted") {
+          // User revoked perms in iOS Settings since enabling — clear
+          // our local flag so we don't keep retrying every launch.
+          if (permission === "denied") clearPushLocal();
+          return;
+        }
+        // Wire foreground + tap handlers. Foreground: in-app toast
+        // (iOS doesn't show a system banner while we're frontmost).
+        // Tap: store a deep-link hint in window — the relevant tab
+        // can read it on mount and route to the right asset.
+        cleanup = await setupPushListeners({
+          onMessage: ({ title, body }) => {
+            toast.info(title ? `${title} · ${body}` : body, { duration: 6000 });
+          },
+          onAction: ({ data }) => {
+            try {
+              if (data?.kind === "price_alert" && data?.ticker) {
+                window.__samasPendingDeepLink = { kind: "alert", ticker: data.ticker };
+              }
+            } catch (_) {}
+          },
+        });
+      } catch (e) {
+        console.warn("[push] register at login:", e);
+      }
+    })();
+    return () => { alive = false; try { cleanup(); } catch {} };
+  }, [loggedIn, sbSession?.user?.id]);
   // Write a new PIN hash to profiles and refetch. Called from the PIN
   // "create" flow. Throws on network/DB errors so the PinLockScreen can
   // show an inline error and let the user retry.
