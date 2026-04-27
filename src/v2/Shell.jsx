@@ -125,7 +125,7 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
       case "news":
         return (
           <Suspense fallback={<TinyLoader T={T}/>}>
-            <NewsPage T={T} />
+            <NewsPage T={T} lang={lang} />
           </Suspense>
         );
       default:

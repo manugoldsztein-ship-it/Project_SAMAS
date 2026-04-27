@@ -287,7 +287,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
                 <div style={{
                   fontFamily: FONT.sans, fontSize: 11, color: T.textMute,
                   letterSpacing: 0.6, fontWeight: 700, textTransform: "uppercase", marginBottom: 2,
-                }}>Próximo aporte</div>
+                }}>{tr("aporte.title", lang)}</div>
                 <div style={{ fontFamily: FONT.display, fontSize: 16, fontWeight: 700, color: T.text }}>
                   {aporte.currency === "ARS" ? "$" : "US$"}{fmtMoney(aporte.amount, aporte.currency)}
                   {" "}<span style={{ color: T.textMute, fontWeight: 500 }}>·</span>{" "}
@@ -302,7 +302,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
             ) : (
               <>
                 <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 700, color: T.text }}>
-                  Programar aporte mensual
+                  {tr("aporte.title", lang)}
                 </div>
                 <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute, marginTop: 2 }}>
                   Cargá un monto fijo cada mes y ahorrá sin pensarlo.
@@ -376,22 +376,22 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
 
       {/* ---------- modals ---------- */}
       {activeModal === "deposit" && (
-        <DepositModal T={T} balance={balance}
+        <DepositModal T={T} lang={lang} balance={balance}
           onClose={() => setActiveModal(null)}
           onDone={() => { setActiveModal(null); refresh(); }} />
       )}
       {activeModal === "withdraw" && (
-        <WithdrawModal T={T} balance={balance}
+        <WithdrawModal T={T} lang={lang} balance={balance}
           onClose={() => setActiveModal(null)}
           onDone={() => { setActiveModal(null); refresh(); }} />
       )}
       {activeModal === "card" && (
-        <CardDetailsModal T={T} card={card}
+        <CardDetailsModal T={T} lang={lang} card={card}
           onClose={() => setActiveModal(null)}
           onCardChange={(updated) => setCard((c) => ({ ...c, ...updated }))} />
       )}
       {activeModal === "aporte" && (
-        <AporteModal T={T} aporte={aporte}
+        <AporteModal T={T} lang={lang} aporte={aporte}
           onClose={() => setActiveModal(null)}
           onDone={() => { setActiveModal(null); refresh(); }} />
       )}
@@ -404,7 +404,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
 // deposit. Saves via walletApi.setRecurringAporte. The schedule is
 // purely local for now (mock); production needs a server-side cron.
 // ----------------------------------------------------------
-function AporteModal({ T, aporte, onClose, onDone }) {
+function AporteModal({ T, lang = "es", aporte, onClose, onDone }) {
   const [amountStr, setAmountStr] = useState(String(aporte?.amount || ""));
   const [currency, setCurrency] = useState(aporte?.currency || "ARS");
   const [day, setDay] = useState(aporte?.dayOfMonth || 1);
@@ -745,7 +745,7 @@ function ModalShell({ T, title, onClose, children }) {
   );
 }
 
-function DepositModal({ T, balance, onClose, onDone }) {
+function DepositModal({ T, lang = "es", balance, onClose, onDone }) {
   const [amount, setAmount] = useState("");
   const [source, setSource] = useState("mp");
   const [busy, setBusy] = useState(false);
@@ -763,7 +763,7 @@ function DepositModal({ T, balance, onClose, onDone }) {
   }
 
   return (
-    <ModalShell T={T} title="Cargar saldo" onClose={onClose}>
+    <ModalShell T={T} title={tr("deposit.title", lang)} onClose={onClose}>
       <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, marginBottom: 16 }}>
         Acreditamos en pesos a tu cuenta SAMAS.
       </div>
@@ -816,7 +816,7 @@ function DepositModal({ T, balance, onClose, onDone }) {
   );
 }
 
-function WithdrawModal({ T, balance, onClose, onDone }) {
+function WithdrawModal({ T, lang = "es", balance, onClose, onDone }) {
   const [amount, setAmount] = useState("");
   const [destination, setDestination] = useState("");
   const [busy, setBusy] = useState(false);
@@ -840,7 +840,7 @@ function WithdrawModal({ T, balance, onClose, onDone }) {
   }
 
   return (
-    <ModalShell T={T} title="Enviar dinero" onClose={onClose}>
+    <ModalShell T={T} title={tr("withdraw.title", lang)} onClose={onClose}>
       <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, marginBottom: 16 }}>
         Saldo disponible: <strong style={{ color: T.text }}>${balance ? fmtMoney(balance.ars, "ARS") : "—"}</strong>
       </div>
@@ -863,7 +863,7 @@ function WithdrawModal({ T, balance, onClose, onDone }) {
   );
 }
 
-function CardDetailsModal({ T, card, onClose, onCardChange }) {
+function CardDetailsModal({ T, lang = "es", card, onClose, onCardChange }) {
   const [revealed, setRevealed] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -896,7 +896,7 @@ function CardDetailsModal({ T, card, onClose, onCardChange }) {
   }
 
   return (
-    <ModalShell T={T} title="Mi tarjeta" onClose={onClose}>
+    <ModalShell T={T} title={tr("card.title", lang)} onClose={onClose}>
       <div style={{
         padding: 22, borderRadius: 18,
         background: `linear-gradient(135deg, ${T.accentDim} 0%, ${T.surfaceHi} 100%)`,

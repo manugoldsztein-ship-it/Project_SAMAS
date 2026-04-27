@@ -252,10 +252,10 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true, la
           />
         )}
         {tab === "mercado" && (
-          <MercadoView T={T} assets={assets} ccy={ccy} setCcy={setCcy} onSelectAsset={setSelectedAsset} />
+          <MercadoView T={T} assets={assets} ccy={ccy} setCcy={setCcy} onSelectAsset={setSelectedAsset} lang={lang} />
         )}
         {tab === "watchlist" && (
-          <WatchlistView T={T} watchlists={watchlists} assets={assets} onSelectAsset={setSelectedAsset} onRefresh={refresh} />
+          <WatchlistView T={T} watchlists={watchlists} assets={assets} onSelectAsset={setSelectedAsset} onRefresh={refresh} lang={lang} />
         )}
         {tab === "ordenes" && (
           <OrdenesView
@@ -480,14 +480,15 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
 // ----------------------------------------------------------
 // Mercado — full universe with search + category filter.
 // ----------------------------------------------------------
-function MercadoView({ T, assets, onSelectAsset }) {
-  const [cat, setCat] = useState("Todas");
+function MercadoView({ T, assets, onSelectAsset, lang = "es" }) {
+  const ALL = tr("market.filter.all", lang);
+  const [cat, setCat] = useState(ALL);
   const [query, setQuery] = useState("");
   const [showCompare, setShowCompare] = useState(false);
   const cats = useMemo(() => {
     const s = new Set(assets.map((a) => a.category));
-    return ["Todas", ...Array.from(s)];
-  }, [assets]);
+    return [ALL, ...Array.from(s)];
+  }, [assets, ALL]);
 
   // Search matches ticker OR name (case-insensitive). Then category
   // narrows further. Order matters: search first so the user can find
@@ -501,7 +502,7 @@ function MercadoView({ T, assets, onSelectAsset }) {
         (a.name || "").toLowerCase().includes(q)
       );
     }
-    if (cat !== "Todas") rows = rows.filter((a) => a.category === cat);
+    if (cat !== ALL) rows = rows.filter((a) => a.category === cat);
     return rows;
   }, [assets, cat, query]);
 
@@ -521,7 +522,7 @@ function MercadoView({ T, assets, onSelectAsset }) {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar por ticker o nombre"
+            placeholder={tr("market.search_ph", lang)}
             style={{
               flex: 1, background: "transparent", border: "none", outline: "none",
               color: T.text, fontFamily: FONT.sans, fontSize: 14,
@@ -779,7 +780,7 @@ function Stat({ T, label, value, color, mono }) {
 // ----------------------------------------------------------
 // Watchlist — multiple lists with name/create/rename/delete.
 // ----------------------------------------------------------
-function WatchlistView({ T, watchlists, assets, onSelectAsset, onRefresh }) {
+function WatchlistView({ T, watchlists, assets, onSelectAsset, onRefresh, lang = "es" }) {
   // Selected list ID. Default to the first one; if it gets deleted
   // we fall back to whichever is now first.
   const [selectedId, setSelectedId] = useState(null);
@@ -960,6 +961,7 @@ function WatchlistView({ T, watchlists, assets, onSelectAsset, onRefresh }) {
           assets={assets}
           excludeTickers={selected.tickers}
           listName={selected.name}
+          lang={lang}
           onClose={() => setModal(null)}
           onPick={async (ticker) => {
             await brokerApi.addToWatchlist(selected.id, ticker);
@@ -1830,7 +1832,7 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
 // tab (alternative to going to Mercado, opening AssetSheet, and using
 // the star icon). Includes search to find tickers fast.
 // ----------------------------------------------------------
-function AddAssetModal({ T, assets, excludeTickers = [], listName, onClose, onPick }) {
+function AddAssetModal({ T, assets, excludeTickers = [], listName, onClose, onPick, lang = "es" }) {
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const filtered = useMemo(() => {
@@ -1872,7 +1874,7 @@ function AddAssetModal({ T, assets, excludeTickers = [], listName, onClose, onPi
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar por ticker o nombre"
+              placeholder={tr("market.search_ph", lang)}
               style={{
                 flex: 1, background: "transparent", border: "none", outline: "none",
                 color: T.text, fontFamily: FONT.sans, fontSize: 14,

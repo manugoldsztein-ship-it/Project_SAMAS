@@ -20,13 +20,14 @@ import { FONT } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import { news as newsApi } from "./api/index.js";
 import { Skeleton } from "./shared.jsx";
+import { t as tr } from "../lib/i18n.js";
 import { setRefreshHandler } from "./refreshRegistry.js";
 
-export function NewsPage({ T }) {
+export function NewsPage({ T, lang = "es" }) {
   const [items, setItems] = useState([]);
   const [ticker, setTicker] = useState([]);
-  const [cats, setCats] = useState(["Todo"]);
-  const [cat, setCat] = useState("Todo");
+  const [cats, setCats] = useState([tr("news.cat.all", lang)]);
+  const [cat, setCat] = useState(tr("news.cat.all", lang));
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState(null); // null = not searching
   const [loading, setLoading] = useState(true);
@@ -80,7 +81,7 @@ export function NewsPage({ T }) {
   // too (so "NVDA" + "Tech" works as a sub-filter).
   const visible = useMemo(() => {
     const base = searchResults != null ? searchResults : items;
-    if (cat === "Todo") return base;
+    if (cat === tr("news.cat.all", lang)) return base;
     return base.filter((n) => n.category === cat);
   }, [items, searchResults, cat]);
 
@@ -95,15 +96,15 @@ export function NewsPage({ T }) {
           <div style={{
             fontFamily: FONT.display, fontSize: 28, fontWeight: 700,
             color: T.text, letterSpacing: -0.6,
-          }}>Noticias</div>
+          }}>{tr("news.title", lang)}</div>
           <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, marginTop: 2 }}>
-            Mercados, Argentina, cripto y más
+            {tr("news.subtitle", lang)}
           </div>
         </div>
         <button
           onClick={refresh}
           disabled={loading}
-          aria-label="Actualizar"
+          aria-label={tr("news.refresh", lang)}
           style={{
             width: 38, height: 38, borderRadius: 12, flexShrink: 0,
             background: T.surface, border: `1px solid ${T.border}`,
@@ -175,7 +176,7 @@ export function NewsPage({ T }) {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar por ticker (NVDA, BTC, GGAL...)"
+            placeholder={tr("news.search_ph", lang)}
             autoCapitalize="characters"
             autoCorrect="off"
             spellCheck={false}
@@ -240,7 +241,7 @@ export function NewsPage({ T }) {
                 marginTop: 8, textAlign: "center", color: T.textMute,
                 fontFamily: FONT.sans, fontSize: 12,
               }}>
-                Buscando noticias de {query.toUpperCase()}…
+                {tr("news.searching", lang, { q: query.toUpperCase() })}
               </div>
             )}
           </>
@@ -250,16 +251,16 @@ export function NewsPage({ T }) {
             background: T.surface, border: `1px solid ${T.border}`,
           }}>
             <div style={{ fontFamily: FONT.display, fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 6 }}>
-              Sin resultados
+              {tr("news.empty_title", lang)}
             </div>
             <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, lineHeight: 1.5 }}>
               {query
-                ? `No encontramos noticias para "${query}".`
-                : "No hay noticias en esta categoría todavía."}
+                ? tr("news.empty_no_results", lang, { q: query })
+                : tr("news.empty_no_news", lang)}
             </div>
           </div>
         ) : (
-          visible.map((n) => <NewsCard key={n.id} T={T} item={n} />)
+          visible.map((n) => <NewsCard key={n.id} T={T} item={n} lang={lang} />)
         )}
       </div>
     </div>
@@ -271,7 +272,7 @@ export function NewsPage({ T }) {
 // legacy NewsArticleSheet was a full overlay; in v2 we keep it inline
 // to avoid yet-another modal layer).
 // ----------------------------------------------------------
-function NewsCard({ T, item }) {
+function NewsCard({ T, item, lang = "es" }) {
   const [expanded, setExpanded] = useState(false);
 
   // Open the real article URL (when item.url is present, i.e. came
@@ -353,7 +354,7 @@ function NewsCard({ T, item }) {
       }}>
         <span style={{
           fontFamily: FONT.sans, fontSize: 11, color: T.textMute, fontWeight: 600,
-        }}>Vía {item.source}</span>
+        }}>{tr("news.source_prefix", lang)} {item.source}</span>
         {(item.tickers || []).map((tk) => (
           <span key={tk} style={{
             padding: "2px 7px", borderRadius: 6,
@@ -368,7 +369,7 @@ function NewsCard({ T, item }) {
             display: "flex", alignItems: "center", gap: 4,
             fontFamily: FONT.sans, fontSize: 11, fontWeight: 700, color: T.accent,
           }}>
-            Leer
+            {tr("news.read", lang)}
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M7 17L17 7M7 7h10v10"/>
