@@ -51,16 +51,21 @@ export function BrokerShell({ T, isNativeApp = false, onBack }) {
   const [assets, setAssets] = useState([]);
   const [watchlists, setWatchlists] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [alerts, setAlerts] = useState([]);
+  const [stops, setStops] = useState([]);
 
   const refresh = useCallback(async () => {
     try {
-      const [p, a, wl, o] = await Promise.all([
+      const [p, a, wl, o, al, st] = await Promise.all([
         brokerApi.getPortfolio(),
         brokerApi.getAssets(),
         brokerApi.getWatchlists(),
         brokerApi.getOrders({ status: "all" }),
+        brokerApi.getPriceAlerts(),
+        brokerApi.getStopLosses(),
       ]);
       setPortfolio(p); setAssets(a); setWatchlists(wl); setOrders(o);
+      setAlerts(al); setStops(st);
     } catch (e) { console.error("[broker] load:", e); }
   }, []);
 
@@ -125,7 +130,14 @@ export function BrokerShell({ T, isNativeApp = false, onBack }) {
           <WatchlistView T={T} watchlists={watchlists} assets={assets} onSelectAsset={setSelectedAsset} />
         )}
         {tab === "ordenes" && (
-          <OrdenesView T={T} orders={orders} onRefresh={refresh} />
+          <OrdenesView
+            T={T}
+            orders={orders}
+            alerts={alerts}
+            stops={stops}
+            holdings={portfolio?.holdings || []}
+            onRefresh={refresh}
+          />
         )}
       </div>
 
@@ -344,52 +356,204 @@ function WatchlistView({ T, watchlists, assets, onSelectAsset }) {
 // ----------------------------------------------------------
 // Órdenes — list of submitted orders, with cancel button on open ones.
 // ----------------------------------------------------------
-function OrdenesView({ T, orders, onRefresh }) {
-  const [busyId, setBusyId] = useState(null);
+function OrdenesView({ T, orders, alerts, stops, holdings, onRefresh }) {
+  const [busyKey, setBusyKey] = useState(null);
 
-  async function cancel(orderId) {
-    setBusyId(orderId);
-    try {
-      await brokerApi.cancelOrder(orderId);
-      await onRefresh();
-    } catch (e) { alert(e.message); }
-    setBusyId(null);
+  async function cancelOrder(orderId) {
+    setBusyKey(`order:${orderId}`);
+    try { await brokerApi.cancelOrder(orderId); await onRefresh(); }
+    catch (e) { alert(e.message); }
+    setBusyKey(null);
+  }
+  async function removeAlert(ticker) {
+    setBusyKey(`alert:${ticker}`);
+    try { await brokerApi.removePriceAlert(ticker); await onRefresh(); }
+    catch (e) { alert(e.message); }
+    setBusyKey(null);
+  }
+  async function removeStop(ticker) {
+    setBusyKey(`stop:${ticker}`);
+    try { await brokerApi.removeStopLoss(ticker); await onRefresh(); }
+    catch (e) { alert(e.message); }
+    setBusyKey(null);
   }
 
-  if (orders.length === 0) {
+  const openOrders = orders.filter((o) => o.status === "open");
+  const recentOrders = orders.filter((o) => o.status !== "open").slice(0, 20);
+  const totalActive = openOrders.length + alerts.length + stops.length;
+
+  // Empty state — vertically centered in the available area.
+  if (totalActive === 0 && recentOrders.length === 0) {
     return (
-      <div style={{ padding: "16px", paddingBottom: 110 }}>
-        <SectionHead T={T} title="Órdenes" action="0 totales" />
-        <Empty T={T} title="No hay órdenes" subtitle="Tus operaciones aparecen acá una vez que las envíes." />
+      <div style={{
+        padding: "16px",
+        paddingBottom: 110,
+        // minHeight 100% of the scroll container so flex centering works.
+        minHeight: "calc(100vh - 200px)",
+        display: "flex", flexDirection: "column",
+      }}>
+        <SectionHead T={T} title="Órdenes" action="0 activas" />
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{
+            padding: "40px 28px", borderRadius: 22,
+            background: T.surface, border: `1px solid ${T.border}`,
+            textAlign: "center", maxWidth: 320,
+          }}>
+            <div style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text, marginBottom: 8 }}>
+              Sin actividad
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, lineHeight: 1.5 }}>
+              Tus órdenes, alertas de precio y stop losses aparecen acá. Tocá un activo en Mercado para empezar.
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
-  // Group by status: open first, then filled, then cancelled.
-  const ordered = [
-    ...orders.filter((o) => o.status === "open"),
-    ...orders.filter((o) => o.status === "filled"),
-    ...orders.filter((o) => o.status === "cancelled"),
-  ];
-
   return (
     <div style={{ paddingBottom: 110 }}>
       <div style={{ margin: "16px" }}>
-        <SectionHead T={T} title="Órdenes" action={`${orders.length} totales`} />
+        <SectionHead T={T} title="Órdenes" action={`${totalActive} activas`} />
       </div>
+
+      {openOrders.length > 0 && (
+        <Group T={T} title="Órdenes pendientes">
+          {openOrders.map((o, i) => (
+            <OrderRow
+              key={o.id} T={T} order={o}
+              isLast={i === openOrders.length - 1}
+              busy={busyKey === `order:${o.id}`}
+              onCancel={() => cancelOrder(o.id)}
+            />
+          ))}
+        </Group>
+      )}
+
+      {alerts.length > 0 && (
+        <Group T={T} title="Alertas de precio">
+          {alerts.map((a, i) => (
+            <AlertRow
+              key={a.ticker} T={T} alert={a}
+              isLast={i === alerts.length - 1}
+              busy={busyKey === `alert:${a.ticker}`}
+              onRemove={() => removeAlert(a.ticker)}
+            />
+          ))}
+        </Group>
+      )}
+
+      {stops.length > 0 && (
+        <Group T={T} title="Stop losses">
+          {stops.map((s, i) => (
+            <StopRow
+              key={s.ticker} T={T} stop={s}
+              isLast={i === stops.length - 1}
+              busy={busyKey === `stop:${s.ticker}`}
+              onRemove={() => removeStop(s.ticker)}
+            />
+          ))}
+        </Group>
+      )}
+
+      {recentOrders.length > 0 && (
+        <Group T={T} title="Histórico">
+          {recentOrders.map((o, i) => (
+            <OrderRow
+              key={o.id} T={T} order={o}
+              isLast={i === recentOrders.length - 1}
+            />
+          ))}
+        </Group>
+      )}
+    </div>
+  );
+}
+
+function Group({ T, title, children }) {
+  return (
+    <>
+      <div style={{
+        padding: "0 20px", marginTop: 18, marginBottom: 6,
+        fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+        color: T.textDim, letterSpacing: 0.6,
+      }}>{title.toUpperCase()}</div>
       <div style={{
         margin: "0 16px", borderRadius: 18,
         background: T.surface, border: `1px solid ${T.border}`, overflow: "hidden",
       }}>
-        {ordered.map((o, i) => (
-          <OrderRow
-            key={o.id} T={T} order={o}
-            isLast={i === ordered.length - 1}
-            busy={busyId === o.id}
-            onCancel={() => cancel(o.id)}
-          />
-        ))}
+        {children}
       </div>
+    </>
+  );
+}
+
+function AlertRow({ T, alert, isLast, busy, onRemove }) {
+  const a = alert.asset;
+  const cur = a?.price ?? 0;
+  const distance = ((alert.targetPrice - cur) / cur) * 100;
+  return (
+    <div style={{
+      padding: "14px 16px", display: "flex", alignItems: "center", gap: 12,
+      borderBottom: isLast ? "none" : `1px solid ${T.border}`,
+    }}>
+      <div style={{
+        width: 38, height: 38, borderRadius: 12,
+        background: T.accentSoft, color: T.accent,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        flexShrink: 0,
+      }}>
+        <Ico.Bell size={16}/>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, color: T.text }}>
+          {alert.ticker}{" "}
+          <span style={{ color: T.textMute, fontWeight: 500 }}>
+            · cuando {alert.direction === "above" ? "supere" : "baje a"}
+          </span>
+        </div>
+        <div style={{ fontFamily: FONT.mono, fontSize: 12, color: T.textMute }}>
+          ${fmtMoney(alert.targetPrice)} ({distance >= 0 ? "+" : ""}{distance.toFixed(1)}% del actual)
+        </div>
+      </div>
+      <button onClick={onRemove} disabled={busy} style={{
+        padding: "5px 10px", borderRadius: 8,
+        background: "transparent", border: `1px solid ${T.border}`,
+        color: T.textMute, fontFamily: FONT.sans, fontSize: 11, fontWeight: 600,
+        cursor: busy ? "default" : "pointer",
+      }}>Quitar</button>
+    </div>
+  );
+}
+
+function StopRow({ T, stop, isLast, busy, onRemove }) {
+  return (
+    <div style={{
+      padding: "14px 16px", display: "flex", alignItems: "center", gap: 12,
+      borderBottom: isLast ? "none" : `1px solid ${T.border}`,
+    }}>
+      <div style={{
+        width: 38, height: 38, borderRadius: 12,
+        background: T.dangerSoft, color: T.danger,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        flexShrink: 0, fontFamily: FONT.mono, fontSize: 11, fontWeight: 800,
+      }}>SL</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, color: T.text }}>
+          {stop.ticker}{" "}
+          <span style={{ color: T.textMute, fontWeight: 500 }}>· vender si baja a</span>
+        </div>
+        <div style={{ fontFamily: FONT.mono, fontSize: 12, color: T.textMute }}>
+          ${fmtMoney(stop.triggerPrice)}
+          {stop.type === "pct" ? ` (${stop.value}% del actual)` : ""}
+        </div>
+      </div>
+      <button onClick={onRemove} disabled={busy} style={{
+        padding: "5px 10px", borderRadius: 8,
+        background: "transparent", border: `1px solid ${T.border}`,
+        color: T.textMute, fontFamily: FONT.sans, fontSize: 11, fontWeight: 600,
+        cursor: busy ? "default" : "pointer",
+      }}>Quitar</button>
     </div>
   );
 }
@@ -486,6 +650,9 @@ function AssetRow({ T, asset, subline, rightTop, rightBottom, rightBottomColor, 
 }
 
 function AssetSheet({ T, asset, onClose, onDone }) {
+  // Asset sheet has 3 modes via a top tab: Trade / Alerta / Stop loss.
+  // Each renders its own form below the price header.
+  const [mode, setMode] = useState("trade");
   const [side, setSide] = useState("buy");
   const [qtyStr, setQtyStr] = useState("");
   const [type, setType] = useState("market");
@@ -493,6 +660,21 @@ function AssetSheet({ T, asset, onClose, onDone }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [done, setDone] = useState(null);
+
+  // Existing alert / stop for this asset, loaded once on open.
+  const [alert, setAlert] = useState(null);
+  const [stop, setStop] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    Promise.all([
+      brokerApi.getAlertFor(asset.ticker),
+      brokerApi.getStopFor(asset.ticker),
+    ]).then(([a, s]) => { if (alive) { setAlert(a); setStop(s); } });
+    return () => { alive = false; };
+  }, [asset.ticker]);
+
+  // Whether the user owns this asset (only then can they set a stop).
+  const ownsIt = asset.qty > 0;
 
   const qty = parseFloat(qtyStr.replace(",", ".")) || 0;
   const limit = parseFloat(limitStr.replace(",", ".")) || 0;
@@ -569,6 +751,44 @@ function AssetSheet({ T, asset, onClose, onDone }) {
             <DoneScreen T={T} done={done} side={side} qty={qty} ticker={asset.ticker} onClose={onDone} />
           ) : (
             <>
+              {/* Mode tabs: Trade / Alerta / Stop loss */}
+              <div style={{
+                display: "flex", gap: 4, padding: 4, marginBottom: 16,
+                background: T.surface, border: `1px solid ${T.border}`,
+                borderRadius: 12,
+              }}>
+                {[
+                  { id: "trade",  label: "Operar" },
+                  { id: "alert",  label: alert ? "Alerta ✓" : "Alerta" },
+                  { id: "stop",   label: stop  ? "Stop ✓"  : "Stop"   },
+                ].map((m) => {
+                  const active = m.id === mode;
+                  return (
+                    <button key={m.id} onClick={() => { setMode(m.id); setErr(null); }} style={{
+                      flex: 1, padding: "8px 0", borderRadius: 8,
+                      background: active ? T.bg : "transparent",
+                      border: active ? `1px solid ${T.border}` : "1px solid transparent",
+                      color: active ? T.text : T.textMute,
+                      fontFamily: FONT.sans, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    }}>{m.label}</button>
+                  );
+                })}
+              </div>
+
+              {mode === "alert" && (
+                <AlertForm T={T} asset={asset} existing={alert}
+                  onSaved={(a) => { setAlert(a); setMode("trade"); }}
+                  onRemoved={() => setAlert(null)} />
+              )}
+
+              {mode === "stop" && (
+                <StopForm T={T} asset={asset} existing={stop} ownsIt={ownsIt}
+                  onSaved={(s) => { setStop(s); setMode("trade"); }}
+                  onRemoved={() => setStop(null)} />
+              )}
+
+              {mode === "trade" && (
+                <>
               <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
                 {[
                   { id: "buy",  label: "Comprar", color: T.accent,  soft: T.accentSoft },
@@ -639,11 +859,191 @@ function AssetSheet({ T, asset, onClose, onDone }) {
               }}>
                 {busy ? "Enviando..." : side === "buy" ? `Comprar ${asset.ticker}` : `Vender ${asset.ticker}`}
               </button>
+                </>
+              )}
             </>
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+// ----------------------------------------------------------
+// AlertForm — set / edit / remove a price alert.
+// ----------------------------------------------------------
+function AlertForm({ T, asset, existing, onSaved, onRemoved }) {
+  const [direction, setDirection] = useState(existing?.direction || "above");
+  const [priceStr, setPriceStr] = useState(
+    existing ? String(existing.targetPrice) : String(asset.price)
+  );
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function save() {
+    setErr(null);
+    const targetPrice = parseFloat(priceStr.replace(",", "."));
+    if (!targetPrice || targetPrice <= 0) { setErr("Precio inválido."); return; }
+    setBusy(true);
+    try {
+      const a = await brokerApi.setPriceAlert({ ticker: asset.ticker, targetPrice, direction });
+      onSaved(a);
+    } catch (e) { setErr(e.message); setBusy(false); }
+  }
+
+  async function remove() {
+    setBusy(true);
+    try { await brokerApi.removePriceAlert(asset.ticker); onRemoved(); }
+    catch (e) { setErr(e.message); }
+    setBusy(false);
+  }
+
+  return (
+    <>
+      <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, marginBottom: 14, lineHeight: 1.5 }}>
+        Te avisamos por notificación cuando {asset.ticker} {direction === "above" ? "supere" : "baje a"} el precio que elijas.
+      </div>
+
+      {/* Direction selector */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        {[
+          { id: "above", label: "Cuando supere" },
+          { id: "below", label: "Cuando baje" },
+        ].map((d) => {
+          const active = d.id === direction;
+          return (
+            <button key={d.id} onClick={() => setDirection(d.id)} style={{
+              flex: 1, padding: 12, borderRadius: 12,
+              background: active ? T.accentSoft : T.surface,
+              border: `1px solid ${active ? T.accent : T.border}`,
+              color: active ? T.accent : T.text,
+              fontFamily: FONT.sans, fontSize: 13, fontWeight: 600, cursor: "pointer",
+            }}>{d.label}</button>
+          );
+        })}
+      </div>
+
+      <NumberInput T={T} label={`Precio objetivo (${asset.currency})`} value={priceStr} onChange={setPriceStr} placeholder={String(asset.price)} />
+
+      {err && <div style={{ marginTop: 12, color: T.danger, fontFamily: FONT.sans, fontSize: 12 }}>{err}</div>}
+
+      <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+        {existing && (
+          <button onClick={remove} disabled={busy} style={{
+            flex: 1, padding: 14, borderRadius: 14,
+            background: T.surface, border: `1px solid ${T.border}`,
+            color: T.danger, fontFamily: FONT.sans, fontSize: 14, fontWeight: 600,
+            cursor: busy ? "default" : "pointer",
+          }}>Quitar alerta</button>
+        )}
+        <button onClick={save} disabled={busy} style={{
+          flex: 1, padding: 14, borderRadius: 14,
+          background: T.accent, color: T.accentInk,
+          fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, border: "none",
+          cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
+        }}>{existing ? "Actualizar" : "Crear alerta"}</button>
+      </div>
+    </>
+  );
+}
+
+// ----------------------------------------------------------
+// StopForm — set / edit / remove a stop loss. Only available on
+// assets the user owns.
+// ----------------------------------------------------------
+function StopForm({ T, asset, existing, ownsIt, onSaved, onRemoved }) {
+  const [type, setType] = useState(existing?.type || "pct");
+  const [pctStr, setPctStr] = useState(existing && existing.type === "pct" ? String(existing.value) : "-10");
+  const [priceStr, setPriceStr] = useState(existing && existing.type === "price" ? String(existing.value) : String(asset.price * 0.9));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  if (!ownsIt) {
+    return (
+      <div style={{ padding: "32px 24px", textAlign: "center" }}>
+        <div style={{ fontFamily: FONT.display, fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 8 }}>
+          Sin posición en {asset.ticker}
+        </div>
+        <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, lineHeight: 1.5 }}>
+          Solo podés poner stop loss en activos que tenés. Comprá primero y volvé acá.
+        </div>
+      </div>
+    );
+  }
+
+  async function save() {
+    setErr(null);
+    const value = type === "pct"
+      ? parseFloat(pctStr.replace(",", "."))
+      : parseFloat(priceStr.replace(",", "."));
+    if (isNaN(value)) { setErr("Valor inválido."); return; }
+    setBusy(true);
+    try {
+      const s = await brokerApi.setStopLoss({ ticker: asset.ticker, type, value });
+      onSaved(s);
+    } catch (e) { setErr(e.message); setBusy(false); }
+  }
+
+  async function remove() {
+    setBusy(true);
+    try { await brokerApi.removeStopLoss(asset.ticker); onRemoved(); }
+    catch (e) { setErr(e.message); }
+    setBusy(false);
+  }
+
+  return (
+    <>
+      <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, marginBottom: 14, lineHeight: 1.5 }}>
+        Vendemos {asset.ticker} automáticamente si el precio cae al nivel que definas. Te protege en caídas fuertes.
+      </div>
+
+      {/* Type toggle */}
+      <div style={{
+        display: "flex", gap: 4, padding: 4, marginBottom: 14,
+        background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12,
+      }}>
+        {[
+          { id: "pct",   label: "Porcentaje" },
+          { id: "price", label: "Precio" },
+        ].map((t) => {
+          const active = t.id === type;
+          return (
+            <button key={t.id} onClick={() => setType(t.id)} style={{
+              flex: 1, padding: "8px 0", borderRadius: 8,
+              background: active ? T.bg : "transparent",
+              border: active ? `1px solid ${T.border}` : "1px solid transparent",
+              color: active ? T.text : T.textMute,
+              fontFamily: FONT.sans, fontSize: 12, fontWeight: 600, cursor: "pointer",
+            }}>{t.label}</button>
+          );
+        })}
+      </div>
+
+      {type === "pct" ? (
+        <NumberInput T={T} label="Porcentaje (negativo)" value={pctStr} onChange={setPctStr} placeholder="-10" />
+      ) : (
+        <NumberInput T={T} label={`Precio gatillo (${asset.currency})`} value={priceStr} onChange={setPriceStr} placeholder={String(asset.price * 0.9)} />
+      )}
+
+      {err && <div style={{ marginTop: 12, color: T.danger, fontFamily: FONT.sans, fontSize: 12 }}>{err}</div>}
+
+      <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+        {existing && (
+          <button onClick={remove} disabled={busy} style={{
+            flex: 1, padding: 14, borderRadius: 14,
+            background: T.surface, border: `1px solid ${T.border}`,
+            color: T.danger, fontFamily: FONT.sans, fontSize: 14, fontWeight: 600,
+            cursor: busy ? "default" : "pointer",
+          }}>Quitar stop</button>
+        )}
+        <button onClick={save} disabled={busy} style={{
+          flex: 1, padding: 14, borderRadius: 14,
+          background: T.danger, color: "#FFFFFF",
+          fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, border: "none",
+          cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
+        }}>{existing ? "Actualizar" : "Crear stop"}</button>
+      </div>
+    </>
   );
 }
 

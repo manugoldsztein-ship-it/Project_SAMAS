@@ -81,7 +81,15 @@ function seed() {
     watchlists: [
       { id: "wl_main", name: "Mi watchlist", tickers: ["NVDA", "TSLA", "ETH"] },
     ],
-    stopLosses: {},                // ticker → { pct, triggerPrice }
+    // Price alerts + stop losses are keyed by ticker (one per asset).
+    // alert  = { targetPrice, direction: "above" | "below", createdAt }
+    // stop   = { type: "pct" | "price", value, triggerPrice, createdAt }
+    //   type=pct: value is a negative percent from current price
+    //             (e.g. -10 = sell when price drops 10%); we precompute
+    //             the absolute trigger when setting and store it.
+    //   type=price: value IS the trigger.
+    alerts: {},
+    stops: {},
     fx: {
       mep:     { value: 1245, change:  0.40 },
       ccl:     { value: 1261, change:  1.10 },
@@ -284,6 +292,126 @@ export async function createWatchlist(name) {
   const wl = { id: genId(), name, tickers: [] };
   saveState({ ...state, watchlists: [...state.watchlists, wl] });
   return wl;
+}
+
+// ----------------------------------------------------------
+// Price alerts + stop losses
+// ----------------------------------------------------------
+// Both are PER-TICKER (one alert + one stop per asset). Setting a
+// new one replaces the previous. Real implementation in production:
+// a server-side job polls quotes every N seconds and fires a push
+// notification (Capacitor LocalNotifications / APNs) when the
+// trigger condition is met. Stops also auto-place a market sell.
+//
+// In mock mode we just store the config; we don't run a polling
+// loop. The Órdenes view shows the pending alerts/stops so the
+// user can see them and remove them.
+
+/**
+ * setPriceAlert({ ticker, targetPrice, direction }) — fire when
+ * the asset's price crosses targetPrice in `direction`.
+ * @returns {Promise<{ ticker, targetPrice, direction, createdAt }>}
+ */
+export async function setPriceAlert({ ticker, targetPrice, direction = "above" }) {
+  await jitter();
+  const a = ASSETS.find((x) => x.ticker === ticker);
+  if (!a) throw new Error("Ticker no encontrado.");
+  if (!targetPrice || targetPrice <= 0) throw new Error("Precio objetivo inválido.");
+  if (direction !== "above" && direction !== "below") throw new Error("Dirección inválida.");
+
+  const alert = { ticker, targetPrice, direction, createdAt: Date.now() };
+  saveState({ ...state, alerts: { ...state.alerts, [ticker]: alert } });
+  return alert;
+}
+
+/**
+ * removePriceAlert(ticker) — delete the alert for this ticker.
+ */
+export async function removePriceAlert(ticker) {
+  await jitter();
+  const next = { ...state, alerts: { ...state.alerts } };
+  delete next.alerts[ticker];
+  saveState(next);
+  return { ok: true };
+}
+
+/**
+ * getPriceAlerts() — flat list of all active alerts.
+ */
+export async function getPriceAlerts() {
+  await jitter();
+  return Object.values(state.alerts).map((a) => ({
+    ...a,
+    asset: ASSETS.find((x) => x.ticker === a.ticker),
+  }));
+}
+
+/**
+ * setStopLoss({ ticker, type, value }) — auto-sell when price hits
+ * the stop. type:"pct" → value is negative percent from current;
+ * type:"price" → value is the absolute trigger.
+ *
+ * Validation: the asset must be currently held (you can't stop-loss
+ * something you don't own).
+ */
+export async function setStopLoss({ ticker, type = "pct", value }) {
+  await jitter();
+  const a = ASSETS.find((x) => x.ticker === ticker);
+  if (!a) throw new Error("Ticker no encontrado.");
+  const holding = state.holdings.find((h) => h.ticker === ticker);
+  if (!holding) throw new Error("Solo podés poner stop loss en activos que tenés.");
+  if (value == null || isNaN(value)) throw new Error("Valor inválido.");
+
+  let triggerPrice;
+  if (type === "pct") {
+    if (value >= 0) throw new Error("El porcentaje debe ser negativo (ej. -10).");
+    triggerPrice = a.price * (1 + value / 100);
+  } else if (type === "price") {
+    if (value <= 0) throw new Error("Precio inválido.");
+    if (value >= a.price) throw new Error("El precio de stop debe ser menor al actual.");
+    triggerPrice = value;
+  } else {
+    throw new Error("Tipo de stop inválido.");
+  }
+
+  const stop = { ticker, type, value, triggerPrice, createdAt: Date.now() };
+  saveState({ ...state, stops: { ...state.stops, [ticker]: stop } });
+  return stop;
+}
+
+/**
+ * removeStopLoss(ticker) — delete the stop for this ticker.
+ */
+export async function removeStopLoss(ticker) {
+  await jitter();
+  const next = { ...state, stops: { ...state.stops } };
+  delete next.stops[ticker];
+  saveState(next);
+  return { ok: true };
+}
+
+/**
+ * getStopLosses() — list of all active stops.
+ */
+export async function getStopLosses() {
+  await jitter();
+  return Object.values(state.stops).map((s) => ({
+    ...s,
+    asset: ASSETS.find((x) => x.ticker === s.ticker),
+  }));
+}
+
+/**
+ * getAlertFor(ticker) / getStopFor(ticker) — single fetch by ticker.
+ * Useful from AssetSheet to show the current state at a glance.
+ */
+export async function getAlertFor(ticker) {
+  await jitter(50, 150);
+  return state.alerts[ticker] || null;
+}
+export async function getStopFor(ticker) {
+  await jitter(50, 150);
+  return state.stops[ticker] || null;
 }
 
 /**
