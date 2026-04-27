@@ -18,6 +18,7 @@ import { SamasTabBar } from "./shared.jsx";
 import { WalletPage } from "./Wallet.jsx";
 import { BrokerShell } from "./Broker.jsx";
 import { SocialPage } from "./Social.jsx";
+import { NewsPage } from "./News.jsx";
 import { Onboarding } from "./Onboarding.jsx";
 // 2FA enrollment from the legacy auth code. Same component, hosted in
 // a v2-themed modal so the Authenticator-app TOTP setup feels native
@@ -110,7 +111,7 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
       case "social":
         return <SocialPage T={T} />;
       case "news":
-        return <Placeholder T={T} title="Noticias" subtitle="Mercados, Argentina, cripto" />;
+        return <NewsPage T={T} />;
       default:
         return null;
     }
