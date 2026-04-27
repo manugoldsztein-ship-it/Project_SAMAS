@@ -54,6 +54,29 @@ export function BrokerShell({ T, isNativeApp = false, onBack }) {
   const [alerts, setAlerts] = useState([]);
   const [stops, setStops] = useState([]);
 
+  // Track whether any text input is focused so we can hide the floating
+  // SubNav while the iOS keyboard is up. With Capacitor's
+  // Keyboard.resize=body the body shrinks and the SubNav floats just
+  // above the keyboard — which would cover modal buttons. We watch
+  // document focusin/focusout and toggle the nav off whenever the user
+  // is typing.
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  useEffect(() => {
+    const isField = (el) => {
+      if (!el || !el.tagName) return false;
+      const t = el.tagName;
+      return t === "INPUT" || t === "TEXTAREA" || el.isContentEditable;
+    };
+    const onIn = (e) => { if (isField(e.target)) setKeyboardOpen(true); };
+    const onOut = (e) => { if (isField(e.target)) setKeyboardOpen(false); };
+    document.addEventListener("focusin", onIn);
+    document.addEventListener("focusout", onOut);
+    return () => {
+      document.removeEventListener("focusin", onIn);
+      document.removeEventListener("focusout", onOut);
+    };
+  }, []);
+
   const refresh = useCallback(async () => {
     try {
       const [p, a, wl, o, al, st] = await Promise.all([
@@ -141,8 +164,12 @@ export function BrokerShell({ T, isNativeApp = false, onBack }) {
         )}
       </div>
 
-      {/* ---------- sub-nav bottom bar ---------- */}
-      <SubNav T={T} tab={tab} setTab={setTab} bottomInset={navBottom} />
+      {/* ---------- sub-nav bottom bar ----------
+          Hidden while the keyboard is open so it doesn't sit on top of
+          modal buttons (Cancelar / Guardar) when typing. */}
+      {!keyboardOpen && (
+        <SubNav T={T} tab={tab} setTab={setTab} bottomInset={navBottom} />
+      )}
 
       {/* ---------- asset sheet ---------- */}
       {selectedAsset && (
