@@ -288,6 +288,63 @@ export async function getMe() {
   return { ...state.me };
 }
 
+/**
+ * getUsers({ query }) — list of accounts (everyone except me),
+ * optionally filtered by handle/displayName substring. Used by the
+ * Buscar tab inside Social.
+ */
+export async function getUsers({ query = "" } = {}) {
+  await jitter(60, 180);
+  const q = query.trim().toLowerCase();
+  return state.users
+    .map((u) => ({
+      ...u,
+      followedByMe: state.follows.includes(u.id),
+    }))
+    .filter((u) => {
+      if (!q) return true;
+      return (
+        u.handle.toLowerCase().includes(q) ||
+        u.displayName.toLowerCase().includes(q)
+      );
+    });
+}
+
+/**
+ * getFollowing() — users I follow, denormalized.
+ */
+export async function getFollowing() {
+  await jitter(60, 180);
+  return state.follows
+    .map((id) => state.users.find((u) => u.id === id))
+    .filter(Boolean);
+}
+
+/**
+ * savePost / unsavePost / getSavedPosts — Instagram-style bookmarks.
+ * Stored separately from likes (a like is public, a save is private).
+ * Mock keeps a "saves" array of postIds. Production = saved_posts table.
+ */
+export async function savePost(postId) {
+  await jitter();
+  if (!state.saves) state.saves = [];
+  if (state.saves.includes(postId)) return { ok: true };
+  saveState({ ...state, saves: [...state.saves, postId] });
+  return { ok: true };
+}
+export async function unsavePost(postId) {
+  await jitter();
+  saveState({ ...state, saves: (state.saves || []).filter((id) => id !== postId) });
+  return { ok: true };
+}
+export async function getSavedPosts() {
+  await jitter();
+  const ids = state.saves || [];
+  return state.posts
+    .filter((p) => ids.includes(p.id))
+    .map(denormalizePost);
+}
+
 // ----------------------------------------------------------
 // Admin / Moderation — only callable by users with is_admin=true
 // (server-side enforced via RLS on the real impl).

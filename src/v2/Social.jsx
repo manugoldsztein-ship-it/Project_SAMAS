@@ -1,49 +1,169 @@
 // ============================================================
-// SAMAS v2 — Social tab MVP
+// SAMAS v2 — Social sub-shell (drill-in pattern, like Broker)
 // ============================================================
-// Twitter/X-style feed of trader posts. Currently mock-only
-// (api/social.js drives everything from localStorage). The legacy
-// MobileApp had no social feature — this is a fresh build.
+// Tapping the Social tab in the main shell short-circuits to this
+// shell, which has its own bottom nav (Feed / Buscar / Mensajes /
+// Perfil) plus a back arrow and a mini SAMAS mark in the header so
+// the user knows they're still in the SAMAS app.
 //
-// What it has:
-//   - Top tabs: Siguiendo / Para vos / Trades
-//   - Compose box at the top (max 280 chars, banned-word gate enforced
-//     server-side in api/social.js)
-//   - Post cards with author / body / trade card / like / repost / report
-//
-// What's NOT here yet (TODO once we get to it):
-//   - Replies / threads
-//   - Profile pages and follow lists
-//   - Admin moderation queue
-//   - Real backend (Supabase tables + RLS)
+// Sub-views:
+//   Feed     — Twitter-like feed (Para vos / Siguiendo / Trades),
+//              compose box, like/repost/save per post
+//   Buscar   — find users by handle or name, follow/unfollow inline
+//   Mensajes — DM inbox (UI only — real DMs need backend, see TODO)
+//   Perfil   — your profile: name + handle + verified badge + your
+//              own posts + saved posts shortcut
 // ============================================================
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { FONT } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import { social as socialApi } from "./api/index.js";
 
-const TABS = [
+const SUB_TABS = [
+  { id: "feed",     label: "Feed",     icon: Ico.Comment },
+  { id: "search",   label: "Buscar",   icon: Ico.Search  },
+  { id: "messages", label: "Mensajes", icon: Ico.Send    },
+  { id: "profile",  label: "Perfil",   icon: Ico.Users   },
+];
+
+// ----------------------------------------------------------
+// SocialPage — the wrapper with header + bottom nav + sub-view.
+// Exposed under the same name SocialPage so Shell.jsx doesn't need to
+// change its lazy import.
+// ----------------------------------------------------------
+export function SocialPage({ T, isNativeApp = false, onBack }) {
+  const [tab, setTab] = useState("feed");
+  const navBottom = isNativeApp
+    ? "calc(env(safe-area-inset-bottom) + 12px)"
+    : 12;
+
+  return (
+    <div style={{
+      position: "absolute", inset: 0,
+      background: T.bg, color: T.text,
+      overflow: "hidden",
+      display: "flex", flexDirection: "column",
+      fontFamily: FONT.sans,
+    }}>
+      {/* Header — back arrow + mini SAMAS logo + section title */}
+      <div style={{
+        flexShrink: 0,
+        padding: "calc(env(safe-area-inset-top) + 14px) 16px 12px",
+        display: "flex", alignItems: "center", gap: 12,
+        background: T.bg,
+        borderBottom: `1px solid ${T.border}`,
+        zIndex: 5,
+      }}>
+        {onBack && (
+          <button onClick={onBack} style={{
+            width: 40, height: 40, borderRadius: 12,
+            background: T.surface, border: `1px solid ${T.border}`,
+            color: T.text, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <Ico.Back size={18}/>
+          </button>
+        )}
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ flexShrink: 0, color: T.text }}>
+            <Ico.Logo size={26}/>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontFamily: FONT.display, fontSize: 22, fontWeight: 700,
+              color: T.text, letterSpacing: -0.4,
+            }}>Social</div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute }}>
+              {SUB_TABS.find((t) => t.id === tab)?.label}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Scrollable content */}
+      <div style={{
+        flex: 1, overflowY: "auto",
+        overscrollBehavior: "contain",
+        WebkitOverflowScrolling: "touch",
+      }}>
+        {tab === "feed"     && <FeedView T={T} />}
+        {tab === "search"   && <SearchView T={T} />}
+        {tab === "messages" && <MessagesView T={T} />}
+        {tab === "profile"  && <ProfileView T={T} />}
+      </div>
+
+      {/* Bottom nav */}
+      <SocialNav T={T} tab={tab} setTab={setTab} bottomInset={navBottom} />
+    </div>
+  );
+}
+
+// ----------------------------------------------------------
+// SocialNav — same shape as the broker SubNav.
+// ----------------------------------------------------------
+function SocialNav({ T, tab, setTab, bottomInset }) {
+  return (
+    <div style={{
+      position: "absolute", left: 12, right: 12, bottom: bottomInset,
+      zIndex: 40,
+      borderRadius: 28, padding: "10px 8px",
+      background: T.surface,
+      border: `1px solid ${T.border}`,
+      boxShadow: "0 12px 30px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.04) inset",
+      display: "flex", justifyContent: "space-around", alignItems: "center",
+    }}>
+      {SUB_TABS.map((t) => {
+        const active = t.id === tab;
+        const TabIco = t.icon;
+        return (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            background: "none", border: "none", cursor: "pointer", padding: "6px 8px",
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+            color: active ? T.accent : T.textMute, position: "relative",
+            fontFamily: FONT.sans, fontSize: 10, fontWeight: 600, letterSpacing: 0.2,
+          }}>
+            {active && (
+              <div style={{
+                position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)",
+                width: 24, height: 3, borderRadius: 2, background: T.accent,
+              }} />
+            )}
+            <TabIco size={20} sw={active ? 2 : 1.7} />
+            <span>{t.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ============================================================
+// FEED — top tabs (Siguiendo / Para vos / Trades) + compose + cards
+// ============================================================
+const FEED_TABS = [
   { id: "following", label: "Siguiendo" },
   { id: "for_you",   label: "Para vos"  },
   { id: "trades",    label: "Trades"    },
 ];
 
-export function SocialPage({ T }) {
+function FeedView({ T }) {
   const [tab, setTab] = useState("for_you");
   const [posts, setPosts] = useState([]);
   const [me, setMe] = useState(null);
+  const [savedIds, setSavedIds] = useState([]);
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [feed, m] = await Promise.all([
+      const [feed, m, saved] = await Promise.all([
         socialApi.getFeed({ tab, limit: 30 }),
         socialApi.getMe(),
+        socialApi.getSavedPosts(),
       ]);
-      setPosts(feed); setMe(m);
+      setPosts(feed); setMe(m); setSavedIds(saved.map((p) => p.id));
     } catch (e) { console.error("[social] load:", e); }
   }, [tab]);
 
@@ -53,11 +173,8 @@ export function SocialPage({ T }) {
     setErr(null);
     if (!body.trim()) { setErr("El post está vacío."); return; }
     setBusy(true);
-    try {
-      await socialApi.createPost({ body });
-      setBody("");
-      await refresh();
-    } catch (e) { setErr(e.message); }
+    try { await socialApi.createPost({ body }); setBody(""); await refresh(); }
+    catch (e) { setErr(e.message); }
     setBusy(false);
   }
 
@@ -66,36 +183,29 @@ export function SocialPage({ T }) {
       if (p.likedByMe) await socialApi.unlikePost(p.id);
       else await socialApi.likePost(p.id);
       await refresh();
-    } catch (e) { console.error(e); }
+    } catch {}
   }
-
   async function repost(p) {
-    try { await socialApi.repostPost(p.id); await refresh(); }
-    catch (e) { console.error(e); }
+    try { await socialApi.repostPost(p.id); await refresh(); } catch {}
+  }
+  async function toggleSave(p) {
+    try {
+      if (savedIds.includes(p.id)) await socialApi.unsavePost(p.id);
+      else await socialApi.savePost(p.id);
+      const saved = await socialApi.getSavedPosts();
+      setSavedIds(saved.map((x) => x.id));
+    } catch {}
   }
 
   return (
     <div style={{ paddingBottom: 110 }}>
-      {/* Header */}
-      <div style={{
-        padding: "calc(env(safe-area-inset-top) + 20px) 20px 0",
-      }}>
-        <div style={{
-          fontFamily: FONT.display, fontSize: 28, fontWeight: 700,
-          color: T.text, letterSpacing: -0.6,
-        }}>Social</div>
-        <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, marginTop: 2 }}>
-          Lo que están haciendo los traders
-        </div>
-      </div>
-
       {/* Top tabs */}
       <div style={{
         display: "flex", gap: 4, padding: 4, margin: "16px 16px 0",
         background: T.surface, border: `1px solid ${T.border}`,
         borderRadius: 12,
       }}>
-        {TABS.map((t) => {
+        {FEED_TABS.map((t) => {
           const active = t.id === tab;
           return (
             <button key={t.id} onClick={() => setTab(t.id)} style={{
@@ -171,8 +281,10 @@ export function SocialPage({ T }) {
             <PostCard
               key={p.id}
               T={T} p={p}
+              saved={savedIds.includes(p.id)}
               onLike={() => toggleLike(p)}
               onRepost={() => repost(p)}
+              onSave={() => toggleSave(p)}
             />
           ))
         )}
@@ -181,7 +293,237 @@ export function SocialPage({ T }) {
   );
 }
 
-function PostCard({ T, p, onLike, onRepost }) {
+// ============================================================
+// SEARCH — find users by handle / name, follow inline
+// ============================================================
+function SearchView({ T }) {
+  const [query, setQuery] = useState("");
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try { setUsers(await socialApi.getUsers({ query })); }
+    catch {} finally { setLoading(false); }
+  }, [query]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  async function toggleFollow(u) {
+    try {
+      if (u.followedByMe) await socialApi.unfollow(u.id);
+      else await socialApi.follow(u.id);
+      await refresh();
+    } catch {}
+  }
+
+  return (
+    <div style={{ paddingBottom: 110 }}>
+      <div style={{ padding: "16px" }}>
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10,
+          padding: "10px 14px", borderRadius: 14,
+          background: T.surface, border: `1px solid ${T.border}`,
+        }}>
+          <Ico.Search size={16} stroke={T.textMute} />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar por usuario o nombre"
+            style={{
+              flex: 1, background: "transparent", border: "none", outline: "none",
+              color: T.text, fontFamily: FONT.sans, fontSize: 14,
+            }}
+          />
+          {query && (
+            <button onClick={() => setQuery("")} style={{
+              background: "none", border: "none", cursor: "pointer",
+              color: T.textMute, fontSize: 14, padding: 0, lineHeight: 1,
+            }}>×</button>
+          )}
+        </div>
+      </div>
+
+      <div style={{ margin: "0 16px" }}>
+        {loading ? null : users.length === 0 ? (
+          <div style={{
+            padding: 30, textAlign: "center",
+            color: T.textMute, fontFamily: FONT.sans, fontSize: 13,
+          }}>Sin resultados.</div>
+        ) : (
+          users.map((u) => <UserRow key={u.id} T={T} user={u} onToggleFollow={() => toggleFollow(u)} />)
+        )}
+      </div>
+    </div>
+  );
+}
+
+function UserRow({ T, user, onToggleFollow }) {
+  const initials = user.displayName.split(/\s+/).slice(0, 2).map((s) => s[0]).join("").toUpperCase();
+  const handle = user.handle.replace(/^@/, "");
+  return (
+    <div style={{
+      padding: "12px 4px", display: "flex", alignItems: "center", gap: 12,
+      borderBottom: `1px solid ${T.border}`,
+    }}>
+      <Avatar T={T} initials={initials} color={user.avatarColor || T.accent} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
+          <span style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, color: T.text }}>
+            {user.displayName}
+          </span>
+          {user.verified && <span style={{ color: T.accent, fontFamily: FONT.mono, fontSize: 11, fontWeight: 800 }}>✓</span>}
+        </div>
+        <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute }}>
+          @{handle}
+        </div>
+      </div>
+      <button
+        onClick={onToggleFollow}
+        style={{
+          padding: "6px 14px", borderRadius: 999,
+          background: user.followedByMe ? "transparent" : T.accent,
+          border: `1px solid ${user.followedByMe ? T.border : T.accent}`,
+          color: user.followedByMe ? T.text : T.accentInk,
+          fontFamily: FONT.sans, fontSize: 12, fontWeight: 700, cursor: "pointer",
+        }}
+      >{user.followedByMe ? "Siguiendo" : "Seguir"}</button>
+    </div>
+  );
+}
+
+// ============================================================
+// MESSAGES — DM inbox (placeholder: needs real backend)
+// ============================================================
+function MessagesView({ T }) {
+  return (
+    <div style={{
+      padding: 32, paddingBottom: 110,
+      minHeight: "calc(100vh - 200px)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      <div style={{
+        textAlign: "center", padding: "32px 24px", borderRadius: 22,
+        background: T.surface, border: `1px solid ${T.border}`, maxWidth: 320,
+      }}>
+        <div style={{
+          width: 56, height: 56, borderRadius: 16,
+          background: T.accentSoft, color: T.accent,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          margin: "0 auto 14px",
+        }}>
+          <Ico.Send size={22} />
+        </div>
+        <div style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text, marginBottom: 8 }}>
+          Mensajes directos
+        </div>
+        <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, lineHeight: 1.5 }}>
+          Pronto vas a poder mandar DMs entre traders, compartir trades y guardar conversaciones.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// PROFILE — your stuff: posts, saved, follow stats
+// ============================================================
+function ProfileView({ T }) {
+  const [me, setMe] = useState(null);
+  const [myPosts, setMyPosts] = useState([]);
+  const [following, setFollowing] = useState([]);
+  const [saved, setSaved] = useState([]);
+  const [view, setView] = useState("posts"); // "posts" | "saved"
+
+  useEffect(() => {
+    let alive = true;
+    Promise.all([
+      socialApi.getMe(),
+      socialApi.getFeed({ tab: "for_you", limit: 60 }),
+      socialApi.getFollowing(),
+      socialApi.getSavedPosts(),
+    ]).then(([m, feed, follows, sav]) => {
+      if (!alive) return;
+      setMe(m);
+      setMyPosts(feed.filter((p) => p.author?.id === m.id));
+      setFollowing(follows);
+      setSaved(sav);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  if (!me) return null;
+  const initials = me.displayName.split(/\s+/).slice(0, 2).map((s) => s[0]).join("").toUpperCase();
+  const handle = me.handle.replace(/^@/, "");
+  const list = view === "posts" ? myPosts : saved;
+
+  return (
+    <div style={{ paddingBottom: 110 }}>
+      {/* Profile header */}
+      <div style={{ padding: "20px 16px 16px", display: "flex", alignItems: "center", gap: 14 }}>
+        <Avatar T={T} initials={initials} color={me.avatarColor || T.accent} size={64}/>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+            <span style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text }}>
+              {me.displayName}
+            </span>
+            {me.verified && <span style={{ color: T.accent, fontFamily: FONT.mono, fontSize: 13, fontWeight: 800 }}>✓</span>}
+          </div>
+          <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute }}>
+            @{handle}
+          </div>
+          <div style={{ display: "flex", gap: 14, marginTop: 8, fontFamily: FONT.mono, fontSize: 12 }}>
+            <span style={{ color: T.text }}><b>{myPosts.length}</b> <span style={{ color: T.textMute }}>posts</span></span>
+            <span style={{ color: T.text }}><b>{following.length}</b> <span style={{ color: T.textMute }}>siguiendo</span></span>
+            <span style={{ color: T.text }}><b>{saved.length}</b> <span style={{ color: T.textMute }}>guardados</span></span>
+          </div>
+        </div>
+      </div>
+
+      {/* Posts / Saved toggle */}
+      <div style={{
+        display: "flex", gap: 4, padding: 4, margin: "0 16px",
+        background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12,
+      }}>
+        {[
+          { id: "posts", label: "Mis posts" },
+          { id: "saved", label: "Guardados" },
+        ].map((v) => {
+          const active = v.id === view;
+          return (
+            <button key={v.id} onClick={() => setView(v.id)} style={{
+              flex: 1, padding: "10px 0", borderRadius: 8,
+              background: active ? T.bg : "transparent",
+              border: active ? `1px solid ${T.border}` : "1px solid transparent",
+              color: active ? T.text : T.textMute,
+              fontFamily: FONT.sans, fontSize: 13, fontWeight: 600, cursor: "pointer",
+            }}>{v.label}</button>
+          );
+        })}
+      </div>
+
+      <div style={{ margin: "16px" }}>
+        {list.length === 0 ? (
+          <div style={{
+            padding: 30, textAlign: "center",
+            color: T.textMute, fontFamily: FONT.sans, fontSize: 13,
+          }}>
+            {view === "posts"
+              ? "Todavía no publicaste nada."
+              : "Aún no guardaste posts."}
+          </div>
+        ) : (
+          list.map((p) => <PostCard key={p.id} T={T} p={p} readonly />)
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// PostCard — used by Feed + Profile
+// ============================================================
+function PostCard({ T, p, saved, onLike, onRepost, onSave, readonly }) {
   const displayName = p.author?.displayName || "Usuario";
   const handle = (p.author?.handle || "@user").replace(/^@/, "");
   const initials = displayName
@@ -210,7 +552,6 @@ function PostCard({ T, p, onLike, onRepost }) {
         lineHeight: 1.5, whiteSpace: "pre-wrap", marginBottom: 10,
       }}>{p.body}</div>
 
-      {/* Trade card if attached */}
       {p.trade && (
         <div style={{
           padding: "10px 12px", borderRadius: 12, marginBottom: 10,
@@ -232,14 +573,21 @@ function PostCard({ T, p, onLike, onRepost }) {
         </div>
       )}
 
-      {/* Actions */}
-      <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-        <ActionBtn T={T} icon={<Ico.Heart size={16} {...(p.likedByMe ? { fill: "currentColor" } : {})}/>}
-          count={p.likes} active={p.likedByMe} activeColor={T.danger} onClick={onLike} />
-        <ActionBtn T={T} icon={<Ico.Repeat size={16}/>} count={p.reposts}
-          active={p.repostedByMe} activeColor={T.accent} onClick={onRepost} />
-        <ActionBtn T={T} icon={<Ico.Comment size={16}/>} count={p.comments} />
-      </div>
+      {!readonly && (
+        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+          <ActionBtn T={T}
+            icon={<Ico.Heart size={16} {...(p.likedByMe ? { fill: "currentColor" } : {})}/>}
+            count={p.likes} active={p.likedByMe} activeColor={T.danger} onClick={onLike} />
+          <ActionBtn T={T}
+            icon={<Ico.Repeat size={16}/>} count={p.reposts}
+            active={p.repostedByMe} activeColor={T.accent} onClick={onRepost} />
+          <ActionBtn T={T}
+            icon={<Ico.Comment size={16}/>} count={p.comments} />
+          <ActionBtn T={T}
+            icon={<Ico.Bookmark size={16} {...(saved ? { fill: "currentColor" } : {})}/>}
+            active={saved} activeColor={T.accent} onClick={onSave} />
+        </div>
+      )}
     </div>
   );
 }
@@ -254,18 +602,18 @@ function ActionBtn({ T, icon, count, active, activeColor, onClick }) {
       fontFamily: FONT.mono, fontSize: 12, fontWeight: 600,
     }}>
       {icon}
-      <span>{count || 0}</span>
+      {count != null && <span>{count || 0}</span>}
     </button>
   );
 }
 
-function Avatar({ T, initials, color }) {
+function Avatar({ T, initials, color, size = 38 }) {
   return (
     <div style={{
-      width: 38, height: 38, borderRadius: 12, flexShrink: 0,
+      width: size, height: size, borderRadius: 12, flexShrink: 0,
       background: color, color: T.accentInk,
       display: "flex", alignItems: "center", justifyContent: "center",
-      fontFamily: FONT.display, fontSize: 14, fontWeight: 700,
+      fontFamily: FONT.display, fontSize: Math.round(size * 0.36), fontWeight: 700,
     }}>{initials}</div>
   );
 }

@@ -97,6 +97,21 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
     );
   }
 
+  // Social is also a drill-in sub-shell (Feed / Buscar / Mensajes /
+  // Perfil) — same pattern as Broker. Replaces the main 4-tab nav
+  // with its own bottom nav until the user backs out.
+  if (tab === "social") {
+    return (
+      <Suspense fallback={<TinyLoader T={T}/>}>
+        <SocialPage
+          T={T}
+          isNativeApp={isNativeApp}
+          onBack={() => setTab("wallet")}
+        />
+      </Suspense>
+    );
+  }
+
   const renderTab = () => {
     switch (tab) {
       case "wallet":
@@ -111,12 +126,6 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
             onToggleDark={onToggleDark}
             onOpenSettings={() => setShowSettings(true)}
           />
-        );
-      case "social":
-        return (
-          <Suspense fallback={<TinyLoader T={T}/>}>
-            <SocialPage T={T} />
-          </Suspense>
         );
       case "news":
         return (

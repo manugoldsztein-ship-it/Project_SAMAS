@@ -159,13 +159,22 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true }) 
         }}>
           <Ico.Back size={18}/>
         </button>
-        <div style={{ flex: 1 }}>
-          <div style={{
-            fontFamily: FONT.display, fontSize: 22, fontWeight: 700,
-            color: T.text, letterSpacing: -0.4,
-          }}>Invertir</div>
-          <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute }}>
-            {SUB_TABS.find((t) => t.id === tab)?.label}
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10 }}>
+          {/* Mini SAMAS mark — shows up only inside drill-in sub-shells
+              (Invertir / eventually Social) so the user always knows
+              they're still inside the SAMAS app even when the bottom
+              nav has been replaced by section-specific tabs. */}
+          <div style={{ flexShrink: 0, color: T.text }}>
+            <Ico.Logo size={26}/>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontFamily: FONT.display, fontSize: 22, fontWeight: 700,
+              color: T.text, letterSpacing: -0.4,
+            }}>Invertir</div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute }}>
+              {SUB_TABS.find((t) => t.id === tab)?.label}
+            </div>
           </div>
         </div>
       </div>
