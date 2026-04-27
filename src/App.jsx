@@ -45,6 +45,10 @@ import { SamasShell } from "./v2/Shell.jsx";
 // once per session (sessionStorage flag) so it doesn't replay on hot
 // reloads, but always plays on a cold launch.
 import { Intro } from "./v2/Intro.jsx";
+// Global toast host — mounted once at root so toasts work from every
+// shell, including BrokerShell/SocialPage short-circuits.
+import { ToastHost } from "./v2/toast.jsx";
+import { SAMAS_THEME } from "./v2/theme.js";
 
 // ============================================================
 // THEME
@@ -6983,6 +6987,12 @@ export default function SAMASApp() {
       {/* Intro animation overlay — covers everything above for ~2.3s
           on the first render of each session, then fades out. */}
       {showIntro && <Intro onDone={dismissIntro} />}
+
+      {/* Global toast host — mounted at root so toasts survive
+          drill-in shells (BrokerShell / SocialPage). Uses the v2
+          dark-theme palette regardless of the legacy isDark flag —
+          toasts are tiny and the dark style reads on every surface. */}
+      <ToastHost T={SAMAS_THEME.dark} />
     </div>
   );
 }

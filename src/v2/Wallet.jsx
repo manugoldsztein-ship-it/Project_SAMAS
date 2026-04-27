@@ -25,6 +25,7 @@ import {
   Avatar, ChromeBtn, Pill, SectionHead, Sparkline, SAMAS_SPARKS,
 } from "./shared.jsx";
 import { wallet as walletApi, card as cardApi, broker as brokerApi } from "./api/index.js";
+import { toast } from "./toast.jsx";
 
 export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark, onOpenSettings }) {
   // ----------- data state -----------
@@ -191,7 +192,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
       }}>
         <Action T={T} icon={<Ico.Send size={18}/>}   label="Enviar"  onClick={() => setActiveModal("withdraw")} />
         <Action T={T} icon={<Ico.Recv size={18}/>}   label="Recibir" onClick={() => setActiveModal("deposit")} />
-        <Action T={T} icon={<Ico.Repeat size={18}/>} label="Cambiar" onClick={() => alert("Cambio ARS↔USD: TBD modal")} />
+        <Action T={T} icon={<Ico.Repeat size={18}/>} label="Cambiar" onClick={() => toast.info("Cambio ARS↔USD próximamente.")} />
         <Action T={T} icon={<Ico.Add size={18}/>}    label="Cargar"  onClick={() => setActiveModal("deposit")} />
       </div>
 

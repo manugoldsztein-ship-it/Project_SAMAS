@@ -33,6 +33,7 @@ import { broker as brokerApi } from "./api/index.js";
 import { ObjectivesWizard } from "../ai/ObjectivesWizard.jsx";
 // iOS-style swipe-from-left-edge back gesture.
 import { useEdgeSwipeBack } from "./useEdgeSwipeBack.js";
+import { toast } from "./toast.jsx";
 
 // Sub-tabs metadata — drives both the bottom nav and the content
 // switch in the top-level <BrokerShell/> render.
@@ -145,8 +146,18 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true }) 
       overflow: "hidden",
       display: "flex", flexDirection: "column",
       fontFamily: FONT.sans,
+      // iOS-style push-in animation when the user enters the
+      // sub-shell. Combined with the swipe-back transform via
+      // ...swipeStyle (which sets its own transition during drag).
+      animation: "samas-shell-in 240ms cubic-bezier(.2,.8,.2,1)",
       ...swipeStyle,
     }}>
+      <style>{`
+        @keyframes samas-shell-in {
+          from { transform: translateX(100%); }
+          to   { transform: translateX(0); }
+        }
+      `}</style>
       {/* ---------- header with back arrow ---------- */}
       <div style={{
         flexShrink: 0,
@@ -1062,19 +1073,19 @@ function OrdenesView({ T, orders, alerts, stops, holdings, onRefresh }) {
   async function cancelOrder(orderId) {
     setBusyKey(`order:${orderId}`);
     try { await brokerApi.cancelOrder(orderId); await onRefresh(); }
-    catch (e) { alert(e.message); }
+    catch (e) { toast.error(e.message); }
     setBusyKey(null);
   }
   async function removeAlert(ticker) {
     setBusyKey(`alert:${ticker}`);
     try { await brokerApi.removePriceAlert(ticker); await onRefresh(); }
-    catch (e) { alert(e.message); }
+    catch (e) { toast.error(e.message); }
     setBusyKey(null);
   }
   async function removeStop(ticker) {
     setBusyKey(`stop:${ticker}`);
     try { await brokerApi.removeStopLoss(ticker); await onRefresh(); }
-    catch (e) { alert(e.message); }
+    catch (e) { toast.error(e.message); }
     setBusyKey(null);
   }
 
@@ -1817,7 +1828,7 @@ function AddAssetModal({ T, assets, excludeTickers = [], listName, onClose, onPi
               <button
                 key={a.ticker}
                 disabled={busy}
-                onClick={async () => { setBusy(true); try { await onPick(a.ticker); } catch (e) { alert(e.message); setBusy(false); } }}
+                onClick={async () => { setBusy(true); try { await onPick(a.ticker); } catch (e) { toast.error(e.message); setBusy(false); } }}
                 style={{
                   width: "100%", padding: "10px 8px", background: "transparent",
                   border: "none", borderBottom: `1px solid ${T.border}`,
@@ -1871,7 +1882,7 @@ function WatchlistPicker({ T, ticker, watchlists, onClose, onChange }) {
         await brokerApi.addToWatchlist(wl.id, ticker);
       }
       if (onChange) await onChange();
-    } catch (e) { alert(e.message); }
+    } catch (e) { toast.error(e.message); }
     setBusyId(null);
   }
 
@@ -2484,7 +2495,7 @@ function AIPlanCard({ T, onOpen, savedPlan }) {
           await navigator.share({ title: "Mi plan en SAMAS", text });
         } else if (navigator.clipboard) {
           await navigator.clipboard.writeText(text);
-          alert("Plan copiado al portapapeles.");
+          toast.success("Plan copiado al portapapeles.");
         }
       } catch (_) { /* user cancelled */ }
     }

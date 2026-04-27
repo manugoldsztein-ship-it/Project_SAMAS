@@ -199,3 +199,26 @@ export function ChromeBtn({ T, children, onClick, dot }) {
     </button>
   );
 }
+
+// ----------------------------------------------------------
+// Skeleton — shimmering placeholder block while data loads. Used by
+// News / Wallet etc. to avoid a flash of "Cargando…" text. Renders
+// a div sized to the props and animates a light gradient across it.
+// ----------------------------------------------------------
+export function Skeleton({ T, width = "100%", height = 14, borderRadius = 8, marginBottom = 0 }) {
+  return (
+    <div style={{
+      width, height, borderRadius, marginBottom,
+      background: `linear-gradient(90deg, ${T.surface} 0%, ${T.bgElev} 50%, ${T.surface} 100%)`,
+      backgroundSize: "200% 100%",
+      animation: "samas-skel 1.4s ease-in-out infinite",
+    }}>
+      <style>{`
+        @keyframes samas-skel {
+          0%   { background-position: 100% 0; }
+          100% { background-position: -100% 0; }
+        }
+      `}</style>
+    </div>
+  );
+}

@@ -19,6 +19,7 @@ import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { FONT } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import { news as newsApi } from "./api/index.js";
+import { Skeleton } from "./shared.jsx";
 
 export function NewsPage({ T }) {
   const [items, setItems] = useState([]);
@@ -210,19 +211,34 @@ export function NewsPage({ T }) {
       {/* Feed */}
       <div style={{ margin: "0 16px" }}>
         {loading ? (
-          <div style={{
-            padding: 30, textAlign: "center", color: T.textMute,
-            fontFamily: FONT.sans, fontSize: 13,
-            display: "flex", flexDirection: "column", alignItems: "center", gap: 12,
-          }}>
-            <div style={{
-              width: 22, height: 22, borderRadius: 999,
-              border: `2px solid ${T.border}`, borderTopColor: T.accent,
-              animation: "samas-spin 700ms linear infinite",
-            }}/>
-            <div>{query ? `Buscando noticias de ${query.toUpperCase()}…` : "Cargando noticias…"}</div>
-            <style>{`@keyframes samas-spin { to { transform: rotate(360deg); } }`}</style>
-          </div>
+          <>
+            {/* Skeleton card stack — feels much more "loading" than a
+                single spinner because the layout matches the eventual
+                content. Three placeholders is enough to fill the
+                viewport during typical fetch latency. */}
+            {[0, 1, 2].map((i) => (
+              <div key={i} style={{
+                padding: 14, marginBottom: 8, borderRadius: 18,
+                background: T.surface, border: `1px solid ${T.border}`,
+              }}>
+                <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                  <Skeleton T={T} width={44} height={14} borderRadius={6} />
+                  <Skeleton T={T} width={72} height={14} borderRadius={6} />
+                </div>
+                <Skeleton T={T} height={16} marginBottom={8} />
+                <Skeleton T={T} height={12} marginBottom={6} />
+                <Skeleton T={T} width="60%" height={12} />
+              </div>
+            ))}
+            {query && (
+              <div style={{
+                marginTop: 8, textAlign: "center", color: T.textMute,
+                fontFamily: FONT.sans, fontSize: 12,
+              }}>
+                Buscando noticias de {query.toUpperCase()}…
+              </div>
+            )}
+          </>
         ) : visible.length === 0 ? (
           <div style={{
             padding: "32px 24px", borderRadius: 18, textAlign: "center",

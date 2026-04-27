@@ -49,8 +49,15 @@ export function SocialPage({ T, isNativeApp = false, onBack }) {
       overflow: "hidden",
       display: "flex", flexDirection: "column",
       fontFamily: FONT.sans,
+      animation: "samas-shell-in 240ms cubic-bezier(.2,.8,.2,1)",
       ...swipeStyle,
     }}>
+      <style>{`
+        @keyframes samas-shell-in {
+          from { transform: translateX(100%); }
+          to   { transform: translateX(0); }
+        }
+      `}</style>
       {/* Header — back arrow + mini SAMAS logo + section title */}
       <div style={{
         flexShrink: 0,
