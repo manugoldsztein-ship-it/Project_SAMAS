@@ -294,7 +294,9 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
                   <span style={{ color: T.accent }}>{nextLabel(aporte.nextAt)}</span>
                 </div>
                 <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
-                  Día {aporte.dayOfMonth} de cada mes · Tocá para ajustar
+                  Día {aporte.dayOfMonth} de cada mes
+                  {aporte.lastAt ? ` · Último: ${shortDate(aporte.lastAt)}` : ""}
+                  {" · Tocá para ajustar"}
                 </div>
               </>
             ) : (
@@ -539,6 +541,14 @@ function nextLabel(ts) {
   if (diffDays === 1) return "mañana";
   if (diffDays <= 7) return `en ${diffDays} días`;
   return target.toLocaleDateString("es-AR", { day: "numeric", month: "short" });
+}
+
+// Compact "{day} {monthAbbrev}" formatter for the "Último aporte" line.
+// Used when the user has had at least one credit fire — surfaces the
+// fact that the schedule is alive and well.
+function shortDate(ts) {
+  if (!ts) return "";
+  return new Date(ts).toLocaleDateString("es-AR", { day: "numeric", month: "short" });
 }
 
 // ----------------------------------------------------------

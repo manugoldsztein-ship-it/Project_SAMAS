@@ -297,22 +297,28 @@ export function _resetDemo() {
 // Recurring aporte mensual
 // ----------------------------------------------------------
 // User schedules a recurring deposit: amount + currency + day of
-// month. We persist locally (samas_v2_aporte_mock) and the UI shows
-// "next: <date>" and "last credited: <date>".
+// month. Persisted server-side in public.recurring_aportes — the
+// process-recurring-aportes Edge Function runs daily and credits the
+// wallet via wallet_credits. While the user is between phones (or the
+// table hasn't been migrated yet) we fall back to a localStorage
+// stub so the UI keeps working.
 //
-// Production: store in a recurring_deposits table, with a daily cron
-// (Supabase scheduled function or external) that on day-of-month creates
-// the deposit + buy split.
+// Public shape (unchanged so callers don't need updating):
+//   { amount, currency, dayOfMonth, nextAt, lastAt, createdAt }
+// ============================================================
+
+import { supabase } from "../../lib/supabase.js";
+
 const APORTE_KEY = "samas_v2_aporte_mock";
 
-function loadAporte() {
+function loadAporteLocal() {
   if (typeof localStorage === "undefined") return null;
   try {
     const raw = localStorage.getItem(APORTE_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch { return null; }
 }
-function saveAporte(a) {
+function saveAporteLocal(a) {
   if (typeof localStorage !== "undefined") {
     try {
       if (a) localStorage.setItem(APORTE_KEY, JSON.stringify(a));
@@ -321,28 +327,109 @@ function saveAporte(a) {
   }
 }
 
-/** Return the next-monthly date >= today for a given day-of-month. */
+// Return the next-monthly DATE (calendar) >= today for a given day-of-
+// month. We work in local-time because the user picks days in their
+// local frame ("the 5th") — we'll switch to AR time when we go
+// production.
 function nextDateFor(dayOfMonth) {
   const today = new Date();
   const d = Math.max(1, Math.min(28, Number(dayOfMonth) || 1));
   const candidate = new Date(today.getFullYear(), today.getMonth(), d);
-  if (candidate.getTime() < today.setHours(0, 0, 0, 0)) {
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  if (candidate.getTime() < startOfToday.getTime()) {
     candidate.setMonth(candidate.getMonth() + 1);
   }
   return candidate.getTime();
 }
 
+// Convert a YYYY-MM-DD date string (Supabase DATE column) to a JS ms.
+// Supabase returns these as 'YYYY-MM-DD' strings; new Date() parses
+// them as midnight UTC, which is fine for "today vs that day"
+// comparisons in the UI.
+function dateStringToMs(s) {
+  if (!s) return null;
+  const t = new Date(s).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+function msToDateString(ms) {
+  if (!ms) return null;
+  const d = new Date(ms);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+// Detect the "table doesn't exist" flavour error so we degrade
+// gracefully when the migration hasn't been applied yet.
+function isMissingTableError(error) {
+  if (!error) return false;
+  if (error.code === "42P01") return true;
+  const msg = String(error.message || "").toLowerCase();
+  return msg.includes("does not exist") || msg.includes("schema cache");
+}
+let _aporteMissingTableWarned = false;
+function warnMissingAporteTableOnce() {
+  if (_aporteMissingTableWarned) return;
+  _aporteMissingTableWarned = true;
+  console.warn("[aporte] recurring_aportes table not migrated yet — using local fallback. Apply supabase/recurring_aportes.sql to persist server-side.");
+}
+
+function rowToAporte(row) {
+  if (!row) return null;
+  return {
+    amount: Number(row.amount),
+    currency: row.currency,
+    dayOfMonth: row.day_of_month,
+    nextAt: dateStringToMs(row.next_due),
+    lastAt: row.last_credited_at ? new Date(row.last_credited_at).getTime() : null,
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+  };
+}
+
 /**
  * getRecurringAporte() — returns the active schedule or null.
  *
- * Shape: { amount: number, currency: "ARS"|"USD", dayOfMonth: number,
- *          nextAt: number(ms), lastAt: number(ms)|null, createdAt: number }
+ * Shape: { amount, currency, dayOfMonth, nextAt(ms), lastAt(ms|null), createdAt(ms) }
  */
 export async function getRecurringAporte() {
-  await jitter(80, 200);
-  const a = loadAporte();
+  // Prefer server. Fall back to localStorage if no session, no table,
+  // or any other error — we don't want a Supabase hiccup to wipe the
+  // user's "next aporte" badge.
+  try {
+    const { data: u } = await supabase.auth.getUser();
+    const userId = u?.user?.id;
+    if (!userId) return rebaseAporte(loadAporteLocal());
+    const { data, error } = await supabase
+      .from("recurring_aportes")
+      .select("amount, currency, day_of_month, next_due, last_credited_at, created_at, active")
+      .eq("user_id", userId)
+      .eq("active", true)
+      .maybeSingle();
+    if (error) {
+      if (isMissingTableError(error)) {
+        warnMissingAporteTableOnce();
+        return rebaseAporte(loadAporteLocal());
+      }
+      console.warn("[aporte] get:", error.message);
+      return rebaseAporte(loadAporteLocal());
+    }
+    if (!data) return null;
+    // Mirror the server row to localStorage so the next cold start has
+    // something to render before the round-trip resolves.
+    const result = rowToAporte(data);
+    saveAporteLocal(result);
+    return result;
+  } catch (e) {
+    console.warn("[aporte] get caught:", e?.message);
+    return rebaseAporte(loadAporteLocal());
+  }
+}
+
+// nextAt drifts as the calendar advances. Recompute on read so the
+// UI doesn't show "next: 5 days ago" if the device was offline.
+function rebaseAporte(a) {
   if (!a) return null;
-  // Recompute nextAt in case the day passed.
   return { ...a, nextAt: nextDateFor(a.dayOfMonth) };
 }
 
@@ -351,28 +438,73 @@ export async function getRecurringAporte() {
  * replace the schedule. Pass null/undefined to disable.
  */
 export async function setRecurringAporte(input) {
-  await jitter(120, 280);
   if (!input || !input.amount || input.amount <= 0) {
-    saveAporte(null);
-    return null;
+    return cancelRecurringAporte();
   }
   const currency = input.currency === "USD" ? "USD" : "ARS";
   const dayOfMonth = Math.max(1, Math.min(28, Math.round(Number(input.dayOfMonth) || 1)));
-  const next = {
-    amount: Number(input.amount),
-    currency,
-    dayOfMonth,
-    nextAt: nextDateFor(dayOfMonth),
+  const amount = Number(input.amount);
+  const nextAt = nextDateFor(dayOfMonth);
+  const local = {
+    amount, currency, dayOfMonth, nextAt,
     lastAt: input.lastAt || null,
     createdAt: input.createdAt || Date.now(),
   };
-  saveAporte(next);
-  return next;
+
+  try {
+    const { data: u } = await supabase.auth.getUser();
+    const userId = u?.user?.id;
+    if (!userId) {
+      saveAporteLocal(local);
+      return local;
+    }
+    const { error } = await supabase
+      .from("recurring_aportes")
+      .upsert({
+        user_id: userId,
+        amount,
+        currency,
+        day_of_month: dayOfMonth,
+        next_due: msToDateString(nextAt),
+        active: true,
+      }, { onConflict: "user_id" });
+    if (error) {
+      if (isMissingTableError(error)) {
+        warnMissingAporteTableOnce();
+        saveAporteLocal(local);
+        return local;
+      }
+      throw new Error(error.message);
+    }
+    saveAporteLocal(local);
+    return local;
+  } catch (e) {
+    console.warn("[aporte] set:", e?.message);
+    // Still mirror locally so the UI updates even if the upstream write
+    // failed — the user can retry later and the local copy is the one
+    // they see.
+    saveAporteLocal(local);
+    return local;
+  }
 }
 
 /** Disable / cancel the schedule. */
 export async function cancelRecurringAporte() {
-  await jitter(80, 180);
-  saveAporte(null);
+  try {
+    const { data: u } = await supabase.auth.getUser();
+    const userId = u?.user?.id;
+    if (userId) {
+      const { error } = await supabase
+        .from("recurring_aportes")
+        .update({ active: false })
+        .eq("user_id", userId);
+      if (error && !isMissingTableError(error)) {
+        console.warn("[aporte] cancel:", error.message);
+      }
+    }
+  } catch (e) {
+    console.warn("[aporte] cancel caught:", e?.message);
+  }
+  saveAporteLocal(null);
   return null;
 }
