@@ -127,7 +127,7 @@ export function BrokerShell({ T, isNativeApp = false, onBack }) {
           <MercadoView T={T} assets={assets} onSelectAsset={setSelectedAsset} />
         )}
         {tab === "watchlist" && (
-          <WatchlistView T={T} watchlists={watchlists} assets={assets} onSelectAsset={setSelectedAsset} />
+          <WatchlistView T={T} watchlists={watchlists} assets={assets} onSelectAsset={setSelectedAsset} onRefresh={refresh} />
         )}
         {tab === "ordenes" && (
           <OrdenesView
@@ -317,19 +317,113 @@ function MercadoView({ T, assets, onSelectAsset }) {
 }
 
 // ----------------------------------------------------------
-// Watchlist — first list (full mgmt UI is Phase 2.5).
+// Watchlist — multiple lists with name/create/rename/delete.
 // ----------------------------------------------------------
-function WatchlistView({ T, watchlists, assets, onSelectAsset }) {
+function WatchlistView({ T, watchlists, assets, onSelectAsset, onRefresh }) {
+  // Selected list ID. Default to the first one; if it gets deleted
+  // we fall back to whichever is now first.
+  const [selectedId, setSelectedId] = useState(null);
+  const [modal, setModal] = useState(null); // "create" | "rename" | "confirm-delete" | null
+
+  // Pick a sensible initial selection when lists arrive. Re-runs if
+  // the list set changes (e.g. after creating or deleting).
+  useEffect(() => {
+    if (!watchlists.length) { setSelectedId(null); return; }
+    if (!selectedId || !watchlists.find((w) => w.id === selectedId)) {
+      setSelectedId(watchlists[0].id);
+    }
+  }, [watchlists, selectedId]);
+
+  const selected = watchlists.find((w) => w.id === selectedId);
+  const items = selected
+    ? selected.tickers.map((tk) => assets.find((a) => a.ticker === tk)).filter(Boolean)
+    : [];
+
   if (!watchlists.length) {
-    return <Empty T={T} title="Sin listas" subtitle="Próximamente." />;
+    return (
+      <div style={{ paddingBottom: 110, padding: 16 }}>
+        <Empty T={T} title="Sin listas"
+          subtitle="Creá tu primera lista para seguir activos."
+        />
+        <button onClick={() => setModal("create")} style={{
+          width: "100%", marginTop: 12, padding: 14, borderRadius: 14,
+          background: T.accent, color: T.accentInk,
+          fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, border: "none",
+          cursor: "pointer",
+        }}>+ Crear lista</button>
+        {modal === "create" && (
+          <NameModal T={T} title="Nueva lista" placeholder="Mi watchlist"
+            onClose={() => setModal(null)}
+            onSubmit={async (name) => {
+              await brokerApi.createWatchlist(name);
+              await onRefresh();
+              setModal(null);
+            }}
+          />
+        )}
+      </div>
+    );
   }
-  const list = watchlists[0];
-  const items = list.tickers.map((tk) => assets.find((a) => a.ticker === tk)).filter(Boolean);
+
   return (
     <div style={{ paddingBottom: 110 }}>
-      <div style={{ margin: "16px" }}>
-        <SectionHead T={T} title={list.name} action={`${items.length} activos`} />
+      {/* Pills row — each watchlist + "+" to create a new one. */}
+      <div style={{
+        display: "flex", gap: 8, padding: "16px 16px 12px",
+        overflowX: "auto", scrollbarWidth: "none",
+      }}>
+        {watchlists.map((w) => {
+          const active = w.id === selectedId;
+          return (
+            <button key={w.id} onClick={() => setSelectedId(w.id)} style={{
+              flexShrink: 0, padding: "8px 14px", borderRadius: 999,
+              background: active ? T.accentSoft : T.surface,
+              border: `1px solid ${active ? T.accent : T.border}`,
+              color: active ? T.accent : T.text,
+              fontFamily: FONT.sans, fontSize: 13, fontWeight: 600,
+              cursor: "pointer", whiteSpace: "nowrap",
+            }}>{w.name} <span style={{ color: T.textMute, marginLeft: 4 }}>{w.tickers.length}</span></button>
+          );
+        })}
+        <button onClick={() => setModal("create")} style={{
+          flexShrink: 0, padding: "8px 14px", borderRadius: 999,
+          background: T.surface, border: `1px dashed ${T.border}`,
+          color: T.textMute, fontFamily: FONT.sans, fontSize: 13, fontWeight: 600,
+          cursor: "pointer", whiteSpace: "nowrap",
+        }}>+ Nueva</button>
       </div>
+
+      {/* Selected list header with rename/delete actions */}
+      {selected && (
+        <div style={{
+          margin: "0 16px",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          gap: 12, marginBottom: 8,
+        }}>
+          <div style={{
+            fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text,
+            letterSpacing: -0.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>{selected.name}</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={() => setModal("rename")} style={{
+              padding: "5px 10px", borderRadius: 8,
+              background: "transparent", border: `1px solid ${T.border}`,
+              color: T.textMute, fontFamily: FONT.sans, fontSize: 11, fontWeight: 600,
+              cursor: "pointer",
+            }}>Renombrar</button>
+            {watchlists.length > 1 && (
+              <button onClick={() => setModal("confirm-delete")} style={{
+                padding: "5px 10px", borderRadius: 8,
+                background: "transparent", border: `1px solid ${T.border}`,
+                color: T.danger, fontFamily: FONT.sans, fontSize: 11, fontWeight: 600,
+                cursor: "pointer",
+              }}>Borrar</button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Tickers */}
       {items.length === 0 ? (
         <Empty T={T} title="Lista vacía" subtitle="Agregá activos desde Mercado." />
       ) : (
@@ -349,6 +443,155 @@ function WatchlistView({ T, watchlists, assets, onSelectAsset }) {
           ))}
         </div>
       )}
+
+      {/* Modals */}
+      {modal === "create" && (
+        <NameModal T={T} title="Nueva lista" placeholder="Mi watchlist"
+          onClose={() => setModal(null)}
+          onSubmit={async (name) => {
+            const wl = await brokerApi.createWatchlist(name);
+            await onRefresh();
+            setSelectedId(wl.id);
+            setModal(null);
+          }}
+        />
+      )}
+      {modal === "rename" && selected && (
+        <NameModal T={T} title="Renombrar lista" initial={selected.name}
+          onClose={() => setModal(null)}
+          onSubmit={async (name) => {
+            await brokerApi.renameWatchlist(selected.id, name);
+            await onRefresh();
+            setModal(null);
+          }}
+        />
+      )}
+      {modal === "confirm-delete" && selected && (
+        <ConfirmModal T={T}
+          title="¿Borrar lista?"
+          message={`Vas a perder la lista "${selected.name}" y los ${selected.tickers.length} activos que tiene.`}
+          confirmLabel="Borrar"
+          danger
+          onClose={() => setModal(null)}
+          onConfirm={async () => {
+            await brokerApi.removeWatchlist(selected.id);
+            await onRefresh();
+            setModal(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------
+// Tiny modal shells — used by watchlist mgmt and other simple flows.
+// ----------------------------------------------------------
+function NameModal({ T, title, placeholder, initial, onClose, onSubmit }) {
+  const [value, setValue] = useState(initial || "");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function go() {
+    setErr(null);
+    if (!value.trim()) { setErr("Indicá un nombre."); return; }
+    setBusy(true);
+    try { await onSubmit(value.trim()); }
+    catch (e) { setErr(e.message); setBusy(false); }
+  }
+
+  return (
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
+      position: "fixed", inset: 0, zIndex: 100,
+      background: "rgba(0,0,0,0.6)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+    }}>
+      <div style={{
+        width: "100%", maxWidth: 540,
+        background: T.bgElev, color: T.text,
+        borderTopLeftRadius: 28, borderTopRightRadius: 28,
+        border: `1px solid ${T.border}`, borderBottom: "none",
+        padding: "20px 20px",
+        paddingBottom: "calc(env(safe-area-inset-bottom) + 24px)",
+      }}>
+        <div style={{ fontFamily: FONT.display, fontSize: 20, fontWeight: 700, color: T.text, marginBottom: 14 }}>{title}</div>
+        <input
+          autoFocus
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder={placeholder}
+          maxLength={40}
+          style={{
+            width: "100%", boxSizing: "border-box",
+            padding: "14px 16px", borderRadius: 14,
+            background: T.surface, border: `1px solid ${T.border}`,
+            color: T.text, fontFamily: FONT.sans, fontSize: 15, fontWeight: 500,
+            outline: "none",
+          }}
+        />
+        {err && <div style={{ marginTop: 10, color: T.danger, fontFamily: FONT.sans, fontSize: 12 }}>{err}</div>}
+        <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+          <button onClick={onClose} disabled={busy} style={{
+            flex: 1, padding: 14, borderRadius: 14,
+            background: T.surface, border: `1px solid ${T.border}`,
+            color: T.text, fontFamily: FONT.sans, fontSize: 14, fontWeight: 600,
+            cursor: busy ? "default" : "pointer",
+          }}>Cancelar</button>
+          <button onClick={go} disabled={busy} style={{
+            flex: 1, padding: 14, borderRadius: 14,
+            background: T.accent, color: T.accentInk,
+            fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, border: "none",
+            cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
+          }}>Guardar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmModal({ T, title, message, confirmLabel = "Confirmar", danger, onClose, onConfirm }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function go() {
+    setBusy(true); setErr(null);
+    try { await onConfirm(); }
+    catch (e) { setErr(e.message); setBusy(false); }
+  }
+
+  return (
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
+      position: "fixed", inset: 0, zIndex: 100,
+      background: "rgba(0,0,0,0.6)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+    }}>
+      <div style={{
+        width: "100%", maxWidth: 540,
+        background: T.bgElev, color: T.text,
+        borderTopLeftRadius: 28, borderTopRightRadius: 28,
+        border: `1px solid ${T.border}`, borderBottom: "none",
+        padding: "20px 20px",
+        paddingBottom: "calc(env(safe-area-inset-bottom) + 24px)",
+      }}>
+        <div style={{ fontFamily: FONT.display, fontSize: 20, fontWeight: 700, color: T.text, marginBottom: 8 }}>{title}</div>
+        <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, lineHeight: 1.5 }}>{message}</div>
+        {err && <div style={{ marginTop: 10, color: T.danger, fontFamily: FONT.sans, fontSize: 12 }}>{err}</div>}
+        <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+          <button onClick={onClose} disabled={busy} style={{
+            flex: 1, padding: 14, borderRadius: 14,
+            background: T.surface, border: `1px solid ${T.border}`,
+            color: T.text, fontFamily: FONT.sans, fontSize: 14, fontWeight: 600,
+            cursor: busy ? "default" : "pointer",
+          }}>Cancelar</button>
+          <button onClick={go} disabled={busy} style={{
+            flex: 1, padding: 14, borderRadius: 14,
+            background: danger ? T.danger : T.accent,
+            color: danger ? "#FFFFFF" : T.accentInk,
+            fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, border: "none",
+            cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
+          }}>{confirmLabel}</button>
+        </div>
+      </div>
     </div>
   );
 }

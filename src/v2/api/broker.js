@@ -289,9 +289,39 @@ export async function removeFromWatchlist(watchlistId, ticker) {
 }
 export async function createWatchlist(name) {
   await jitter();
-  const wl = { id: genId(), name, tickers: [] };
+  if (!name || !name.trim()) throw new Error("Indicá un nombre.");
+  const trimmed = name.trim().slice(0, 40);
+  const wl = { id: genId(), name: trimmed, tickers: [] };
   saveState({ ...state, watchlists: [...state.watchlists, wl] });
   return wl;
+}
+
+/**
+ * renameWatchlist(id, newName) — update display name.
+ */
+export async function renameWatchlist(id, newName) {
+  await jitter();
+  if (!newName || !newName.trim()) throw new Error("Indicá un nombre.");
+  const trimmed = newName.trim().slice(0, 40);
+  const next = {
+    ...state,
+    watchlists: state.watchlists.map((w) => w.id === id ? { ...w, name: trimmed } : w),
+  };
+  saveState(next);
+  return { ok: true };
+}
+
+/**
+ * removeWatchlist(id) — delete the list and all its tickers. Server
+ * should verify ownership via RLS in production.
+ */
+export async function removeWatchlist(id) {
+  await jitter();
+  if (state.watchlists.length <= 1) {
+    throw new Error("Tenés que dejar al menos una lista.");
+  }
+  saveState({ ...state, watchlists: state.watchlists.filter((w) => w.id !== id) });
+  return { ok: true };
 }
 
 // ----------------------------------------------------------
