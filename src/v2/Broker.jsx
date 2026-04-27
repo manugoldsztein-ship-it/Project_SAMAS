@@ -211,9 +211,9 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true, la
             <div style={{
               fontFamily: FONT.display, fontSize: 22, fontWeight: 700,
               color: T.text, letterSpacing: -0.4,
-            }}>Invertir</div>
+            }}>{tr("broker.title", lang)}</div>
             <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute }}>
-              {SUB_TABS.find((t) => t.id === tab)?.label}
+              {tr(SUB_TABS.find((t) => t.id === tab)?.key || "broker.subnav.cartera", lang)}
             </div>
           </div>
         </div>

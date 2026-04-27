@@ -91,45 +91,23 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
     );
   }
 
-  // ---------- short-circuit: Broker is a NESTED sub-shell ----------
-  // When the user taps "Invertir", we replace the entire main shell
-  // with BrokerShell. BrokerShell has its OWN bottom nav (Portafolio
-  // / Mercado / Watchlist / Órdenes) and a back arrow at the top to
-  // return us here. The main 4-tab nav is hidden while inside Broker
-  // — this gives the iOS-style "drill down into a section" feel the
-  // legacy app had, without coupling the two navs together.
-  if (tab === "broker") {
-    return (
-      <Suspense fallback={<TinyLoader T={T}/>}>
-        <BrokerShell
-          T={T}
-          isNativeApp={isNativeApp}
-          proMode={proMode}
-          onBack={() => setTab("wallet")}
-          lang={lang}
-        />
-      </Suspense>
-    );
-  }
-
-  // Social is also a drill-in sub-shell (Feed / Buscar / Mensajes /
-  // Perfil) — same pattern as Broker. Replaces the main 4-tab nav
-  // with its own bottom nav until the user backs out.
-  if (tab === "social") {
-    return (
-      <Suspense fallback={<TinyLoader T={T}/>}>
-        <SocialPage
-          T={T}
-          isNativeApp={isNativeApp}
-          onBack={() => setTab("wallet")}
-          lang={lang}
-        />
-      </Suspense>
-    );
-  }
+  // Broker / Social are drill-in sub-shells with their OWN bottom nav.
+  // We don't short-circuit anymore: instead the main Wallet layout
+  // stays mounted underneath, and the sub-shell sits on top with
+  // position:absolute. That way the iOS-style edge-swipe-back gesture
+  // translates the sub-shell out of the way and reveals the Wallet
+  // beneath it (instead of a black gap, which is what was happening
+  // when we early-returned a single sub-shell on its own).
+  //
+  // The "background" Wallet is rendered with the tab fixed to "wallet"
+  // even though the actual tab state is "broker"/"social" — that way
+  // the user's destination after the swipe feels natural and the data
+  // stays warm in memory.
+  const inSubShell = tab === "broker" || tab === "social";
+  const baseTab = inSubShell ? "wallet" : tab;
 
   const renderTab = () => {
-    switch (tab) {
+    switch (baseTab) {
       case "wallet":
         return (
           <WalletPage
@@ -167,12 +145,43 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
       color: T.text,
     }}>
       {/* ---------- scrollable page content ---------- */}
-      <ScrollWithPTR T={T} tab={tab}>
+      <ScrollWithPTR T={T} tab={baseTab}>
         {renderTab()}
       </ScrollWithPTR>
 
-      {/* ---------- floating tab bar ---------- */}
-      <SamasTabBar tab={tab} setTab={setTab} T={T} bottomInset={tabBarBottom} lang={lang} />
+      {/* ---------- floating tab bar ----------
+          Hidden while inside a drill-in sub-shell because the sub-shell
+          renders its own bottom nav. The base tab bar reappears as the
+          user swipes back and the sub-shell exits. */}
+      {!inSubShell && (
+        <SamasTabBar tab={tab} setTab={setTab} T={T} bottomInset={tabBarBottom} lang={lang} />
+      )}
+
+      {/* ---------- drill-in sub-shells (overlay) ----------
+          Rendered ABOVE the main shell layout via position:absolute so
+          the edge-swipe-back gesture (translateX) reveals the Wallet
+          underneath as the user drags. */}
+      {tab === "broker" && (
+        <Suspense fallback={<TinyLoader T={T}/>}>
+          <BrokerShell
+            T={T}
+            isNativeApp={isNativeApp}
+            proMode={proMode}
+            onBack={() => setTab("wallet")}
+            lang={lang}
+          />
+        </Suspense>
+      )}
+      {tab === "social" && (
+        <Suspense fallback={<TinyLoader T={T}/>}>
+          <SocialPage
+            T={T}
+            isNativeApp={isNativeApp}
+            onBack={() => setTab("wallet")}
+            lang={lang}
+          />
+        </Suspense>
+      )}
 
       {/* ---------- settings sheet (Pro toggle, 2FA, logout, etc.) ---------- */}
       {showSettings && (
