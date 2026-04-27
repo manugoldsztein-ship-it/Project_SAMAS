@@ -151,6 +151,8 @@ export function BrokerShell({ T, isNativeApp = false, onBack }) {
           asset={selectedAsset}
           onClose={() => setSelectedAsset(null)}
           onDone={() => { setSelectedAsset(null); refresh(); }}
+          watchlists={watchlists}
+          onWatchlistsChange={refresh}
         />
       )}
     </div>
@@ -504,15 +506,22 @@ function NameModal({ T, title, placeholder, initial, onClose, onSubmit }) {
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
       position: "fixed", inset: 0, zIndex: 100,
       background: "rgba(0,0,0,0.6)",
-      display: "flex", alignItems: "flex-end", justifyContent: "center",
+      // Centered (not bottom-anchored) so when iOS pops the keyboard
+      // the modal stays in the visible viewport instead of being
+      // covered. Bottom-sheet visuals are nice but break with text
+      // inputs on mobile.
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: 16,
+      // dvh (dynamic viewport height) shrinks with the keyboard so
+      // the available area for the centered modal is always visible.
+      maxHeight: "100dvh",
     }}>
       <div style={{
         width: "100%", maxWidth: 540,
         background: T.bgElev, color: T.text,
-        borderTopLeftRadius: 28, borderTopRightRadius: 28,
-        border: `1px solid ${T.border}`, borderBottom: "none",
+        borderRadius: 22,
+        border: `1px solid ${T.border}`,
         padding: "20px 20px",
-        paddingBottom: "calc(env(safe-area-inset-bottom) + 24px)",
       }}>
         <div style={{ fontFamily: FONT.display, fontSize: 20, fontWeight: 700, color: T.text, marginBottom: 14 }}>{title}</div>
         <input
@@ -563,15 +572,22 @@ function ConfirmModal({ T, title, message, confirmLabel = "Confirmar", danger, o
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
       position: "fixed", inset: 0, zIndex: 100,
       background: "rgba(0,0,0,0.6)",
-      display: "flex", alignItems: "flex-end", justifyContent: "center",
+      // Centered (not bottom-anchored) so when iOS pops the keyboard
+      // the modal stays in the visible viewport instead of being
+      // covered. Bottom-sheet visuals are nice but break with text
+      // inputs on mobile.
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: 16,
+      // dvh (dynamic viewport height) shrinks with the keyboard so
+      // the available area for the centered modal is always visible.
+      maxHeight: "100dvh",
     }}>
       <div style={{
         width: "100%", maxWidth: 540,
         background: T.bgElev, color: T.text,
-        borderTopLeftRadius: 28, borderTopRightRadius: 28,
-        border: `1px solid ${T.border}`, borderBottom: "none",
+        borderRadius: 22,
+        border: `1px solid ${T.border}`,
         padding: "20px 20px",
-        paddingBottom: "calc(env(safe-area-inset-bottom) + 24px)",
       }}>
         <div style={{ fontFamily: FONT.display, fontSize: 20, fontWeight: 700, color: T.text, marginBottom: 8 }}>{title}</div>
         <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, lineHeight: 1.5 }}>{message}</div>
@@ -892,7 +908,7 @@ function AssetRow({ T, asset, subline, rightTop, rightBottom, rightBottomColor, 
   );
 }
 
-function AssetSheet({ T, asset, onClose, onDone }) {
+function AssetSheet({ T, asset, onClose, onDone, watchlists = [], onWatchlistsChange }) {
   // Asset sheet has 3 modes via a top tab: Trade / Alerta / Stop loss.
   // Each renders its own form below the price header.
   const [mode, setMode] = useState("trade");
@@ -918,6 +934,12 @@ function AssetSheet({ T, asset, onClose, onDone }) {
 
   // Whether the user owns this asset (only then can they set a stop).
   const ownsIt = asset.qty > 0;
+
+  // Watchlist picker — shown over the sheet when the user taps the
+  // star. Lists every saved watchlist with a checkmark when this
+  // asset is already in it.
+  const [showListPicker, setShowListPicker] = useState(false);
+  const inAnyList = watchlists.some((wl) => wl.tickers.includes(asset.ticker));
 
   const qty = parseFloat(qtyStr.replace(",", ".")) || 0;
   const limit = parseFloat(limitStr.replace(",", ".")) || 0;
@@ -963,15 +985,32 @@ function AssetSheet({ T, asset, onClose, onDone }) {
               {asset.name || asset.ticker}
             </div>
           </div>
-          <button onClick={onClose} style={{
-            background: T.surface, border: `1px solid ${T.border}`,
-            width: 32, height: 32, borderRadius: 10, color: T.textMute,
-            display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-          }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 6L6 18M6 6l12 12"/>
-            </svg>
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            {/* Star toggle — opens the watchlist picker. Filled
+                accent when this asset is in any list, hollow muted
+                otherwise. */}
+            {watchlists.length > 0 && (
+              <button onClick={() => setShowListPicker(true)} style={{
+                background: inAnyList ? T.accentSoft : T.surface,
+                border: `1px solid ${inAnyList ? T.accent : T.border}`,
+                width: 32, height: 32, borderRadius: 10,
+                color: inAnyList ? T.accent : T.textMute,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: "pointer",
+              }}>
+                <Ico.Star size={16} {...(inAnyList ? { fill: "currentColor" } : {})}/>
+              </button>
+            )}
+            <button onClick={onClose} style={{
+              background: T.surface, border: `1px solid ${T.border}`,
+              width: 32, height: 32, borderRadius: 10, color: T.textMute,
+              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
         </div>
 
         <div style={{
@@ -1107,6 +1146,115 @@ function AssetSheet({ T, asset, onClose, onDone }) {
             </>
           )}
         </div>
+      </div>
+
+      {/* Watchlist picker overlay — opens on top of the AssetSheet
+          when the user taps the star icon in the header. */}
+      {showListPicker && (
+        <WatchlistPicker
+          T={T}
+          ticker={asset.ticker}
+          watchlists={watchlists}
+          onClose={() => setShowListPicker(false)}
+          onChange={onWatchlistsChange}
+        />
+      )}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------
+// WatchlistPicker — modal that lets the user toggle this asset's
+// membership across all of their watchlists with checkmarks.
+// ----------------------------------------------------------
+function WatchlistPicker({ T, ticker, watchlists, onClose, onChange }) {
+  const [busyId, setBusyId] = useState(null);
+
+  async function toggle(wl) {
+    const isIn = wl.tickers.includes(ticker);
+    setBusyId(wl.id);
+    try {
+      if (isIn) {
+        await brokerApi.removeFromWatchlist(wl.id, ticker);
+      } else {
+        await brokerApi.addToWatchlist(wl.id, ticker);
+      }
+      if (onChange) await onChange();
+    } catch (e) { alert(e.message); }
+    setBusyId(null);
+  }
+
+  return (
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
+      position: "fixed", inset: 0, zIndex: 110,
+      background: "rgba(0,0,0,0.6)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: 16,
+    }}>
+      <div style={{
+        width: "100%", maxWidth: 420,
+        background: T.bgElev, color: T.text,
+        borderRadius: 22, border: `1px solid ${T.border}`,
+        overflow: "hidden",
+      }}>
+        <div style={{ padding: "20px 20px 12px" }}>
+          <div style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text, marginBottom: 4 }}>
+            Agregar {ticker} a una lista
+          </div>
+          <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute }}>
+            Tocá una lista para agregarlo o quitarlo.
+          </div>
+        </div>
+        <div style={{ borderTop: `1px solid ${T.border}` }}>
+          {watchlists.map((wl) => {
+            const isIn = wl.tickers.includes(ticker);
+            const busy = busyId === wl.id;
+            return (
+              <button
+                key={wl.id}
+                onClick={() => toggle(wl)}
+                disabled={busy}
+                style={{
+                  width: "100%", padding: "14px 20px",
+                  background: "transparent", border: "none",
+                  borderBottom: `1px solid ${T.border}`,
+                  display: "flex", alignItems: "center", gap: 12,
+                  cursor: busy ? "default" : "pointer",
+                  textAlign: "left", color: T.text,
+                }}
+              >
+                <div style={{
+                  width: 24, height: 24, borderRadius: 8,
+                  border: `1.5px solid ${isIn ? T.accent : T.border}`,
+                  background: isIn ? T.accent : "transparent",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  flexShrink: 0,
+                }}>
+                  {isIn && (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                      stroke={T.accentInk} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 6L9 17l-5-5"/>
+                    </svg>
+                  )}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text }}>
+                    {wl.name}
+                  </div>
+                  <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute }}>
+                    {wl.tickers.length} {wl.tickers.length === 1 ? "activo" : "activos"}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        <button onClick={onClose} style={{
+          width: "100%", padding: 14,
+          background: T.surface, border: "none",
+          color: T.text, fontFamily: FONT.sans, fontSize: 14, fontWeight: 600,
+          cursor: "pointer",
+        }}>Listo</button>
       </div>
     </div>
   );
