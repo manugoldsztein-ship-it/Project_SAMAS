@@ -1949,17 +1949,16 @@ function AlertForm({ T, asset, existing, onSaved, onRemoved }) {
   const [priceStr, setPriceStr] = useState(
     existing ? String(existing.targetPrice) : String(asset.price)
   );
-  // Signed %: positive = above current, negative = below.
-  // Default to +5 so the form has a sensible starting value.
+  // Pct flow: store ABSOLUTE value in pctStr, sign comes from the
+  // pctSign pill ("+" or "-"). Numeric keyboard stays sane this way —
+  // typing "-" used to force iOS into the QWERTY layout.
   const [pctStr, setPctStr] = useState("5");
+  const [pctSign, setPctSign] = useState("+");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
-  // Derived target + direction based on input mode. When type="pct"
-  // we compute targetPrice from the signed % and infer direction
-  // from the sign — UI shows a live preview so the user knows what
-  // gets saved.
-  const pctNum = parseFloat(pctStr.replace(",", ".")) || 0;
+  // Effective signed % derived from pctSign + pctStr.
+  const pctNum = (pctSign === "-" ? -1 : 1) * (parseFloat(pctStr.replace(",", ".")) || 0);
   const computedTarget = type === "pct"
     ? asset.price * (1 + pctNum / 100)
     : parseFloat(priceStr.replace(",", ".")) || 0;
@@ -2052,9 +2051,35 @@ function AlertForm({ T, asset, existing, onSaved, onRemoved }) {
           value={priceStr} onChange={setPriceStr}
           placeholder={String(asset.price)} />
       ) : (
-        <NumberInput T={T} label="Porcentaje (+ sube · − baja)"
-          value={pctStr} onChange={setPctStr}
-          placeholder="5" allowSign />
+        <>
+          {/* Direction pill for % mode — explicit + (sube) / − (baja).
+              Cleaner than typing a minus sign because iOS keeps the
+              numeric keyboard up. */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            {[
+              { id: "+", label: "Sube",  color: T.accent, soft: T.accentSoft },
+              { id: "-", label: "Baja",  color: T.danger, soft: T.dangerSoft },
+            ].map((d) => {
+              const active = d.id === pctSign;
+              return (
+                <button key={d.id} onClick={() => setPctSign(d.id)} style={{
+                  flex: 1, padding: 12, borderRadius: 12,
+                  background: active ? d.soft : T.surface,
+                  border: `1px solid ${active ? d.color : T.border}`,
+                  color: active ? d.color : T.text,
+                  fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                }}>
+                  <span style={{ fontFamily: FONT.mono, fontSize: 16, fontWeight: 800 }}>{d.id}</span>
+                  {d.label}
+                </button>
+              );
+            })}
+          </div>
+          <NumberInput T={T} label="Porcentaje"
+            value={pctStr} onChange={setPctStr}
+            placeholder="5" prefix={pctSign === "-" ? "−" : "+"} />
+        </>
       )}
 
       {/* Live preview — what we'll actually save */}
@@ -2101,7 +2126,14 @@ function AlertForm({ T, asset, existing, onSaved, onRemoved }) {
 // ----------------------------------------------------------
 function StopForm({ T, asset, existing, ownsIt, onSaved, onRemoved }) {
   const [type, setType] = useState(existing?.type || "pct");
-  const [pctStr, setPctStr] = useState(existing && existing.type === "pct" ? String(existing.value) : "-10");
+  // Stop-loss is always BELOW current price, so we store the absolute
+  // pct value in the input and prepend "−" in the prefix on display +
+  // make it negative when saving. Avoids the QWERTY-keyboard pitfall.
+  const [pctStr, setPctStr] = useState(
+    existing && existing.type === "pct"
+      ? String(Math.abs(existing.value))
+      : "10"
+  );
   const [priceStr, setPriceStr] = useState(existing && existing.type === "price" ? String(existing.value) : String(asset.price * 0.9));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -2121,10 +2153,17 @@ function StopForm({ T, asset, existing, ownsIt, onSaved, onRemoved }) {
 
   async function save() {
     setErr(null);
-    const value = type === "pct"
-      ? parseFloat(pctStr.replace(",", "."))
-      : parseFloat(priceStr.replace(",", "."));
-    if (isNaN(value)) { setErr("Valor inválido."); return; }
+    let value;
+    if (type === "pct") {
+      // Stored as positive in the input → make negative when saving
+      // because a stop-loss only fires on the way DOWN.
+      const abs = parseFloat(pctStr.replace(",", "."));
+      if (isNaN(abs) || abs <= 0) { setErr("Ingresá un porcentaje mayor a 0."); return; }
+      value = -Math.abs(abs);
+    } else {
+      value = parseFloat(priceStr.replace(",", "."));
+      if (isNaN(value)) { setErr("Valor inválido."); return; }
+    }
     setBusy(true);
     try {
       const s = await brokerApi.setStopLoss({ ticker: asset.ticker, type, value });
@@ -2168,7 +2207,7 @@ function StopForm({ T, asset, existing, ownsIt, onSaved, onRemoved }) {
       </div>
 
       {type === "pct" ? (
-        <NumberInput T={T} label="Porcentaje (negativo)" value={pctStr} onChange={setPctStr} placeholder="-10" allowSign />
+        <NumberInput T={T} label="Caída desde precio actual" value={pctStr} onChange={setPctStr} placeholder="10" prefix="−" />
       ) : (
         <NumberInput T={T} label={`Precio gatillo (${asset.currency})`} value={priceStr} onChange={setPriceStr} placeholder={String(asset.price * 0.9)} />
       )}
@@ -2668,37 +2707,40 @@ function hashString(s) {
   return Math.abs(h);
 }
 
-function NumberInput({ T, label, value, onChange, placeholder, allowSign = false }) {
-  // Sanitize keystrokes: digits + decimal separator always allowed.
-  // When allowSign is true (% inputs for stop-loss / alert), accept a
-  // single leading "-" so the user can express negative values.
-  const sanitize = (raw) => {
-    if (allowSign) {
-      let s = raw.replace(/[^\d.,-]/g, "").replace(",", ".");
-      // Keep at most one "-", and only at position 0.
-      const isNeg = s.startsWith("-");
-      s = s.replace(/-/g, "");
-      return (isNeg ? "-" : "") + s;
-    }
-    return raw.replace(/[^\d.,]/g, "").replace(",", ".");
-  };
+function NumberInput({ T, label, value, onChange, placeholder, prefix }) {
+  // Always numeric keyboard. Sign (when applicable) is selected via a
+  // separate pill toggle in the parent — much better UX than typing "-"
+  // on iOS, which forces the QWERTY keyboard.
+  const sanitize = (raw) => raw.replace(/[^\d.,]/g, "").replace(",", ".");
   return (
     <label style={{ display: "block" }}>
       <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginBottom: 6, letterSpacing: 0.4 }}>{label}</div>
-      <input
-        type="text"
-        inputMode={allowSign ? "text" : "decimal"}
-        value={value}
-        onChange={(e) => onChange(sanitize(e.target.value))}
-        placeholder={placeholder}
-        style={{
-          width: "100%", boxSizing: "border-box",
-          padding: "14px 16px", borderRadius: 14,
-          background: T.surface, border: `1px solid ${T.border}`,
-          color: T.text, fontFamily: FONT.mono, fontSize: 18, fontWeight: 600,
-          outline: "none",
-        }}
-      />
+      <div style={{
+        display: "flex", alignItems: "center",
+        background: T.surface, border: `1px solid ${T.border}`, borderRadius: 14,
+        overflow: "hidden",
+      }}>
+        {prefix && (
+          <div style={{
+            paddingLeft: 14, paddingRight: 6,
+            fontFamily: FONT.mono, fontSize: 18, fontWeight: 700, color: T.textMute,
+          }}>{prefix}</div>
+        )}
+        <input
+          type="text"
+          inputMode="decimal"
+          value={value}
+          onChange={(e) => onChange(sanitize(e.target.value))}
+          placeholder={placeholder}
+          style={{
+            flex: 1, boxSizing: "border-box",
+            padding: prefix ? "14px 16px 14px 4px" : "14px 16px",
+            background: "transparent", border: "none",
+            color: T.text, fontFamily: FONT.mono, fontSize: 18, fontWeight: 600,
+            outline: "none",
+          }}
+        />
+      </div>
     </label>
   );
 }
