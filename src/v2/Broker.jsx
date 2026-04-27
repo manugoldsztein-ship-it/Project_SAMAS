@@ -53,6 +53,10 @@ export function BrokerShell({ T, isNativeApp = false, onBack }) {
   const [orders, setOrders] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [stops, setStops] = useState([]);
+  const [fx, setFx] = useState(null);
+  // ARS / USD display toggle for Portafolio + Mercado. Lifted here so
+  // it stays consistent across sub-tabs (mirrors the wallet pattern).
+  const [ccy, setCcy] = useState("USD");
 
   // Track whether any text input is focused so we can hide the floating
   // SubNav while the iOS keyboard is up. With Capacitor's
@@ -79,16 +83,17 @@ export function BrokerShell({ T, isNativeApp = false, onBack }) {
 
   const refresh = useCallback(async () => {
     try {
-      const [p, a, wl, o, al, st] = await Promise.all([
+      const [p, a, wl, o, al, st, f] = await Promise.all([
         brokerApi.getPortfolio(),
         brokerApi.getAssets(),
         brokerApi.getWatchlists(),
         brokerApi.getOrders({ status: "all" }),
         brokerApi.getPriceAlerts(),
         brokerApi.getStopLosses(),
+        brokerApi.getFx(),
       ]);
       setPortfolio(p); setAssets(a); setWatchlists(wl); setOrders(o);
-      setAlerts(al); setStops(st);
+      setAlerts(al); setStops(st); setFx(f);
     } catch (e) { console.error("[broker] load:", e); }
   }, []);
 
@@ -144,10 +149,18 @@ export function BrokerShell({ T, isNativeApp = false, onBack }) {
         WebkitOverflowScrolling: "touch",
       }}>
         {tab === "portafolio" && (
-          <PortafolioView T={T} portfolio={portfolio} onSelectAsset={setSelectedAsset} />
+          <PortafolioView
+            T={T}
+            portfolio={portfolio}
+            assets={assets}
+            fx={fx}
+            ccy={ccy}
+            setCcy={setCcy}
+            onSelectAsset={setSelectedAsset}
+          />
         )}
         {tab === "mercado" && (
-          <MercadoView T={T} assets={assets} onSelectAsset={setSelectedAsset} />
+          <MercadoView T={T} assets={assets} ccy={ccy} setCcy={setCcy} onSelectAsset={setSelectedAsset} />
         )}
         {tab === "watchlist" && (
           <WatchlistView T={T} watchlists={watchlists} assets={assets} onSelectAsset={setSelectedAsset} onRefresh={refresh} />
@@ -228,13 +241,21 @@ function SubNav({ T, tab, setTab, bottomInset }) {
 }
 
 // ----------------------------------------------------------
-// Portafolio — total + holdings list.
+// Portafolio — total + ARS/USD toggle + ticker banner + distribución +
+// holdings + top/bottom movers + AI plan card.
 // ----------------------------------------------------------
-function PortafolioView({ T, portfolio, onSelectAsset }) {
+function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset }) {
   if (!portfolio) return <Loader T={T}/>;
+
+  const ccySym = ccy === "ARS" ? "$" : "US$";
+  const total = ccy === "ARS" ? portfolio.totalArs : portfolio.totalUsd;
 
   return (
     <div style={{ paddingBottom: 110 }}>
+      {/* Live ticker banner — scrolling row of selected assets at the
+          top of Portafolio, like the legacy Pro view. */}
+      <TickerBanner T={T} assets={assets} />
+
       {/* portfolio summary card */}
       <div style={{
         margin: "16px", padding: 22, borderRadius: 24,
@@ -247,22 +268,58 @@ function PortafolioView({ T, portfolio, onSelectAsset }) {
         }}/>
         <div style={{ position: "relative", zIndex: 1 }}>
           <div style={{
-            fontFamily: FONT.sans, fontSize: 11, color: T.textDim,
-            marginBottom: 6, letterSpacing: 0.6, fontWeight: 700,
-          }}>VALOR DE CARTERA</div>
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            marginBottom: 10,
+          }}>
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 11, color: T.textDim,
+              letterSpacing: 0.6, fontWeight: 700,
+            }}>VALOR DE CARTERA</div>
+            {/* ARS / USD toggle */}
+            <div style={{
+              display: "flex", gap: 4, padding: 4,
+              background: T.bg, border: `1px solid ${T.border}`,
+              borderRadius: 999,
+            }}>
+              {["ARS", "USD"].map(c => (
+                <button key={c} onClick={() => setCcy(c)} style={{
+                  padding: "4px 10px", borderRadius: 999, border: "none", cursor: "pointer",
+                  background: ccy === c ? T.accent : "transparent",
+                  color: ccy === c ? T.accentInk : T.textMute,
+                  fontFamily: FONT.mono, fontSize: 10, fontWeight: 700, letterSpacing: 0.6,
+                }}>{c}</button>
+              ))}
+            </div>
+          </div>
           <div style={{
             fontFamily: FONT.display, fontSize: 36, fontWeight: 700, color: T.text,
             letterSpacing: -1.2, fontVariantNumeric: "tabular-nums", marginBottom: 10,
           }}>
-            US${fmtMoney(portfolio.totalUsd, "USD")}
+            {ccySym}{fmtMoney(total, ccy)}
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <Pill T={T} color={T.accent} bg={T.accentSoft}>+US$160.27</Pill>
+            <Pill T={T} color={T.accent} bg={T.accentSoft}>+{ccySym}{fmtMoney(total * 0.0234, ccy)}</Pill>
             <Pill T={T} color={T.accent} bg={T.accentSoft}>+2.34%</Pill>
             <Pill T={T}>30 días</Pill>
           </div>
+          {fx && (
+            <div style={{
+              marginTop: 12, fontFamily: FONT.mono, fontSize: 11, color: T.textMute,
+              fontVariantNumeric: "tabular-nums",
+            }}>
+              MEP ${fx.mep.value.toFixed(0)} · CCL ${fx.ccl.value.toFixed(0)} · Oficial ${fx.oficial.value.toFixed(0)}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* AI Plan card — links to the goal-planning wizard. */}
+      <AIPlanCard T={T} />
+
+      {/* Distribución bar — % per holding of total cartera. */}
+      {portfolio.holdings.length > 0 && (
+        <DistribucionBar T={T} holdings={portfolio.holdings} totalUsd={portfolio.totalUsd} />
+      )}
 
       {/* holdings */}
       <div style={{ margin: "0 16px 16px" }}>
@@ -290,27 +347,74 @@ function PortafolioView({ T, portfolio, onSelectAsset }) {
           ))}
         </div>
       )}
+
+      {/* Top / bottom movers across the whole asset universe. */}
+      {assets.length > 0 && (
+        <TopMovers T={T} assets={assets} onSelectAsset={onSelectAsset} />
+      )}
     </div>
   );
 }
 
 // ----------------------------------------------------------
-// Mercado — full universe with category filter.
+// Mercado — full universe with search + category filter.
 // ----------------------------------------------------------
 function MercadoView({ T, assets, onSelectAsset }) {
   const [cat, setCat] = useState("Todas");
+  const [query, setQuery] = useState("");
   const cats = useMemo(() => {
     const s = new Set(assets.map((a) => a.category));
     return ["Todas", ...Array.from(s)];
   }, [assets]);
-  const filtered = cat === "Todas" ? assets : assets.filter((a) => a.category === cat);
+
+  // Search matches ticker OR name (case-insensitive). Then category
+  // narrows further. Order matters: search first so the user can find
+  // anything quickly without remembering its category.
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    let rows = assets;
+    if (q) {
+      rows = rows.filter((a) =>
+        a.ticker.toLowerCase().includes(q) ||
+        (a.name || "").toLowerCase().includes(q)
+      );
+    }
+    if (cat !== "Todas") rows = rows.filter((a) => a.category === cat);
+    return rows;
+  }, [assets, cat, query]);
 
   if (assets.length === 0) return <Loader T={T}/>;
 
   return (
     <div style={{ paddingBottom: 110 }}>
+      {/* Search input at the top of Mercado. */}
+      <div style={{ padding: "16px 16px 8px" }}>
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10,
+          padding: "10px 14px", borderRadius: 14,
+          background: T.surface, border: `1px solid ${T.border}`,
+        }}>
+          <Ico.Search size={16} stroke={T.textMute} />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar por ticker o nombre"
+            style={{
+              flex: 1, background: "transparent", border: "none", outline: "none",
+              color: T.text, fontFamily: FONT.sans, fontSize: 14,
+            }}
+          />
+          {query && (
+            <button onClick={() => setQuery("")} style={{
+              background: "none", border: "none", cursor: "pointer",
+              color: T.textMute, fontSize: 14, padding: 0, lineHeight: 1,
+            }}>×</button>
+          )}
+        </div>
+      </div>
+
       <div style={{
-        display: "flex", gap: 8, padding: "16px 16px 12px",
+        display: "flex", gap: 8, padding: "4px 16px 12px",
         overflowX: "auto", scrollbarWidth: "none",
       }}>
         {cats.map((c) => {
@@ -328,19 +432,23 @@ function MercadoView({ T, assets, onSelectAsset }) {
         })}
       </div>
       <div style={{ margin: "0 16px" }}>
-        {filtered.map((a, i) => (
-          <AssetRow
-            key={a.ticker}
-            T={T}
-            asset={a}
-            subline={a.name}
-            rightTop={`${a.currency === "ARS" ? "$" : "US$"}${fmtMoney(a.price, a.currency)}`}
-            rightBottom={fmtPct(a.changePct)}
-            rightBottomColor={a.changePct >= 0 ? T.accent : T.danger}
-            isLast={i === filtered.length - 1}
-            onClick={() => onSelectAsset(a)}
-          />
-        ))}
+        {filtered.length === 0 ? (
+          <Empty T={T} title="Sin resultados" subtitle={`No encontramos activos para "${query}".`} />
+        ) : (
+          filtered.map((a, i) => (
+            <AssetRow
+              key={a.ticker}
+              T={T}
+              asset={a}
+              subline={a.name}
+              rightTop={`${a.currency === "ARS" ? "$" : "US$"}${fmtMoney(a.price, a.currency)}`}
+              rightBottom={fmtPct(a.changePct)}
+              rightBottomColor={a.changePct >= 0 ? T.accent : T.danger}
+              isLast={i === filtered.length - 1}
+              onClick={() => onSelectAsset(a)}
+            />
+          ))
+        )}
       </div>
     </div>
   );
@@ -1731,6 +1839,243 @@ function DoneScreen({ T, done, side, qty, ticker, onClose }) {
       }}>
         Listo
       </button>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------
+// TickerBanner — horizontal scrolling row of selected tickers + price
+// + change %, capped at the top of Portafolio. Same role as the legacy
+// PRO live ticker. Static data here (the asset universe is mocked) but
+// rolls smoothly via CSS animation.
+// ----------------------------------------------------------
+function TickerBanner({ T, assets }) {
+  // Pick a representative cross-section: a few CEDEARs / ETFs / cripto.
+  const pick = useMemo(() => {
+    if (!assets || assets.length === 0) return [];
+    const wanted = ["SPY", "QQQ", "AAPL", "NVDA", "TSLA", "GLD", "BTC", "ETH"];
+    const found = wanted.map((tk) => assets.find((a) => a.ticker === tk)).filter(Boolean);
+    return found.length ? found : assets.slice(0, 6);
+  }, [assets]);
+
+  if (pick.length === 0) return null;
+  // Duplicate the list so the marquee loops seamlessly.
+  const loop = [...pick, ...pick];
+
+  return (
+    <div style={{
+      position: "relative",
+      borderTop: `1px solid ${T.border}`,
+      borderBottom: `1px solid ${T.border}`,
+      background: T.surface,
+      overflow: "hidden",
+      paddingLeft: 16,
+    }}>
+      <style>{`
+        @keyframes samas-marquee {
+          from { transform: translateX(0); }
+          to   { transform: translateX(-50%); }
+        }
+      `}</style>
+      <div style={{
+        display: "flex", gap: 18, padding: "10px 0",
+        whiteSpace: "nowrap",
+        animation: "samas-marquee 38s linear infinite",
+        willChange: "transform",
+      }}>
+        {loop.map((a, i) => {
+          const up = a.changePct >= 0;
+          return (
+            <div key={`${a.ticker}-${i}`} style={{
+              display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
+              fontFamily: FONT.mono, fontSize: 11, fontWeight: 600,
+            }}>
+              <span style={{ color: T.textMute }}>{a.ticker}</span>
+              <span style={{ color: T.text }}>
+                {a.currency === "ARS" ? "$" : "US$"}{fmtMoney(a.price, a.currency)}
+              </span>
+              <span style={{ color: up ? T.accent : T.danger }}>{fmtPct(a.changePct)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------
+// AIPlanCard — entry point for the goal-planning wizard. The wizard
+// itself lives in /src/ai/ObjectivesWizard.jsx but it depends on the
+// legacy theme and is heavy. For now this card opens a placeholder
+// alert so the user sees the surface; we can wire the real wizard in
+// a follow-up pass once it's been ported to the v2 theme.
+// ----------------------------------------------------------
+function AIPlanCard({ T }) {
+  return (
+    <div style={{
+      margin: "16px",
+      padding: 16,
+      borderRadius: 22,
+      background: `linear-gradient(135deg, ${T.accentSoft} 0%, ${T.surface} 70%)`,
+      border: `1px solid ${T.accent}33`,
+      display: "flex", alignItems: "center", gap: 14,
+      cursor: "pointer",
+    }} onClick={() => alert("Próximamente: SAMAS IA arma tu plan personalizado.")}>
+      <div style={{
+        width: 48, height: 48, borderRadius: 12,
+        background: T.bg, border: `1px solid ${T.border}`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        color: T.accent, flexShrink: 0,
+      }}>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <circle cx="12" cy="12" r="6"/>
+          <circle cx="12" cy="12" r="2" fill="currentColor"/>
+        </svg>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+          <span style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 700, color: T.text }}>
+            Armar mi plan con IA
+          </span>
+          <span style={{
+            fontFamily: FONT.mono, fontSize: 9, fontWeight: 700, letterSpacing: 0.6,
+            padding: "2px 6px", borderRadius: 4,
+            background: T.accent, color: T.accentInk,
+          }}>NUEVO</span>
+        </div>
+        <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute, lineHeight: 1.4 }}>
+          Análisis de ingresos, gastos y objetivo para diseñar tu estrategia.
+        </div>
+      </div>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="9 18 15 12 9 6"/>
+      </svg>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------
+// DistribucionBar — horizontal bar split by holding share of the total
+// USD value of the cartera. Each segment gets a deterministic color so
+// the same ticker is the same color across renders. Below the bar,
+// a legend lists each ticker + its %.
+// ----------------------------------------------------------
+const DIST_COLORS = [
+  "#16C784", "#7C5CFF", "#F59E0B", "#06B6D4", "#EF4444",
+  "#22D3EE", "#EC4899", "#84CC16", "#F97316", "#A855F7",
+];
+function colorFor(ticker, idx) {
+  return DIST_COLORS[idx % DIST_COLORS.length];
+}
+function DistribucionBar({ T, holdings, totalUsd }) {
+  const rows = useMemo(() => {
+    if (!totalUsd) return [];
+    return holdings.map((h, i) => {
+      const valUsd = h.currency === "ARS" ? (h.value / 1248) : h.value; // approx MEP
+      const pct = (valUsd / totalUsd) * 100;
+      return { ticker: h.ticker, pct, color: colorFor(h.ticker, i) };
+    }).sort((a, b) => b.pct - a.pct);
+  }, [holdings, totalUsd]);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div style={{ margin: "0 16px 20px" }}>
+      <SectionHead T={T} title="Distribución" />
+      <div style={{
+        marginTop: 12, padding: 14, borderRadius: 18,
+        background: T.surface, border: `1px solid ${T.border}`,
+      }}>
+        <div style={{
+          display: "flex", height: 10, borderRadius: 5, overflow: "hidden",
+          background: T.bg,
+        }}>
+          {rows.map((r) => (
+            <div key={r.ticker} style={{
+              width: `${r.pct}%`, background: r.color,
+            }} />
+          ))}
+        </div>
+        <div style={{
+          marginTop: 10, display: "flex", flexWrap: "wrap", gap: "6px 14px",
+        }}>
+          {rows.map((r) => (
+            <div key={r.ticker} style={{
+              display: "flex", alignItems: "center", gap: 6,
+              fontFamily: FONT.sans, fontSize: 11, color: T.textMute,
+            }}>
+              <span style={{
+                width: 8, height: 8, borderRadius: 2, background: r.color,
+              }}/>
+              <span style={{ color: T.text, fontWeight: 600 }}>{r.ticker}</span>
+              <span style={{ fontFamily: FONT.mono }}>{r.pct.toFixed(1)}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------
+// TopMovers — top 3 winners + top 3 losers across the asset universe.
+// Tapping a row opens the AssetSheet for that ticker.
+// ----------------------------------------------------------
+function TopMovers({ T, assets, onSelectAsset }) {
+  const sorted = useMemo(
+    () => [...assets].sort((a, b) => b.changePct - a.changePct),
+    [assets]
+  );
+  const winners = sorted.slice(0, 3);
+  const losers = sorted.slice(-3).reverse();
+
+  return (
+    <div style={{ margin: "8px 16px 0" }}>
+      <SectionHead T={T} title="Top del día" />
+      <div style={{
+        marginTop: 12, padding: 4, borderRadius: 18,
+        background: T.surface, border: `1px solid ${T.border}`,
+      }}>
+        <MoverGroup T={T} label="Ganadores" rows={winners} positive onSelectAsset={onSelectAsset} />
+        <div style={{ height: 1, background: T.border, margin: "0 12px" }}/>
+        <MoverGroup T={T} label="Perdedores" rows={losers} positive={false} onSelectAsset={onSelectAsset} />
+      </div>
+    </div>
+  );
+}
+
+function MoverGroup({ T, label, rows, positive, onSelectAsset }) {
+  return (
+    <div style={{ padding: "10px 12px" }}>
+      <div style={{
+        fontFamily: FONT.sans, fontSize: 11, color: T.textMute, fontWeight: 600,
+        letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 8,
+      }}>{label}</div>
+      {rows.map((a) => (
+        <button key={a.ticker} onClick={() => onSelectAsset(a)} style={{
+          width: "100%", padding: "8px 4px", background: "transparent",
+          border: "none", cursor: "pointer", display: "flex",
+          alignItems: "center", justifyContent: "space-between", gap: 10,
+        }}>
+          <div style={{ textAlign: "left", minWidth: 0, flex: 1 }}>
+            <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text }}>{a.ticker}</div>
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 11, color: T.textMute,
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }}>{a.name}</div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{
+              fontFamily: FONT.mono, fontSize: 12, fontWeight: 700, color: T.text,
+            }}>{a.currency === "ARS" ? "$" : "US$"}{fmtMoney(a.price, a.currency)}</div>
+            <div style={{
+              fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+              color: positive ? T.accent : T.danger,
+            }}>{fmtPct(a.changePct)}</div>
+          </div>
+        </button>
+      ))}
     </div>
   );
 }

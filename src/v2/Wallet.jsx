@@ -82,28 +82,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
             <div style={{ fontFamily: FONT.sans, fontSize: 16, fontWeight: 700, color: T.text }}>{userName}</div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {/* Principal / Pro pill — switches the entire app shell.
-              Tapping "Pro" hands off to the legacy MobileApp UI which
-              has the advanced PRO surfaces (FX strip, distribución,
-              what-if, charts). User can come back from the ProfileSheet
-              inside the legacy app. */}
-          {onChangeAppShell && (
-            <button
-              onClick={() => {
-                if (window.confirm("Cambiar a la vista Pro? Tiene mas datos y graficos avanzados. Podes volver a Principal desde el perfil.")) {
-                  onChangeAppShell("pro");
-                }
-              }}
-              style={{
-                padding: "6px 12px", borderRadius: 999,
-                background: "transparent", border: `1px solid ${T.border}`,
-                color: T.textMute,
-                fontFamily: FONT.sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6,
-                cursor: "pointer",
-              }}
-            >PRO</button>
-          )}
+        <div style={{ display: "flex", gap: 8 }}>
           {onToggleDark && (
             <ChromeBtn T={T} onClick={onToggleDark}>
               {isDark ? <Ico.Sun size={18}/> : <Ico.Moon size={18}/>}
@@ -216,6 +195,45 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
           <Quote T={T} label="DÓLAR OFICIAL" value={fx.oficial.value} delta={fx.oficial.change} />
         </div>
       )}
+
+      {/* ---------- AI plan card (mirrors the legacy banner) ---------- */}
+      <div
+        onClick={() => alert("Próximamente: SAMAS IA arma tu plan personalizado.")}
+        style={{
+          margin: "28px 16px 0", padding: 16, borderRadius: 22, cursor: "pointer",
+          background: `linear-gradient(135deg, ${T.accentSoft} 0%, ${T.surface} 70%)`,
+          border: `1px solid ${T.accent}33`,
+          display: "flex", alignItems: "center", gap: 14,
+        }}
+      >
+        <div style={{
+          width: 48, height: 48, borderRadius: 12, flexShrink: 0,
+          background: T.bg, border: `1px solid ${T.border}`,
+          display: "flex", alignItems: "center", justifyContent: "center", color: T.accent,
+        }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2" fill="currentColor"/>
+          </svg>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+            <span style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 700, color: T.text }}>
+              Armar mi plan con IA
+            </span>
+            <span style={{
+              fontFamily: FONT.mono, fontSize: 9, fontWeight: 700, letterSpacing: 0.6,
+              padding: "2px 6px", borderRadius: 4,
+              background: T.accent, color: T.accentInk,
+            }}>NUEVO</span>
+          </div>
+          <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute, lineHeight: 1.4 }}>
+            Análisis de ingresos, gastos y objetivo para diseñar tu estrategia.
+          </div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      </div>
 
       {/* ---------- virtual card ---------- */}
       {card && (

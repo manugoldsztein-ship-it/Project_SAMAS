@@ -5341,28 +5341,6 @@ function ProfileSheet({ displayUser, uiMode, onChangeUiMode, onResetAccount, onR
         </button>
         )}
 
-        {/* Volver a Principal — only visible when running in Pro shell.
-            Lets the Pro user switch back to the new wallet-first UI. */}
-        {!showSettings && onChangeAppShell && appShell === "pro" && (
-          <button
-            onClick={() => { onChangeAppShell("principal"); onClose(); }}
-            style={{ width:"100%", background:C.creamDk, border:"1.5px solid "+C.border, borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}
-          >
-            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-              <div style={{ width:36, height:36, borderRadius:10, background:C.accent+"22", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 7v11a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2H5a2 2 0 0 1-2-2zm0 0a2 2 0 0 1 2-2h12"/>
-                </svg>
-              </div>
-              <div>
-                <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Volver a Principal</div>
-                <div style={{ fontSize:11, color:C.textLt }}>Vista simple con billetera, tarjeta y portafolio</div>
-              </div>
-            </div>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-          </button>
-        )}
-
         {/* Settings entry row (root view only) */}
         {!showSettings && (
           <button onClick={() => setShowSettings(true)} style={{ width:"100%", background:C.creamDk, border:"1.5px solid "+C.border, borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}>
@@ -6892,7 +6870,7 @@ export default function SAMASApp() {
             )}
           </div>
         </div>
-      ) : (isNativeApp || viewMode === "v2") && appShell === "principal" ? (
+      ) : (isNativeApp || viewMode === "v2") ? (
         isNativeApp ? (
           <ErrorBoundary>
             <SamasShell
@@ -6900,8 +6878,6 @@ export default function SAMASApp() {
               isDark={isDark}
               isNativeApp={true}
               onToggleDark={() => setIsDark(d => !d)}
-              appShell={appShell}
-              onChangeAppShell={setAppShell}
             />
           </ErrorBoundary>
         ) : (
@@ -6919,22 +6895,14 @@ export default function SAMASApp() {
                   isDark={isDark}
                   isNativeApp={false}
                   onToggleDark={() => setIsDark(d => !d)}
-                  appShell={appShell}
-                  onChangeAppShell={setAppShell}
                 />
               </ErrorBoundary>
             </div>
           </div>
         )
-      ) : (isNativeApp || viewMode === "mobile" || appShell === "pro") ? (
-        <div style={{ display:"flex", justifyContent:"center", padding: isNativeApp ? 0 : "20px" }}>
-          <ErrorBoundary>
-            <MobileApp
-              appState={{ ...appState, appShell, setAppShell }}
-              handlers={handlers}
-              C={C}
-            />
-          </ErrorBoundary>
+      ) : viewMode === "mobile" ? (
+        <div style={{ display:"flex", justifyContent:"center", padding: "20px" }}>
+          <ErrorBoundary><MobileApp appState={appState} handlers={handlers} C={C}/></ErrorBoundary>
         </div>
       ) : (
         <ErrorBoundary><WebDashboard appState={appState} handlers={handlers} C={C}/></ErrorBoundary>
