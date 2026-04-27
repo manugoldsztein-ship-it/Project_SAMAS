@@ -27,6 +27,10 @@ import { FONT, fmtMoney, fmtPct } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import { Pill, SectionHead, Sparkline, SAMAS_SPARKS } from "./shared.jsx";
 import { broker as brokerApi } from "./api/index.js";
+// The Objetivos wizard is shared with the legacy MobileApp UI. It
+// expects a legacy-shape theme `C`, so we pass an adapter built from
+// the v2 theme `T` to keep its visual language in sync with the new UI.
+import { ObjectivesWizard } from "../ai/ObjectivesWizard.jsx";
 
 // Sub-tabs metadata — drives both the bottom nav and the content
 // switch in the top-level <BrokerShell/> render.
@@ -57,6 +61,30 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true }) 
   // ARS / USD display toggle for Portafolio + Mercado. Lifted here so
   // it stays consistent across sub-tabs (mirrors the wallet pattern).
   const [ccy, setCcy] = useState("USD");
+  // AI plan wizard — opens from the AIPlanCard. Lifted here so the
+  // wizard renders at shell level (full-screen) rather than inside the
+  // page scroll container.
+  const [showAIWizard, setShowAIWizard] = useState(false);
+  // Persisted plan, if the user already ran the wizard. Stored in
+  // localStorage so they don't lose their classification across reloads.
+  const [savedPlan, setSavedPlan] = useState(() => {
+    if (typeof localStorage === "undefined") return null;
+    try {
+      const raw = localStorage.getItem("samas_v2_ai_plan");
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  });
+  // Adapter: map v2 theme `T` -> legacy theme `C` shape that the
+  // ObjectivesWizard expects. We only need to fill in the keys it
+  // actually reads (bg, border, accent, text, textMd/Lt, card, creamDk,
+  // green, red, gold).
+  const C = useMemo(() => ({
+    bg: T.bgElev, card: T.surface, creamDk: T.surface,
+    border: T.border, accent: T.accent,
+    text: T.text, textMd: T.textMute, textLt: T.textDim,
+    green: T.accent, red: T.danger, gold: "#C9A84C",
+    isDark: true,
+  }), [T]);
 
   // Track whether any text input is focused so we can hide the floating
   // SubNav while the iOS keyboard is up. With Capacitor's
@@ -167,6 +195,7 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true }) 
             setCcy={setCcy}
             proMode={proMode}
             onSelectAsset={setSelectedAsset}
+            onOpenAIPlan={() => setShowAIWizard(true)}
           />
         )}
         {tab === "mercado" && (
@@ -204,6 +233,19 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true }) 
           onDone={() => { setSelectedAsset(null); refresh(); }}
           watchlists={watchlists}
           onWatchlistsChange={refresh}
+        />
+      )}
+
+      {/* ---------- AI wizard (legacy ObjectivesWizard with v2 theme) ---------- */}
+      {showAIWizard && (
+        <ObjectivesWizard
+          C={C}
+          savedPlan={savedPlan}
+          onClose={() => setShowAIWizard(false)}
+          onSave={(p) => {
+            setSavedPlan(p);
+            try { localStorage.setItem("samas_v2_ai_plan", JSON.stringify(p)); } catch {}
+          }}
         />
       )}
     </div>
@@ -254,7 +296,7 @@ function SubNav({ T, tab, setTab, bottomInset }) {
 // Portafolio — total + ARS/USD toggle + ticker banner + distribución +
 // holdings + top/bottom movers + AI plan card.
 // ----------------------------------------------------------
-function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, proMode = true }) {
+function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, onOpenAIPlan, proMode = true }) {
   if (!portfolio) return <Loader T={T}/>;
 
   const ccySym = ccy === "ARS" ? "$" : "US$";
@@ -321,7 +363,7 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
 
       {/* AI Plan card — links to the goal-planning wizard. Always
           shown so the user can find the wizard regardless of mode. */}
-      <AIPlanCard T={T} />
+      <AIPlanCard T={T} onOpen={onOpenAIPlan} />
 
       {/* Distribución bar — % per holding of total cartera. Only in
           Pro mode (gated by the settings toggle). */}
@@ -1011,9 +1053,22 @@ function OrderRow({ T, order, isLast, busy, onCancel }) {
 // Shared row + AssetSheet + helpers
 // ============================================================
 
+// Tile background per asset category — same color for all CEDEAR, all
+// ACCION, all CRYPTO etc. Keeps the list visually grouped instead of
+// the chaotic per-ticker hue we had before.
+const CATEGORY_TILES = {
+  CEDEAR:  "#2563EB", // blue
+  ACCION:  "#16C784", // green (Argentine equities)
+  CRYPTO:  "#F7931A", // bitcoin orange
+  ETF:     "#7C3AED", // violet
+  COMMOD:  "#C9A84C", // gold
+  BONO:    "#0EA5E9", // sky blue
+};
+function tileForCategory(category) {
+  return CATEGORY_TILES[category] || "#6B7280";
+}
 function AssetRow({ T, asset, subline, rightTop, rightBottom, rightBottomColor, isLast, onClick }) {
-  const hue = hashString(asset.ticker) % 360;
-  const tile = `oklch(0.55 0.14 ${hue})`;
+  const tile = tileForCategory(asset.category);
   return (
     <button onClick={onClick} style={{
       width: "100%", padding: "12px 0",
@@ -1922,7 +1977,7 @@ function TickerBanner({ T, assets }) {
 // alert so the user sees the surface; we can wire the real wizard in
 // a follow-up pass once it's been ported to the v2 theme.
 // ----------------------------------------------------------
-function AIPlanCard({ T }) {
+function AIPlanCard({ T, onOpen }) {
   return (
     <div style={{
       margin: "16px",
@@ -1932,7 +1987,7 @@ function AIPlanCard({ T }) {
       border: `1px solid ${T.accent}33`,
       display: "flex", alignItems: "center", gap: 14,
       cursor: "pointer",
-    }} onClick={() => alert("Próximamente: SAMAS IA arma tu plan personalizado.")}>
+    }} onClick={onOpen || (() => {})}>
       <div style={{
         width: 48, height: 48, borderRadius: 12,
         background: T.bg, border: `1px solid ${T.border}`,
