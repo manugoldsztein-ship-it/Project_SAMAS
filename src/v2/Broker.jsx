@@ -223,6 +223,7 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true }) 
             savedPlan={savedPlan}
             onSelectAsset={setSelectedAsset}
             onOpenAIPlan={() => setShowAIWizard(true)}
+            onGoToMercado={() => setTab("mercado")}
           />
         )}
         {tab === "mercado" && (
@@ -336,7 +337,7 @@ function SubNav({ T, tab, setTab, bottomInset }) {
 // Portafolio — total + ARS/USD toggle + ticker banner + distribución +
 // holdings + top/bottom movers + AI plan card.
 // ----------------------------------------------------------
-function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, onOpenAIPlan, savedPlan, proMode = true }) {
+function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, onOpenAIPlan, savedPlan, proMode = true, onGoToMercado }) {
   if (!portfolio) return <Loader T={T}/>;
 
   const ccySym = ccy === "ARS" ? "$" : "US$";
@@ -419,8 +420,11 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
       </div>
       {portfolio.holdings.length === 0 ? (
         <Empty T={T}
+          icon={<Ico.Briefcase size={26}/>}
           title="Aún no tenés posiciones"
-          subtitle="Tocá Mercado para ver activos disponibles y hacer tu primera compra."
+          subtitle="Comprá tu primer activo desde Mercado y empezá a construir tu cartera."
+          ctaLabel="Ir a Mercado"
+          onCta={onGoToMercado}
         />
       ) : (
         <div style={{ margin: "0 16px" }}>
@@ -533,7 +537,11 @@ function MercadoView({ T, assets, onSelectAsset }) {
       </div>
       <div style={{ margin: "0 16px" }}>
         {filtered.length === 0 ? (
-          <Empty T={T} title="Sin resultados" subtitle={`No encontramos activos para "${query}".`} />
+          <Empty T={T}
+            icon={<Ico.Search size={26}/>}
+            title="Sin resultados"
+            subtitle={`No encontramos activos para "${query}".`}
+          />
         ) : (
           filtered.map((a, i) => (
             <AssetRow
@@ -769,15 +777,13 @@ function WatchlistView({ T, watchlists, assets, onSelectAsset, onRefresh }) {
   if (!watchlists.length) {
     return (
       <div style={{ paddingBottom: 110, padding: 16 }}>
-        <Empty T={T} title="Sin listas"
-          subtitle="Creá tu primera lista para seguir activos."
+        <Empty T={T}
+          icon={<Ico.Star size={26}/>}
+          title="Sin watchlists"
+          subtitle="Armá una lista para seguir tus activos favoritos sin tenerlos comprados todavía."
+          ctaLabel="+ Crear lista"
+          onCta={() => setModal("create")}
         />
-        <button onClick={() => setModal("create")} style={{
-          width: "100%", marginTop: 12, padding: 14, borderRadius: 14,
-          background: T.accent, color: T.accentInk,
-          fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, border: "none",
-          cursor: "pointer",
-        }}>+ Crear lista</button>
         {modal === "create" && (
           <NameModal T={T} title="Nueva lista" placeholder="Mi watchlist"
             onClose={() => setModal(null)}
@@ -850,7 +856,13 @@ function WatchlistView({ T, watchlists, assets, onSelectAsset, onRefresh }) {
 
       {/* Tickers */}
       {items.length === 0 ? (
-        <Empty T={T} title="Lista vacía" subtitle="Tocá + Agregar activo abajo o desde Mercado." />
+        <Empty T={T}
+          icon={<Ico.Star size={26}/>}
+          title="Esta lista está vacía"
+          subtitle="Agregá activos para verlos rápido sin tenerlos en tu cartera."
+          ctaLabel="+ Agregar activo"
+          onCta={() => setModal("add-asset")}
+        />
       ) : (
         <div style={{ margin: "0 16px" }}>
           {items.map((a, i) => (
@@ -1432,7 +1444,19 @@ function AssetRow({ T, asset, subline, rightTop, rightBottom, rightBottomColor, 
   );
 }
 
-function AssetSheet({ T, asset, holding = null, onClose, onDone, watchlists = [], onWatchlistsChange }) {
+function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: rawOnDone, watchlists = [], onWatchlistsChange }) {
+  // Wrap close + done callbacks so we play a slide-down exit animation
+  // before the parent unmounts the sheet. The CSS transition lives on
+  // the inner sheet div (transform translateY).
+  const [closing, setClosing] = useState(false);
+  const onClose = () => {
+    setClosing(true);
+    setTimeout(() => { if (rawOnClose) rawOnClose(); }, 220);
+  };
+  const onDone = () => {
+    setClosing(true);
+    setTimeout(() => { if (rawOnDone) rawOnDone(); }, 220);
+  };
   // Asset sheet has 3 modes via a top tab: Trade / Alerta / Stop loss.
   // Each renders its own form below the price header.
   const [mode, setMode] = useState("trade");
@@ -1513,7 +1537,8 @@ function AssetSheet({ T, asset, holding = null, onClose, onDone, watchlists = []
   return (
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
       position: "fixed", inset: 0, zIndex: 100,
-      background: "rgba(0,0,0,0.6)",
+      background: closing ? "rgba(0,0,0,0)" : "rgba(0,0,0,0.6)",
+      transition: "background 220ms ease",
       display: "flex", alignItems: "flex-end", justifyContent: "center",
     }}>
       <div style={{
@@ -1529,7 +1554,19 @@ function AssetSheet({ T, asset, holding = null, onClose, onDone, watchlists = []
         overflowY: "auto",
         overscrollBehavior: "contain",
         WebkitOverflowScrolling: "touch",
+        // Slide-up entry on mount, slide-down exit when the user
+        // dismisses (closing flag). Combined with the backdrop fade
+        // it feels native iOS sheet.
+        animation: closing ? "none" : "samas-sheet-up 220ms cubic-bezier(.2,.8,.2,1)",
+        transform: closing ? "translateY(100%)" : "translateY(0)",
+        transition: closing ? "transform 220ms cubic-bezier(.4,0,.6,1)" : undefined,
       }}>
+        <style>{`
+          @keyframes samas-sheet-up {
+            from { transform: translateY(100%); }
+            to   { transform: translateY(0); }
+          }
+        `}</style>
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "20px 20px 8px",
@@ -2725,11 +2762,44 @@ function Loader({ T }) {
   );
 }
 
-function Empty({ T, title, subtitle }) {
+// Empty state — icon + title + subtitle + optional CTA. Used wherever
+// a list comes back with zero rows. icon defaults to an "open box"
+// glyph; pass a different node (Ico.X) to override per surface.
+function Empty({ T, title, subtitle, icon, ctaLabel, onCta }) {
+  const defaultIcon = (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+      <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+      <line x1="12" y1="22.08" x2="12" y2="12"/>
+    </svg>
+  );
   return (
-    <div style={{ margin: "0 16px", padding: "32px 24px", borderRadius: 22, background: T.surface, border: `1px solid ${T.border}`, textAlign: "center" }}>
-      <div style={{ fontFamily: FONT.display, fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 6 }}>{title}</div>
-      <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, lineHeight: 1.5 }}>{subtitle}</div>
+    <div style={{
+      margin: "0 16px", padding: "36px 24px", borderRadius: 22,
+      background: T.surface, border: `1px solid ${T.border}`,
+      textAlign: "center",
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 12,
+    }}>
+      <div style={{
+        width: 56, height: 56, borderRadius: 16,
+        background: T.bg, border: `1px solid ${T.border}`,
+        color: T.textMute,
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>{icon || defaultIcon}</div>
+      <div>
+        <div style={{ fontFamily: FONT.display, fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 4 }}>{title}</div>
+        {subtitle && (
+          <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, lineHeight: 1.5, maxWidth: 320, margin: "0 auto" }}>{subtitle}</div>
+        )}
+      </div>
+      {ctaLabel && onCta && (
+        <button onClick={onCta} style={{
+          marginTop: 4, padding: "10px 18px", borderRadius: 999,
+          background: T.accent, color: T.accentInk, border: "none",
+          fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, cursor: "pointer",
+        }}>{ctaLabel}</button>
+      )}
     </div>
   );
 }

@@ -121,10 +121,12 @@ export async function getCategorizedNews({ category = "Todo", limit = 30 } = {})
     tickers = Array.from(set);
   } catch { /* fall through */ }
 
-  // No tickers OR fetch fails → use the curated mock so the user
-  // never sees an empty news tab.
+  // No tickers (fresh demo account) → use a default macro basket so
+  // the news feed is alive on first open. SPY / QQQ / BTC give a
+  // reasonable cross-section of US equities + crypto. The user's
+  // own holdings will replace this once they buy something.
   if (tickers.length === 0) {
-    return mockFeed({ category, limit });
+    tickers = ["SPY", "QQQ", "BTC"];
   }
 
   let real = [];
