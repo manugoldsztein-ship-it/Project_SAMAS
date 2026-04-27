@@ -33,6 +33,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
   const [card, setCard] = useState(null);
   const [txns, setTxns] = useState([]);
   const [portfolio, setPortfolio] = useState(null);
+  const [aporte, setAporte] = useState(null);
 
   // ----------- UI state -----------
   const [ccy, setCcy] = useState("ARS");
@@ -41,14 +42,16 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
   // ----------- load everything in parallel -----------
   const refresh = useCallback(async () => {
     try {
-      const [b, f, c, t, p] = await Promise.all([
+      const [b, f, c, t, p, a] = await Promise.all([
         walletApi.getBalance(),
         brokerApi.getFx(),
         cardApi.getCard(),
         walletApi.getTransactions({ limit: 5 }),
         brokerApi.getPortfolio(),
+        walletApi.getRecurringAporte(),
       ]);
       setBalance(b); setFx(f); setCard(c); setTxns(t); setPortfolio(p);
+      setAporte(a);
     } catch (e) {
       console.error("[wallet] load:", e);
     }
@@ -246,6 +249,65 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
         </div>
       )}
 
+      {/* ---------- aporte mensual ---------- */}
+      <div style={{ margin: "28px 16px 0" }}>
+        <SectionHead T={T} title="Aporte mensual" />
+        <button
+          onClick={() => setActiveModal("aporte")}
+          style={{
+            width: "100%", marginTop: 12, padding: 16, borderRadius: 22,
+            background: aporte ? `linear-gradient(135deg, ${T.accentSoft} 0%, ${T.surface} 70%)` : T.surface,
+            border: `1px solid ${aporte ? T.accent + "55" : T.border}`,
+            display: "flex", alignItems: "center", gap: 14, cursor: "pointer",
+            textAlign: "left",
+          }}
+        >
+          <div style={{
+            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+            background: T.bg, border: `1px solid ${T.border}`,
+            color: T.accent,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {aporte ? (
+              <>
+                <div style={{
+                  fontFamily: FONT.sans, fontSize: 11, color: T.textMute,
+                  letterSpacing: 0.6, fontWeight: 700, textTransform: "uppercase", marginBottom: 2,
+                }}>Próximo aporte</div>
+                <div style={{ fontFamily: FONT.display, fontSize: 16, fontWeight: 700, color: T.text }}>
+                  {aporte.currency === "ARS" ? "$" : "US$"}{fmtMoney(aporte.amount, aporte.currency)}
+                  {" "}<span style={{ color: T.textMute, fontWeight: 500 }}>·</span>{" "}
+                  <span style={{ color: T.accent }}>{nextLabel(aporte.nextAt)}</span>
+                </div>
+                <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+                  Día {aporte.dayOfMonth} de cada mes · Tocá para ajustar
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 700, color: T.text }}>
+                  Programar aporte mensual
+                </div>
+                <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute, marginTop: 2 }}>
+                  Cargá un monto fijo cada mes y ahorrá sin pensarlo.
+                </div>
+              </>
+            )}
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.textMute}
+            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
+      </div>
+
       {/* ---------- movimientos ---------- */}
       <div style={{ margin: "28px 16px 0" }}>
         <SectionHead T={T} title="Movimientos" action="Filtrar"/>
@@ -319,8 +381,157 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
           onClose={() => setActiveModal(null)}
           onCardChange={(updated) => setCard((c) => ({ ...c, ...updated }))} />
       )}
+      {activeModal === "aporte" && (
+        <AporteModal T={T} aporte={aporte}
+          onClose={() => setActiveModal(null)}
+          onDone={() => { setActiveModal(null); refresh(); }} />
+      )}
     </div>
   );
+}
+
+// ----------------------------------------------------------
+// Aporte mensual — modal to set / edit / cancel a recurring monthly
+// deposit. Saves via walletApi.setRecurringAporte. The schedule is
+// purely local for now (mock); production needs a server-side cron.
+// ----------------------------------------------------------
+function AporteModal({ T, aporte, onClose, onDone }) {
+  const [amountStr, setAmountStr] = useState(String(aporte?.amount || ""));
+  const [currency, setCurrency] = useState(aporte?.currency || "ARS");
+  const [day, setDay] = useState(aporte?.dayOfMonth || 1);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function save() {
+    setErr(null);
+    const amount = parseFloat(amountStr.replace(",", "."));
+    if (!amount || amount <= 0) { setErr("Ingresá un monto válido."); return; }
+    setBusy(true);
+    try {
+      await walletApi.setRecurringAporte({ amount, currency, dayOfMonth: day });
+      onDone();
+    } catch (e) { setErr(e.message); setBusy(false); }
+  }
+
+  async function cancel() {
+    if (!aporte) { onClose(); return; }
+    if (!window.confirm("¿Cancelar el aporte mensual?")) return;
+    setBusy(true);
+    try {
+      await walletApi.cancelRecurringAporte();
+      onDone();
+    } catch (e) { setErr(e.message); setBusy(false); }
+  }
+
+  return (
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
+      position: "fixed", inset: 0, zIndex: 100,
+      background: "rgba(0,0,0,0.6)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: 16,
+    }}>
+      <div style={{
+        width: "100%", maxWidth: 480,
+        background: T.bgElev, color: T.text,
+        borderRadius: 22, border: `1px solid ${T.border}`,
+        padding: 20,
+      }}>
+        <div style={{ fontFamily: FONT.display, fontSize: 20, fontWeight: 700, color: T.text, marginBottom: 4 }}>
+          Aporte mensual
+        </div>
+        <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute, marginBottom: 16 }}>
+          Cargá un monto fijo cada mes. Se acredita en tu wallet automáticamente el día que elijas.
+        </div>
+
+        {/* Currency pill */}
+        <div style={{
+          display: "flex", gap: 4, padding: 4, marginBottom: 12,
+          background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12,
+        }}>
+          {["ARS", "USD"].map((c) => (
+            <button key={c} onClick={() => setCurrency(c)} style={{
+              flex: 1, padding: "8px 0", borderRadius: 8,
+              background: currency === c ? T.bg : "transparent",
+              border: currency === c ? `1px solid ${T.border}` : "1px solid transparent",
+              color: currency === c ? T.text : T.textMute,
+              fontFamily: FONT.mono, fontSize: 12, fontWeight: 700, letterSpacing: 0.4, cursor: "pointer",
+            }}>{c}</button>
+          ))}
+        </div>
+
+        {/* Amount input */}
+        <div style={{
+          fontFamily: FONT.sans, fontSize: 11, color: T.textMute, fontWeight: 600,
+          letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 6,
+        }}>Monto ({currency})</div>
+        <input
+          autoFocus
+          inputMode="decimal"
+          value={amountStr}
+          onChange={(e) => setAmountStr(e.target.value.replace(/[^\d,.]/g, ""))}
+          placeholder={currency === "ARS" ? "50000" : "200"}
+          style={{
+            width: "100%", boxSizing: "border-box",
+            padding: "14px 16px", borderRadius: 14, marginBottom: 16,
+            background: T.surface, border: `1px solid ${T.border}`,
+            color: T.text, fontFamily: FONT.mono, fontSize: 18, fontWeight: 700,
+            outline: "none",
+          }}
+        />
+
+        {/* Day of month */}
+        <div style={{
+          fontFamily: FONT.sans, fontSize: 11, color: T.textMute, fontWeight: 600,
+          letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 6,
+        }}>Día del mes</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+          {[1, 5, 10, 15, 20, 25, 28].map((d) => {
+            const active = d === day;
+            return (
+              <button key={d} onClick={() => setDay(d)} style={{
+                padding: "8px 14px", borderRadius: 999,
+                background: active ? T.accentSoft : T.surface,
+                border: `1px solid ${active ? T.accent : T.border}`,
+                color: active ? T.accent : T.textMute,
+                fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, cursor: "pointer",
+              }}>{d}</button>
+            );
+          })}
+        </div>
+
+        {err && <div style={{ marginBottom: 12, color: T.danger, fontFamily: FONT.sans, fontSize: 12 }}>{err}</div>}
+
+        <div style={{ display: "flex", gap: 10 }}>
+          {aporte && (
+            <button onClick={cancel} disabled={busy} style={{
+              flex: 1, padding: 14, borderRadius: 14,
+              background: "transparent", border: `1px solid ${T.danger}55`,
+              color: T.danger, fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+              cursor: busy ? "default" : "pointer",
+            }}>Cancelar aporte</button>
+          )}
+          <button onClick={save} disabled={busy} style={{
+            flex: 1.4, padding: 14, borderRadius: 14,
+            background: T.accent, color: T.accentInk,
+            fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, border: "none",
+            cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
+          }}>{busy ? "Guardando..." : (aporte ? "Actualizar" : "Programar")}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// "Próximo aporte" relative date — "mañana", "en 5 días", or formatted.
+function nextLabel(ts) {
+  if (!ts) return "";
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const target = new Date(ts); target.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((target - today) / (24 * 3600 * 1000));
+  if (diffDays <= 0) return "hoy";
+  if (diffDays === 1) return "mañana";
+  if (diffDays <= 7) return `en ${diffDays} días`;
+  return target.toLocaleDateString("es-AR", { day: "numeric", month: "short" });
 }
 
 // ----------------------------------------------------------

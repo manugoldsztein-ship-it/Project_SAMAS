@@ -16,12 +16,16 @@
 import React, { useEffect, useState } from "react";
 import { AnimatedLogoMark, playIntroSound } from "./SamasLogo.jsx";
 
+// Tightened from ~2.7s to ~1.6s total. Boot already costs ~10s on
+// cold launch (WebView + WebContent processes), no point making the
+// user wait an extra full second just for a logo. Tap anywhere also
+// dismisses immediately.
 const TIMINGS = {
-  startTrace:    50,    // tiny delay so the initial paint registers
-  startDot:      600,   // dot scales in while the strokes are still drawing
-  startRing:     1100,  // ring pulse fires when the mark is fully drawn
-  startFade:     2000,  // begin fade-out
-  done:          2700,  // unmount / call onDone
+  startTrace:    30,
+  startDot:      400,
+  startRing:     750,
+  startFade:     1200,
+  done:          1700,
 };
 
 export function Intro({ onDone }) {
@@ -56,8 +60,16 @@ export function Intro({ onDone }) {
     return () => timers.forEach(clearTimeout);
   }, [onDone]);
 
+  // Tap-to-skip: if the user has seen this animation a thousand times,
+  // they don't need 1.6s every cold launch. One tap dismisses.
+  const skip = () => {
+    setFading(true);
+    setTimeout(() => { if (onDone) onDone(); }, 350);
+  };
+
   return (
     <div
+      onClick={skip}
       style={{
         position: "fixed",
         inset: 0,
@@ -70,8 +82,9 @@ export function Intro({ onDone }) {
         background: "radial-gradient(120% 80% at 50% 50%, #1A2233 0%, #0A0E17 100%)",
         opacity: fading ? 0 : 1,
         transform: fading ? "scale(1.04)" : "scale(1)",
-        transition: "opacity 600ms ease, transform 700ms cubic-bezier(.7,0,.3,1)",
+        transition: "opacity 350ms ease, transform 500ms cubic-bezier(.7,0,.3,1)",
         pointerEvents: fading ? "none" : "auto",
+        cursor: "pointer",
       }}
     >
       <AnimatedLogoMark

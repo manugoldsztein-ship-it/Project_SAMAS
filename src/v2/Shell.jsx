@@ -12,18 +12,20 @@
 // end-to-end and we can iterate one tab at a time.
 // ============================================================
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, Suspense, lazy } from "react";
 import { SAMAS_THEME, FONT } from "./theme.js";
 import { SamasTabBar } from "./shared.jsx";
 import { WalletPage } from "./Wallet.jsx";
-import { BrokerShell } from "./Broker.jsx";
-import { SocialPage } from "./Social.jsx";
-import { NewsPage } from "./News.jsx";
+// Code-split the heavy tabs and the 2FA enrollment so they don't
+// inflate the initial JS parse on cold launch. Wallet is the landing
+// tab so it stays eagerly imported. Broker stays eager too because
+// it's typically the first thing power users tap. Everything else
+// loads on first navigation / first open.
+const BrokerShell = lazy(() => import("./Broker.jsx").then((m) => ({ default: m.BrokerShell })));
+const SocialPage  = lazy(() => import("./Social.jsx").then((m) => ({ default: m.SocialPage })));
+const NewsPage    = lazy(() => import("./News.jsx").then((m) => ({ default: m.NewsPage })));
+const MfaEnrollSection = lazy(() => import("../auth/Mfa.jsx").then((m) => ({ default: m.MfaEnrollSection })));
 import { Onboarding } from "./Onboarding.jsx";
-// 2FA enrollment from the legacy auth code. Same component, hosted in
-// a v2-themed modal so the Authenticator-app TOTP setup feels native
-// to the new UI.
-import { MfaEnrollSection } from "../auth/Mfa.jsx";
 
 // localStorage flag for the Pro mode toggle. Default ON — power users
 // see the full broker surface (ticker banner, distribución, top movers)
@@ -84,12 +86,14 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
   // legacy app had, without coupling the two navs together.
   if (tab === "broker") {
     return (
-      <BrokerShell
-        T={T}
-        isNativeApp={isNativeApp}
-        proMode={proMode}
-        onBack={() => setTab("wallet")}
-      />
+      <Suspense fallback={<TinyLoader T={T}/>}>
+        <BrokerShell
+          T={T}
+          isNativeApp={isNativeApp}
+          proMode={proMode}
+          onBack={() => setTab("wallet")}
+        />
+      </Suspense>
     );
   }
 
@@ -109,9 +113,17 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
           />
         );
       case "social":
-        return <SocialPage T={T} />;
+        return (
+          <Suspense fallback={<TinyLoader T={T}/>}>
+            <SocialPage T={T} />
+          </Suspense>
+        );
       case "news":
-        return <NewsPage T={T} />;
+        return (
+          <Suspense fallback={<TinyLoader T={T}/>}>
+            <NewsPage T={T} />
+          </Suspense>
+        );
       default:
         return null;
     }
@@ -321,7 +333,9 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
               </button>
             </div>
             <div style={{ padding: 16, overflowY: "auto", flex: 1 }}>
-              <MfaEnrollSection C={C} />
+              <Suspense fallback={<TinyLoader T={T}/>}>
+                <MfaEnrollSection C={C} />
+              </Suspense>
             </div>
           </div>
         </div>
@@ -446,6 +460,30 @@ function Placeholder({ T, title, subtitle }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------
+// TinyLoader — minimal fallback for Suspense boundaries while the
+// lazy chunk for a tab loads. Keeps the chrome (header background)
+// and shows a centered subtle spinner so it doesn't feel like the
+// app froze.
+// ----------------------------------------------------------
+function TinyLoader({ T }) {
+  return (
+    <div style={{
+      position: "absolute", inset: 0,
+      background: T.bg,
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      <div style={{
+        width: 28, height: 28, borderRadius: 999,
+        border: `2px solid ${T.border}`,
+        borderTopColor: T.accent,
+        animation: "samas-spin 700ms linear infinite",
+      }}/>
+      <style>{`@keyframes samas-spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

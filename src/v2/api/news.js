@@ -19,7 +19,7 @@ import { jitter } from "./_mock.js";
 // fallback for Argentine sources, all cached server-side. Same wrapper
 // the legacy MobileApp used. We keep the v2 mock as a fallback for
 // when there's no auth session yet (demo mode).
-import { fetchNewsForTickers } from "../../lib/news.js";
+import { fetchNewsForTicker, fetchNewsForTickers } from "../../lib/news.js";
 // Pull the user's holdings + watchlists so we can ask for news about
 // tickers they actually care about. Same broker mock everywhere else
 // uses — when the real broker API lands, this swaps automatically.
@@ -201,6 +201,53 @@ function bucketCategory(ticker) {
   if (ENERGY_TICKERS.has(t)) return "Energía";
   if (ETF_TICKERS.has(t))    return "Mercados";
   return "Mercados";
+}
+
+/**
+ * searchNewsByTicker(query) — fetch fresh news from the Edge Function
+ * for an arbitrary ticker the user typed in the search box. Same
+ * route as the merged feed, but explicit per-ticker so users can
+ * look up "NVDA" / "TSLA" / "BTC" without having to add them to a
+ * watchlist first. Falls back to mock filtering if the function
+ * fails or the user has no session.
+ */
+export async function searchNewsByTicker(query) {
+  const ticker = (query || "").trim().toUpperCase();
+  if (!ticker) return [];
+  let real = [];
+  try {
+    real = await fetchNewsForTicker(ticker);
+  } catch (e) {
+    console.warn("[news] ticker search failed, using mock:", e?.message);
+  }
+  if (real && real.length) {
+    return real.map((a, i) => {
+      const at = a.published_at ? +new Date(a.published_at) : Date.now();
+      return {
+        id: a.url || `n_search_${i}`,
+        category: bucketCategory(ticker),
+        title: a.title || "",
+        summary: a.summary || "",
+        tickers: [ticker],
+        source: a.source || "",
+        url: a.url || null,
+        imageUrl: a.image_url || null,
+        hot: false,
+        at,
+        timeLabel: relativeTimeShort(at),
+      };
+    });
+  }
+  // Fallback: mock catalog filtered by ticker substring (handy in
+  // demo mode so you can still see something for "NVDA").
+  await jitter(120, 280);
+  return NEWS
+    .filter((n) => n.tickers.some((t) => t.toUpperCase().includes(ticker)))
+    .map((n) => ({
+      id: n.id, category: n.category, title: n.title, summary: n.summary,
+      tickers: [...n.tickers], source: n.source, hot: !!n.hot, at: n.at,
+      timeLabel: relativeTimeShort(n.at),
+    }));
 }
 
 /**

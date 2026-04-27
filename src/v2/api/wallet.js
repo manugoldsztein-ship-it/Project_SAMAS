@@ -292,3 +292,87 @@ export async function swap({ from, to, amountFrom, rate }) {
 export function _resetDemo() {
   saveState(seed());
 }
+
+// ----------------------------------------------------------
+// Recurring aporte mensual
+// ----------------------------------------------------------
+// User schedules a recurring deposit: amount + currency + day of
+// month. We persist locally (samas_v2_aporte_mock) and the UI shows
+// "next: <date>" and "last credited: <date>".
+//
+// Production: store in a recurring_deposits table, with a daily cron
+// (Supabase scheduled function or external) that on day-of-month creates
+// the deposit + buy split.
+const APORTE_KEY = "samas_v2_aporte_mock";
+
+function loadAporte() {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(APORTE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function saveAporte(a) {
+  if (typeof localStorage !== "undefined") {
+    try {
+      if (a) localStorage.setItem(APORTE_KEY, JSON.stringify(a));
+      else localStorage.removeItem(APORTE_KEY);
+    } catch {}
+  }
+}
+
+/** Return the next-monthly date >= today for a given day-of-month. */
+function nextDateFor(dayOfMonth) {
+  const today = new Date();
+  const d = Math.max(1, Math.min(28, Number(dayOfMonth) || 1));
+  const candidate = new Date(today.getFullYear(), today.getMonth(), d);
+  if (candidate.getTime() < today.setHours(0, 0, 0, 0)) {
+    candidate.setMonth(candidate.getMonth() + 1);
+  }
+  return candidate.getTime();
+}
+
+/**
+ * getRecurringAporte() — returns the active schedule or null.
+ *
+ * Shape: { amount: number, currency: "ARS"|"USD", dayOfMonth: number,
+ *          nextAt: number(ms), lastAt: number(ms)|null, createdAt: number }
+ */
+export async function getRecurringAporte() {
+  await jitter(80, 200);
+  const a = loadAporte();
+  if (!a) return null;
+  // Recompute nextAt in case the day passed.
+  return { ...a, nextAt: nextDateFor(a.dayOfMonth) };
+}
+
+/**
+ * setRecurringAporte({ amount, currency, dayOfMonth }) — create or
+ * replace the schedule. Pass null/undefined to disable.
+ */
+export async function setRecurringAporte(input) {
+  await jitter(120, 280);
+  if (!input || !input.amount || input.amount <= 0) {
+    saveAporte(null);
+    return null;
+  }
+  const currency = input.currency === "USD" ? "USD" : "ARS";
+  const dayOfMonth = Math.max(1, Math.min(28, Math.round(Number(input.dayOfMonth) || 1)));
+  const next = {
+    amount: Number(input.amount),
+    currency,
+    dayOfMonth,
+    nextAt: nextDateFor(dayOfMonth),
+    lastAt: input.lastAt || null,
+    createdAt: input.createdAt || Date.now(),
+  };
+  saveAporte(next);
+  return next;
+}
+
+/** Disable / cancel the schedule. */
+export async function cancelRecurringAporte() {
+  await jitter(80, 180);
+  saveAporte(null);
+  return null;
+}

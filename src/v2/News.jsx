@@ -26,6 +26,7 @@ export function NewsPage({ T }) {
   const [cats, setCats] = useState(["Todo"]);
   const [cat, setCat] = useState("Todo");
   const [query, setQuery] = useState("");
+  const [searchResults, setSearchResults] = useState(null); // null = not searching
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -46,21 +47,36 @@ export function NewsPage({ T }) {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  // Local search across what the API already returned. We keep it
-  // client-side so typing feels instant; the API filtering is by
-  // category only. Match against title, summary, source and any of
-  // the related tickers.
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((n) => {
-      if (n.title.toLowerCase().includes(q)) return true;
-      if ((n.summary || "").toLowerCase().includes(q)) return true;
-      if ((n.source || "").toLowerCase().includes(q)) return true;
-      if ((n.tickers || []).some((tk) => tk.toLowerCase().includes(q))) return true;
-      return false;
-    });
-  }, [items, query]);
+  // Debounced ticker search — when the user types, after 350ms idle
+  // we hit the Edge Function for fresh news on that ticker. Empty
+  // query clears the search and we revert to the categorized feed.
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) { setSearchResults(null); return; }
+    let alive = true;
+    setLoading(true);
+    const id = setTimeout(async () => {
+      try {
+        const r = await newsApi.searchNewsByTicker(q);
+        if (!alive) return;
+        setSearchResults(r);
+      } catch (e) {
+        if (alive) setSearchResults([]);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    }, 350);
+    return () => { alive = false; clearTimeout(id); };
+  }, [query]);
+
+  // Visible feed: search results when actively searching, otherwise
+  // the categorized list. Search results respect the category pill
+  // too (so "NVDA" + "Tech" works as a sub-filter).
+  const visible = useMemo(() => {
+    const base = searchResults != null ? searchResults : items;
+    if (cat === "Todo") return base;
+    return base.filter((n) => n.category === cat);
+  }, [items, searchResults, cat]);
 
   return (
     <div style={{ paddingBottom: 110 }}>
@@ -153,7 +169,10 @@ export function NewsPage({ T }) {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar por título, ticker o fuente"
+            placeholder="Buscar por ticker (NVDA, BTC, GGAL...)"
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
             style={{
               flex: 1, background: "transparent", border: "none", outline: "none",
               color: T.text, fontFamily: FONT.sans, fontSize: 14,
@@ -194,7 +213,7 @@ export function NewsPage({ T }) {
           <div style={{ padding: 30, textAlign: "center", color: T.textMute, fontFamily: FONT.sans, fontSize: 13 }}>
             Cargando noticias...
           </div>
-        ) : filtered.length === 0 ? (
+        ) : visible.length === 0 ? (
           <div style={{
             padding: "32px 24px", borderRadius: 18, textAlign: "center",
             background: T.surface, border: `1px solid ${T.border}`,
@@ -209,7 +228,7 @@ export function NewsPage({ T }) {
             </div>
           </div>
         ) : (
-          filtered.map((n) => <NewsCard key={n.id} T={T} item={n} />)
+          visible.map((n) => <NewsCard key={n.id} T={T} item={n} />)
         )}
       </div>
     </div>
