@@ -173,6 +173,44 @@ export async function getPortfolio() {
 }
 
 /**
+ * Fee schedule used to build a confirmation breakdown before sending
+ * an order. The numbers below are typical retail-broker rates in
+ * Argentina (Cohen / IOL / Balanz are in this ballpark). When wired to
+ * a real broker we'll fetch the real schedule from their API and feed
+ * it here — the UI only depends on `quoteOrderFees` returning the
+ * same shape.
+ */
+const FEE_SCHEDULE = {
+  commissionRate:    0.005,   // 0.5% over subtotal
+  ivaRate:           0.21,    // 21% over the commission
+  marketDutyRate:    0.0008,  // ~0.08% derechos de mercado
+};
+
+/**
+ * quoteOrderFees({ side, subtotal }) — returns an itemized fee
+ * breakdown for a hypothetical order. Synchronous on purpose: the UI
+ * recomputes this on every keystroke in the confirmation step.
+ *
+ * @returns {{
+ *   subtotal: number,
+ *   commission: number,
+ *   iva: number,
+ *   marketDuty: number,
+ *   feesTotal: number,
+ *   total: number,    // what the user pays (buy) or receives (sell)
+ * }}
+ */
+export function quoteOrderFees({ side, subtotal }) {
+  const sub = Number(subtotal) || 0;
+  const commission = sub * FEE_SCHEDULE.commissionRate;
+  const iva = commission * FEE_SCHEDULE.ivaRate;
+  const marketDuty = sub * FEE_SCHEDULE.marketDutyRate;
+  const feesTotal = commission + iva + marketDuty;
+  const total = side === "buy" ? sub + feesTotal : sub - feesTotal;
+  return { subtotal: sub, commission, iva, marketDuty, feesTotal, total };
+}
+
+/**
  * placeOrder({ ticker, side, qty, type, limitPrice }) — submit a
  * new order. Mock fills market orders immediately at the latest
  * price; LIMIT orders sit in `orders` as "open".
@@ -314,12 +352,13 @@ export async function renameWatchlist(id, newName) {
 /**
  * removeWatchlist(id) — delete the list and all its tickers. Server
  * should verify ownership via RLS in production.
+ *
+ * The user can delete every list — the WatchlistView shows an empty
+ * state with a "+ Crear lista" button when watchlists is empty, so
+ * we no longer require keeping at least one around.
  */
 export async function removeWatchlist(id) {
   await jitter();
-  if (state.watchlists.length <= 1) {
-    throw new Error("Tenés que dejar al menos una lista.");
-  }
   saveState({ ...state, watchlists: state.watchlists.filter((w) => w.id !== id) });
   return { ok: true };
 }

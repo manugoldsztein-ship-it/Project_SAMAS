@@ -176,6 +176,7 @@ export function BrokerShell({ T, isNativeApp = false, onBack }) {
         <AssetSheet
           T={T}
           asset={selectedAsset}
+          holding={portfolio?.holdings.find((h) => h.ticker === selectedAsset.ticker) || null}
           onClose={() => setSelectedAsset(null)}
           onDone={() => { setSelectedAsset(null); refresh(); }}
           watchlists={watchlists}
@@ -440,14 +441,12 @@ function WatchlistView({ T, watchlists, assets, onSelectAsset, onRefresh }) {
               color: T.textMute, fontFamily: FONT.sans, fontSize: 11, fontWeight: 600,
               cursor: "pointer",
             }}>Renombrar</button>
-            {watchlists.length > 1 && (
-              <button onClick={() => setModal("confirm-delete")} style={{
-                padding: "5px 10px", borderRadius: 8,
-                background: "transparent", border: `1px solid ${T.border}`,
-                color: T.danger, fontFamily: FONT.sans, fontSize: 11, fontWeight: 600,
-                cursor: "pointer",
-              }}>Borrar</button>
-            )}
+            <button onClick={() => setModal("confirm-delete")} style={{
+              padding: "5px 10px", borderRadius: 8,
+              background: "transparent", border: `1px solid ${T.border}`,
+              color: T.danger, fontFamily: FONT.sans, fontSize: 11, fontWeight: 600,
+              cursor: "pointer",
+            }}>Borrar</button>
           </div>
         </div>
       )}
@@ -935,7 +934,7 @@ function AssetRow({ T, asset, subline, rightTop, rightBottom, rightBottomColor, 
   );
 }
 
-function AssetSheet({ T, asset, onClose, onDone, watchlists = [], onWatchlistsChange }) {
+function AssetSheet({ T, asset, holding = null, onClose, onDone, watchlists = [], onWatchlistsChange }) {
   // Asset sheet has 3 modes via a top tab: Trade / Alerta / Stop loss.
   // Each renders its own form below the price header.
   const [mode, setMode] = useState("trade");
@@ -946,6 +945,10 @@ function AssetSheet({ T, asset, onClose, onDone, watchlists = [], onWatchlistsCh
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [done, setDone] = useState(null);
+  // Confirm step — when set, we render the breakdown sheet instead of
+  // the form. Holds the snapshot of fees so the user sees exactly what
+  // they're agreeing to.
+  const [confirm, setConfirm] = useState(null);
 
   // Existing alert / stop for this asset, loaded once on open.
   const [alert, setAlert] = useState(null);
@@ -959,8 +962,8 @@ function AssetSheet({ T, asset, onClose, onDone, watchlists = [], onWatchlistsCh
     return () => { alive = false; };
   }, [asset.ticker]);
 
-  // Whether the user owns this asset (only then can they set a stop).
-  const ownsIt = asset.qty > 0;
+  // Whether the user owns this asset (only then can they set a stop or sell).
+  const ownsIt = !!holding && holding.qty > 0;
 
   // Watchlist picker — shown over the sheet when the user taps the
   // star. Lists every saved watchlist with a checkmark when this
@@ -974,16 +977,38 @@ function AssetSheet({ T, asset, onClose, onDone, watchlists = [], onWatchlistsCh
   const totalEst = qty * price;
   const ccySym = asset.currency === "ARS" ? "$" : "US$";
 
-  async function submit() {
+  // First click on Comprar/Vender opens the confirmation step. We
+  // freeze the price + fee breakdown into `confirm` so what the user
+  // sees on the review screen is exactly what gets sent.
+  function openConfirm() {
     setErr(null);
     if (!qty || qty <= 0) { setErr("Cantidad inválida."); return; }
-    setBusy(true);
+    if (side === "sell" && (!holding || holding.qty < qty)) {
+      setErr("Cantidad insuficiente para vender."); return;
+    }
+    const fees = brokerApi.quoteOrderFees({ side, subtotal: qty * price });
+    setConfirm({
+      side, qty, type,
+      price, limitPrice: type === "limit" ? limit : null,
+      fees,
+    });
+  }
+
+  // Second click — actually places the order using the snapshot from
+  // openConfirm() (so a price tick mid-review doesn't surprise the user).
+  async function confirmAndPlace() {
+    if (!confirm) return;
+    setBusy(true); setErr(null);
     try {
       const r = await brokerApi.placeOrder({
-        ticker: asset.ticker, side, qty, type,
-        limitPrice: type === "limit" ? limit : undefined,
+        ticker: asset.ticker,
+        side: confirm.side,
+        qty: confirm.qty,
+        type: confirm.type,
+        limitPrice: confirm.limitPrice || undefined,
       });
       setDone(r);
+      setConfirm(null);
     } catch (e) { setErr(e.message); setBusy(false); }
   }
 
@@ -1058,6 +1083,16 @@ function AssetSheet({ T, asset, onClose, onDone, watchlists = [], onWatchlistsCh
 
           {done ? (
             <DoneScreen T={T} done={done} side={side} qty={qty} ticker={asset.ticker} onClose={onDone} />
+          ) : confirm ? (
+            <ConfirmOrderStep
+              T={T}
+              asset={asset}
+              confirm={confirm}
+              busy={busy}
+              err={err}
+              onCancel={() => { setConfirm(null); setErr(null); }}
+              onConfirm={confirmAndPlace}
+            />
           ) : (
             <>
               {/* Mode tabs: Trade / Alerta / Stop loss */}
@@ -1098,6 +1133,34 @@ function AssetSheet({ T, asset, onClose, onDone, watchlists = [], onWatchlistsCh
 
               {mode === "trade" && (
                 <>
+              {/* Tenencia row — shows what the user already owns of
+                  this asset. Always rendered when in Operar mode so
+                  buying/selling feels grounded. */}
+              <div style={{
+                marginBottom: 14, padding: "12px 14px", borderRadius: 12,
+                background: ownsIt ? T.accentSoft : T.surface,
+                border: `1px solid ${ownsIt ? T.accent : T.border}`,
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                gap: 8,
+              }}>
+                <div>
+                  <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, fontWeight: 600, letterSpacing: 0.4, textTransform: "uppercase" }}>
+                    Tenencia actual
+                  </div>
+                  <div style={{ fontFamily: FONT.mono, fontSize: 15, fontWeight: 700, color: ownsIt ? T.accent : T.text, marginTop: 2 }}>
+                    {ownsIt ? `${fmtMoney(holding.qty, asset.currency)} ${asset.ticker}` : `0 ${asset.ticker}`}
+                  </div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, fontWeight: 600, letterSpacing: 0.4, textTransform: "uppercase" }}>
+                    Valuación
+                  </div>
+                  <div style={{ fontFamily: FONT.mono, fontSize: 15, fontWeight: 700, color: T.text, marginTop: 2 }}>
+                    {ownsIt ? `${ccySym}${fmtMoney(holding.value, asset.currency)}` : "—"}
+                  </div>
+                </div>
+              </div>
+
               <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
                 {[
                   { id: "buy",  label: "Comprar", color: T.accent,  soft: T.accentSoft },
@@ -1159,14 +1222,14 @@ function AssetSheet({ T, asset, onClose, onDone, watchlists = [], onWatchlistsCh
 
               {err && <div style={{ marginTop: 12, color: T.danger, fontFamily: FONT.sans, fontSize: 12 }}>{err}</div>}
 
-              <button onClick={submit} disabled={busy || qty <= 0} style={{
+              <button onClick={openConfirm} disabled={qty <= 0} style={{
                 width: "100%", marginTop: 18, padding: 16, borderRadius: 14,
                 background: side === "buy" ? T.accent : T.danger,
                 color: side === "buy" ? T.accentInk : "#FFFFFF",
                 fontFamily: FONT.sans, fontSize: 15, fontWeight: 700, border: "none",
-                cursor: busy ? "default" : "pointer", opacity: busy || qty <= 0 ? 0.6 : 1,
+                cursor: "pointer", opacity: qty <= 0 ? 0.6 : 1,
               }}>
-                {busy ? "Enviando..." : side === "buy" ? `Comprar ${asset.ticker}` : `Vender ${asset.ticker}`}
+                {side === "buy" ? `Revisar compra` : `Revisar venta`}
               </button>
                 </>
               )}
@@ -1550,6 +1613,94 @@ function StopForm({ T, asset, existing, ownsIt, onSaved, onRemoved }) {
         }}>{existing ? "Actualizar" : "Crear stop"}</button>
       </div>
     </>
+  );
+}
+
+// ----------------------------------------------------------
+// ConfirmOrderStep — review screen shown after the user clicks
+// "Revisar compra/venta" but before the order is actually sent. Lists
+// every line item (price, comisión, IVA, derechos de mercado) so the
+// user knows exactly what they're paying / receiving.
+// ----------------------------------------------------------
+function ConfirmOrderStep({ T, asset, confirm, busy, err, onCancel, onConfirm }) {
+  const ccySym = asset.currency === "ARS" ? "$" : "US$";
+  const fee = confirm.fees;
+  const isBuy = confirm.side === "buy";
+
+  const Row = ({ label, value, strong, color }) => (
+    <div style={{
+      display: "flex", justifyContent: "space-between", alignItems: "baseline",
+      padding: "8px 0", gap: 8,
+    }}>
+      <span style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute }}>{label}</span>
+      <span style={{
+        fontFamily: FONT.mono, fontSize: strong ? 15 : 13,
+        fontWeight: strong ? 700 : 600,
+        color: color || T.text,
+      }}>{value}</span>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{
+        marginBottom: 14, padding: "10px 14px", borderRadius: 10,
+        background: isBuy ? T.accentSoft : T.dangerSoft,
+        color: isBuy ? T.accent : T.danger,
+        fontFamily: FONT.sans, fontSize: 12, fontWeight: 700,
+        letterSpacing: 0.5, textTransform: "uppercase",
+        textAlign: "center",
+      }}>
+        Revisar {isBuy ? "compra" : "venta"} de {asset.ticker}
+      </div>
+
+      <div style={{
+        padding: "12px 16px", borderRadius: 14,
+        background: T.surface, border: `1px solid ${T.border}`,
+        marginBottom: 14,
+      }}>
+        <Row label="Cantidad" value={`${fmtMoney(confirm.qty, asset.currency)} ${asset.ticker}`} />
+        <Row label="Tipo de orden" value={confirm.type === "limit" ? "Límite" : "Mercado"} />
+        <Row label="Precio" value={`${ccySym}${fmtMoney(confirm.price, asset.currency)}`} />
+        <div style={{ height: 1, background: T.border, margin: "6px 0" }} />
+        <Row label="Subtotal" value={`${ccySym}${fmtMoney(fee.subtotal, asset.currency)}`} />
+        <Row label="Comisión (0,5%)" value={`${ccySym}${fmtMoney(fee.commission, asset.currency)}`} />
+        <Row label="IVA s/comisión (21%)" value={`${ccySym}${fmtMoney(fee.iva, asset.currency)}`} />
+        <Row label="Derechos de mercado" value={`${ccySym}${fmtMoney(fee.marketDuty, asset.currency)}`} />
+        <div style={{ height: 1, background: T.border, margin: "6px 0" }} />
+        <Row
+          label={isBuy ? "Total a pagar" : "Total a recibir"}
+          value={`${ccySym}${fmtMoney(fee.total, asset.currency)}`}
+          strong
+          color={isBuy ? T.danger : T.accent}
+        />
+      </div>
+
+      <div style={{
+        fontFamily: FONT.sans, fontSize: 11, color: T.textMute,
+        lineHeight: 1.5, marginBottom: 14,
+      }}>
+        Los valores son estimados. El precio final puede variar levemente al ejecutarse en el mercado.
+      </div>
+
+      {err && <div style={{ marginBottom: 12, color: T.danger, fontFamily: FONT.sans, fontSize: 12 }}>{err}</div>}
+
+      <div style={{ display: "flex", gap: 10 }}>
+        <button onClick={onCancel} disabled={busy} style={{
+          flex: 1, padding: 16, borderRadius: 14,
+          background: T.surface, border: `1px solid ${T.border}`,
+          color: T.text, fontFamily: FONT.sans, fontSize: 14, fontWeight: 600,
+          cursor: busy ? "default" : "pointer",
+        }}>Modificar</button>
+        <button onClick={onConfirm} disabled={busy} style={{
+          flex: 1.4, padding: 16, borderRadius: 14,
+          background: isBuy ? T.accent : T.danger,
+          color: isBuy ? T.accentInk : "#FFFFFF",
+          fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, border: "none",
+          cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
+        }}>{busy ? "Enviando..." : `Confirmar ${isBuy ? "compra" : "venta"}`}</button>
+      </div>
+    </div>
   );
 }
 
