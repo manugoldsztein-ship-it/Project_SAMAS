@@ -26,7 +26,7 @@ import {
 } from "./shared.jsx";
 import { wallet as walletApi, card as cardApi, broker as brokerApi } from "./api/index.js";
 
-export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark }) {
+export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark, appShell = "principal", onChangeAppShell }) {
   // ----------- data state -----------
   const [balance, setBalance] = useState(null);
   const [fx, setFx] = useState(null);
@@ -82,7 +82,28 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
             <div style={{ fontFamily: FONT.sans, fontSize: 16, fontWeight: 700, color: T.text }}>{userName}</div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {/* Principal / Pro pill — switches the entire app shell.
+              Tapping "Pro" hands off to the legacy MobileApp UI which
+              has the advanced PRO surfaces (FX strip, distribución,
+              what-if, charts). User can come back from the ProfileSheet
+              inside the legacy app. */}
+          {onChangeAppShell && (
+            <button
+              onClick={() => {
+                if (window.confirm("Cambiar a la vista Pro? Tiene mas datos y graficos avanzados. Podes volver a Principal desde el perfil.")) {
+                  onChangeAppShell("pro");
+                }
+              }}
+              style={{
+                padding: "6px 12px", borderRadius: 999,
+                background: "transparent", border: `1px solid ${T.border}`,
+                color: T.textMute,
+                fontFamily: FONT.sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6,
+                cursor: "pointer",
+              }}
+            >PRO</button>
+          )}
           {onToggleDark && (
             <ChromeBtn T={T} onClick={onToggleDark}>
               {isDark ? <Ico.Sun size={18}/> : <Ico.Moon size={18}/>}
@@ -217,13 +238,27 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
               <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute, marginBottom: 4 }}>
                 Valor invertido
               </div>
+              {/* Show whichever currency the user picked in the
+                  balance card pill, so cartera and balance feel
+                  consistent. The other currency is shown small
+                  below as reference. */}
               <div style={{
                 fontFamily: FONT.display, fontSize: 22, fontWeight: 700, color: T.text,
                 letterSpacing: -0.6, fontVariantNumeric: "tabular-nums",
               }}>
-                US$ {fmtMoney(portfolio.totalUsd, "USD")}
+                {ccy === "ARS"
+                  ? `$${fmtMoney(portfolio.totalArs, "ARS")}`
+                  : `US$${fmtMoney(portfolio.totalUsd, "USD")}`}
               </div>
-              <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+              <div style={{
+                fontFamily: FONT.mono, fontSize: 12, color: T.textMute, marginTop: 2,
+                fontVariantNumeric: "tabular-nums",
+              }}>
+                {ccy === "ARS"
+                  ? `≈ US$${fmtMoney(portfolio.totalUsd, "USD")}`
+                  : `≈ $${fmtMoney(portfolio.totalArs, "ARS")}`}
+              </div>
+              <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                 <Pill T={T} color={T.accent} bg={T.accentSoft}>+2.34%</Pill>
                 <Pill T={T}>30 días</Pill>
               </div>

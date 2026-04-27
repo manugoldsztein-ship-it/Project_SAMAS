@@ -18,7 +18,7 @@ import { SamasTabBar } from "./shared.jsx";
 import { WalletPage } from "./Wallet.jsx";
 import { BrokerShell } from "./Broker.jsx";
 
-export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleDark }) {
+export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleDark, appShell = "principal", onChangeAppShell }) {
   const [tab, setTab] = useState("wallet");
   // balanceVisible is lifted here (not inside WalletPage) so the
   // user's choice persists when they navigate to another tab and
@@ -64,6 +64,8 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
             setBalanceVisible={setBalanceVisible}
             isDark={isDark}
             onToggleDark={onToggleDark}
+            appShell={appShell}
+            onChangeAppShell={onChangeAppShell}
           />
         );
       case "social":

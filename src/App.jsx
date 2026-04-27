@@ -5253,7 +5253,7 @@ function SessionsSection({ C }) {
   );
 }
 
-function ProfileSheet({ displayUser, uiMode, onChangeUiMode, onResetAccount, onResetPin, onClose, onLogout, onToggleDark, isDark, lang, setLang, C }) {
+function ProfileSheet({ displayUser, uiMode, onChangeUiMode, onResetAccount, onResetPin, onClose, onLogout, onToggleDark, isDark, lang, setLang, appShell, onChangeAppShell, C }) {
   useEscapeKey(onClose);
   // U = the authenticated user (fallback to DEMO_USER shape if no real
   // one is passed; shouldn't happen once auth gates are wired).
@@ -5339,6 +5339,28 @@ function ProfileSheet({ displayUser, uiMode, onChangeUiMode, onResetAccount, onR
           </div>
           <div style={{ width:40, height:22, borderRadius:11, background:isDark?C.accent:C.creamDk, border:"1.5px solid "+C.border, position:"relative" }}><div style={{ position:"absolute", top:2, left:isDark?18:2, width:14, height:14, borderRadius:"50%", background:isDark?"#fff":C.textLt, transition:"left 0.2s" }}/></div>
         </button>
+        )}
+
+        {/* Volver a Principal — only visible when running in Pro shell.
+            Lets the Pro user switch back to the new wallet-first UI. */}
+        {!showSettings && onChangeAppShell && appShell === "pro" && (
+          <button
+            onClick={() => { onChangeAppShell("principal"); onClose(); }}
+            style={{ width:"100%", background:C.creamDk, border:"1.5px solid "+C.border, borderRadius:14, padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", marginBottom:8, textAlign:"left" }}
+          >
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <div style={{ width:36, height:36, borderRadius:10, background:C.accent+"22", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 7v11a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2H5a2 2 0 0 1-2-2zm0 0a2 2 0 0 1 2-2h12"/>
+                </svg>
+              </div>
+              <div>
+                <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Volver a Principal</div>
+                <div style={{ fontSize:11, color:C.textLt }}>Vista simple con billetera, tarjeta y portafolio</div>
+              </div>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
         )}
 
         {/* Settings entry row (root view only) */}
@@ -5591,7 +5613,7 @@ function ProfileSheet({ displayUser, uiMode, onChangeUiMode, onResetAccount, onR
 // MOBILE PHONE WRAPPER
 // ============================================================
 function MobileApp({ appState, handlers, C }) {
-  const { loggedIn, needsAuth, needsMfa, mfaPassed, setMfaPassed, needsPinGate, needsWelcome, uiMode, displayUser, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
+  const { loggedIn, needsAuth, needsMfa, mfaPassed, setMfaPassed, needsPinGate, needsWelcome, uiMode, displayUser, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker, appShell, setAppShell } = appState;
   const { handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte } = handlers;
   // Modal state hoisted out of PagePortfolio so the wizard's absolute
   // overlay covers the full phone frame (otherwise it was clipped by the
@@ -5696,7 +5718,7 @@ function MobileApp({ appState, handlers, C }) {
         <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:110, height:26, background:"#0a0a0a", borderRadius:"0 0 16px 16px", zIndex:30 }}/>
       )}
       {showTutorial && <OnboardingTutorial onClose={finishTutorial} onComplete={finishTutorial} setTab={setTab} setShowUSD={setShowUSD} setShowProfile={setShowProfile} currentTab={tab} uiMode={uiMode} C={C}/>}
-      {showProfile && <ProfileSheet displayUser={displayUser} uiMode={uiMode} onChangeUiMode={handlers.handleChangeUiMode} onResetAccount={handlers.handleResetAccount} onResetPin={handlers.handleResetPin} onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} C={C}/>}
+      {showProfile && <ProfileSheet displayUser={displayUser} uiMode={uiMode} onChangeUiMode={handlers.handleChangeUiMode} onResetAccount={handlers.handleResetAccount} onResetPin={handlers.handleResetPin} onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} appShell={appShell} onChangeAppShell={setAppShell} C={C}/>}
       {toast && <div className="samas-slide-up" style={{ position:"absolute", top:34, left:14, right:14, zIndex:50, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 14px", fontSize:12, fontWeight:700, boxShadow:"0 10px 30px rgba(0,0,0,0.35)" }}>{toast.msg}</div>}
       {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} uiMode={uiMode} lang={lang} C={C}/>}
       {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} displayUser={displayUser} storedPinHash={sbProfile?.pin_hash || null} C={C}/>}
@@ -5853,7 +5875,7 @@ function MobileApp({ appState, handlers, C }) {
 // WEB DASHBOARD LAYOUT
 // ============================================================
 function WebDashboard({ appState, handlers, C }) {
-  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, needsAuth, needsMfa, mfaPassed, setMfaPassed, needsPinGate, needsWelcome, uiMode, displayUser, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, showUSD, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker } = appState;
+  const { holdings, stopLosses, priceAlerts, balance, orders, selectedAsset, pendingTrade, toast, isDark, loggedIn, needsAuth, needsMfa, mfaPassed, setMfaPassed, needsPinGate, needsWelcome, uiMode, displayUser, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, showUSD, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker, appShell, setAppShell } = appState;
   const { setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, setShowProfile, setIsDark, setShowUSD, setLang, finishTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, handleDeposit, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte } = handlers;
   const [sideTab, setSideTab] = useState("portfolio");
   // Objectives modal lives at dashboard level for the same reason as in
@@ -5926,7 +5948,7 @@ function WebDashboard({ appState, handlers, C }) {
         <div style={{ flex:1, position:"relative", minWidth:0 }}>
           {selectedAsset && <AssetDetail asset={selectedAsset} holding={getH(selectedAsset.ticker)} stopLoss={getSL(selectedAsset.ticker)} priceAlert={getA(selectedAsset.ticker)} balance={balance} isInWatchlist={watchlist.includes(selectedAsset.ticker)} onToggleWatchlist={toggleWatchlist} onClose={() => setSelected(null)} onTrade={handleTrade} onSetStopLoss={handleSetSL} onSetAlert={handleSetAlert} uiMode={uiMode} lang={lang} C={C}/>}
           {pendingTrade && <ConfirmTradeModal trade={pendingTrade} onConfirm={executeTrade} onCancel={() => setPending(null)} isWeb={true} displayUser={displayUser} storedPinHash={sbProfile?.pin_hash || null} C={C}/>}
-          {showProfile && <ProfileSheet displayUser={displayUser} uiMode={uiMode} onChangeUiMode={handlers.handleChangeUiMode} onResetAccount={handlers.handleResetAccount} onResetPin={handlers.handleResetPin} onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} C={C}/>}
+          {showProfile && <ProfileSheet displayUser={displayUser} uiMode={uiMode} onChangeUiMode={handlers.handleChangeUiMode} onResetAccount={handlers.handleResetAccount} onResetPin={handlers.handleResetPin} onClose={() => setShowProfile(false)} onLogout={handleLogout} onToggleDark={() => setIsDark(d => !d)} isDark={isDark} lang={lang} setLang={setLang} appShell={appShell} onChangeAppShell={setAppShell} C={C}/>}
           {toast && <div className="samas-slide-up" style={{ position:"fixed", top:70, left:"50%", transform:"translateX(-50%)", zIndex:99, background:toast.color, color:"#fff", borderRadius:14, padding:"10px 20px", fontSize:13, fontWeight:700, boxShadow:"0 8px 32px rgba(0,0,0,0.3)" }}>{toast.msg}</div>}
           <div style={{ overflowY:"auto", height:"calc(100vh - 56px)" }}>{renderPage()}</div>
           {showObjectives && <ObjectivesWizard onClose={() => setShowObjectives(false)} onSave={setSavedPlan} savedPlan={savedPlan} C={C}/>}
@@ -6118,6 +6140,12 @@ export default function SAMASApp() {
   // iPhone preview keeps working). Either platform can switch via the
   // toggle bar at the top of the app.
   const [viewMode, setViewMode]       = usePersistedState("samas_view_mode", isNativeApp ? "v2" : "mobile");
+  // Principal vs Pro shell. "principal" renders the new v2 SamasShell
+  // (wallet-first design). "pro" renders the legacy MobileApp with the
+  // full advanced UI (PRO badge, FX strip, distribución, posiciones
+  // table, etc.). Persisted in localStorage so the choice survives
+  // reloads. Default: "principal" — the new shell.
+  const [appShell, setAppShell] = usePersistedState("samas_app_shell", "principal");
   const [finnhubKey, setFinnhubKey]   = useState(() => loadKey());
   const [emailjsCfg, setEmailjsCfg]   = useState(() => loadEmailjsConfig());
   // Anthropic (Claude) — BYOK. Same pattern as Finnhub: localStorage-backed,
@@ -6766,7 +6794,7 @@ export default function SAMASApp() {
     showToast(`$${fN(amount)} acreditados via ${methodLabel}`, C.green);
   };
 
-  const appState = { isDark, loggedIn, needsAuth, needsMfa, mfaPassed, setMfaPassed, needsPinGate, needsWelcome, uiMode, displayUser, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker };
+  const appState = { isDark, loggedIn, needsAuth, needsMfa, mfaPassed, setMfaPassed, needsPinGate, needsWelcome, uiMode, displayUser, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker, appShell, setAppShell };
   const handlers = { handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, handleSavePin, handleChangeUiMode, handleResetAccount, handleResetPin, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte };
 
   const outerBg = isDark ? "#080808" : "#050505";
@@ -6832,17 +6860,49 @@ export default function SAMASApp() {
 
       {showShortcuts && <ShortcutsHelpModal onClose={() => setShowShortcuts(false)} C={C}/>}
 
-      {/* v2 shell (Wallet-first) renders in two cases:
-            - native (iPhone testers see the new design by default)
-            - web preview, when the user picks "SAMAS v2" from the toggle
-          On native we render Shell directly — its position:absolute
-          inset:0 fills the safe-area-padded #root box. On web preview
-          we wrap it in a 390x800 phone-shape frame so it reads like
-          the existing Movil preview. */}
-      {(isNativeApp || viewMode === "v2") && loggedIn ? (
+      {/* Render decision tree:
+          1. NOT logged in → auth / PIN / MFA / welcome screens
+             (works on native + web — fixes the legacy-UI flash on boot)
+          2. Logged in, native or v2 web preview, appShell === "principal"
+             → new v2 SamasShell (wallet-first)
+          3. Logged in, appShell === "pro" → legacy MobileApp (advanced UI)
+          4. Web mobile preview → MobileApp wrapped in phone frame
+          5. Web desktop → WebDashboard */}
+      {!loggedIn ? (
+        <div style={{ display:"flex", justifyContent:"center", alignItems:"center", minHeight: isNativeApp ? "100%" : "calc(100vh - 60px)" }}>
+          <div style={{ width: isNativeApp ? "100%" : 420, height: isNativeApp ? "100%" : 620, position:"relative", borderRadius: isNativeApp ? 0 : 20, overflow:"hidden" }}>
+            {needsAuth && <SupabaseAuthFlow C={C} session={sbSession} profile={sbProfile} onVerified={refetchProfile}/>}
+            {needsMfa && <MfaChallengeView C={C} onSuccess={() => setMfaPassed(true)} onForgot={handleLogout}/>}
+            {needsPinGate && (
+              <PinLockScreen
+                C={C}
+                storedPinHash={sbProfile?.pin_hash || null}
+                onSavePin={handleSavePin}
+                userEmail={sbSession?.user?.email}
+                onSuccess={() => setPinUnlocked(true)}
+                onForgot={handleLogout}
+              />
+            )}
+            {needsWelcome && (
+              <WelcomeChooser
+                C={C}
+                userId={sbSession?.user?.id}
+                onDone={() => refetchProfile()}
+              />
+            )}
+          </div>
+        </div>
+      ) : (isNativeApp || viewMode === "v2") && appShell === "principal" ? (
         isNativeApp ? (
           <ErrorBoundary>
-            <SamasShell user={displayUser} isDark={isDark} isNativeApp={true} onToggleDark={() => setIsDark(d => !d)}/>
+            <SamasShell
+              user={displayUser}
+              isDark={isDark}
+              isNativeApp={true}
+              onToggleDark={() => setIsDark(d => !d)}
+              appShell={appShell}
+              onChangeAppShell={setAppShell}
+            />
           </ErrorBoundary>
         ) : (
           <div style={{ display:"flex", justifyContent:"center", padding: "20px" }}>
@@ -6854,43 +6914,30 @@ export default function SAMASApp() {
               boxShadow: "0 40px 80px rgba(0,0,0,0.7)",
             }}>
               <ErrorBoundary>
-                <SamasShell user={displayUser} isDark={isDark} isNativeApp={false} onToggleDark={() => setIsDark(d => !d)}/>
+                <SamasShell
+                  user={displayUser}
+                  isDark={isDark}
+                  isNativeApp={false}
+                  onToggleDark={() => setIsDark(d => !d)}
+                  appShell={appShell}
+                  onChangeAppShell={setAppShell}
+                />
               </ErrorBoundary>
             </div>
           </div>
         )
-      ) : (isNativeApp || viewMode === "mobile") ? (
+      ) : (isNativeApp || viewMode === "mobile" || appShell === "pro") ? (
         <div style={{ display:"flex", justifyContent:"center", padding: isNativeApp ? 0 : "20px" }}>
-          <ErrorBoundary><MobileApp appState={appState} handlers={handlers} C={C}/></ErrorBoundary>
+          <ErrorBoundary>
+            <MobileApp
+              appState={{ ...appState, appShell, setAppShell }}
+              handlers={handlers}
+              C={C}
+            />
+          </ErrorBoundary>
         </div>
       ) : (
-        loggedIn ? (
-          <ErrorBoundary><WebDashboard appState={appState} handlers={handlers} C={C}/></ErrorBoundary>
-        ) : (
-          <div style={{ display:"flex", justifyContent:"center", alignItems:"center", minHeight:"calc(100vh - 60px)" }}>
-            <div style={{ width:420, height:620, position:"relative", borderRadius:20, overflow:"hidden" }}>
-              {needsAuth && <SupabaseAuthFlow C={C} session={sbSession} profile={sbProfile} onVerified={refetchProfile}/>}
-              {needsMfa && <MfaChallengeView C={C} onSuccess={() => setMfaPassed(true)} onForgot={handleLogout}/>}
-              {needsPinGate && (
-                <PinLockScreen
-                  C={C}
-                  storedPinHash={sbProfile?.pin_hash || null}
-                  onSavePin={handleSavePin}
-                  userEmail={sbSession?.user?.email}
-                  onSuccess={() => setPinUnlocked(true)}
-                  onForgot={handleLogout}
-                />
-              )}
-              {needsWelcome && (
-                <WelcomeChooser
-                  C={C}
-                  userId={sbSession?.user?.id}
-                  onDone={() => refetchProfile()}
-                />
-              )}
-            </div>
-          </div>
-        )
+        <ErrorBoundary><WebDashboard appState={appState} handlers={handlers} C={C}/></ErrorBoundary>
       )}
     </div>
   );
