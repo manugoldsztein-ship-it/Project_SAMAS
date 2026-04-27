@@ -37,6 +37,7 @@ import {
   registerPush, getPushPermission, clearPushLocal,
 } from "../lib/push.js";
 import { supabase } from "../lib/supabase.js";
+import { LANGUAGES } from "../lib/languages.js";
 import { toast } from "./toast.jsx";
 
 // localStorage flag for the Pro mode toggle. Default ON — power users
@@ -44,7 +45,7 @@ import { toast } from "./toast.jsx";
 // out of the box. Flip OFF for a simpler beginner view.
 const PRO_KEY = "samas_v2_pro_mode";
 
-export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleDark, onLogout }) {
+export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleDark, onLogout, lang = "es", setLang }) {
   const [tab, setTab] = useState("wallet");
   // balanceVisible is lifted here (not inside WalletPage) so the
   // user's choice persists when they navigate to another tab and
@@ -181,6 +182,8 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
           onLogout={onLogout}
           onClose={() => setShowSettings(false)}
           isNativeApp={isNativeApp}
+          lang={lang}
+          setLang={setLang}
         />
       )}
     </div>
@@ -193,9 +196,13 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
 // full ProfileSheet from legacy, it's a focused settings panel for
 // the toggles the user actually flips often.
 // ----------------------------------------------------------
-function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onLogout, onClose, isNativeApp }) {
+function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onLogout, onClose, isNativeApp, lang = "es", setLang }) {
   const [show2FA, setShow2FA] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
+  // Language picker is collapsed by default; tapping the row expands it
+  // inline so we don't open another modal layer on top of this one.
+  const [showLang, setShowLang] = useState(false);
+  const activeLanguage = LANGUAGES.find((l) => l.code === lang) || LANGUAGES[0];
   // Biometric state — capability detection on mount + current opt-in
   // pref. The toggle is hidden entirely on devices without biometric
   // (e.g. web preview, simulator without Face ID configured).
@@ -385,6 +392,101 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
             value={isDark}
             onChange={() => onToggleDark()}
           />
+        )}
+
+        {/* Language row + inline picker. The picker stays in this same
+            sheet (no second modal layer) — tapping the row rotates the
+            chevron and reveals the language list right below. Selecting
+            a language collapses the list and persists via setLang
+            (which already writes profiles.lang on the App.jsx side). */}
+        {setLang && (
+          <>
+            <button
+              onClick={() => setShowLang((v) => !v)}
+              style={{
+                width: "100%", padding: "12px 14px", borderRadius: 14,
+                marginBottom: 8,
+                background: showLang ? T.accent + "18" : T.surface,
+                border: `1px solid ${showLang ? T.accent + "55" : T.border}`,
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                cursor: "pointer", textAlign: "left",
+                fontFamily: "inherit",
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text }}>
+                  Idioma
+                </div>
+                <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+                  {activeLanguage.label}
+                </div>
+              </div>
+              <svg
+                width="14" height="14" viewBox="0 0 24 24"
+                fill="none" stroke={T.textMute} strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round"
+                style={{
+                  transform: showLang ? "rotate(90deg)" : "rotate(0deg)",
+                  transition: "transform 200ms",
+                }}
+              >
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+            {showLang && (
+              <div style={{
+                background: T.surface, borderRadius: 12,
+                border: `1px solid ${T.border}`,
+                padding: 6, marginBottom: 8,
+              }}>
+                {LANGUAGES.map((l) => {
+                  const active = l.code === lang;
+                  return (
+                    <button
+                      key={l.code}
+                      onClick={() => { setLang(l.code); setShowLang(false); }}
+                      style={{
+                        width: "100%",
+                        background: active ? T.accent + "22" : "transparent",
+                        border: "none", borderRadius: 9,
+                        padding: "11px 12px",
+                        display: "flex", alignItems: "center", gap: 10,
+                        cursor: "pointer", fontFamily: "inherit",
+                        textAlign: "left", marginBottom: 2,
+                      }}
+                    >
+                      <div style={{
+                        width: 28, height: 28, borderRadius: 6,
+                        background: T.bgElev,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontFamily: FONT.sans,
+                        fontSize: 10, fontWeight: 800,
+                        color: T.textMute, letterSpacing: 0.5,
+                      }}>
+                        {l.flag}
+                      </div>
+                      <span style={{
+                        fontFamily: FONT.sans,
+                        fontSize: 13,
+                        fontWeight: active ? 700 : 500,
+                        color: active ? T.accent : T.text,
+                        flex: 1,
+                      }}>
+                        {l.label}
+                      </span>
+                      {active && (
+                        <svg width="14" height="14" viewBox="0 0 24 24"
+                          fill="none" stroke={T.accent} strokeWidth="3"
+                          strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="6 12 10 16 18 8" />
+                        </svg>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
 
         {/* Face ID / Touch ID — when the device doesn't have biometry

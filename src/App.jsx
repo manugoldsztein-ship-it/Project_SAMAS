@@ -32,6 +32,7 @@ import { MfaEnrollSection, MfaChallengeView } from "./auth/Mfa.jsx";
 import { fetchNewsForTicker, fetchNewsForTickers, relativeTime } from "./lib/news.js";
 import { isNative as isNativeApp, hapticNative, updateNativeTheme, hideNativeSplash } from "./lib/native.js";
 import { isPushEnabled, registerPush, setupPushListeners, clearPushLocal } from "./lib/push.js";
+import { LANGUAGES, RTL_LANGS } from "./lib/languages.js";
 // Welcome chooser: shown only on first session when profiles.ui_mode
 // is null. User picks "principiante" or "profesional" and the rest
 // of the app reads that choice to decide which surfaces to show.
@@ -234,24 +235,8 @@ function registerUser({ name, email, pin }) {
 // ============================================================
 // LANGUAGES / i18n
 // ============================================================
-const LANGUAGES = [
-  { code:"es", label:"Español",   flag:"ES" },
-  { code:"en", label:"English",   flag:"EN" },
-  { code:"pt", label:"Português", flag:"PT" },
-  { code:"it", label:"Italiano",  flag:"IT" },
-  { code:"fr", label:"Français",  flag:"FR" },
-  { code:"de", label:"Deutsch",   flag:"DE" },
-  { code:"zh", label:"中文",       flag:"ZH" },
-  { code:"ru", label:"Русский",   flag:"RU" },
-  { code:"ja", label:"日本語",     flag:"JA" },
-  { code:"he", label:"עברית",     flag:"HE" },
-  { code:"ar", label:"العربية",   flag:"AR" },
-  { code:"ko", label:"한국어",     flag:"KO" },
-];
-
-// Languages that render right-to-left. Used to flip `dir` on the document
-// root so Hebrew / Arabic read naturally.
-const RTL_LANGS = ["he", "ar"];
+// LANGUAGES + RTL_LANGS now live in src/lib/languages.js so the v2
+// Shell can pull them in. See the import block at the top of the file.
 
 const TRANSLATIONS = {
   es: {
@@ -7015,6 +7000,8 @@ export default function SAMASApp() {
               isNativeApp={true}
               onToggleDark={() => setIsDark(d => !d)}
               onLogout={handleLogout}
+              lang={lang}
+              setLang={setLang}
             />
           </ErrorBoundary>
         ) : (
@@ -7033,6 +7020,8 @@ export default function SAMASApp() {
                   isNativeApp={false}
                   onToggleDark={() => setIsDark(d => !d)}
                   onLogout={handleLogout}
+                  lang={lang}
+                  setLang={setLang}
                 />
               </ErrorBoundary>
             </div>
