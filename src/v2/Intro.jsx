@@ -13,7 +13,7 @@
 // the brand mark reads cleanly against it.
 // ============================================================
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { AnimatedLogoMark, playIntroSound } from "./SamasLogo.jsx";
 
 // Tightened from ~2.7s to ~1.6s total. Boot already costs ~10s on
@@ -34,13 +34,31 @@ export function Intro({ onDone }) {
   const [showRing, setShowRing] = useState(false);
   const [fading, setFading] = useState(false);
 
+  // Capture the latest onDone in a ref so we don't have to put it in
+  // the effect's dependency array. Caller is App.jsx where `dismissIntro`
+  // is a fresh function reference on every render — without the ref +
+  // empty deps, every parent re-render during the 1.7s intro would
+  // tear down + re-run the effect, replaying the sound each time
+  // (which is exactly what was happening: 3× sound on cold launch).
+  const onDoneRef = useRef(onDone);
+  useEffect(() => { onDoneRef.current = onDone; }, [onDone]);
+
+  // Strict-mode + cold-mount guard: even with empty deps, React's
+  // dev-mode StrictMode will invoke an effect twice. We track whether
+  // the sound has been played in this Intro instance and short-circuit.
+  const playedSoundRef = useRef(false);
+
   useEffect(() => {
     const timers = [];
 
     // Try to play the audio early — if the WebView's autoplay policy
     // blocks it we silently no-op. iOS WebView typically allows it
     // after the first user gesture (PIN entry counts).
-    timers.push(setTimeout(() => playIntroSound(), TIMINGS.startTrace));
+    timers.push(setTimeout(() => {
+      if (playedSoundRef.current) return;
+      playedSoundRef.current = true;
+      playIntroSound();
+    }, TIMINGS.startTrace));
 
     // Kick off the stroke-trace immediately. The CSS transition on
     // stroke-dashoffset handles the actual animation; we just flip
@@ -55,10 +73,10 @@ export function Intro({ onDone }) {
 
     // Begin fade-out → unmount.
     timers.push(setTimeout(() => setFading(true), TIMINGS.startFade));
-    timers.push(setTimeout(() => { if (onDone) onDone(); }, TIMINGS.done));
+    timers.push(setTimeout(() => { onDoneRef.current?.(); }, TIMINGS.done));
 
     return () => timers.forEach(clearTimeout);
-  }, [onDone]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- onDone via ref
 
   // Tap-to-skip: if the user has seen this animation a thousand times,
   // they don't need 1.6s every cold launch. One tap dismisses.

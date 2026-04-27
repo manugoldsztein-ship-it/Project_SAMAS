@@ -106,6 +106,7 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
           isNativeApp={isNativeApp}
           proMode={proMode}
           onBack={() => setTab("wallet")}
+          lang={lang}
         />
       </Suspense>
     );
@@ -121,6 +122,7 @@ export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleD
           T={T}
           isNativeApp={isNativeApp}
           onBack={() => setTab("wallet")}
+          lang={lang}
         />
       </Suspense>
     );

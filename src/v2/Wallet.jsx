@@ -153,7 +153,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
             fontFamily: FONT.sans, fontSize: 12, color: T.textMute,
             marginBottom: 4, letterSpacing: 0.3,
           }}>
-            BALANCE TOTAL · {ccy}
+            {tr("wallet.balance_total", lang)} · {ccy}
           </div>
 
           <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 8 }}>
@@ -184,7 +184,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
                 ↑ {fmtPct(1.84)}
               </span>
               <span style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute }}>
-                hoy · {balanceVisible ? `+US$${(portfolio.totalUsd * 0.0184).toFixed(2)}` : "••••"}
+                {tr("wallet.today", lang)} · {balanceVisible ? `+US$${(portfolio.totalUsd * 0.0184).toFixed(2)}` : "••••"}
               </span>
             </div>
           )}
@@ -196,10 +196,10 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
         margin: "20px 16px 0",
         display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8,
       }}>
-        <Action T={T} icon={<Ico.Send size={18}/>}   label="Enviar"  onClick={() => setActiveModal("withdraw")} />
-        <Action T={T} icon={<Ico.Recv size={18}/>}   label="Recibir" onClick={() => setActiveModal("deposit")} />
-        <Action T={T} icon={<Ico.Repeat size={18}/>} label="Cambiar" onClick={() => toast.info("Cambio ARS↔USD próximamente.")} />
-        <Action T={T} icon={<Ico.Add size={18}/>}    label="Cargar"  onClick={() => setActiveModal("deposit")} />
+        <Action T={T} icon={<Ico.Send size={18}/>}   label={tr("wallet.action.send", lang)}  onClick={() => setActiveModal("withdraw")} />
+        <Action T={T} icon={<Ico.Recv size={18}/>}   label={tr("wallet.action.receive", lang)} onClick={() => setActiveModal("deposit")} />
+        <Action T={T} icon={<Ico.Repeat size={18}/>} label={tr("wallet.action.swap", lang)} onClick={() => toast.info(tr("wallet.swap_soon", lang))} />
+        <Action T={T} icon={<Ico.Add size={18}/>}    label={tr("wallet.action.deposit", lang)}  onClick={() => setActiveModal("deposit")} />
       </div>
 
       {/* ---------- FX quotes ---------- */}
@@ -216,7 +216,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
       {/* ---------- portfolio peek ---------- */}
       {portfolio && portfolio.totalUsd > 0 && (
         <div style={{ margin: "28px 16px 0" }}>
-          <SectionHead T={T} title="Mi cartera" action="Ver todo" onAction={() => onTab && onTab("broker")} />
+          <SectionHead T={T} title={tr("wallet.section.portfolio", lang)} action={tr("wallet.see_all", lang)} onAction={() => onTab && onTab("broker")} />
           <div style={{
             marginTop: 12, padding: 16, borderRadius: 22,
             background: T.surface, border: `1px solid ${T.border}`,
@@ -224,7 +224,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
           }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute, marginBottom: 4 }}>
-                Valor invertido
+                {tr("wallet.value_invested", lang)}
               </div>
               {/* Show whichever currency the user picked in the
                   balance card pill, so cartera and balance feel
@@ -248,7 +248,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
               </div>
               <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                 <Pill T={T} color={T.accent} bg={T.accentSoft}>+2.34%</Pill>
-                <Pill T={T}>30 días</Pill>
+                <Pill T={T}>{tr("wallet.last_30d", lang)}</Pill>
               </div>
             </div>
             <Sparkline data={SAMAS_SPARKS.bull} color={T.accent} w={90} h={42} sw={2}/>
@@ -258,7 +258,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
 
       {/* ---------- aporte mensual ---------- */}
       <div style={{ margin: "28px 16px 0" }}>
-        <SectionHead T={T} title="Aporte mensual" />
+        <SectionHead T={T} title={tr("wallet.section.aporte", lang)} />
         <button
           onClick={() => setActiveModal("aporte")}
           style={{
@@ -317,7 +317,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
 
       {/* ---------- movimientos ---------- */}
       <div style={{ margin: "28px 16px 0" }}>
-        <SectionHead T={T} title="Movimientos" action="Filtrar"/>
+        <SectionHead T={T} title={tr("wallet.section.txns", lang)} action={tr("wallet.filter", lang)}/>
         <div style={{
           marginTop: 12, borderRadius: 22, background: T.surface,
           border: `1px solid ${T.border}`, overflow: "hidden",

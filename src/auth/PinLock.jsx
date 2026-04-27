@@ -59,7 +59,11 @@ function Dot({ filled, C }) {
 
 function Pad({ C, value, onChange, error }) {
   const ref = useRef(null);
-  useEffect(() => { ref.current?.focus(); }, []);
+  // No auto-focus on mount: iOS would surface the keyboard immediately
+  // every time the PIN screen appears, which feels aggressive (the user
+  // just finished a login flow and gets a keyboard punched at them).
+  // The user can tap anywhere on the dots area to focus and start
+  // typing — handled by the onClick on the wrapper div below.
   return (
     <div
       onClick={() => ref.current?.focus()}

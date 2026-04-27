@@ -35,21 +35,24 @@ import { ObjectivesWizard } from "../ai/ObjectivesWizard.jsx";
 import { useEdgeSwipeBack } from "./useEdgeSwipeBack.js";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { toast } from "./toast.jsx";
+import { t as tr } from "../lib/i18n.js";
 
 // Sub-tabs metadata — drives both the bottom nav and the content
 // switch in the top-level <BrokerShell/> render.
+// Labels are looked up via tr(...) at render time so they re-translate
+// when the user changes language.
 const SUB_TABS = [
-  { id: "portafolio", label: "Portafolio", icon: Ico.Briefcase },
-  { id: "mercado",    label: "Mercado",    icon: Ico.Chart },
-  { id: "watchlist",  label: "Watchlist",  icon: Ico.Star },
-  { id: "ordenes",    label: "Órdenes",    icon: Ico.List },
+  { id: "portafolio", key: "broker.subnav.cartera", icon: Ico.Briefcase },
+  { id: "mercado",    key: "broker.subnav.market",  icon: Ico.Chart },
+  { id: "watchlist",  key: "broker.subnav.list",    icon: Ico.Star },
+  { id: "ordenes",    key: "broker.subnav.orders",  icon: Ico.List },
 ];
 
 // ----------------------------------------------------------
 // Top-level BrokerShell — replaces the main Shell entirely while
 // the user is inside Invertir.
 // ----------------------------------------------------------
-export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true }) {
+export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true, lang = "es" }) {
   const [tab, setTab] = useState("portafolio");
   const [selectedAsset, setSelectedAsset] = useState(null);
 
@@ -114,19 +117,35 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true }) 
   }, []);
 
   const refresh = useCallback(async () => {
-    try {
-      const [p, a, wl, o, al, st, f] = await Promise.all([
-        brokerApi.getPortfolio(),
-        brokerApi.getAssets(),
-        brokerApi.getWatchlists(),
-        brokerApi.getOrders({ status: "all" }),
-        brokerApi.getPriceAlerts(),
-        brokerApi.getStopLosses(),
-        brokerApi.getFx(),
-      ]);
-      setPortfolio(p); setAssets(a); setWatchlists(wl); setOrders(o);
-      setAlerts(al); setStops(st); setFx(f);
-    } catch (e) { console.error("[broker] load:", e); }
+    // Use allSettled so a single failed call (e.g. price_alerts table
+    // not yet migrated, FX endpoint down) doesn't blank the whole
+    // Broker shell. Each setter gets the resolved value or a sane
+    // default.
+    const results = await Promise.allSettled([
+      brokerApi.getPortfolio(),
+      brokerApi.getAssets(),
+      brokerApi.getWatchlists(),
+      brokerApi.getOrders({ status: "all" }),
+      brokerApi.getPriceAlerts(),
+      brokerApi.getStopLosses(),
+      brokerApi.getFx(),
+    ]);
+    const [pR, aR, wlR, oR, alR, stR, fR] = results;
+    const val = (r, fallback) => r.status === "fulfilled" ? r.value : fallback;
+    // Surface the rejected ones in the console so we still see real
+    // bugs while the UI keeps working.
+    results.forEach((r, i) => {
+      if (r.status === "rejected") {
+        console.warn(`[broker] load[${i}]:`, r.reason?.message || r.reason);
+      }
+    });
+    setPortfolio(val(pR, null));
+    setAssets(val(aR, []));
+    setWatchlists(val(wlR, []));
+    setOrders(val(oR, []));
+    setAlerts(val(alR, []));
+    setStops(val(stR, []));
+    setFx(val(fR, null));
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -253,7 +272,7 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true }) 
           Hidden while the keyboard is open so it doesn't sit on top of
           modal buttons (Cancelar / Guardar) when typing. */}
       {!keyboardOpen && (
-        <SubNav T={T} tab={tab} setTab={setTab} bottomInset={navBottom} />
+        <SubNav T={T} tab={tab} setTab={setTab} bottomInset={navBottom} lang={lang} />
       )}
 
       {/* ---------- asset sheet ---------- */}
@@ -302,7 +321,7 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true }) 
 // SubNav — bottom nav scoped to the Invertir section. Same shape as
 // SamasTabBar but with the broker-specific tab list.
 // ----------------------------------------------------------
-function SubNav({ T, tab, setTab, bottomInset }) {
+function SubNav({ T, tab, setTab, bottomInset, lang = "es" }) {
   return (
     <div style={{
       position: "absolute", left: 12, right: 12, bottom: bottomInset,
@@ -330,7 +349,7 @@ function SubNav({ T, tab, setTab, bottomInset }) {
               }} />
             )}
             <TabIco size={20} sw={active ? 2 : 1.7} />
-            <span>{t.label}</span>
+            <span>{tr(t.key, lang)}</span>
           </button>
         );
       })}

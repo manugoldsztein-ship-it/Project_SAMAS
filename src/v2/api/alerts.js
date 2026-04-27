@@ -95,6 +95,18 @@ export async function removePriceAlert(idOrTicker) {
   if (error) throw new Error(error.message);
 }
 
+// Detect "the price_alerts table doesn't exist" and degrade quietly.
+// In Supabase, a missing table comes back as code "42P01" or message
+// containing "schema cache". We don't want a missing migration to take
+// down the whole Broker shell — the rest of the app should still work
+// while the user runs the price_alerts.sql migration.
+function isMissingTableError(error) {
+  if (!error) return false;
+  if (error.code === "42P01") return true;
+  const msg = String(error.message || "").toLowerCase();
+  return msg.includes("does not exist") || msg.includes("schema cache");
+}
+
 /**
  * getPriceAlerts({ activeOnly }) — list alerts for the current user.
  *   Default activeOnly=true so the Órdenes tab shows only what's still
@@ -107,7 +119,13 @@ export async function getPriceAlerts({ activeOnly = true } = {}) {
     .order("created_at", { ascending: false });
   if (activeOnly) q = q.eq("active", true).is("fired_at", null);
   const { data, error } = await q;
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (isMissingTableError(error)) {
+      console.warn("[alerts] price_alerts table not migrated yet — returning []");
+      return [];
+    }
+    throw new Error(error.message);
+  }
   return (data || []).map(rowToAlert);
 }
 
@@ -122,6 +140,9 @@ export async function getFiredAlerts(limit = 20) {
     .not("fired_at", "is", null)
     .order("fired_at", { ascending: false })
     .limit(limit);
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (isMissingTableError(error)) return [];
+    throw new Error(error.message);
+  }
   return (data || []).map(rowToAlert);
 }

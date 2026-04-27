@@ -22,12 +22,15 @@ import { social as socialApi } from "./api/index.js";
 import { useEdgeSwipeBack } from "./useEdgeSwipeBack.js";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { setRefreshHandler, callRefreshFor } from "./refreshRegistry.js";
+import { t as tr } from "../lib/i18n.js";
 
+// SUB_TABS labels are looked up dynamically below so they re-translate
+// when the user changes language. We keep id + icon static here.
 const SUB_TABS = [
-  { id: "feed",     label: "Feed",     icon: Ico.Comment },
-  { id: "search",   label: "Buscar",   icon: Ico.Search  },
-  { id: "messages", label: "Mensajes", icon: Ico.Send    },
-  { id: "profile",  label: "Perfil",   icon: Ico.Users   },
+  { id: "feed",     key: "social.subnav.feed",     icon: Ico.Comment },
+  { id: "search",   key: "social.subnav.search",   icon: Ico.Search  },
+  { id: "messages", key: "social.subnav.messages", icon: Ico.Send    },
+  { id: "profile",  key: "social.subnav.profile",  icon: Ico.Users   },
 ];
 
 // ----------------------------------------------------------
@@ -35,7 +38,7 @@ const SUB_TABS = [
 // Exposed under the same name SocialPage so Shell.jsx doesn't need to
 // change its lazy import.
 // ----------------------------------------------------------
-export function SocialPage({ T, isNativeApp = false, onBack }) {
+export function SocialPage({ T, isNativeApp = false, onBack, lang = "es" }) {
   const [tab, setTab] = useState("feed");
   const navBottom = isNativeApp
     ? "calc(env(safe-area-inset-bottom) + 12px)"
@@ -91,9 +94,9 @@ export function SocialPage({ T, isNativeApp = false, onBack }) {
             <div style={{
               fontFamily: FONT.display, fontSize: 22, fontWeight: 700,
               color: T.text, letterSpacing: -0.4,
-            }}>Social</div>
+            }}>{tr("social.title", lang)}</div>
             <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute }}>
-              {SUB_TABS.find((t) => t.id === tab)?.label}
+              {tr(SUB_TABS.find((t) => t.id === tab)?.key || "social.subnav.feed", lang)}
             </div>
           </div>
         </div>
@@ -106,14 +109,14 @@ export function SocialPage({ T, isNativeApp = false, onBack }) {
         WebkitOverflowScrolling: "touch",
       }}>
         {ptrIndicator}
-        {tab === "feed"     && <FeedView T={T} />}
-        {tab === "search"   && <SearchView T={T} />}
-        {tab === "messages" && <MessagesView T={T} />}
-        {tab === "profile"  && <ProfileView T={T} />}
+        {tab === "feed"     && <FeedView T={T} lang={lang} />}
+        {tab === "search"   && <SearchView T={T} lang={lang} />}
+        {tab === "messages" && <MessagesView T={T} lang={lang} />}
+        {tab === "profile"  && <ProfileView T={T} lang={lang} />}
       </div>
 
       {/* Bottom nav */}
-      <SocialNav T={T} tab={tab} setTab={setTab} bottomInset={navBottom} />
+      <SocialNav T={T} tab={tab} setTab={setTab} bottomInset={navBottom} lang={lang} />
     </div>
   );
 }
@@ -121,7 +124,7 @@ export function SocialPage({ T, isNativeApp = false, onBack }) {
 // ----------------------------------------------------------
 // SocialNav — same shape as the broker SubNav.
 // ----------------------------------------------------------
-function SocialNav({ T, tab, setTab, bottomInset }) {
+function SocialNav({ T, tab, setTab, bottomInset, lang = "es" }) {
   return (
     <div style={{
       position: "absolute", left: 12, right: 12, bottom: bottomInset,
@@ -149,7 +152,7 @@ function SocialNav({ T, tab, setTab, bottomInset }) {
               }} />
             )}
             <TabIco size={20} sw={active ? 2 : 1.7} />
-            <span>{t.label}</span>
+            <span>{tr(t.key, lang)}</span>
           </button>
         );
       })}
@@ -160,13 +163,14 @@ function SocialNav({ T, tab, setTab, bottomInset }) {
 // ============================================================
 // FEED — top tabs (Siguiendo / Para vos / Trades) + compose + cards
 // ============================================================
+// Keys looked up via tr(...) below so they re-translate live.
 const FEED_TABS = [
-  { id: "following", label: "Siguiendo" },
-  { id: "for_you",   label: "Para vos"  },
-  { id: "trades",    label: "Trades"    },
+  { id: "following", key: "social.tab.following" },
+  { id: "for_you",   key: "social.tab.for_you"  },
+  { id: "trades",    key: "social.tab.trades"    },
 ];
 
-function FeedView({ T }) {
+function FeedView({ T, lang = "es" }) {
   const [tab, setTab] = useState("for_you");
   const [posts, setPosts] = useState([]);
   const [me, setMe] = useState(null);
@@ -234,7 +238,7 @@ function FeedView({ T }) {
               border: active ? `1px solid ${T.border}` : "1px solid transparent",
               color: active ? T.text : T.textMute,
               fontFamily: FONT.sans, fontSize: 13, fontWeight: 600, cursor: "pointer",
-            }}>{t.label}</button>
+            }}>{tr(t.key, lang)}</button>
           );
         })}
       </div>
@@ -253,7 +257,7 @@ function FeedView({ T }) {
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value.slice(0, 280))}
-              placeholder="¿Qué pensás del mercado hoy?"
+              placeholder={tr("social.compose_ph", lang)}
               rows={3}
               style={{
                 width: "100%", boxSizing: "border-box",
@@ -278,7 +282,7 @@ function FeedView({ T }) {
                   cursor: busy || !body.trim() ? "default" : "pointer",
                   opacity: busy ? 0.6 : 1,
                 }}
-              >{busy ? "Publicando..." : "Publicar"}</button>
+              >{busy ? "…" : tr("social.publish", lang)}</button>
             </div>
             {err && <div style={{ marginTop: 8, color: T.danger, fontFamily: FONT.sans, fontSize: 12 }}>{err}</div>}
           </div>
@@ -316,7 +320,7 @@ function FeedView({ T }) {
 // ============================================================
 // SEARCH — find users by handle / name, follow inline
 // ============================================================
-function SearchView({ T }) {
+function SearchView({ T, lang = "es" }) {
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -416,7 +420,7 @@ function UserRow({ T, user, onToggleFollow }) {
 // ============================================================
 // MESSAGES — DM inbox (placeholder: needs real backend)
 // ============================================================
-function MessagesView({ T }) {
+function MessagesView({ T, lang = "es" }) {
   return (
     <div style={{
       padding: 32, paddingBottom: 110,
@@ -449,7 +453,7 @@ function MessagesView({ T }) {
 // ============================================================
 // PROFILE — your stuff: posts, saved, follow stats
 // ============================================================
-function ProfileView({ T }) {
+function ProfileView({ T, lang = "es" }) {
   const [me, setMe] = useState(null);
   const [myPosts, setMyPosts] = useState([]);
   const [following, setFollowing] = useState([]);
