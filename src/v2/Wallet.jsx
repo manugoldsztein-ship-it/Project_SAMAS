@@ -18,13 +18,13 @@
 // — keeps the section components focused on rendering.
 // ============================================================
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { FONT, fmtMoney, fmtPct } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import {
   Avatar, ChromeBtn, Pill, SectionHead, Sparkline, SAMAS_SPARKS,
 } from "./shared.jsx";
-import { wallet as walletApi, card as cardApi, broker as brokerApi } from "./api/index.js";
+import { wallet as walletApi, card as cardApi, broker as brokerApi, notifications as notifApi } from "./api/index.js";
 import { toast } from "./toast.jsx";
 import { setRefreshHandler } from "./refreshRegistry.js";
 import { t as tr } from "../lib/i18n.js";
@@ -40,7 +40,17 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
 
   // ----------- UI state -----------
   const [ccy, setCcy] = useState("ARS");
-  const [activeModal, setActiveModal] = useState(null); // "deposit" | "withdraw" | "card" | null
+  const [activeModal, setActiveModal] = useState(null); // "deposit" | "withdraw" | "card" | "aporte" | "inbox" | null
+  // Unread badge on the bell. Refetched on tab focus + after the
+  // inbox closes (since opening it marks rows read). Returns 0 when
+  // the table doesn't exist yet, so the dot just stays hidden until
+  // the migration is applied.
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    notifApi.getUnreadCount().then((n) => { if (alive) setUnread(n); }).catch(() => {});
+    return () => { alive = false; };
+  }, [activeModal]);
 
   // ----------- load everything in parallel -----------
   const refresh = useCallback(async () => {
@@ -106,7 +116,9 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
             </ChromeBtn>
           )}
           <ChromeBtn T={T}><Ico.Search size={18}/></ChromeBtn>
-          <ChromeBtn T={T} dot><Ico.Bell size={18}/></ChromeBtn>
+          <ChromeBtn T={T} dot={unread > 0} onClick={() => setActiveModal("inbox")}>
+            <Ico.Bell size={18}/>
+          </ChromeBtn>
         </div>
       </div>
 
@@ -395,8 +407,216 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
           onClose={() => setActiveModal(null)}
           onDone={() => { setActiveModal(null); refresh(); }} />
       )}
+      {activeModal === "inbox" && (
+        <NotificationsInbox T={T} lang={lang}
+          onClose={() => setActiveModal(null)} />
+      )}
     </div>
   );
+}
+
+// ----------------------------------------------------------
+// NotificationsInbox — bell-icon modal listing past pings
+// ----------------------------------------------------------
+// Bottom sheet that opens from the Wallet header. Loads the most recent
+// 50 notifications, groups them by Today / Earlier, renders each with
+// a kind-specific icon. On open we mark all unread items as read so
+// the bell badge clears — the user sees the bold/dot styling for one
+// frame before they fade, which is the same pattern Brubank / Ualá use.
+//
+// When the table doesn't exist yet, getNotifications returns [] and we
+// show the empty state — same gracefulfallback as alerts.js.
+// ----------------------------------------------------------
+function NotificationsInbox({ T, lang = "es", onClose }) {
+  const [items, setItems] = useState(null); // null=loading, [] = empty
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    notifApi.getNotifications({ limit: 50 }).then((rows) => {
+      if (!alive) return;
+      setItems(rows);
+      // Mark all read after we've rendered them once. The bell badge
+      // will reset on the next focus check (handled by the parent's
+      // unread-count effect that depends on activeModal).
+      if (rows.some((r) => !r.readAt)) {
+        notifApi.markAllRead().catch(() => {});
+      }
+    }).catch(() => { if (alive) setItems([]); });
+    return () => { alive = false; };
+  }, []);
+
+  // Group by Today / Earlier for visual scanability.
+  const groups = useMemo(() => {
+    if (!items) return null;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const todayMs = today.getTime();
+    const t = []; const e = [];
+    for (const n of items) (n.createdAt >= todayMs ? t : e).push(n);
+    return { today: t, earlier: e };
+  }, [items]);
+
+  async function clearAll() {
+    if (!items || items.length === 0) return;
+    if (busy) return;
+    setBusy(true);
+    try {
+      await Promise.all(items.map((n) => notifApi.deleteNotification(n.id)));
+      setItems([]);
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
+      position: "fixed", inset: 0, zIndex: 100,
+      background: "rgba(0,0,0,0.6)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+    }}>
+      <div style={{
+        width: "100%", maxWidth: 540, maxHeight: "92dvh",
+        background: T.bgElev, color: T.text,
+        borderTopLeftRadius: 28, borderTopRightRadius: 28,
+        border: `1px solid ${T.border}`, borderBottom: "none",
+        display: "flex", flexDirection: "column",
+        overflow: "hidden",
+      }}>
+        {/* Drag handle */}
+        <div style={{ display: "flex", justifyContent: "center", paddingTop: 14 }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: T.border }}/>
+        </div>
+        {/* Header */}
+        <div style={{
+          padding: "14px 20px 10px", display: "flex",
+          justifyContent: "space-between", alignItems: "center",
+        }}>
+          <div style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text }}>
+            {tr("notif.title", lang)}
+          </div>
+          {items && items.length > 0 && (
+            <button onClick={clearAll} disabled={busy} style={{
+              background: "transparent", border: "none",
+              color: T.textMute, fontFamily: FONT.sans, fontSize: 12, fontWeight: 600,
+              cursor: busy ? "default" : "pointer",
+            }}>{tr("notif.clear_all", lang)}</button>
+          )}
+        </div>
+        <div style={{
+          flex: 1, overflowY: "auto",
+          padding: "0 16px 24px",
+        }}>
+          {items === null ? (
+            <div style={{ padding: 40, textAlign: "center", color: T.textMute, fontFamily: FONT.sans, fontSize: 13 }}>
+              {tr("common.loading", lang)}
+            </div>
+          ) : items.length === 0 ? (
+            <div style={{
+              padding: "40px 20px", textAlign: "center",
+              fontFamily: FONT.sans, color: T.textMute,
+            }}>
+              <div style={{ fontSize: 36, marginBottom: 8 }}>🔔</div>
+              <div style={{ fontFamily: FONT.display, fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 4 }}>
+                {tr("notif.empty_title", lang)}
+              </div>
+              <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+                {tr("notif.empty_sub", lang)}
+              </div>
+            </div>
+          ) : (
+            <>
+              {groups.today.length > 0 && (
+                <NotifGroup T={T} label={tr("wallet.today", lang).toUpperCase()} items={groups.today} />
+              )}
+              {groups.earlier.length > 0 && (
+                <NotifGroup T={T} label={tr("notif.earlier", lang).toUpperCase()} items={groups.earlier} />
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NotifGroup({ T, label, items }) {
+  return (
+    <>
+      <div style={{
+        marginTop: 14, marginBottom: 8,
+        fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+        color: T.textMute, letterSpacing: 0.6,
+      }}>{label}</div>
+      <div style={{
+        background: T.surface, border: `1px solid ${T.border}`,
+        borderRadius: 14, overflow: "hidden",
+      }}>
+        {items.map((n, i) => (
+          <NotifRow key={n.id} T={T} n={n} isLast={i === items.length - 1} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function NotifRow({ T, n, isLast }) {
+  // Per-kind glyph + tint. New kinds fall through to a neutral system bell.
+  const meta = (() => {
+    switch (n.kind) {
+      case "price_alert": return { emoji: "📈", tint: T.accent };
+      case "aporte":      return { emoji: "💰", tint: "#C9A84C" };
+      case "news":        return { emoji: "📰", tint: T.text };
+      case "mention":     return { emoji: "@",  tint: T.accent };
+      default:            return { emoji: "🔔", tint: T.textMute };
+    }
+  })();
+  const when = relativeWhen(n.createdAt);
+  return (
+    <div style={{
+      padding: "12px 14px",
+      borderBottom: isLast ? "none" : `1px solid ${T.border}`,
+      display: "flex", gap: 12, alignItems: "flex-start",
+      // Unread rows get a faint accent stripe + slightly bolder weight.
+      background: n.readAt ? "transparent" : `${T.accent}08`,
+    }}>
+      <div style={{
+        width: 32, height: 32, borderRadius: 10, flexShrink: 0,
+        background: T.bgElev, color: meta.tint,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 16,
+      }}>{meta.emoji}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontFamily: FONT.sans, fontSize: 13,
+          fontWeight: n.readAt ? 600 : 700,
+          color: T.text, marginBottom: 2,
+        }}>
+          {n.title}
+        </div>
+        {n.body && (
+          <div style={{
+            fontFamily: FONT.sans, fontSize: 12, color: T.textMute,
+            lineHeight: 1.4,
+          }}>{n.body}</div>
+        )}
+        <div style={{
+          fontFamily: FONT.sans, fontSize: 10, color: T.textMute,
+          marginTop: 4, opacity: 0.7,
+        }}>{when}</div>
+      </div>
+    </div>
+  );
+}
+
+function relativeWhen(ts) {
+  if (!ts) return "";
+  const diff = Date.now() - ts;
+  const mins = Math.round(diff / 60000);
+  if (mins < 1) return "ahora";
+  if (mins < 60) return `hace ${mins} min`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `hace ${hours} h`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `hace ${days} d`;
+  return new Date(ts).toLocaleDateString("es-AR", { day: "numeric", month: "short" });
 }
 
 // ----------------------------------------------------------

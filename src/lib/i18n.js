@@ -224,6 +224,12 @@ const V2 = {
     "onb.skip": "Saltar",
     "onb.start": "Empezar",
 
+    "notif.title": "Notificaciones",
+    "notif.clear_all": "Vaciar",
+    "notif.empty_title": "Bandeja vacía",
+    "notif.empty_sub": "Tus alertas, aportes y avisos van a aparecer acá.",
+    "notif.earlier": "Antes",
+
   },
 
   en: {
@@ -427,6 +433,12 @@ const V2 = {
     "onb.continue": "Continue",
     "onb.skip": "Skip",
     "onb.start": "Get started",
+
+    "notif.title": "Notifications",
+    "notif.clear_all": "Clear all",
+    "notif.empty_title": "Inbox empty",
+    "notif.empty_sub": "Your alerts, contributions and pings will show up here.",
+    "notif.earlier": "Earlier",
 
   },
 
@@ -632,6 +644,12 @@ const V2 = {
     "onb.skip": "Pular",
     "onb.start": "Começar",
 
+    "notif.title": "Notificações",
+    "notif.clear_all": "Limpar",
+    "notif.empty_title": "Caixa vazia",
+    "notif.empty_sub": "Seus alertas, aportes e avisos aparecerão aqui.",
+    "notif.earlier": "Antes",
+
   },
 
   it: {
@@ -815,6 +833,12 @@ const V2 = {
     "onb.continue": "Continua",
     "onb.skip": "Salta",
     "onb.start": "Inizia",
+
+    "notif.title": "Notifiche",
+    "notif.clear_all": "Svuota",
+    "notif.empty_title": "Inbox vuota",
+    "notif.empty_sub": "I tuoi avvisi e contributi appariranno qui.",
+    "notif.earlier": "Prima",
 
   },
 
@@ -1000,6 +1024,12 @@ const V2 = {
     "onb.skip": "Passer",
     "onb.start": "Commencer",
 
+    "notif.title": "Notifications",
+    "notif.clear_all": "Vider",
+    "notif.empty_title": "Boîte vide",
+    "notif.empty_sub": "Tes alertes, apports et notifications apparaîtront ici.",
+    "notif.earlier": "Avant",
+
   },
 
   de: {
@@ -1183,6 +1213,12 @@ const V2 = {
     "onb.continue": "Weiter",
     "onb.skip": "Überspringen",
     "onb.start": "Loslegen",
+
+    "notif.title": "Benachrichtigungen",
+    "notif.clear_all": "Leeren",
+    "notif.empty_title": "Posteingang leer",
+    "notif.empty_sub": "Deine Alarme und Beiträge erscheinen hier.",
+    "notif.earlier": "Früher",
 
   },
 
@@ -1368,6 +1404,12 @@ const V2 = {
     "onb.skip": "跳过",
     "onb.start": "开始",
 
+    "notif.title": "通知",
+    "notif.clear_all": "清空",
+    "notif.empty_title": "收件箱空空如也",
+    "notif.empty_sub": "你的提醒和供款会显示在这里。",
+    "notif.earlier": "之前",
+
   },
 
   ru: {
@@ -1551,6 +1593,12 @@ const V2 = {
     "onb.continue": "Продолжить",
     "onb.skip": "Пропустить",
     "onb.start": "Начать",
+
+    "notif.title": "Уведомления",
+    "notif.clear_all": "Очистить",
+    "notif.empty_title": "Папка пуста",
+    "notif.empty_sub": "Твои алерты и взносы будут здесь.",
+    "notif.earlier": "Раньше",
 
   },
 
@@ -1736,6 +1784,12 @@ const V2 = {
     "onb.skip": "スキップ",
     "onb.start": "はじめる",
 
+    "notif.title": "通知",
+    "notif.clear_all": "クリア",
+    "notif.empty_title": "受信箱は空です",
+    "notif.empty_sub": "アラートや積立はここに表示されます。",
+    "notif.earlier": "以前",
+
   },
 
   he: {
@@ -1919,6 +1973,12 @@ const V2 = {
     "onb.continue": "המשך",
     "onb.skip": "דלג",
     "onb.start": "התחל",
+
+    "notif.title": "התראות",
+    "notif.clear_all": "נקה",
+    "notif.empty_title": "תיבה ריקה",
+    "notif.empty_sub": "ההתראות וההפקדות יופיעו כאן.",
+    "notif.earlier": "קודם",
 
   },
 
@@ -2104,6 +2164,12 @@ const V2 = {
     "onb.skip": "تخطي",
     "onb.start": "ابدأ",
 
+    "notif.title": "الإشعارات",
+    "notif.clear_all": "مسح",
+    "notif.empty_title": "الصندوق فارغ",
+    "notif.empty_sub": "ستظهر هنا تنبيهاتك ومساهماتك.",
+    "notif.earlier": "سابقًا",
+
   },
 
   ko: {
@@ -2287,6 +2353,12 @@ const V2 = {
     "onb.continue": "계속",
     "onb.skip": "건너뛰기",
     "onb.start": "시작하기",
+
+    "notif.title": "알림",
+    "notif.clear_all": "비우기",
+    "notif.empty_title": "받은편지함이 비어 있어요",
+    "notif.empty_sub": "알림과 적립이 여기 표시됩니다.",
+    "notif.earlier": "이전",
 
   },
 };

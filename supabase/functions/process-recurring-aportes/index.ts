@@ -144,6 +144,24 @@ serve(async (req) => {
         continue;
       }
 
+      // 3) In-app notification so the user sees the credit show up
+      //    in their inbox even if push wasn't delivered.
+      const sym = r.currency === "ARS" ? "$" : "US$";
+      const fmtAmount = r.currency === "ARS"
+        ? Math.round(r.amount).toLocaleString("es-AR")
+        : r.amount.toFixed(2);
+      try {
+        await admin.from("notifications").insert({
+          user_id: r.user_id,
+          kind: "aporte",
+          title: `Aporte acreditado · ${sym}${fmtAmount}`,
+          body: `Tu aporte mensual ya está en tu cartera. Próximo: ${nextDue}.`,
+          data: { aporteId: r.id, amount: r.amount, currency: r.currency, nextDue },
+        });
+      } catch (e) {
+        console.warn("[process-aportes] notif insert", e);
+      }
+
       fired++;
     }
 

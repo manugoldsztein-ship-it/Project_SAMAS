@@ -140,6 +140,21 @@ serve(async (req) => {
         ? a.note
         : `Tu alerta se disparó · objetivo ${formatPrice(a.target_price, a.currency)}`;
 
+      // Drop a notification row regardless of whether the push goes
+      // through — the in-app inbox is the durable record. The push is
+      // best-effort delivery on top.
+      try {
+        await admin.from("notifications").insert({
+          user_id: a.user_id,
+          kind: "price_alert",
+          title,
+          body,
+          data: { alertId: a.id, ticker: a.ticker, firedPrice: usdPrice },
+        });
+      } catch (e) {
+        console.warn("[check-alerts] notif insert", e);
+      }
+
       try {
         await fetch(`${SUPABASE_URL}/functions/v1/send-push`, {
           method: "POST",
