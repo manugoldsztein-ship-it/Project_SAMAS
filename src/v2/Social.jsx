@@ -1645,12 +1645,15 @@ function ThreadView({ T, lang = "es", post, onBack, onOpenProfile, onOpenTicker 
       flex: 1, minHeight: 0,
     }}>
       {/* Header — safe-area aware so the back arrow + 'Hilo'
-          title don't sit under the iOS Dynamic Island. */}
+          title don't sit under the iOS Dynamic Island. Background
+          matches body (T.bg) so the safe-area zone visually merges
+          with the canvas instead of looking like a tall colored
+          band. Borders provide the visual separation. */}
       <div style={{
         display: "flex", alignItems: "center", gap: 10,
-        padding: "calc(env(safe-area-inset-top) + 10px) 16px 12px",
+        padding: "calc(env(safe-area-inset-top) + 6px) 16px 10px",
         borderBottom: `1px solid ${T.border}`,
-        background: T.surface,
+        background: T.bg,
       }}>
         <button onClick={onBack} aria-label="Volver" style={{
           width: 32, height: 32, borderRadius: 10,
@@ -1900,13 +1903,14 @@ function TickerFeedView({ T, lang = "es", ticker, onBack, onOpenProfile, onOpenT
       display: "flex", flexDirection: "column",
       flex: 1, minHeight: 0,
     }}>
-      {/* Header — safe-area aware so the back arrow doesn't sit
-          under the iOS Dynamic Island. */}
+      {/* Header — safe-area aware. Bg matches body so the
+          safe-area zone visually merges with the canvas instead of
+          looking like an oversized colored band. */}
       <div style={{
         display: "flex", alignItems: "center", gap: 10,
-        padding: "calc(env(safe-area-inset-top) + 10px) 16px 12px",
+        padding: "calc(env(safe-area-inset-top) + 6px) 16px 10px",
         borderBottom: `1px solid ${T.border}`,
-        background: T.surface,
+        background: T.bg,
       }}>
         <button onClick={onBack} aria-label="Volver" style={{
           width: 32, height: 32, borderRadius: 10,
