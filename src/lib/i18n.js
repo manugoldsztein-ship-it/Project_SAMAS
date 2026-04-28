@@ -68,6 +68,14 @@ const V2 = {
     "settings.logout_cancel":     "Cancelar",
     "settings.logout_yes":        "Sí, salir",
 
+    "settings.demo.section":      "Demo",
+    "settings.demo.seed":         "Cargar cuenta demo",
+    "settings.demo.seed_sub":     "Holdings + balance + historia 30 días",
+    "settings.demo.seed_confirm": "Esto va a sobreescribir tu portafolio actual con datos de demostración. ¿Continuar?",
+    "settings.demo.reset":        "Vaciar cuenta",
+    "settings.demo.reset_sub":    "Volver al estado inicial (sin holdings)",
+    "settings.demo.reset_confirm":"Esto va a borrar todos tus holdings, balance y plan. ¿Continuar?",
+
     "settings.done":              "Listo",
     "wallet.balance_total": "BALANCE TOTAL",
     "wallet.today": "hoy",
@@ -277,6 +285,14 @@ const V2 = {
     "settings.logout_confirm_sub":"You'll need to enter your PIN again to come back in.",
     "settings.logout_cancel":     "Cancel",
     "settings.logout_yes":        "Yes, sign out",
+
+    "settings.demo.section":      "Demo",
+    "settings.demo.seed":         "Load demo account",
+    "settings.demo.seed_sub":     "Holdings + balance + 30-day history",
+    "settings.demo.seed_confirm": "This will overwrite your current portfolio with demo data. Continue?",
+    "settings.demo.reset":        "Empty account",
+    "settings.demo.reset_sub":    "Reset to the new-user empty state",
+    "settings.demo.reset_confirm":"This will delete all your holdings, balance, and plan. Continue?",
 
     "settings.done":              "Done",
     "wallet.balance_total": "TOTAL BALANCE",

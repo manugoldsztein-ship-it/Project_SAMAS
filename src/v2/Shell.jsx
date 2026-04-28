@@ -40,6 +40,7 @@ import { supabase } from "../lib/supabase.js";
 import { LANGUAGES } from "../lib/languages.js";
 import { t as tr } from "../lib/i18n.js";
 import { toast } from "./toast.jsx";
+import { seedDemoAccount, resetDemoAccount } from "../lib/demoSeed.js";
 
 // localStorage flag for the Pro mode toggle. Default ON — power users
 // see the full broker surface (ticker banner, distribución, top movers)
@@ -562,6 +563,72 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
           </div>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
+
+        {/* ---------- Demo section ----------
+            Investor-demo helpers: seed a curated portfolio (so the
+            Wallet hero, sparkline, holdings list and broker PnL all
+            render fully populated) or reset back to the empty-state
+            onboarding flow. Both reload the page so usePersistedState
+            picks up the new localStorage values cleanly. */}
+        <div style={{
+          marginTop: 6, marginBottom: 6,
+          fontFamily: FONT.sans, fontSize: 11, fontWeight: 600,
+          color: T.textMute, letterSpacing: 0.4, textTransform: "uppercase",
+          padding: "0 4px",
+        }}>
+          {tr("settings.demo.section", lang)}
+        </div>
+        <button
+          onClick={() => {
+            if (confirm(tr("settings.demo.seed_confirm", lang))) seedDemoAccount();
+          }}
+          style={{
+            width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 8,
+            background: T.surface, border: `1px solid ${T.accent}55`,
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            cursor: "pointer", textAlign: "left",
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text }}>
+              {tr("settings.demo.seed", lang)}
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+              {tr("settings.demo.seed_sub", lang)}
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </button>
+        <button
+          onClick={() => {
+            if (confirm(tr("settings.demo.reset_confirm", lang))) resetDemoAccount();
+          }}
+          style={{
+            width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 14,
+            background: T.surface, border: `1px solid ${T.border}`,
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            cursor: "pointer", textAlign: "left",
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text }}>
+              {tr("settings.demo.reset", lang)}
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+              {tr("settings.demo.reset_sub", lang)}
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            <path d="M10 11v6M14 11v6"/>
+            <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
           </svg>
         </button>
 
