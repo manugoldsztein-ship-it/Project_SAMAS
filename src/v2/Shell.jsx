@@ -46,7 +46,7 @@ import { toast } from "./toast.jsx";
 // out of the box. Flip OFF for a simpler beginner view.
 const PRO_KEY = "samas_v2_pro_mode";
 
-export function SamasShell({ user, isDark = true, isNativeApp = false, onToggleDark, onLogout, lang = "es", setLang }) {
+function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDark, onLogout, lang = "es", setLang }) {
   const [tab, setTab] = useState("wallet");
   // balanceVisible is lifted here (not inside WalletPage) so the
   // user's choice persists when they navigate to another tab and
@@ -779,6 +779,17 @@ function ScrollWithPTR({ T, tab, children }) {
     </div>
   );
 }
+
+// ----------------------------------------------------------
+// SamasShell — memoized export so SAMASApp's 60s Finnhub re-render
+// (setBump → top-level state change) doesn't propagate down into
+// the v2 tree. All shell props are stable across the bump because
+// nothing in the shell consumes Finnhub state directly; without
+// React.memo the entire 9.5k-line v2 subtree reconciles every minute
+// and React's fiber retention compounds with the ASSETS mutation
+// pattern, materially driving the iOS memory crash.
+// ----------------------------------------------------------
+export const SamasShell = React.memo(SamasShellInner);
 
 // ----------------------------------------------------------
 // TinyLoader — minimal fallback for Suspense boundaries while the

@@ -126,6 +126,47 @@ export async function updateNativeTheme(isDark) {
 }
 
 // ----------------------------------------------------------
+// Foreground/background — Capacitor lifecycle bridge.
+// ----------------------------------------------------------
+// Pass a handler that receives `true` when the app goes to the
+// foreground and `false` when it's backgrounded. Returns a cleanup
+// function (call on unmount). Outside Capacitor it falls back to
+// document.visibilitychange so the same hook works in the web build.
+//
+// Used by useFinnhubQuotes to suspend the 60s quote poll while the
+// app is backgrounded — without this the WebView keeps fetching +
+// re-rendering for hours, eventually getting killed by iOS for
+// memory pressure.
+export function onAppStateChange(handler) {
+  if (typeof handler !== "function") return () => {};
+  let cleanup = () => {};
+  if (isNative) {
+    let canceled = false;
+    let listener = null;
+    (async () => {
+      try {
+        const { App } = await import("@capacitor/app");
+        if (canceled) return;
+        listener = await App.addListener("appStateChange", (state) => {
+          handler(!!state?.isActive);
+        });
+      } catch (e) {
+        console.warn("[native] appStateChange listener failed:", e);
+      }
+    })();
+    cleanup = () => {
+      canceled = true;
+      try { listener?.remove?.(); } catch {}
+    };
+  } else if (typeof document !== "undefined") {
+    const onVis = () => handler(document.visibilityState === "visible");
+    document.addEventListener("visibilitychange", onVis);
+    cleanup = () => document.removeEventListener("visibilitychange", onVis);
+  }
+  return cleanup;
+}
+
+// ----------------------------------------------------------
 // Haptic — light tactile feedback for button taps.
 // ----------------------------------------------------------
 // kind: "tap" | "success" | "warning" | "error"

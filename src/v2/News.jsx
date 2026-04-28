@@ -144,7 +144,11 @@ export function NewsPage({ T, lang = "es" }) {
             display: "flex", gap: 22, padding: "10px 0 10px 16px",
             whiteSpace: "nowrap",
             animation: "samas-news-marquee 32s linear infinite",
-            willChange: "transform",
+            // willChange:"transform" was here as a compositor hint, but
+            // on iOS WebKit it forces a permanent GPU layer that isn't
+            // released when the news tab is hidden — small but additive
+            // contribution to long-session memory pressure. The
+            // browser can promote this layer on its own when needed.
           }}>
             {[...ticker, ...ticker].map((t, i) => {
               const up = (t.changePct ?? 0) >= 0;

@@ -40,7 +40,7 @@ import { hashPin, PinLockScreen } from "./auth/PinLock.jsx";
 const MfaEnrollSection = lazy(() => import("./auth/Mfa.jsx").then((m) => ({ default: m.MfaEnrollSection })));
 const MfaChallengeView = lazy(() => import("./auth/Mfa.jsx").then((m) => ({ default: m.MfaChallengeView })));
 import { fetchNewsForTicker, fetchNewsForTickers, relativeTime } from "./lib/news.js";
-import { isNative as isNativeApp, hapticNative, updateNativeTheme, hideNativeSplash } from "./lib/native.js";
+import { isNative as isNativeApp, hapticNative, updateNativeTheme, hideNativeSplash, onAppStateChange } from "./lib/native.js";
 import { isPushEnabled, registerPush, setupPushListeners, clearPushLocal } from "./lib/push.js";
 import { LANGUAGES, RTL_LANGS } from "./lib/languages.js";
 // Welcome chooser: shown only on first session when profiles.ui_mode
@@ -793,8 +793,17 @@ function useFinnhubQuotes(apiKey, mepRate) {
     };
 
     const refresh = async () => {
-      const results = await Promise.all(ASSETS.map(fetchQuote));
+      // allSettled (not all) — one rejected fetch shouldn't poison the
+      // batch. Promise.all leaks unhandled-rejection state on iOS WebKit
+      // when any sibling fetch throws, which compounds across the 60s
+      // poll cycles and contributes to the "killed for memory" crash.
+      const settled = await Promise.allSettled(ASSETS.map(fetchQuote));
       if (cancelled) return;
+      const results = settled.map((s, i) =>
+        s.status === "fulfilled"
+          ? s.value
+          : { ticker: ASSETS[i].ticker, ok: false, reason: "rejected: " + (s.reason?.message || s.reason) }
+      );
       const authErr  = results.find(r => r.authErr);
       const rateErr  = results.find(r => r.rateErr);
       const failures = results.filter(r => !r.ok);
@@ -820,8 +829,26 @@ function useFinnhubQuotes(apiKey, mepRate) {
     };
 
     refresh();
-    const id = setInterval(refresh, 60000);
-    return () => { cancelled = true; clearInterval(id); };
+    let id = setInterval(refresh, 60000);
+    // Pause the poll while the app is backgrounded — without this the
+    // 60s loop keeps firing inside iOS's frozen WebView and the OS kills
+    // us for memory after ~2 hours. Resume on foreground with a fresh
+    // interval and a one-shot refresh so prices aren't stale.
+    const stopAppState = onAppStateChange((isActive) => {
+      if (isActive) {
+        if (id == null) {
+          refresh();
+          id = setInterval(refresh, 60000);
+        }
+      } else {
+        if (id != null) { clearInterval(id); id = null; }
+      }
+    });
+    return () => {
+      cancelled = true;
+      if (id != null) clearInterval(id);
+      stopAppState();
+    };
   }, [apiKey, mepRate]);
 
   return { bump, ...status };
