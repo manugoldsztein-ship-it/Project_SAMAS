@@ -24,7 +24,9 @@ function warnMissingTableOnce() {
   console.warn("[notifications] table not migrated yet — returning []. Apply supabase/notifications.sql to enable.");
 }
 
-function rowToNotif(r) {
+// Exported so realtime subscribers can map the raw INSERT payload
+// from supabase.channel() the same way getNotifications() does.
+export function rowToNotif(r) {
   return {
     id: r.id,
     kind: r.kind || "system",

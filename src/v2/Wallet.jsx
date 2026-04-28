@@ -25,6 +25,8 @@ import {
   Avatar, ChromeBtn, Pill, SectionHead, Sparkline, SAMAS_SPARKS,
 } from "./shared.jsx";
 import { wallet as walletApi, card as cardApi, broker as brokerApi, notifications as notifApi } from "./api/index.js";
+import { rowToNotif } from "./api/notifications.js";
+import { supabase } from "../lib/supabase.js";
 import { toast } from "./toast.jsx";
 import { setRefreshHandler } from "./refreshRegistry.js";
 import { t as tr } from "../lib/i18n.js";
@@ -51,6 +53,36 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
     notifApi.getUnreadCount().then((n) => { if (alive) setUnread(n); }).catch(() => {});
     return () => { alive = false; };
   }, [activeModal]);
+  // Realtime: bump the bell badge the moment a notification row is
+  // written for this user (e.g. someone likes a post, follows them,
+  // or replies — see supabase/social_notifications.sql triggers).
+  // Filtering on user_id at the channel level so we only get our
+  // own rows; RLS already enforces the same on the read side, but
+  // the filter saves bytes on the wire.
+  useEffect(() => {
+    let alive = true;
+    let channel = null;
+    (async () => {
+      const { data: u } = await supabase.auth.getUser();
+      const uid = u?.user?.id;
+      if (!uid || !alive) return;
+      channel = supabase
+        .channel(`notifications-bell-${uid}`)
+        .on("postgres_changes", {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${uid}`,
+        }, () => {
+          if (alive) setUnread((n) => n + 1);
+        })
+        .subscribe();
+    })();
+    return () => {
+      alive = false;
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, []);
 
   // ----------- load everything in parallel -----------
   const refresh = useCallback(async () => {
@@ -444,6 +476,37 @@ function NotificationsInbox({ T, lang = "es", onClose }) {
       }
     }).catch(() => { if (alive) setItems([]); });
     return () => { alive = false; };
+  }, []);
+
+  // Realtime: while the inbox is open, prepend any new notifications
+  // as they arrive so the user sees them slide in. We don't bother
+  // marking them read here (the parent will reset the unread badge
+  // on next focus); the visual update is what matters.
+  useEffect(() => {
+    let alive = true;
+    let channel = null;
+    (async () => {
+      const { data: u } = await supabase.auth.getUser();
+      const uid = u?.user?.id;
+      if (!uid || !alive) return;
+      channel = supabase
+        .channel(`notifications-inbox-${uid}`)
+        .on("postgres_changes", {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${uid}`,
+        }, (payload) => {
+          if (!alive) return;
+          const n = rowToNotif(payload.new);
+          setItems((prev) => prev ? [n, ...prev] : [n]);
+        })
+        .subscribe();
+    })();
+    return () => {
+      alive = false;
+      if (channel) supabase.removeChannel(channel);
+    };
   }, []);
 
   // Group by Today / Earlier for visual scanability.

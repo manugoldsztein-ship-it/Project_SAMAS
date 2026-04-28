@@ -23,6 +23,7 @@ import { useEdgeSwipeBack } from "./useEdgeSwipeBack.js";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { setRefreshHandler, callRefreshFor } from "./refreshRegistry.js";
 import { avatarPropsFor } from "./shared.jsx";
+import { supabase } from "../lib/supabase.js";
 import { t as tr } from "../lib/i18n.js";
 
 // SUB_TABS labels are looked up dynamically below so they re-translate
@@ -225,6 +226,79 @@ function FeedView({ T, lang = "es", user = null }) {
 
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => setRefreshHandler("social-feed", refresh), [refresh]);
+
+  // Realtime: a new post anywhere in the system → fetch its
+  // denormalized form (author profile + my flags) and prepend to
+  // the local list if it belongs in the active tab. Trade-share
+  // posts originated by the current user are skipped because
+  // createPost already updated state via refresh() — re-prepending
+  // would cause a duplicate flash.
+  //
+  // We re-subscribe whenever `tab` changes so the filter logic
+  // (following / for_you / trades) re-evaluates. Cheap; Supabase
+  // handles channel teardown + re-establishment cleanly.
+  useEffect(() => {
+    let alive = true;
+    let channel = null;
+    let myUserId = null;
+    let followingSet = null; // populated lazily for "following" tab
+    (async () => {
+      try {
+        const { data: u } = await supabase.auth.getUser();
+        myUserId = u?.user?.id || null;
+        if (tab === "following" && myUserId) {
+          const { data: rows } = await supabase
+            .from("follows")
+            .select("following_id")
+            .eq("follower_id", myUserId);
+          followingSet = new Set((rows || []).map((r) => r.following_id));
+        }
+      } catch {}
+      if (!alive) return;
+
+      channel = supabase
+        .channel(`social-feed-${tab}`)
+        .on("postgres_changes", {
+          event: "INSERT",
+          schema: "public",
+          table: "posts",
+        }, async (payload) => {
+          if (!alive) return;
+          const row = payload.new;
+          if (!row || row.deleted_at) return;
+          // Tab-specific filtering on the wire:
+          if (tab === "following" && (!followingSet || !followingSet.has(row.author_id))) return;
+          if (tab === "trades" && !row.trade) return;
+          // Skip duplicates — createPost prepended the same row already.
+          if (row.author_id === myUserId) {
+            // Still re-fetch for OTHER tabs where my own posts should
+            // appear (for_you, trades). For "following", own posts
+            // wouldn't pass the filter anyway.
+            try {
+              const fetched = await socialApi.getPost(row.id);
+              if (alive) setPosts((prev) =>
+                prev.some((p) => p.id === fetched.id) ? prev : [fetched, ...prev]
+              );
+            } catch {}
+            return;
+          }
+          // Other people's posts — full denormalized fetch.
+          try {
+            const fetched = await socialApi.getPost(row.id);
+            if (alive) setPosts((prev) =>
+              prev.some((p) => p.id === fetched.id) ? prev : [fetched, ...prev]
+            );
+          } catch (e) {
+            console.warn("[social] realtime getPost failed:", e);
+          }
+        })
+        .subscribe();
+    })();
+    return () => {
+      alive = false;
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [tab]);
 
   async function publish() {
     setErr(null);
