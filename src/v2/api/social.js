@@ -183,13 +183,19 @@ export async function updateMe(patch) {
 // ----------------------------------------------------------
 
 /**
- * getFeed({ tab, limit }) — list of posts for a given tab.
+ * getFeed({ tab, ticker, limit }) — list of posts for a given tab.
+ *
+ * tab:    'for_you' | 'following' | 'trades'   (default 'for_you')
+ * ticker: optional uppercase symbol — when set, returns only posts
+ *         where posts.ticker = upper(ticker). Backed by the
+ *         posts_by_ticker partial index. Composes with `tab`, e.g.
+ *         tab='trades', ticker='NVDA' → trades on NVDA.
  *
  * Implementation: one query for posts (joined to author profile),
- * one query for "my likes" / "my reposts" / "my saves" to compute
- * the per-row flags. Three queries total, all batched in parallel.
+ * three more for "my likes / reposts / saves" to compute per-row
+ * flags. All batched in parallel.
  */
-export async function getFeed({ tab = "for_you", limit = 20 } = {}) {
+export async function getFeed({ tab = "for_you", ticker = null, limit = 20 } = {}) {
   const userId = await currentUserId();
 
   // Step 1: figure out which posts to fetch.
@@ -221,6 +227,7 @@ export async function getFeed({ tab = "for_you", limit = 20 } = {}) {
 
   if (authorFilter) q = q.in("author_id", authorFilter);
   if (tab === "trades") q = q.not("trade", "is", null);
+  if (ticker) q = q.eq("ticker", String(ticker).toUpperCase());
 
   const { data: posts, error } = await q;
   if (error) throw new Error(error.message);

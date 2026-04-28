@@ -53,6 +53,9 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
   // can: open profile → tap a post in their feed → see replies →
   // back out → still on profile → back out → still on feed.
   const [threadPost, setThreadPost] = useState(null);
+  // Drilled-in ticker feed (posts mentioning a specific ticker).
+  // Stacks alongside profile/thread overlays.
+  const [tickerFilter, setTickerFilter] = useState(null);
   const navBottom = isNativeApp
     ? "calc(env(safe-area-inset-bottom) + 12px)"
     : 12;
@@ -90,6 +93,15 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
     setThreadPost(post);
   }
   function closeThread() { setThreadPost(null); }
+
+  // openTicker(symbol) — drill into a feed of posts mentioning a
+  // given ticker. The symbol is uppercased for normalization
+  // (matches the posts.ticker storage convention).
+  function openTicker(symbol) {
+    if (!symbol) return;
+    setTickerFilter(String(symbol).toUpperCase());
+  }
+  function closeTicker() { setTickerFilter(null); }
 
   // iOS-style swipe-from-left-edge back to the wallet shell.
   const { bind: swipeBind, style: swipeStyle } = useEdgeSwipeBack(onBack);
@@ -156,10 +168,10 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
         WebkitOverflowScrolling: "touch",
       }}>
         {ptrIndicator}
-        {tab === "feed"     && <FeedView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} />}
+        {tab === "feed"     && <FeedView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} />}
         {tab === "search"   && <SearchView T={T} lang={lang} user={user} onMessageUser={openDmWith} onOpenProfile={openProfile} />}
         {tab === "messages" && <MessagesView T={T} lang={lang} user={user} onOpenProfile={openProfile} />}
-        {tab === "profile"  && <ProfileView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} />}
+        {tab === "profile"  && <ProfileView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} />}
       </div>
 
       {/* Drill-in peer profile overlay. Sits above the current
@@ -191,6 +203,7 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
               onOpenProfile={openProfile}
               onMessage={openDmWith}
               onOpenThread={openThread}
+              onOpenTicker={openTicker}
             />
           </div>
         </div>
@@ -215,12 +228,38 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
             post={threadPost}
             onBack={closeThread}
             onOpenProfile={openProfile}
+            onOpenTicker={openTicker}
+          />
+        </div>
+      )}
+
+      {/* Drill-in ticker feed. Same overlay pattern; stacks at
+          z-index 35 so it sits above the thread overlay (a user
+          can be in a thread, tap a $TICKER chip on the parent
+          post, and drill further into the ticker feed). */}
+      {tickerFilter && (
+        <div style={{
+          position: "absolute", inset: 0,
+          background: T.bg, color: T.text,
+          overflow: "hidden",
+          display: "flex", flexDirection: "column",
+          animation: "samas-shell-in 220ms cubic-bezier(.2,.8,.2,1)",
+          zIndex: 35,
+        }}>
+          <TickerFeedView
+            T={T}
+            lang={lang}
+            ticker={tickerFilter}
+            onBack={closeTicker}
+            onOpenProfile={openProfile}
+            onOpenThread={openThread}
+            onOpenTicker={openTicker}
           />
         </div>
       )}
 
       {/* Bottom nav */}
-      <SocialNav T={T} tab={tab} setTab={(t) => { setProfileUserId(null); setThreadPost(null); setTab(t); }} bottomInset={navBottom} lang={lang} />
+      <SocialNav T={T} tab={tab} setTab={(t) => { setProfileUserId(null); setThreadPost(null); setTickerFilter(null); setTab(t); }} bottomInset={navBottom} lang={lang} />
     </div>
   );
 }
@@ -274,7 +313,7 @@ const FEED_TABS = [
   { id: "trades",    key: "social.tab.trades"    },
 ];
 
-function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread }) {
+function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, onOpenTicker }) {
   const [tab, setTab] = useState("for_you");
   const [posts, setPosts] = useState([]);
   const [me, setMe] = useState(null);
@@ -568,6 +607,7 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread }) 
               onSave={() => toggleSave(p)}
               onOpenAuthor={onOpenProfile}
               onOpenThread={onOpenThread}
+              onOpenTicker={onOpenTicker}
             />
           ))
         )}
@@ -1125,7 +1165,7 @@ function ConversationView({ T, lang = "es", thread, onBack, onOpenProfile }) {
 //      Follow/Unfollow + DM buttons, only their post list (no
 //      saved tab). Followers + Following + Posts counts.
 // ============================================================
-function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack, onOpenProfile, onMessage, onOpenThread }) {
+function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack, onOpenProfile, onMessage, onOpenThread, onOpenTicker }) {
   const [me, setMe] = useState(null);          // logged-in user (for fallback color, isSelf check)
   const [profile, setProfile] = useState(null); // person being viewed (me or peer)
   const [posts, setPosts] = useState([]);
@@ -1201,11 +1241,13 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
 
   return (
     <div style={{ paddingBottom: 110 }}>
-      {/* Header — back arrow when drilled in (peer view) */}
+      {/* Header — back arrow when drilled in (peer view).
+          Safe-area aware since this overlay covers SocialPage's
+          own header chrome. */}
       {onBack && (
         <div style={{
           display: "flex", alignItems: "center", gap: 8,
-          padding: "10px 12px",
+          padding: "calc(env(safe-area-inset-top) + 8px) 12px 10px",
           borderBottom: `1px solid ${T.border}`,
           background: T.bg,
         }}>
@@ -1332,6 +1374,7 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
               readonly
               onOpenAuthor={onOpenProfile}
               onOpenThread={onOpenThread}
+              onOpenTicker={onOpenTicker}
             />
           ))
         )}
@@ -1352,7 +1395,7 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
 // Tap any reply author's avatar/handle → drills into their profile
 // (recursive navigation, supported by the SocialPage overlay stack).
 // ============================================================
-function ThreadView({ T, lang = "es", post, onBack, onOpenProfile }) {
+function ThreadView({ T, lang = "es", post, onBack, onOpenProfile, onOpenTicker }) {
   const [replies, setReplies] = useState(null); // null = loading
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1445,10 +1488,11 @@ function ThreadView({ T, lang = "es", post, onBack, onOpenProfile }) {
       display: "flex", flexDirection: "column",
       flex: 1, minHeight: 0,
     }}>
-      {/* Header */}
+      {/* Header — safe-area aware so the back arrow + 'Hilo'
+          title don't sit under the iOS Dynamic Island. */}
       <div style={{
         display: "flex", alignItems: "center", gap: 10,
-        padding: "12px 16px",
+        padding: "calc(env(safe-area-inset-top) + 10px) 16px 12px",
         borderBottom: `1px solid ${T.border}`,
         background: T.surface,
       }}>
@@ -1472,7 +1516,7 @@ function ThreadView({ T, lang = "es", post, onBack, onOpenProfile }) {
         {/* Parent post — same PostCard the feed uses, readonly so
             we don't re-render the action row twice. Tapping the
             author still opens their profile via onOpenAuthor. */}
-        <PostCard T={T} p={post} readonly onOpenAuthor={onOpenProfile} />
+        <PostCard T={T} p={post} readonly onOpenAuthor={onOpenProfile} onOpenTicker={onOpenTicker} />
 
         {/* Section divider */}
         <div style={{
@@ -1601,9 +1645,201 @@ function ReplyRow({ T, r, onOpenAuthor }) {
 }
 
 // ============================================================
+// TickerFeedView — drill-in feed of posts mentioning a single ticker
+// ============================================================
+// Wired from the $TICKER chip on a trade-share post or from
+// $XXX-style mentions in any post body (see linkifyTickers below).
+// Reads via socialApi.getFeed({ ticker: '...' }) which the
+// posts_by_ticker partial index makes O(matching) instead of a
+// table scan.
+//
+// Realtime: subscribes to INSERTs on posts filtered to
+// upper(ticker)=eq.<symbol> so when someone posts a new trade /
+// mention while you're viewing the ticker feed, it slides in at
+// the top within ~500ms.
+// ============================================================
+function TickerFeedView({ T, lang = "es", ticker, onBack, onOpenProfile, onOpenThread, onOpenTicker }) {
+  const [posts, setPosts] = useState(null); // null = loading
+  const [savedIds, setSavedIds] = useState([]);
+  const symbol = String(ticker || "").toUpperCase();
+
+  const refresh = useCallback(async () => {
+    try {
+      const [feed, saved] = await Promise.all([
+        socialApi.getFeed({ ticker: symbol, limit: 50 }),
+        socialApi.getSavedPosts().catch(() => []),
+      ]);
+      setPosts(feed);
+      setSavedIds(saved.map((p) => p.id));
+    } catch (e) {
+      console.error("[ticker-feed] load:", e);
+      setPosts([]);
+    }
+  }, [symbol]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  // Realtime: new posts on this ticker prepend live. We use the
+  // raw posts INSERT subscription (already in supabase_realtime
+  // since 0.0.24) and filter client-side because PostgREST's
+  // realtime channel filter doesn't support upper() — incoming
+  // payload.new.ticker is always uppercased by our trade-share
+  // pipeline, so a direct compare works.
+  useEffect(() => {
+    let alive = true;
+    let channel = null;
+    (async () => {
+      const { data: u } = await supabase.auth.getUser();
+      const uid = u?.user?.id;
+      if (!uid || !alive) return;
+      channel = supabase
+        .channel(`ticker-feed-${symbol}`)
+        .on("postgres_changes", {
+          event: "INSERT",
+          schema: "public",
+          table: "posts",
+        }, async (payload) => {
+          if (!alive) return;
+          const row = payload.new;
+          if (!row || row.deleted_at) return;
+          if (String(row.ticker || "").toUpperCase() !== symbol) return;
+          try {
+            const fetched = await socialApi.getPost(row.id);
+            if (alive) setPosts((prev) =>
+              !prev || prev.some((p) => p.id === fetched.id) ? prev : [fetched, ...prev]
+            );
+          } catch (e) {
+            console.warn("[ticker-feed] realtime getPost failed:", e);
+          }
+        })
+        .subscribe();
+    })();
+    return () => {
+      alive = false;
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [symbol]);
+
+  async function toggleLike(p) {
+    try {
+      if (p.likedByMe) await socialApi.unlikePost(p.id);
+      else await socialApi.likePost(p.id);
+      await refresh();
+    } catch {}
+  }
+  async function repost(p) {
+    try { await socialApi.repostPost(p.id); await refresh(); } catch {}
+  }
+  async function toggleSave(p) {
+    try {
+      if (savedIds.includes(p.id)) await socialApi.unsavePost(p.id);
+      else await socialApi.savePost(p.id);
+      const saved = await socialApi.getSavedPosts();
+      setSavedIds(saved.map((x) => x.id));
+    } catch {}
+  }
+
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column",
+      flex: 1, minHeight: 0,
+    }}>
+      {/* Header — safe-area aware so the back arrow doesn't sit
+          under the iOS Dynamic Island. */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10,
+        padding: "calc(env(safe-area-inset-top) + 10px) 16px 12px",
+        borderBottom: `1px solid ${T.border}`,
+        background: T.surface,
+      }}>
+        <button onClick={onBack} aria-label="Volver" style={{
+          width: 32, height: 32, borderRadius: 10,
+          background: T.bg, border: `1px solid ${T.border}`,
+          color: T.text, cursor: "pointer", padding: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
+        <div style={{
+          fontFamily: FONT.mono, fontSize: 14, fontWeight: 700, color: T.accent,
+          letterSpacing: 0.4,
+        }}>${symbol}</div>
+        <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute }}>
+          posts mencionando este ticker
+        </div>
+      </div>
+
+      {/* Scrollable feed */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px 110px" }}>
+        {posts === null ? (
+          <div style={{ color: T.textMute, fontFamily: FONT.sans, fontSize: 13, textAlign: "center", padding: 30 }}>
+            Cargando…
+          </div>
+        ) : posts.length === 0 ? (
+          <div style={{ color: T.textMute, fontFamily: FONT.sans, fontSize: 13, textAlign: "center", padding: 30 }}>
+            Sin posts sobre ${symbol} todavía. Sé el primero — andá al Broker, comprá o vendé, y compartí el trade.
+          </div>
+        ) : (
+          posts.map((p) => (
+            <PostCard
+              key={p.id}
+              T={T} p={p}
+              saved={savedIds.includes(p.id)}
+              onLike={() => toggleLike(p)}
+              onRepost={() => repost(p)}
+              onSave={() => toggleSave(p)}
+              onOpenAuthor={onOpenProfile}
+              onOpenThread={onOpenThread}
+              onOpenTicker={onOpenTicker}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+// linkifyTickers — turns $XXX patterns in a post body into
+// clickable spans that drill into the ticker feed. We restrict
+// to 1–6 uppercase letters/digits so day-to-day "$5" prices and
+// random "$abc" don't trigger. Returns an array of React nodes
+// suitable for inlining inside <div>{...}</div>.
+function linkifyTickers(body, T, onOpenTicker) {
+  if (!body || !onOpenTicker) return body;
+  // \$([A-Z][A-Z0-9]{0,5})\b — start with uppercase letter, allow
+  // up to 6 alphanumerics, word boundary at end.
+  const re = /\$([A-Z][A-Z0-9]{0,5})\b/g;
+  const out = [];
+  let last = 0;
+  let m;
+  let i = 0;
+  while ((m = re.exec(body))) {
+    if (m.index > last) out.push(body.slice(last, m.index));
+    const sym = m[1];
+    out.push(
+      <button
+        key={`tk-${i++}-${m.index}`}
+        onClick={(e) => { e.stopPropagation(); onOpenTicker(sym); }}
+        style={{
+          display: "inline", padding: 0, margin: 0,
+          background: "transparent", border: "none",
+          color: T.accent, cursor: "pointer",
+          font: "inherit", fontWeight: 700,
+        }}
+      >${sym}</button>
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < body.length) out.push(body.slice(last));
+  return out;
+}
+
+// ============================================================
 // PostCard — used by Feed + Profile
 // ============================================================
-function PostCard({ T, p, saved, onLike, onRepost, onSave, readonly, onOpenAuthor, onOpenThread }) {
+function PostCard({ T, p, saved, onLike, onRepost, onSave, readonly, onOpenAuthor, onOpenThread, onOpenTicker }) {
   const handle = (p.author?.handle || "@user").replace(/^@/, "");
   // avatarPropsFor handles the displayName-missing case AND falls
   // back to a deterministic color so two posters in the same feed
@@ -1641,7 +1877,7 @@ function PostCard({ T, p, saved, onLike, onRepost, onSave, readonly, onOpenAutho
       <div style={{
         fontFamily: FONT.sans, fontSize: 14, color: T.text,
         lineHeight: 1.5, whiteSpace: "pre-wrap", marginBottom: 10,
-      }}>{p.body}</div>
+      }}>{linkifyTickers(p.body, T, onOpenTicker)}</div>
 
       {p.trade && (
         <div style={{
@@ -1655,9 +1891,19 @@ function PostCard({ T, p, saved, onLike, onRepost, onSave, readonly, onOpenAutho
             color: p.trade.side === "buy" ? T.accent : T.danger,
             fontFamily: FONT.mono, fontSize: 10, fontWeight: 700, letterSpacing: 0.6,
           }}>{p.trade.side === "buy" ? "COMPRA" : "VENTA"}</div>
-          <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text }}>
+          {/* Ticker chip — clickable when onOpenTicker is provided.
+              Drills into the ticker feed for that symbol. */}
+          <button
+            onClick={(e) => { e.stopPropagation(); if (onOpenTicker) onOpenTicker(p.trade.ticker); }}
+            disabled={!onOpenTicker}
+            style={{
+              padding: 0, background: "transparent", border: "none",
+              fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text,
+              cursor: onOpenTicker ? "pointer" : "default",
+            }}
+          >
             {p.trade.qty} {p.trade.ticker}
-          </div>
+          </button>
           <div style={{ fontFamily: FONT.mono, fontSize: 12, color: T.textMute, marginLeft: "auto" }}>
             US${p.trade.price?.toLocaleString("es-AR")}
           </div>
