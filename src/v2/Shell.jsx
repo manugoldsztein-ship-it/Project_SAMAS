@@ -14,7 +14,8 @@
 
 import React, { useState, useEffect, useMemo, Suspense, lazy } from "react";
 import { SAMAS_THEME, FONT } from "./theme.js";
-import { SamasTabBar } from "./shared.jsx";
+import { SamasTabBar, Avatar, avatarPropsFor, initialsOf, AVATAR_PALETTE } from "./shared.jsx";
+import { social as socialApi } from "./api/index.js";
 import { WalletPage } from "./Wallet.jsx";
 // Code-split the heavy tabs and the 2FA enrollment so they don't
 // inflate the initial JS parse on cold launch. Wallet is the landing
@@ -233,6 +234,7 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
 // ----------------------------------------------------------
 function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onLogout, onClose, isNativeApp, lang = "es", setLang }) {
   const [show2FA, setShow2FA] = useState(false);
+  const [showEditProfile, setShowEditProfile] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
   // Language picker is collapsed by default; tapping the row expands it
   // inline so we don't open another modal layer on top of this one.
@@ -408,6 +410,28 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
             }}>{user?.email || ""}</div>
           </div>
         </div>
+
+        {/* Editar perfil — opens the social profile editor sheet
+            so the user can change handle, display name, bio, and
+            avatar color without dropping into SQL. */}
+        <button onClick={() => setShowEditProfile(true)} style={{
+          width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 8,
+          background: T.surface, border: `1px solid ${T.border}`,
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          cursor: "pointer", textAlign: "left",
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text }}>
+              {tr("settings.edit_profile", lang)}
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+              {tr("settings.edit_profile_sub", lang)}
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
 
         {/* Pro mode row */}
         <SettingsToggle
@@ -681,6 +705,18 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
         }}>{tr("settings.done", lang)}</button>
       </div>
 
+      {/* Edit-profile sub-sheet — modifies the user's social
+          profile (handle, display name, bio, avatar color). The
+          sheet manages its own state and fetches via socialApi
+          on open; on save it calls updateMe and closes. */}
+      {showEditProfile && (
+        <EditProfileSheet
+          T={T}
+          lang={lang}
+          onClose={() => setShowEditProfile(false)}
+        />
+      )}
+
       {/* 2FA enrollment sub-sheet */}
       {show2FA && (
         <div onClick={(e) => { if (e.target === e.currentTarget) setShow2FA(false); }} style={{
@@ -758,6 +794,300 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
       )}
     </div>
   );
+}
+
+// ============================================================
+// EditProfileSheet — modify the social profile (handle, display
+// name, bio, avatar color). All fields persisted via
+// socialApi.updateMe which routes to RLS-checked profiles_social
+// UPDATE. Handle uniqueness checked live via a debounced query.
+// ============================================================
+function EditProfileSheet({ T, lang = "es", onClose }) {
+  const [me, setMe] = useState(null);
+  const [handle, setHandle] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [bio, setBio] = useState("");
+  const [avatarColor, setAvatarColor] = useState("#16C784");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [handleStatus, setHandleStatus] = useState(null); // 'checking' | 'available' | 'taken' | 'invalid' | null
+
+  // Initial load — populate state from the existing social profile.
+  useEffect(() => {
+    let alive = true;
+    socialApi.getMe().then((m) => {
+      if (!alive) return;
+      setMe(m);
+      // Strip the leading @ if present so the input shows just the
+      // handle text; the @ is rendered as a static prefix.
+      setHandle((m.handle || "").replace(/^@/, ""));
+      setDisplayName(m.displayName || "");
+      setBio(m.bio || "");
+      setAvatarColor(m.avatarColor || "#16C784");
+    }).catch((e) => setErr(e.message));
+    return () => { alive = false; };
+  }, []);
+
+  // Debounced handle availability check. Only fires when the
+  // current handle differs from me.handle and passes the basic
+  // validation (3-15 chars, alphanumeric + underscore only).
+  useEffect(() => {
+    if (!me) { setHandleStatus(null); return; }
+    const trimmed = handle.trim();
+    const stripped = trimmed.replace(/^@/, "");
+    if (stripped === (me.handle || "").replace(/^@/, "")) {
+      setHandleStatus(null);
+      return;
+    }
+    if (!/^[A-Za-z0-9_]{3,15}$/.test(stripped)) {
+      setHandleStatus("invalid");
+      return;
+    }
+    setHandleStatus("checking");
+    let alive = true;
+    const id = setTimeout(async () => {
+      try {
+        const { data } = await supabase
+          .from("profiles_social")
+          .select("user_id")
+          .ilike("handle", "@" + stripped)
+          .neq("user_id", me.id)
+          .maybeSingle();
+        if (!alive) return;
+        setHandleStatus(data ? "taken" : "available");
+      } catch {
+        if (alive) setHandleStatus(null);
+      }
+    }, 350);
+    return () => { alive = false; clearTimeout(id); };
+  }, [handle, me]);
+
+  const handleValid = handleStatus === null || handleStatus === "available";
+  const canSave = me && displayName.trim().length >= 1 && handleValid && !busy;
+
+  async function save() {
+    if (!canSave) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const cleanHandle = "@" + handle.trim().replace(/^@/, "");
+      await socialApi.updateMe({
+        handle: cleanHandle,
+        displayName: displayName.trim(),
+        bio: bio.trim(),
+        avatarColor,
+      });
+      onClose();
+    } catch (e) {
+      setErr(e.message || "No se pudo guardar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Live avatar preview uses the in-progress form values.
+  const previewProps = avatarPropsFor(
+    { displayName: displayName || me?.displayName || "?", avatarColor },
+    T.accent,
+  );
+
+  return (
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
+      position: "fixed", inset: 0, zIndex: 120,
+      background: "rgba(0,0,0,0.7)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+    }}>
+      <div style={{
+        width: "100%", maxWidth: 540, maxHeight: "92dvh",
+        background: T.bgElev, color: T.text,
+        borderTopLeftRadius: 22, borderTopRightRadius: 22,
+        border: `1px solid ${T.border}`, borderBottom: "none",
+        display: "flex", flexDirection: "column",
+        animation: "samas-sheet-up 220ms cubic-bezier(.2,.8,.2,1)",
+      }}>
+        <style>{`
+          @keyframes samas-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        `}</style>
+        {/* Header */}
+        <div style={{
+          padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between",
+          borderBottom: `1px solid ${T.border}`,
+        }}>
+          <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700 }}>
+            {tr("profile.edit.title", lang)}
+          </div>
+          <button onClick={onClose} aria-label="Cerrar" style={{
+            background: T.surface, border: `1px solid ${T.border}`,
+            width: 30, height: 30, borderRadius: 10, color: T.textMute,
+            display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: 20, overflowY: "auto", flex: 1 }}>
+          {/* Avatar preview */}
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
+            <Avatar T={T} initials={previewProps.initials} color={previewProps.color} size={72}/>
+          </div>
+
+          {/* Display name */}
+          <Field T={T} label={tr("profile.edit.display_name", lang)}>
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value.slice(0, 60))}
+              maxLength={60}
+              style={inputStyle(T)}
+            />
+          </Field>
+
+          {/* Handle (with @ prefix as static element + availability indicator) */}
+          <Field T={T} label={tr("profile.edit.handle", lang)}>
+            <div style={{
+              display: "flex", alignItems: "center",
+              padding: "9px 12px", borderRadius: 12,
+              background: T.surface, border: `1px solid ${T.border}`,
+            }}>
+              <span style={{ fontFamily: FONT.mono, fontSize: 14, color: T.textMute }}>@</span>
+              <input
+                type="text"
+                value={handle.replace(/^@/, "")}
+                onChange={(e) => setHandle(e.target.value.replace(/[^A-Za-z0-9_]/g, "").slice(0, 15))}
+                placeholder="usuario"
+                style={{
+                  flex: 1, marginLeft: 4,
+                  background: "transparent", border: "none", outline: "none",
+                  color: T.text, fontFamily: FONT.mono, fontSize: 14,
+                }}
+              />
+              {handleStatus === "checking" && (
+                <span style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute }}>verificando…</span>
+              )}
+              {handleStatus === "available" && (
+                <span style={{ fontFamily: FONT.sans, fontSize: 12, color: T.accent, fontWeight: 700 }}>✓</span>
+              )}
+              {handleStatus === "taken" && (
+                <span style={{ fontFamily: FONT.sans, fontSize: 11, color: T.danger, fontWeight: 700 }}>en uso</span>
+              )}
+              {handleStatus === "invalid" && (
+                <span style={{ fontFamily: FONT.sans, fontSize: 11, color: T.danger, fontWeight: 700 }}>3-15 chars</span>
+              )}
+            </div>
+          </Field>
+
+          {/* Bio */}
+          <Field T={T} label={tr("profile.edit.bio", lang)}>
+            <textarea
+              value={bio}
+              onChange={(e) => setBio(e.target.value.slice(0, 160))}
+              rows={3}
+              maxLength={160}
+              placeholder={tr("profile.edit.bio_ph", lang)}
+              style={{ ...inputStyle(T), resize: "none", minHeight: 60 }}
+            />
+            <div style={{
+              fontFamily: FONT.mono, fontSize: 11, color: T.textMute,
+              textAlign: "right", marginTop: 4,
+            }}>{bio.length}/160</div>
+          </Field>
+
+          {/* Avatar color picker */}
+          <Field T={T} label={tr("profile.edit.color", lang)}>
+            <div style={{
+              display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 8,
+            }}>
+              {AVATAR_PALETTE.map((c) => {
+                const active = c === avatarColor;
+                return (
+                  <button
+                    key={c}
+                    onClick={() => setAvatarColor(c)}
+                    aria-label={c}
+                    style={{
+                      aspectRatio: "1 / 1", borderRadius: 12,
+                      background: c,
+                      border: active ? `2px solid ${T.text}` : `2px solid transparent`,
+                      cursor: "pointer", padding: 0,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}
+                  >
+                    {active && (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#06170D" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 6L9 17l-5-5"/>
+                      </svg>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+
+          {err && (
+            <div style={{
+              marginTop: 8, padding: "8px 12px", borderRadius: 10,
+              background: `${T.danger}15`, border: `1px solid ${T.danger}40`,
+              color: T.danger, fontFamily: FONT.sans, fontSize: 12,
+            }}>{err}</div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          padding: 16, borderTop: `1px solid ${T.border}`,
+          display: "flex", gap: 10,
+        }}>
+          <button onClick={onClose} style={{
+            flex: 1, padding: 12, borderRadius: 12,
+            background: T.surface, border: `1px solid ${T.border}`,
+            color: T.text, fontFamily: FONT.sans, fontSize: 14, fontWeight: 600,
+            cursor: "pointer",
+          }}>{tr("profile.edit.cancel", lang)}</button>
+          <button
+            onClick={save}
+            disabled={!canSave}
+            style={{
+              flex: 1, padding: 12, borderRadius: 12,
+              background: canSave ? T.accent : T.surface,
+              color: canSave ? T.accentInk : T.textMute,
+              border: canSave ? "none" : `1px solid ${T.border}`,
+              fontFamily: FONT.sans, fontSize: 14, fontWeight: 700,
+              cursor: canSave ? "pointer" : "default",
+              opacity: busy ? 0.6 : 1,
+            }}
+          >{busy ? "…" : tr("profile.edit.save", lang)}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Small Field wrapper — label above, content below, consistent
+// vertical rhythm. Reused by every input row in EditProfileSheet.
+function Field({ T, label, children }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{
+        fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+        color: T.textMute, letterSpacing: 0.4, textTransform: "uppercase",
+        marginBottom: 6,
+      }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function inputStyle(T) {
+  return {
+    width: "100%", boxSizing: "border-box",
+    padding: "9px 12px", borderRadius: 12,
+    background: T.surface, border: `1px solid ${T.border}`,
+    color: T.text, fontFamily: FONT.sans, fontSize: 14,
+    outline: "none",
+  };
 }
 
 function SettingsToggle({ T, title, subtitle, value, onChange }) {
