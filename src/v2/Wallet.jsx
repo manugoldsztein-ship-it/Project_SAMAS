@@ -559,13 +559,20 @@ function NotifGroup({ T, label, items }) {
 
 function NotifRow({ T, n, isLast }) {
   // Per-kind glyph + tint. New kinds fall through to a neutral system bell.
+  // Social kinds (social_like / social_repost / social_reply /
+  // social_follow) are written by triggers in supabase/social_notifications.sql
+  // when someone interacts with the user's posts or follows them.
   const meta = (() => {
     switch (n.kind) {
-      case "price_alert": return { emoji: "📈", tint: T.accent };
-      case "aporte":      return { emoji: "💰", tint: "#C9A84C" };
-      case "news":        return { emoji: "📰", tint: T.text };
-      case "mention":     return { emoji: "@",  tint: T.accent };
-      default:            return { emoji: "🔔", tint: T.textMute };
+      case "price_alert":   return { emoji: "📈", tint: T.accent };
+      case "aporte":        return { emoji: "💰", tint: "#C9A84C" };
+      case "news":          return { emoji: "📰", tint: T.text };
+      case "mention":       return { emoji: "@",  tint: T.accent };
+      case "social_like":   return { emoji: "❤️", tint: T.danger };
+      case "social_repost": return { emoji: "🔁", tint: T.accent };
+      case "social_reply":  return { emoji: "💬", tint: T.accent };
+      case "social_follow": return { emoji: "👤", tint: T.accent };
+      default:              return { emoji: "🔔", tint: T.textMute };
     }
   })();
   const when = relativeWhen(n.createdAt);
