@@ -18,7 +18,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { FONT } from "./theme.js";
 import { Ico } from "./icons.jsx";
-import { social as socialApi } from "./api/index.js";
+import { social as socialApi, messages as messagesApi } from "./api/index.js";
 import { useEdgeSwipeBack } from "./useEdgeSwipeBack.js";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { setRefreshHandler, callRefreshFor } from "./refreshRegistry.js";
@@ -45,6 +45,20 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
   const navBottom = isNativeApp
     ? "calc(env(safe-area-inset-bottom) + 12px)"
     : 12;
+
+  // openDmWith(peerUserId) — called from SearchView's UserRow when
+  // the user taps the DM button next to a search result. We stash
+  // the peer id in a localStorage briefcase (same pattern as the
+  // Broker → Social trade-share handoff) and switch the active tab
+  // to messages. MessagesView drains the briefcase on mount, opens
+  // the thread, and lands directly in the conversation view.
+  function openDmWith(peerUserId) {
+    if (!peerUserId) return;
+    try {
+      localStorage.setItem("samas_pending_dm_peer", String(peerUserId));
+    } catch {}
+    setTab("messages");
+  }
 
   // iOS-style swipe-from-left-edge back to the wallet shell.
   const { bind: swipeBind, style: swipeStyle } = useEdgeSwipeBack(onBack);
@@ -112,7 +126,7 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
       }}>
         {ptrIndicator}
         {tab === "feed"     && <FeedView T={T} lang={lang} user={user} />}
-        {tab === "search"   && <SearchView T={T} lang={lang} user={user} />}
+        {tab === "search"   && <SearchView T={T} lang={lang} user={user} onMessageUser={openDmWith} />}
         {tab === "messages" && <MessagesView T={T} lang={lang} user={user} />}
         {tab === "profile"  && <ProfileView T={T} lang={lang} user={user} />}
       </div>
@@ -475,7 +489,7 @@ function FeedView({ T, lang = "es", user = null }) {
 // ============================================================
 // SEARCH — find users by handle / name, follow inline
 // ============================================================
-function SearchView({ T, lang = "es" }) {
+function SearchView({ T, lang = "es", user = null, onMessageUser }) {
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -531,14 +545,22 @@ function SearchView({ T, lang = "es" }) {
             color: T.textMute, fontFamily: FONT.sans, fontSize: 13,
           }}>Sin resultados.</div>
         ) : (
-          users.map((u) => <UserRow key={u.id} T={T} user={u} onToggleFollow={() => toggleFollow(u)} />)
+          users.map((u) => (
+            <UserRow
+              key={u.id}
+              T={T}
+              user={u}
+              onToggleFollow={() => toggleFollow(u)}
+              onMessage={onMessageUser ? () => onMessageUser(u.id) : undefined}
+            />
+          ))
         )}
       </div>
     </div>
   );
 }
 
-function UserRow({ T, user, onToggleFollow }) {
+function UserRow({ T, user, onToggleFollow, onMessage }) {
   const handle = user.handle.replace(/^@/, "");
   const { initials, color } = avatarPropsFor(user, T.accent);
   return (
@@ -558,48 +580,425 @@ function UserRow({ T, user, onToggleFollow }) {
           @{handle}
         </div>
       </div>
-      <button
-        onClick={onToggleFollow}
-        style={{
-          padding: "6px 14px", borderRadius: 999,
-          background: user.followedByMe ? "transparent" : T.accent,
-          border: `1px solid ${user.followedByMe ? T.border : T.accent}`,
-          color: user.followedByMe ? T.text : T.accentInk,
-          fontFamily: FONT.sans, fontSize: 12, fontWeight: 700, cursor: "pointer",
-        }}
-      >{user.followedByMe ? "Siguiendo" : "Seguir"}</button>
+      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+        {onMessage && (
+          <button
+            onClick={onMessage}
+            aria-label="Mensaje"
+            style={{
+              width: 32, height: 32, borderRadius: 999,
+              background: "transparent", border: `1px solid ${T.border}`,
+              color: T.text, cursor: "pointer", padding: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+          >
+            <Ico.Send size={14}/>
+          </button>
+        )}
+        <button
+          onClick={onToggleFollow}
+          style={{
+            padding: "6px 14px", borderRadius: 999,
+            background: user.followedByMe ? "transparent" : T.accent,
+            border: `1px solid ${user.followedByMe ? T.border : T.accent}`,
+            color: user.followedByMe ? T.text : T.accentInk,
+            fontFamily: FONT.sans, fontSize: 12, fontWeight: 700, cursor: "pointer",
+          }}
+        >{user.followedByMe ? "Siguiendo" : "Seguir"}</button>
+      </div>
     </div>
   );
 }
 
 // ============================================================
-// MESSAGES — DM inbox (placeholder: needs real backend)
+// MESSAGES — 1:1 direct messages
 // ============================================================
-function MessagesView({ T, lang = "es" }) {
-  return (
-    <div style={{
-      padding: 32, paddingBottom: 110,
-      minHeight: "calc(100vh - 200px)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-    }}>
+// Two views internally: a list of threads (sorted by last_message_at)
+// and a conversation view when a thread is selected. The conversation
+// view subscribes to dm_messages INSERTs over realtime so the peer's
+// replies arrive without a refresh. Marks messages read on open via
+// messagesApi.markRead.
+//
+// Schema + RLS: supabase/social_messages.sql.
+// API:           src/v2/api/messages.js.
+// ============================================================
+function MessagesView({ T, lang = "es", user = null }) {
+  const [threads, setThreads] = useState(null); // null = loading
+  const [active, setActive] = useState(null);   // active thread or null
+
+  const refresh = useCallback(async () => {
+    try {
+      const list = await messagesApi.getThreads({ limit: 50 });
+      setThreads(list);
+    } catch (e) {
+      console.error("[messages] getThreads:", e);
+      setThreads([]);
+    }
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => setRefreshHandler("social-messages", refresh), [refresh]);
+
+  // Drain the "open DM with peer X" briefcase set by SocialPage's
+  // openDmWith() when the user tapped the DM button on a search
+  // result. Open the thread, set it as the active conversation,
+  // and clear the briefcase so a future tab visit doesn't keep
+  // re-opening the same chat.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      let peerUserId;
+      try {
+        peerUserId = localStorage.getItem("samas_pending_dm_peer");
+      } catch {}
+      if (!peerUserId) return;
+      try { localStorage.removeItem("samas_pending_dm_peer"); } catch {}
+      try {
+        const tRow = await messagesApi.openThreadWith(peerUserId);
+        const t = await messagesApi.getThread(tRow.id);
+        if (alive) setActive(t);
+      } catch (e) {
+        console.error("[messages] openDM:", e);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  // Realtime: any new dm_messages insert (visible to me via RLS)
+  // bumps the parent thread's last_message_at and may also be a
+  // new thread entirely. Cheapest path: just refresh the thread
+  // list. Threads view is small (dozens of rows), the query is
+  // fast, and we get correct sort + unread-count for free.
+  useEffect(() => {
+    let alive = true;
+    let channel = null;
+    (async () => {
+      const { data: u } = await supabase.auth.getUser();
+      const uid = u?.user?.id;
+      if (!uid || !alive) return;
+      channel = supabase
+        .channel(`dm-threads-${uid}`)
+        .on("postgres_changes", {
+          event: "INSERT",
+          schema: "public",
+          table: "dm_messages",
+        }, () => {
+          if (alive) refresh();
+        })
+        .subscribe();
+    })();
+    return () => {
+      alive = false;
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [refresh]);
+
+  if (active) {
+    return (
+      <ConversationView
+        T={T}
+        lang={lang}
+        thread={active}
+        onBack={() => { setActive(null); refresh(); }}
+      />
+    );
+  }
+
+  if (threads === null) {
+    return (
+      <div style={{ padding: 24, color: T.textMute, fontFamily: FONT.sans, fontSize: 13 }}>
+        Cargando…
+      </div>
+    );
+  }
+
+  if (threads.length === 0) {
+    return (
       <div style={{
-        textAlign: "center", padding: "32px 24px", borderRadius: 22,
-        background: T.surface, border: `1px solid ${T.border}`, maxWidth: 320,
+        padding: 32, paddingBottom: 110,
+        minHeight: "calc(100vh - 200px)",
+        display: "flex", alignItems: "center", justifyContent: "center",
       }}>
         <div style={{
-          width: 56, height: 56, borderRadius: 16,
-          background: T.accentSoft, color: T.accent,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          margin: "0 auto 14px",
+          textAlign: "center", padding: "32px 24px", borderRadius: 22,
+          background: T.surface, border: `1px solid ${T.border}`, maxWidth: 320,
         }}>
-          <Ico.Send size={22} />
+          <div style={{
+            width: 56, height: 56, borderRadius: 16,
+            background: T.accentSoft, color: T.accent,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            margin: "0 auto 14px",
+          }}>
+            <Ico.Send size={22} />
+          </div>
+          <div style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text, marginBottom: 8 }}>
+            Sin mensajes todavía
+          </div>
+          <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, lineHeight: 1.5 }}>
+            Tocá el ícono de mensaje en el perfil de alguien para empezar una conversación.
+          </div>
         </div>
-        <div style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text, marginBottom: 8 }}>
-          Mensajes directos
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ paddingBottom: 110 }}>
+      <div style={{ padding: "16px 16px 8px" }}>
+        {threads.map((t) => (
+          <ThreadRow key={t.id} T={T} thread={t} onOpen={() => setActive(t)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ThreadRow({ T, thread, onOpen }) {
+  const { initials, color } = avatarPropsFor(thread.peer, T.accent);
+  const preview = thread.lastMessage
+    ? (thread.lastMessage.fromMe ? "Vos: " : "") + thread.lastMessage.body
+    : "Sin mensajes aún";
+  return (
+    <button onClick={onOpen} style={{
+      width: "100%", padding: "12px 4px", display: "flex", alignItems: "center", gap: 12,
+      background: "transparent", border: "none", borderBottom: `1px solid ${T.border}`,
+      textAlign: "left", cursor: "pointer",
+    }}>
+      <Avatar T={T} initials={initials} color={color} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 6, justifyContent: "space-between" }}>
+          <span style={{
+            fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, color: T.text,
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>
+            {thread.peer.displayName}
+          </span>
+          {thread.unreadCount > 0 && (
+            <span style={{
+              background: T.accent, color: T.accentInk,
+              fontFamily: FONT.mono, fontSize: 10, fontWeight: 700,
+              borderRadius: 10, padding: "2px 7px", flexShrink: 0,
+            }}>{thread.unreadCount}</span>
+          )}
         </div>
-        <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, lineHeight: 1.5 }}>
-          Pronto vas a poder mandar DMs entre traders, compartir trades y guardar conversaciones.
+        <div style={{
+          fontFamily: FONT.sans, fontSize: 12, color: T.textMute, marginTop: 2,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}>{preview}</div>
+      </div>
+    </button>
+  );
+}
+
+// Conversation view — message list scrolled to bottom + compose bar.
+// Subscribes to INSERTs on dm_messages for THIS thread so peer
+// replies stream in live. Marks unread-as-read on open.
+function ConversationView({ T, lang = "es", thread, onBack }) {
+  const [messages, setMessages] = useState(null); // null=loading
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [me, setMe] = useState(null);
+  const scrollRef = React.useRef(null);
+
+  // Initial load + mark read.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { data: u } = await supabase.auth.getUser();
+        if (alive) setMe(u?.user?.id || null);
+        const list = await messagesApi.getMessages(thread.id, { limit: 100 });
+        // API returns newest-first; reverse for chronological render.
+        if (alive) setMessages(list.slice().reverse());
+        // Mark all unread (from peer) as read in the background.
+        messagesApi.markRead(thread.id).catch(() => {});
+      } catch (e) {
+        console.error("[messages] load:", e);
+        if (alive) setMessages([]);
+      }
+    })();
+    return () => { alive = false; };
+  }, [thread.id]);
+
+  // Realtime: stream new messages for this thread.
+  useEffect(() => {
+    let alive = true;
+    let channel = null;
+    (async () => {
+      const { data: u } = await supabase.auth.getUser();
+      const uid = u?.user?.id;
+      if (!uid || !alive) return;
+      channel = supabase
+        .channel(`dm-thread-${thread.id}`)
+        .on("postgres_changes", {
+          event: "INSERT",
+          schema: "public",
+          table: "dm_messages",
+          filter: `thread_id=eq.${thread.id}`,
+        }, (payload) => {
+          if (!alive) return;
+          const newMsg = messagesApi.payloadToMessage(payload.new, uid);
+          setMessages((prev) => {
+            const list = prev || [];
+            // Skip duplicates from optimistic updates
+            if (list.some((m) => m.id === newMsg.id)) return list;
+            return [...list, newMsg];
+          });
+          // If the new message is from the peer, mark it read on
+          // the server so the unread count goes away.
+          if (newMsg.authorId !== uid) {
+            messagesApi.markRead(thread.id).catch(() => {});
+          }
+        })
+        .subscribe();
+    })();
+    return () => {
+      alive = false;
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [thread.id]);
+
+  // Auto-scroll to bottom on new message.
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages?.length]);
+
+  async function send() {
+    if (!body.trim()) return;
+    if (busy) return;
+    setBusy(true);
+    const text = body;
+    setBody("");
+    try {
+      const sent = await messagesApi.sendMessage(thread.id, text);
+      setMessages((prev) => {
+        const list = prev || [];
+        if (list.some((m) => m.id === sent.id)) return list;
+        return [...list, sent];
+      });
+    } catch (e) {
+      console.error("[messages] send:", e);
+      setBody(text); // restore on failure
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const peerProps = avatarPropsFor(thread.peer, T.accent);
+
+  return (
+    <div style={{
+      paddingBottom: 110,
+      display: "flex", flexDirection: "column",
+      // Fill the available scroll viewport so the compose bar can
+      // dock at the bottom and the message list scrolls between.
+      minHeight: "calc(100dvh - 180px)",
+    }}>
+      {/* Header */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10,
+        padding: "12px 16px",
+        borderBottom: `1px solid ${T.border}`,
+        background: T.surface,
+      }}>
+        <button onClick={onBack} aria-label="Volver" style={{
+          width: 32, height: 32, borderRadius: 10,
+          background: T.bg, border: `1px solid ${T.border}`,
+          color: T.text, cursor: "pointer", padding: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
+        <Avatar T={T} initials={peerProps.initials} color={peerProps.color} size={32}/>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, color: T.text,
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>{thread.peer.displayName}</div>
+          <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute }}>
+            @{(thread.peer.handle || "").replace(/^@/, "")}
+          </div>
         </div>
+      </div>
+
+      {/* Message list */}
+      <div ref={scrollRef} style={{
+        flex: 1, overflowY: "auto",
+        padding: "14px 16px",
+        display: "flex", flexDirection: "column", gap: 6,
+      }}>
+        {messages === null ? (
+          <div style={{ color: T.textMute, fontFamily: FONT.sans, fontSize: 12, textAlign: "center" }}>Cargando…</div>
+        ) : messages.length === 0 ? (
+          <div style={{ color: T.textMute, fontFamily: FONT.sans, fontSize: 13, textAlign: "center", padding: 30 }}>
+            Empezá la conversación.
+          </div>
+        ) : (
+          messages.map((m) => (
+            <div key={m.id} style={{
+              alignSelf: m.fromMe ? "flex-end" : "flex-start",
+              maxWidth: "78%",
+              padding: "8px 12px", borderRadius: 14,
+              background: m.fromMe ? T.accent : T.surface,
+              color: m.fromMe ? T.accentInk : T.text,
+              border: m.fromMe ? "none" : `1px solid ${T.border}`,
+              fontFamily: FONT.sans, fontSize: 14, lineHeight: 1.4,
+              whiteSpace: "pre-wrap", wordBreak: "break-word",
+            }}>
+              {m.body}
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Compose bar */}
+      <div style={{
+        padding: "10px 12px",
+        borderTop: `1px solid ${T.border}`,
+        background: T.bg,
+        display: "flex", alignItems: "center", gap: 8,
+      }}>
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value.slice(0, 2000))}
+          placeholder="Escribí un mensaje…"
+          rows={1}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              send();
+            }
+          }}
+          style={{
+            flex: 1, resize: "none",
+            padding: "9px 12px", borderRadius: 14,
+            background: T.surface, border: `1px solid ${T.border}`,
+            color: T.text, fontFamily: FONT.sans, fontSize: 14,
+            outline: "none", minHeight: 0, maxHeight: 110,
+          }}
+        />
+        <button
+          onClick={send}
+          disabled={busy || !body.trim()}
+          style={{
+            width: 38, height: 38, borderRadius: 12,
+            background: !body.trim() ? T.surface : T.accent,
+            color: !body.trim() ? T.textMute : T.accentInk,
+            border: !body.trim() ? `1px solid ${T.border}` : "none",
+            cursor: busy || !body.trim() ? "default" : "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            opacity: busy ? 0.6 : 1,
+          }}
+          aria-label="Enviar"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
       </div>
     </div>
   );

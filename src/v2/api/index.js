@@ -27,5 +27,6 @@ import * as broker from "./broker.js";
 import * as social from "./social.js";
 import * as news from "./news.js";
 import * as notifications from "./notifications.js";
+import * as messages from "./messages.js";
 
-export { wallet, card, broker, social, news, notifications };
+export { wallet, card, broker, social, news, notifications, messages };
