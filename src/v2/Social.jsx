@@ -178,6 +178,38 @@ function FeedView({ T, lang = "es" }) {
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  // Trade attachment: when the Broker hands off a filled trade, we
+  // prefill `body` with a default sentence and `pendingTrade` with
+  // the jsonb-shaped payload. publish() forwards both to createPost
+  // so the post lands with a trade card. The user can clear the
+  // attachment with the X button (body stays).
+  const [pendingTrade, setPendingTrade] = useState(null);
+
+  // On first mount, drain the share briefcase (set by SamasShell when
+  // Broker dispatches "samas:share-trade"). This is one-shot — once
+  // consumed, the briefcase is cleared so a future visit to Social
+  // doesn't keep re-prefilling the compose box.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("samas_pending_trade_share");
+      if (!raw) return;
+      const trade = JSON.parse(raw);
+      localStorage.removeItem("samas_pending_trade_share");
+      if (!trade || !trade.ticker || !trade.qty || !trade.price) return;
+      setPendingTrade(trade);
+      const tplKey = trade.side === "buy"
+        ? "social.compose.trade_buy_template"
+        : "social.compose.trade_sell_template";
+      const priceStr = `US$${Number(trade.price).toLocaleString("es-AR", { maximumFractionDigits: 2 })}`;
+      setBody(tr(tplKey, lang, {
+        qty: String(trade.qty),
+        ticker: String(trade.ticker),
+        price: priceStr,
+      }));
+    } catch (e) {
+      console.warn("[social] trade prefill failed:", e);
+    }
+  }, [lang]);
 
   const refresh = useCallback(async () => {
     try {
@@ -197,8 +229,12 @@ function FeedView({ T, lang = "es" }) {
     setErr(null);
     if (!body.trim()) { setErr("El post está vacío."); return; }
     setBusy(true);
-    try { await socialApi.createPost({ body }); setBody(""); await refresh(); }
-    catch (e) { setErr(e.message); }
+    try {
+      await socialApi.createPost({ body, trade: pendingTrade || undefined });
+      setBody("");
+      setPendingTrade(null);
+      await refresh();
+    } catch (e) { setErr(e.message); }
     setBusy(false);
   }
 
@@ -266,6 +302,41 @@ function FeedView({ T, lang = "es" }) {
                 resize: "none",
               }}
             />
+            {/* Trade-card preview — shown when the Broker handed off
+                a filled trade. Same visual as the published trade
+                card on a feed item; an X button removes the
+                attachment without clearing the body text. */}
+            {pendingTrade && (
+              <div style={{
+                marginTop: 10, padding: "10px 12px", borderRadius: 12,
+                background: T.bg, border: `1px solid ${T.border}`,
+                display: "flex", alignItems: "center", gap: 10,
+              }}>
+                <div style={{
+                  padding: "3px 8px", borderRadius: 6,
+                  background: pendingTrade.side === "buy" ? T.accentSoft : T.dangerSoft,
+                  color: pendingTrade.side === "buy" ? T.accent : T.danger,
+                  fontFamily: FONT.mono, fontSize: 10, fontWeight: 700, letterSpacing: 0.6,
+                }}>{pendingTrade.side === "buy" ? "COMPRA" : "VENTA"}</div>
+                <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text }}>
+                  {pendingTrade.qty} {pendingTrade.ticker}
+                </div>
+                <div style={{ fontFamily: FONT.mono, fontSize: 12, color: T.textMute, marginLeft: "auto" }}>
+                  US${Number(pendingTrade.price).toLocaleString("es-AR")}
+                </div>
+                <button
+                  onClick={() => setPendingTrade(null)}
+                  aria-label={tr("social.compose.remove_trade", lang)}
+                  style={{
+                    width: 22, height: 22, borderRadius: 11, marginLeft: 4,
+                    background: T.surface, border: `1px solid ${T.border}`,
+                    color: T.textMute, fontFamily: FONT.sans, fontSize: 12,
+                    lineHeight: 1, cursor: "pointer", padding: 0,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}
+                >×</button>
+              </div>
+            )}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
               <span style={{ fontFamily: FONT.mono, fontSize: 11, color: T.textMute }}>
                 {body.length}/280

@@ -2505,6 +2505,23 @@ function ConfirmOrderStep({ T, asset, confirm, busy, err, onCancel, onConfirm, l
 }
 
 function DoneScreen({ T, done, side, qty, ticker, onClose }) {
+  // "Share this trade" hands off to the Social tab. We bridge across
+  // shells via a window CustomEvent (BrokerShell + SocialPage are
+  // sibling sub-shells under SamasShell, which listens for the event,
+  // stashes the trade in localStorage, and switches tab). Social.jsx
+  // picks it up on mount and prefills the compose box.
+  function shareTrade() {
+    if (!done) return;
+    const price = done.fillPrice;
+    if (!price) return; // limit order still pending — nothing to share yet
+    try {
+      window.dispatchEvent(new CustomEvent("samas:share-trade", {
+        detail: { side, qty, ticker, price },
+      }));
+    } catch {}
+    onClose();
+  }
+  const canShare = done.status === "filled" && !!done.fillPrice;
   return (
     <div style={{ textAlign: "center", padding: "24px 0 8px" }}>
       <div style={{
@@ -2523,6 +2540,25 @@ function DoneScreen({ T, done, side, qty, ticker, onClose }) {
         {side === "buy" ? "Compraste" : "Vendiste"} {qty} u de {ticker}
         {done.fillPrice ? ` a $${fmtMoney(done.fillPrice)}` : ""}
       </div>
+      {canShare && (
+        <button onClick={shareTrade} style={{
+          width: "100%", padding: 14, borderRadius: 14, marginBottom: 8,
+          background: T.surface, color: T.accent,
+          border: `1px solid ${T.accent}`,
+          fontFamily: FONT.sans, fontSize: 14, fontWeight: 700,
+          cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="18" cy="5" r="3"/>
+            <circle cx="6"  cy="12" r="3"/>
+            <circle cx="18" cy="19" r="3"/>
+            <line x1="8.59"  y1="13.51" x2="15.42" y2="17.49"/>
+            <line x1="15.41" y1="6.51"  x2="8.59"  y2="10.49"/>
+          </svg>
+          Compartir este trade
+        </button>
+      )}
       <button onClick={onClose} style={{
         width: "100%", padding: 14, borderRadius: 14,
         background: T.accent, color: T.accentInk,

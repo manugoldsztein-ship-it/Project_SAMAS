@@ -71,6 +71,26 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
     }
   }, [proMode]);
 
+  // Cross-shell handoff: the Broker DoneScreen fires
+  // "samas:share-trade" when the user taps "Compartir este trade"
+  // on a filled order. We stash the trade payload in localStorage
+  // (compose-prefill briefcase) and switch to the Social tab. The
+  // SocialPage reads + clears the briefcase on mount and prefills
+  // the compose box. Doing the handoff here (vs. props through
+  // BrokerShell → Social) keeps the lazy-load boundaries clean.
+  useEffect(() => {
+    function onShareTrade(e) {
+      try {
+        const trade = e?.detail;
+        if (!trade || !trade.ticker) return;
+        localStorage.setItem("samas_pending_trade_share", JSON.stringify(trade));
+      } catch {}
+      setTab("social");
+    }
+    window.addEventListener("samas:share-trade", onShareTrade);
+    return () => window.removeEventListener("samas:share-trade", onShareTrade);
+  }, []);
+
   const T = isDark ? SAMAS_THEME.dark : SAMAS_THEME.light;
   // The chrome layout fix moved safe-area handling out of #root and
   // onto the chrome elements themselves. So inside the shell we now
