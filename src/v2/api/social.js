@@ -329,6 +329,103 @@ export async function createPost({ body, trade }) {
 }
 
 /**
+ * getPostsByAuthor(userId, { limit, beforeMs }) — paginated
+ * newest-first posts authored by `userId`. Used by ProfileView to
+ * render someone's post timeline. Same denormalization shape as
+ * getFeed (author profile embedded, my-flags computed).
+ */
+export async function getPostsByAuthor(authorId, { limit = 30, beforeMs } = {}) {
+  const me = await currentUserId();
+  let q = supabase
+    .from("posts")
+    .select(`
+      id, author_id, body, ticker, trade,
+      likes_count, comments_count, reposts_count, created_at,
+      author:profiles_social!author_id (
+        user_id, handle, display_name, avatar_color, verified
+      )
+    `)
+    .eq("author_id", authorId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (beforeMs) q = q.lt("created_at", new Date(beforeMs).toISOString());
+  const { data: posts, error } = await q;
+  if (error) throw new Error(error.message);
+  if (!posts || posts.length === 0) return [];
+
+  const postIds = posts.map((p) => p.id);
+  const [likesRes, repostsRes, savesRes] = await Promise.all([
+    supabase.from("likes").select("post_id").eq("user_id", me).in("post_id", postIds),
+    supabase.from("reposts").select("post_id").eq("user_id", me).in("post_id", postIds),
+    supabase.from("saved_posts").select("post_id").eq("user_id", me).in("post_id", postIds),
+  ]);
+  const liked = new Set((likesRes.data || []).map((r) => r.post_id));
+  const reposted = new Set((repostsRes.data || []).map((r) => r.post_id));
+  const saved = new Set((savesRes.data || []).map((r) => r.post_id));
+
+  return posts.map((p) =>
+    postRowToPost(p, {
+      likedByMe: liked.has(p.id),
+      repostedByMe: reposted.has(p.id),
+      savedByMe: saved.has(p.id),
+      author: p.author ? profileRowToUser(p.author) : null,
+    })
+  );
+}
+
+/**
+ * getUserById(userId) — full peer profile for a drill-in: their
+ * social profile + post count + followers/following counts +
+ * whether the caller follows them. One round trip-ish: 4 parallel
+ * lightweight queries.
+ */
+export async function getUserById(userId) {
+  const me = await currentUserId();
+
+  const [profileRes, postsCountRes, followersCountRes, followingCountRes, iFollowRes] = await Promise.all([
+    supabase
+      .from("profiles_social")
+      .select("user_id, handle, display_name, avatar_color, bio, verified, is_admin, created_at")
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabase
+      .from("posts")
+      .select("id", { count: "exact", head: true })
+      .eq("author_id", userId)
+      .is("deleted_at", null),
+    supabase
+      .from("follows")
+      .select("follower_id", { count: "exact", head: true })
+      .eq("following_id", userId),
+    supabase
+      .from("follows")
+      .select("following_id", { count: "exact", head: true })
+      .eq("follower_id", userId),
+    me === userId ? Promise.resolve({ data: null }) : supabase
+      .from("follows")
+      .select("follower_id")
+      .eq("follower_id", me)
+      .eq("following_id", userId)
+      .maybeSingle(),
+  ]);
+
+  if (profileRes.error) throw new Error(profileRes.error.message);
+  if (!profileRes.data) throw new Error("Usuario no encontrado.");
+
+  return {
+    ...profileRowToUser(profileRes.data),
+    bio: profileRes.data.bio || "",
+    createdAt: profileRes.data.created_at ? new Date(profileRes.data.created_at).getTime() : null,
+    postCount: postsCountRes.count || 0,
+    followersCount: followersCountRes.count || 0,
+    followingCount: followingCountRes.count || 0,
+    followedByMe: !!iFollowRes.data,
+    isMe: me === userId,
+  };
+}
+
+/**
  * deletePost(postId) — soft-delete (sets deleted_at). Only the
  * author can call this; RLS enforces.
  */

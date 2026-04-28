@@ -42,6 +42,12 @@ const SUB_TABS = [
 // ----------------------------------------------------------
 export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user = null }) {
   const [tab, setTab] = useState("feed");
+  // Drilled-in peer profile. When set, a ProfileView sits above the
+  // current sub-tab as an overlay; tapping back returns to wherever
+  // the user came from. Tapping a different bottom-nav tab also
+  // dismisses the profile because tab change re-renders the active
+  // sub-view from scratch.
+  const [profileUserId, setProfileUserId] = useState(null);
   const navBottom = isNativeApp
     ? "calc(env(safe-area-inset-bottom) + 12px)"
     : 12;
@@ -57,8 +63,19 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
     try {
       localStorage.setItem("samas_pending_dm_peer", String(peerUserId));
     } catch {}
+    setProfileUserId(null); // dismiss any drilled-in profile first
     setTab("messages");
   }
+
+  // openProfile(userId) — drill into someone's profile. Skips the
+  // overlay if the userId is null/empty, or if it matches the
+  // currently logged-in user (in which case we route to the Profile
+  // tab instead of an overlay-of-self).
+  function openProfile(peerUserId) {
+    if (!peerUserId) return;
+    setProfileUserId(peerUserId);
+  }
+  function closeProfile() { setProfileUserId(null); }
 
   // iOS-style swipe-from-left-edge back to the wallet shell.
   const { bind: swipeBind, style: swipeStyle } = useEdgeSwipeBack(onBack);
@@ -125,14 +142,47 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
         WebkitOverflowScrolling: "touch",
       }}>
         {ptrIndicator}
-        {tab === "feed"     && <FeedView T={T} lang={lang} user={user} />}
-        {tab === "search"   && <SearchView T={T} lang={lang} user={user} onMessageUser={openDmWith} />}
-        {tab === "messages" && <MessagesView T={T} lang={lang} user={user} />}
-        {tab === "profile"  && <ProfileView T={T} lang={lang} user={user} />}
+        {tab === "feed"     && <FeedView T={T} lang={lang} user={user} onOpenProfile={openProfile} />}
+        {tab === "search"   && <SearchView T={T} lang={lang} user={user} onMessageUser={openDmWith} onOpenProfile={openProfile} />}
+        {tab === "messages" && <MessagesView T={T} lang={lang} user={user} onOpenProfile={openProfile} />}
+        {tab === "profile"  && <ProfileView T={T} lang={lang} user={user} onOpenProfile={openProfile} />}
       </div>
 
+      {/* Drill-in peer profile overlay. Sits above the current
+          sub-tab so back-arrow returns the user exactly where they
+          came from. Bottom nav stays interactive — tapping a tab
+          dismisses the overlay and routes there. */}
+      {profileUserId && (
+        <div style={{
+          position: "absolute", inset: 0,
+          background: T.bg, color: T.text,
+          overflow: "hidden",
+          display: "flex", flexDirection: "column",
+          // Same slide-in animation the Social shell itself uses
+          // on entry; gives the drill a native iOS feel.
+          animation: "samas-shell-in 220ms cubic-bezier(.2,.8,.2,1)",
+        }}>
+          <div {...ptrBind} style={{
+            flex: 1, overflowY: "auto",
+            overscrollBehavior: "contain",
+            WebkitOverflowScrolling: "touch",
+            paddingBottom: 110, // leave room for the bottom nav
+          }}>
+            <ProfileView
+              T={T}
+              lang={lang}
+              user={user}
+              profileUserId={profileUserId}
+              onBack={closeProfile}
+              onOpenProfile={openProfile}
+              onMessage={openDmWith}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Bottom nav */}
-      <SocialNav T={T} tab={tab} setTab={setTab} bottomInset={navBottom} lang={lang} />
+      <SocialNav T={T} tab={tab} setTab={(t) => { setProfileUserId(null); setTab(t); }} bottomInset={navBottom} lang={lang} />
     </div>
   );
 }
@@ -186,7 +236,7 @@ const FEED_TABS = [
   { id: "trades",    key: "social.tab.trades"    },
 ];
 
-function FeedView({ T, lang = "es", user = null }) {
+function FeedView({ T, lang = "es", user = null, onOpenProfile }) {
   const [tab, setTab] = useState("for_you");
   const [posts, setPosts] = useState([]);
   const [me, setMe] = useState(null);
@@ -478,6 +528,7 @@ function FeedView({ T, lang = "es", user = null }) {
               onLike={() => toggleLike(p)}
               onRepost={() => repost(p)}
               onSave={() => toggleSave(p)}
+              onOpenAuthor={onOpenProfile}
             />
           ))
         )}
@@ -489,7 +540,7 @@ function FeedView({ T, lang = "es", user = null }) {
 // ============================================================
 // SEARCH — find users by handle / name, follow inline
 // ============================================================
-function SearchView({ T, lang = "es", user = null, onMessageUser }) {
+function SearchView({ T, lang = "es", user = null, onMessageUser, onOpenProfile }) {
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -552,6 +603,7 @@ function SearchView({ T, lang = "es", user = null, onMessageUser }) {
               user={u}
               onToggleFollow={() => toggleFollow(u)}
               onMessage={onMessageUser ? () => onMessageUser(u.id) : undefined}
+              onOpen={onOpenProfile ? () => onOpenProfile(u.id) : undefined}
             />
           ))
         )}
@@ -560,14 +612,24 @@ function SearchView({ T, lang = "es", user = null, onMessageUser }) {
   );
 }
 
-function UserRow({ T, user, onToggleFollow, onMessage }) {
+function UserRow({ T, user, onToggleFollow, onMessage, onOpen }) {
   const handle = user.handle.replace(/^@/, "");
   const { initials, color } = avatarPropsFor(user, T.accent);
+  // Tap on the row body (avatar + name area) → drill into profile.
+  // The action buttons (Follow/DM) are siblings, not descendants of
+  // the clickable area, so taps on those don't bubble here.
+  const bodyProps = onOpen
+    ? { onClick: onOpen, style: { cursor: "pointer" } }
+    : {};
   return (
     <div style={{
       padding: "12px 4px", display: "flex", alignItems: "center", gap: 12,
       borderBottom: `1px solid ${T.border}`,
     }}>
+      <div {...bodyProps} style={{
+        display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0,
+        ...bodyProps.style,
+      }}>
       <Avatar T={T} initials={initials} color={color} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
@@ -579,6 +641,7 @@ function UserRow({ T, user, onToggleFollow, onMessage }) {
         <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute }}>
           @{handle}
         </div>
+      </div>
       </div>
       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
         {onMessage && (
@@ -622,7 +685,7 @@ function UserRow({ T, user, onToggleFollow, onMessage }) {
 // Schema + RLS: supabase/social_messages.sql.
 // API:           src/v2/api/messages.js.
 // ============================================================
-function MessagesView({ T, lang = "es", user = null }) {
+function MessagesView({ T, lang = "es", user = null, onOpenProfile }) {
   const [threads, setThreads] = useState(null); // null = loading
   const [active, setActive] = useState(null);   // active thread or null
 
@@ -700,6 +763,7 @@ function MessagesView({ T, lang = "es", user = null }) {
         lang={lang}
         thread={active}
         onBack={() => { setActive(null); refresh(); }}
+        onOpenProfile={onOpenProfile}
       />
     );
   }
@@ -793,7 +857,7 @@ function ThreadRow({ T, thread, onOpen }) {
 // Conversation view — message list scrolled to bottom + compose bar.
 // Subscribes to INSERTs on dm_messages for THIS thread so peer
 // replies stream in live. Marks unread-as-read on open.
-function ConversationView({ T, lang = "es", thread, onBack }) {
+function ConversationView({ T, lang = "es", thread, onBack, onOpenProfile }) {
   const [messages, setMessages] = useState(null); // null=loading
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
@@ -912,6 +976,15 @@ function ConversationView({ T, lang = "es", thread, onBack }) {
             <polyline points="15 18 9 12 15 6"/>
           </svg>
         </button>
+        <button
+          onClick={() => onOpenProfile && thread.peer?.id && onOpenProfile(thread.peer.id)}
+          disabled={!onOpenProfile}
+          style={{
+            display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0,
+            background: "transparent", border: "none", padding: 0,
+            cursor: onOpenProfile ? "pointer" : "default", textAlign: "left",
+          }}
+        >
         <Avatar T={T} initials={peerProps.initials} color={peerProps.color} size={32}/>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
@@ -922,6 +995,7 @@ function ConversationView({ T, lang = "es", thread, onBack }) {
             @{(thread.peer.handle || "").replace(/^@/, "")}
           </div>
         </div>
+        </button>
       </div>
 
       {/* Message list */}
@@ -1005,88 +1079,200 @@ function ConversationView({ T, lang = "es", thread, onBack }) {
 }
 
 // ============================================================
-// PROFILE — your stuff: posts, saved, follow stats
+// PROFILE — viewable in two modes:
+//   1) Self (no profileUserId or matches my id): the Profile tab
+//      route. Shows my posts AND my saved-posts, no Follow button.
+//   2) Peer (profileUserId set, drill-in): renders a back arrow,
+//      Follow/Unfollow + DM buttons, only their post list (no
+//      saved tab). Followers + Following + Posts counts.
 // ============================================================
-function ProfileView({ T, lang = "es", user = null }) {
-  const [me, setMe] = useState(null);
-  const [myPosts, setMyPosts] = useState([]);
-  const [following, setFollowing] = useState([]);
+function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack, onOpenProfile, onMessage }) {
+  const [me, setMe] = useState(null);          // logged-in user (for fallback color, isSelf check)
+  const [profile, setProfile] = useState(null); // person being viewed (me or peer)
+  const [posts, setPosts] = useState([]);
   const [saved, setSaved] = useState([]);
-  const [view, setView] = useState("posts"); // "posts" | "saved"
+  const [view, setView] = useState("posts");   // "posts" | "saved" — only relevant when self
+  const [followBusy, setFollowBusy] = useState(false);
 
-  useEffect(() => {
-    let alive = true;
-    Promise.all([
-      socialApi.getMe(),
-      socialApi.getFeed({ tab: "for_you", limit: 60 }),
-      socialApi.getFollowing(),
-      socialApi.getSavedPosts(),
-    ]).then(([m, feed, follows, sav]) => {
-      if (!alive) return;
+  const isSelf = !profileUserId || (me && me.id === profileUserId);
+
+  const loadProfile = useCallback(async () => {
+    try {
+      const m = await socialApi.getMe();
       setMe(m);
-      setMyPosts(feed.filter((p) => p.author?.id === m.id));
-      setFollowing(follows);
-      setSaved(sav);
-    }).catch(() => {});
-    return () => { alive = false; };
-  }, []);
+      if (!profileUserId || m.id === profileUserId) {
+        // Self path
+        const [feed, follows, sav] = await Promise.all([
+          socialApi.getPostsByAuthor(m.id, { limit: 60 }),
+          socialApi.getFollowing(),
+          socialApi.getSavedPosts(),
+        ]);
+        setProfile({
+          ...m,
+          postCount: feed.length,
+          followingCount: follows.length,
+          followersCount: 0, // not displayed for self in this view
+          followedByMe: false,
+          isMe: true,
+        });
+        setPosts(feed);
+        setSaved(sav);
+      } else {
+        // Peer path
+        const [peer, peerPosts] = await Promise.all([
+          socialApi.getUserById(profileUserId),
+          socialApi.getPostsByAuthor(profileUserId, { limit: 30 }),
+        ]);
+        setProfile(peer);
+        setPosts(peerPosts);
+      }
+    } catch (e) {
+      console.error("[profile] load:", e);
+    }
+  }, [profileUserId]);
 
-  if (!me) return null;
-  // avatarPropsFor centralizes the "what initials, what color" rule.
-  // Pass me first (preferred — has display_name + avatar_color from
-  // the social profile); the auth user is a fallback only if me is
-  // somehow missing fields.
-  const { initials, color } = avatarPropsFor(
-    { ...me, email: user?.email },
-    T.accent,
-  );
-  const handle = me.handle.replace(/^@/, "");
-  const list = view === "posts" ? myPosts : saved;
+  useEffect(() => { loadProfile(); }, [loadProfile]);
+
+  async function toggleFollow() {
+    if (!profile || isSelf || followBusy) return;
+    setFollowBusy(true);
+    try {
+      if (profile.followedByMe) await socialApi.unfollow(profile.id);
+      else await socialApi.follow(profile.id);
+      // Refresh just the profile (cheap) — not the full posts query.
+      const refreshed = await socialApi.getUserById(profile.id);
+      setProfile(refreshed);
+    } catch (e) {
+      console.error("[profile] follow toggle:", e);
+    } finally {
+      setFollowBusy(false);
+    }
+  }
+
+  if (!profile) return null;
+
+  // Self avatar uses the email-fallback chain (so 'MG' works on
+  // first paint before me has loaded). Peer avatar uses peer fields.
+  const avatarSeed = isSelf
+    ? { ...profile, email: user?.email }
+    : profile;
+  const { initials, color } = avatarPropsFor(avatarSeed, T.accent);
+  const handle = (profile.handle || "@user").replace(/^@/, "");
+  const list = isSelf && view === "saved" ? saved : posts;
 
   return (
     <div style={{ paddingBottom: 110 }}>
+      {/* Header — back arrow when drilled in (peer view) */}
+      {onBack && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "10px 12px",
+          borderBottom: `1px solid ${T.border}`,
+          background: T.bg,
+        }}>
+          <button onClick={onBack} aria-label="Volver" style={{
+            width: 32, height: 32, borderRadius: 10,
+            background: T.surface, border: `1px solid ${T.border}`,
+            color: T.text, cursor: "pointer", padding: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </button>
+          <div style={{
+            fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text,
+          }}>{profile.displayName}</div>
+        </div>
+      )}
+
       {/* Profile header */}
-      <div style={{ padding: "20px 16px 16px", display: "flex", alignItems: "center", gap: 14 }}>
+      <div style={{ padding: "20px 16px 16px", display: "flex", alignItems: "flex-start", gap: 14 }}>
         <Avatar T={T} initials={initials} color={color} size={64}/>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
             <span style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text }}>
-              {me.displayName}
+              {profile.displayName}
             </span>
-            {me.verified && <span style={{ color: T.accent, fontFamily: FONT.mono, fontSize: 13, fontWeight: 800 }}>✓</span>}
+            {profile.verified && <span style={{ color: T.accent, fontFamily: FONT.mono, fontSize: 13, fontWeight: 800 }}>✓</span>}
           </div>
           <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute }}>
             @{handle}
           </div>
-          <div style={{ display: "flex", gap: 14, marginTop: 8, fontFamily: FONT.mono, fontSize: 12 }}>
-            <span style={{ color: T.text }}><b>{myPosts.length}</b> <span style={{ color: T.textMute }}>posts</span></span>
-            <span style={{ color: T.text }}><b>{following.length}</b> <span style={{ color: T.textMute }}>siguiendo</span></span>
-            <span style={{ color: T.text }}><b>{saved.length}</b> <span style={{ color: T.textMute }}>guardados</span></span>
+          {profile.bio && (
+            <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.text, marginTop: 8, lineHeight: 1.4 }}>
+              {profile.bio}
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 14, marginTop: 10, fontFamily: FONT.mono, fontSize: 12, flexWrap: "wrap" }}>
+            <span style={{ color: T.text }}><b>{profile.postCount || 0}</b> <span style={{ color: T.textMute }}>posts</span></span>
+            {!isSelf && (
+              <span style={{ color: T.text }}><b>{profile.followersCount || 0}</b> <span style={{ color: T.textMute }}>seguidores</span></span>
+            )}
+            <span style={{ color: T.text }}><b>{profile.followingCount || 0}</b> <span style={{ color: T.textMute }}>siguiendo</span></span>
+            {isSelf && (
+              <span style={{ color: T.text }}><b>{saved.length}</b> <span style={{ color: T.textMute }}>guardados</span></span>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Posts / Saved toggle */}
-      <div style={{
-        display: "flex", gap: 4, padding: 4, margin: "0 16px",
-        background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12,
-      }}>
-        {[
-          { id: "posts", label: "Mis posts" },
-          { id: "saved", label: "Guardados" },
-        ].map((v) => {
-          const active = v.id === view;
-          return (
-            <button key={v.id} onClick={() => setView(v.id)} style={{
-              flex: 1, padding: "10px 0", borderRadius: 8,
-              background: active ? T.bg : "transparent",
-              border: active ? `1px solid ${T.border}` : "1px solid transparent",
-              color: active ? T.text : T.textMute,
-              fontFamily: FONT.sans, fontSize: 13, fontWeight: 600, cursor: "pointer",
-            }}>{v.label}</button>
-          );
-        })}
-      </div>
+      {/* Action row — Follow + DM only for peer view */}
+      {!isSelf && (
+        <div style={{ display: "flex", gap: 8, padding: "0 16px 16px" }}>
+          <button
+            onClick={toggleFollow}
+            disabled={followBusy}
+            style={{
+              flex: 1, padding: "10px 14px", borderRadius: 999,
+              background: profile.followedByMe ? "transparent" : T.accent,
+              border: `1px solid ${profile.followedByMe ? T.border : T.accent}`,
+              color: profile.followedByMe ? T.text : T.accentInk,
+              fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+              cursor: followBusy ? "default" : "pointer",
+              opacity: followBusy ? 0.6 : 1,
+            }}
+          >{profile.followedByMe ? "Siguiendo" : "Seguir"}</button>
+          {onMessage && (
+            <button
+              onClick={() => onMessage(profile.id)}
+              aria-label="Mensaje"
+              style={{
+                width: 42, height: 42, borderRadius: 999,
+                background: "transparent", border: `1px solid ${T.border}`,
+                color: T.text, cursor: "pointer", padding: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}
+            >
+              <Ico.Send size={16}/>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Posts / Saved toggle — self only */}
+      {isSelf && (
+        <div style={{
+          display: "flex", gap: 4, padding: 4, margin: "0 16px",
+          background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12,
+        }}>
+          {[
+            { id: "posts", label: "Mis posts" },
+            { id: "saved", label: "Guardados" },
+          ].map((v) => {
+            const active = v.id === view;
+            return (
+              <button key={v.id} onClick={() => setView(v.id)} style={{
+                flex: 1, padding: "10px 0", borderRadius: 8,
+                background: active ? T.bg : "transparent",
+                border: active ? `1px solid ${T.border}` : "1px solid transparent",
+                color: active ? T.text : T.textMute,
+                fontFamily: FONT.sans, fontSize: 13, fontWeight: 600, cursor: "pointer",
+              }}>{v.label}</button>
+            );
+          })}
+        </div>
+      )}
 
       <div style={{ margin: "16px" }}>
         {list.length === 0 ? (
@@ -1094,12 +1280,20 @@ function ProfileView({ T, lang = "es", user = null }) {
             padding: 30, textAlign: "center",
             color: T.textMute, fontFamily: FONT.sans, fontSize: 13,
           }}>
-            {view === "posts"
-              ? "Todavía no publicaste nada."
-              : "Aún no guardaste posts."}
+            {isSelf
+              ? (view === "posts" ? "Todavía no publicaste nada." : "Aún no guardaste posts.")
+              : "Sin posts todavía."}
           </div>
         ) : (
-          list.map((p) => <PostCard key={p.id} T={T} p={p} readonly />)
+          list.map((p) => (
+            <PostCard
+              key={p.id}
+              T={T}
+              p={p}
+              readonly
+              onOpenAuthor={onOpenProfile}
+            />
+          ))
         )}
       </div>
     </div>
@@ -1109,19 +1303,29 @@ function ProfileView({ T, lang = "es", user = null }) {
 // ============================================================
 // PostCard — used by Feed + Profile
 // ============================================================
-function PostCard({ T, p, saved, onLike, onRepost, onSave, readonly }) {
+function PostCard({ T, p, saved, onLike, onRepost, onSave, readonly, onOpenAuthor }) {
   const handle = (p.author?.handle || "@user").replace(/^@/, "");
   // avatarPropsFor handles the displayName-missing case AND falls
   // back to a deterministic color so two posters in the same feed
   // never share a tint by accident.
   const { initials, color } = avatarPropsFor(p.author, T.accent);
   const displayName = p.author?.displayName || "Usuario";
+  // Tap-into-profile handler. We bind it to the avatar/name area
+  // so taps on the body or action buttons aren't hijacked.
+  const openAuthor = (e) => {
+    if (!onOpenAuthor || !p.author?.id) return;
+    e.stopPropagation();
+    onOpenAuthor(p.author.id);
+  };
+  const authorRowProps = onOpenAuthor && p.author?.id
+    ? { onClick: openAuthor, style: { cursor: "pointer" } }
+    : {};
   return (
     <div style={{
       padding: 14, marginBottom: 8, borderRadius: 18,
       background: T.surface, border: `1px solid ${T.border}`,
     }}>
-      <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
+      <div {...authorRowProps} style={{ display: "flex", gap: 10, marginBottom: 8, ...authorRowProps.style }}>
         <Avatar T={T} initials={initials} color={color} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
