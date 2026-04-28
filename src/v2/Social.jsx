@@ -18,7 +18,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { FONT } from "./theme.js";
 import { Ico } from "./icons.jsx";
-import { social as socialApi, messages as messagesApi } from "./api/index.js";
+import { social as socialApi, messages as messagesApi, broker as brokerApi } from "./api/index.js";
 import { useEdgeSwipeBack } from "./useEdgeSwipeBack.js";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { setRefreshHandler, callRefreshFor } from "./refreshRegistry.js";
@@ -327,6 +327,101 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
   // so the post lands with a trade card. The user can clear the
   // attachment with the X button (body stays).
   const [pendingTrade, setPendingTrade] = useState(null);
+  // $-mention autocomplete state. We load the asset universe once
+  // (small list, ~20 entries) and surface matching tickers in a
+  // dropdown when the user types $ followed by 0+ alphanumerics.
+  // tickerMatch holds { start, end, query } when an active query
+  // is being typed, null otherwise. Computed on every body/cursor
+  // change via findActiveTickerQuery below.
+  const [assetUniverse, setAssetUniverse] = useState([]);
+  const [tickerMatch, setTickerMatch] = useState(null);
+  const composeRef = React.useRef(null);
+  useEffect(() => {
+    let alive = true;
+    brokerApi.getAssets().then((list) => {
+      if (alive) setAssetUniverse(list || []);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  // Compute the active $-mention query from body + cursor position.
+  // Walks backward from the cursor; if it hits a $ before any
+  // whitespace and the chars between $ and cursor are all
+  // alphanumeric, that's an active query. Returns { start, end,
+  // query } where start = index of $, end = cursor, query = the
+  // uppercased typed-so-far string (may be empty if the user just
+  // typed $). Updates tickerMatch state.
+  function recomputeTickerMatch(text, cursorPos) {
+    if (cursorPos == null || cursorPos > text.length) {
+      setTickerMatch(null);
+      return;
+    }
+    for (let i = cursorPos - 1; i >= 0; i--) {
+      const ch = text[i];
+      if (ch === "$") {
+        const q = text.slice(i + 1, cursorPos);
+        if (/^[A-Za-z0-9]*$/.test(q)) {
+          setTickerMatch({ start: i, end: cursorPos, query: q.toUpperCase() });
+          return;
+        }
+        setTickerMatch(null);
+        return;
+      }
+      if (/\s/.test(ch)) { setTickerMatch(null); return; }
+    }
+    setTickerMatch(null);
+  }
+
+  // Suggestions filtered by the current query — top 6 matches.
+  // Prefix match on ticker first (e.g. "NV" → NVDA), then a
+  // looser substring match on the asset name as a fallback
+  // (so "appl" surfaces AAPL via name match).
+  const tickerSuggestions = useMemo(() => {
+    if (!tickerMatch) return [];
+    const q = tickerMatch.query;
+    const universe = assetUniverse || [];
+    const seen = new Set();
+    const out = [];
+    for (const a of universe) {
+      if (out.length >= 6) break;
+      if (!a.ticker) continue;
+      if (q === "" || a.ticker.startsWith(q)) {
+        if (!seen.has(a.ticker)) { seen.add(a.ticker); out.push(a); }
+      }
+    }
+    if (out.length < 6 && q.length >= 1) {
+      for (const a of universe) {
+        if (out.length >= 6) break;
+        if (seen.has(a.ticker)) continue;
+        const nameUp = String(a.name || "").toUpperCase();
+        if (nameUp.includes(q)) { seen.add(a.ticker); out.push(a); }
+      }
+    }
+    return out;
+  }, [tickerMatch, assetUniverse]);
+
+  // Replace the active query (between $ and cursor) with the
+  // selected ticker symbol + a trailing space. Restore focus and
+  // place the cursor right after the inserted space so the user
+  // can keep typing without manually re-tapping the textarea.
+  function pickTicker(symbol) {
+    if (!tickerMatch || !symbol) return;
+    const before = body.slice(0, tickerMatch.start);
+    const after = body.slice(tickerMatch.end);
+    const inserted = `$${symbol} `;
+    const next = (before + inserted + after).slice(0, 280);
+    setBody(next);
+    setTickerMatch(null);
+    const newCursor = (before + inserted).length;
+    setTimeout(() => {
+      const el = composeRef.current;
+      if (!el) return;
+      try {
+        el.focus();
+        el.setSelectionRange(newCursor, newCursor);
+      } catch {}
+    }, 0);
+  }
 
   // On first mount, drain the share briefcase (set by SamasShell when
   // Broker dispatches "samas:share-trade"). This is one-shot — once
@@ -514,10 +609,24 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
             );
             return <Avatar T={T} initials={props.initials} color={props.color} />;
           })()}
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
             <textarea
+              ref={composeRef}
               value={body}
-              onChange={(e) => setBody(e.target.value.slice(0, 280))}
+              onChange={(e) => {
+                const next = e.target.value.slice(0, 280);
+                setBody(next);
+                // Recompute right after React updates the input —
+                // selectionStart on the event reflects the new value.
+                recomputeTickerMatch(next, e.target.selectionStart);
+              }}
+              onKeyUp={(e) => recomputeTickerMatch(body, e.target.selectionStart)}
+              onClick={(e) => recomputeTickerMatch(body, e.target.selectionStart)}
+              onBlur={() => {
+                // Hide the dropdown a tick after blur so a tap on a
+                // suggestion (which fires after blur) still registers.
+                setTimeout(() => setTickerMatch(null), 150);
+              }}
               placeholder={tr("social.compose_ph", lang)}
               rows={3}
               style={{
@@ -527,6 +636,53 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
                 resize: "none",
               }}
             />
+            {/* $-mention autocomplete dropdown */}
+            {tickerMatch && tickerSuggestions.length > 0 && (
+              <div style={{
+                marginTop: 4, marginBottom: 6,
+                background: T.bg, border: `1px solid ${T.border}`, borderRadius: 12,
+                overflow: "hidden",
+                maxHeight: 240, overflowY: "auto",
+              }}>
+                {tickerSuggestions.map((a) => (
+                  <button
+                    key={a.ticker}
+                    onMouseDown={(e) => {
+                      // onMouseDown fires before blur, so the textarea
+                      // doesn't lose focus before we can pick. preventDefault
+                      // belt-and-braces.
+                      e.preventDefault();
+                    }}
+                    onClick={() => pickTicker(a.ticker)}
+                    style={{
+                      width: "100%", padding: "8px 12px",
+                      display: "flex", alignItems: "center", gap: 10,
+                      background: "transparent", border: "none",
+                      borderBottom: `1px solid ${T.border}`,
+                      cursor: "pointer", textAlign: "left",
+                    }}
+                  >
+                    <div style={{
+                      fontFamily: FONT.mono, fontSize: 12, fontWeight: 700,
+                      color: T.accent, minWidth: 56,
+                    }}>${a.ticker}</div>
+                    <div style={{
+                      fontFamily: FONT.sans, fontSize: 12, color: T.textMute,
+                      flex: 1, minWidth: 0,
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}>{a.name}</div>
+                    {a.category && (
+                      <div style={{
+                        fontFamily: FONT.mono, fontSize: 9, fontWeight: 700,
+                        color: T.textMute, letterSpacing: 0.4, textTransform: "uppercase",
+                        background: T.surface, border: `1px solid ${T.border}`,
+                        padding: "2px 6px", borderRadius: 6,
+                      }}>{a.category}</div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
             {/* Trade-card preview — shown when the Broker handed off
                 a filled trade. Same visual as the published trade
                 card on a feed item; an X button removes the
