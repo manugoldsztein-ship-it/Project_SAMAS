@@ -22,6 +22,7 @@ import { social as socialApi } from "./api/index.js";
 import { useEdgeSwipeBack } from "./useEdgeSwipeBack.js";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { setRefreshHandler, callRefreshFor } from "./refreshRegistry.js";
+import { avatarPropsFor } from "./shared.jsx";
 import { t as tr } from "../lib/i18n.js";
 
 // SUB_TABS labels are looked up dynamically below so they re-translate
@@ -38,7 +39,7 @@ const SUB_TABS = [
 // Exposed under the same name SocialPage so Shell.jsx doesn't need to
 // change its lazy import.
 // ----------------------------------------------------------
-export function SocialPage({ T, isNativeApp = false, onBack, lang = "es" }) {
+export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user = null }) {
   const [tab, setTab] = useState("feed");
   const navBottom = isNativeApp
     ? "calc(env(safe-area-inset-bottom) + 12px)"
@@ -109,10 +110,10 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es" }) {
         WebkitOverflowScrolling: "touch",
       }}>
         {ptrIndicator}
-        {tab === "feed"     && <FeedView T={T} lang={lang} />}
-        {tab === "search"   && <SearchView T={T} lang={lang} />}
-        {tab === "messages" && <MessagesView T={T} lang={lang} />}
-        {tab === "profile"  && <ProfileView T={T} lang={lang} />}
+        {tab === "feed"     && <FeedView T={T} lang={lang} user={user} />}
+        {tab === "search"   && <SearchView T={T} lang={lang} user={user} />}
+        {tab === "messages" && <MessagesView T={T} lang={lang} user={user} />}
+        {tab === "profile"  && <ProfileView T={T} lang={lang} user={user} />}
       </div>
 
       {/* Bottom nav */}
@@ -170,7 +171,7 @@ const FEED_TABS = [
   { id: "trades",    key: "social.tab.trades"    },
 ];
 
-function FeedView({ T, lang = "es" }) {
+function FeedView({ T, lang = "es", user = null }) {
   const [tab, setTab] = useState("for_you");
   const [posts, setPosts] = useState([]);
   const [me, setMe] = useState(null);
@@ -285,10 +286,19 @@ function FeedView({ T, lang = "es" }) {
         background: T.surface, border: `1px solid ${T.border}`,
       }}>
         <div style={{ display: "flex", gap: 10 }}>
-          <Avatar T={T}
-            initials={(me?.displayName || "Vos").split(/\s+/).slice(0,2).map((s)=>s[0]).join("").toUpperCase()}
-            color={me?.avatarColor || T.accent}
-          />
+          {/* Compose avatar — prefer the social profile if loaded
+              (custom display_name / avatar_color); otherwise fall
+              back to the auth-session-derived user from App.jsx so
+              the avatar is correct from first paint, not after the
+              ~500ms getMe() round-trip. */}
+          {(() => {
+            const props = avatarPropsFor(
+              me ? { ...me, id: me.id, email: user?.email }
+                 : { name: user?.name, initials: user?.initials, email: user?.email },
+              T.accent,
+            );
+            return <Avatar T={T} initials={props.initials} color={props.color} />;
+          })()}
           <div style={{ flex: 1, minWidth: 0 }}>
             <textarea
               value={body}
@@ -455,14 +465,14 @@ function SearchView({ T, lang = "es" }) {
 }
 
 function UserRow({ T, user, onToggleFollow }) {
-  const initials = user.displayName.split(/\s+/).slice(0, 2).map((s) => s[0]).join("").toUpperCase();
   const handle = user.handle.replace(/^@/, "");
+  const { initials, color } = avatarPropsFor(user, T.accent);
   return (
     <div style={{
       padding: "12px 4px", display: "flex", alignItems: "center", gap: 12,
       borderBottom: `1px solid ${T.border}`,
     }}>
-      <Avatar T={T} initials={initials} color={user.avatarColor || T.accent} />
+      <Avatar T={T} initials={initials} color={color} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
           <span style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, color: T.text }}>
@@ -524,7 +534,7 @@ function MessagesView({ T, lang = "es" }) {
 // ============================================================
 // PROFILE — your stuff: posts, saved, follow stats
 // ============================================================
-function ProfileView({ T, lang = "es" }) {
+function ProfileView({ T, lang = "es", user = null }) {
   const [me, setMe] = useState(null);
   const [myPosts, setMyPosts] = useState([]);
   const [following, setFollowing] = useState([]);
@@ -549,7 +559,14 @@ function ProfileView({ T, lang = "es" }) {
   }, []);
 
   if (!me) return null;
-  const initials = me.displayName.split(/\s+/).slice(0, 2).map((s) => s[0]).join("").toUpperCase();
+  // avatarPropsFor centralizes the "what initials, what color" rule.
+  // Pass me first (preferred — has display_name + avatar_color from
+  // the social profile); the auth user is a fallback only if me is
+  // somehow missing fields.
+  const { initials, color } = avatarPropsFor(
+    { ...me, email: user?.email },
+    T.accent,
+  );
   const handle = me.handle.replace(/^@/, "");
   const list = view === "posts" ? myPosts : saved;
 
@@ -557,7 +574,7 @@ function ProfileView({ T, lang = "es" }) {
     <div style={{ paddingBottom: 110 }}>
       {/* Profile header */}
       <div style={{ padding: "20px 16px 16px", display: "flex", alignItems: "center", gap: 14 }}>
-        <Avatar T={T} initials={initials} color={me.avatarColor || T.accent} size={64}/>
+        <Avatar T={T} initials={initials} color={color} size={64}/>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
             <span style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text }}>
@@ -620,18 +637,19 @@ function ProfileView({ T, lang = "es" }) {
 // PostCard — used by Feed + Profile
 // ============================================================
 function PostCard({ T, p, saved, onLike, onRepost, onSave, readonly }) {
-  const displayName = p.author?.displayName || "Usuario";
   const handle = (p.author?.handle || "@user").replace(/^@/, "");
-  const initials = displayName
-    .split(/\s+/).filter(Boolean).slice(0, 2)
-    .map((s) => s[0]).join("").toUpperCase() || "??";
+  // avatarPropsFor handles the displayName-missing case AND falls
+  // back to a deterministic color so two posters in the same feed
+  // never share a tint by accident.
+  const { initials, color } = avatarPropsFor(p.author, T.accent);
+  const displayName = p.author?.displayName || "Usuario";
   return (
     <div style={{
       padding: 14, marginBottom: 8, borderRadius: 18,
       background: T.surface, border: `1px solid ${T.border}`,
     }}>
       <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
-        <Avatar T={T} initials={initials} color={p.author?.avatarColor || T.accent} />
+        <Avatar T={T} initials={initials} color={color} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
             <span style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, color: T.text }}>

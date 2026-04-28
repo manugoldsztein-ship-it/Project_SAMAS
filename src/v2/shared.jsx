@@ -146,6 +146,54 @@ export const initialsOf = (name) => {
   return name.trim().split(/\s+/).map(s => s[0]).slice(0, 2).join("").toUpperCase();
 };
 
+// Eight-color palette for avatar tints. The first entry (SAMAS green)
+// is the brand default; the rest spread across hue space so two
+// adjacent feed posts from different authors look visually distinct.
+// Pick by stable hash on a stable seed (user_id is best, email is OK,
+// display name is a last resort) so the same user always renders the
+// same color across sessions and devices.
+export const AVATAR_PALETTE = [
+  "#16C784", // SAMAS green
+  "#3B82F6", // blue
+  "#F59E0B", // amber
+  "#EC4899", // pink
+  "#8B5CF6", // violet
+  "#06B6D4", // cyan
+  "#EF4444", // red
+  "#10B981", // emerald
+];
+
+export function deriveAvatarColor(seed) {
+  if (!seed) return AVATAR_PALETTE[0];
+  // 32-bit djb2-ish hash. Plenty for 8 buckets.
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) {
+    h = (h * 31 + seed.charCodeAt(i)) | 0;
+  }
+  return AVATAR_PALETTE[Math.abs(h) % AVATAR_PALETTE.length];
+}
+
+// avatarPropsFor — single source of truth for "given a user-ish
+// object, what initials and what color do I render in the avatar
+// tile?". Accepts a partial user with any subset of:
+//   { displayName, name, initials, avatarColor, email, id }
+// and returns { initials, color }, both always strings. Used by
+// Social compose, Profile, message threads, and the Wallet header.
+export function avatarPropsFor(u, fallbackColor) {
+  const u0 = u || {};
+  const name = u0.displayName || u0.name || "";
+  const initials =
+    u0.initials ||
+    (name ? initialsOf(name) : "") ||
+    (u0.email ? u0.email.slice(0, 2).toUpperCase() : "??");
+  const color =
+    u0.avatarColor ||
+    deriveAvatarColor(u0.id || u0.email || name) ||
+    fallbackColor ||
+    AVATAR_PALETTE[0];
+  return { initials, color };
+}
+
 // ----------------------------------------------------------
 // SectionHead — title + optional right-aligned action link.
 // ----------------------------------------------------------

@@ -200,6 +200,7 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
             isNativeApp={isNativeApp}
             onBack={() => setTab("wallet")}
             lang={lang}
+            user={user}
           />
         </Suspense>
       )}
