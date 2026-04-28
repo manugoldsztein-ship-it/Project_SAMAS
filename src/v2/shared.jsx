@@ -143,7 +143,17 @@ export function Avatar({ color, initials, size = 38 }) {
 
 export const initialsOf = (name) => {
   if (!name) return "??";
-  return name.trim().split(/\s+/).map(s => s[0]).slice(0, 2).join("").toUpperCase();
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "??";
+  // Multi-word ("Manuel Goldsztein"): first letter of the first two
+  // words → "MG". This is the canonical case for users who set their
+  // real name (nombre + apellido).
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  // Single-word ("manugoldsztein", "elena"): take the first two
+  // characters so we never render a sad single-letter avatar. Users
+  // who only ever set one name (or who somehow ended up with their
+  // email local-part as displayName) still get a proper tile.
+  return parts[0].slice(0, 2).toUpperCase();
 };
 
 // Eight-color palette for avatar tints. The first entry (SAMAS green)

@@ -290,20 +290,32 @@ function LoginView({ C, onSwitchSignup, onSwitchForgot }) {
 // SIGNUP
 // -----------------------------------------------------------
 function SignupView({ C, onSwitchLogin, onSignupDone }) {
+  // nombre + apellido captured here flow into auth.users.raw_user_meta_data
+  // via the supabase.auth.signUp options.data field. The handle_new_user
+  // trigger reads them from raw_user_meta_data and writes them onto the
+  // public.profiles row, so by the time the user lands inside the app
+  // their displayName ("Manuel Goldsztein") and initials ("MG") are
+  // already correct in displayUser, getMe(), every Avatar render, etc.
+  const [nombre, setNombre] = useState("");
+  const [apellido, setApellido] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passConfirm, setPassConfirm] = useState("");
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
 
+  const nombreOk   = nombre.trim().length >= 1;
+  const apellidoOk = apellido.trim().length >= 1;
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const pwdLenOk = password.length >= 8;
   const pwdHasNumSym = /[^a-zA-Z\s]/.test(password); // digit or symbol
   const pwdMatch = password && password === passConfirm;
-  const allOk = emailOk && pwdLenOk && pwdHasNumSym && pwdMatch;
+  const allOk = nombreOk && apellidoOk && emailOk && pwdLenOk && pwdHasNumSym && pwdMatch;
 
   const submit = async () => {
     setErr(null);
+    if (!nombreOk)   return setErr("Ingresá tu nombre.");
+    if (!apellidoOk) return setErr("Ingresá tu apellido.");
     if (!emailOk) return setErr("Email inválido.");
     if (!pwdLenOk) return setErr("La contraseña debe tener al menos 8 caracteres.");
     if (!pwdHasNumSym) return setErr("La contraseña debe incluir al menos un número o símbolo.");
@@ -313,6 +325,14 @@ function SignupView({ C, onSwitchLogin, onSignupDone }) {
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
+      options: {
+        // raw_user_meta_data — picked up by the handle_new_user trigger
+        // (see supabase/schema.sql) and copied onto public.profiles.
+        data: {
+          nombre:   nombre.trim(),
+          apellido: apellido.trim(),
+        },
+      },
     });
     setBusy(false);
 
@@ -337,6 +357,24 @@ function SignupView({ C, onSwitchLogin, onSignupDone }) {
       <ErrorLine text={err} C={C} />
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 10 }}>
+          <input
+            type="text"
+            autoComplete="given-name"
+            placeholder="Nombre"
+            value={nombre}
+            onChange={(e) => { setNombre(e.target.value); setErr(null); }}
+            style={{ ...fieldStyle(C, nombre.length > 0 && !nombreOk), flex: 1 }}
+          />
+          <input
+            type="text"
+            autoComplete="family-name"
+            placeholder="Apellido"
+            value={apellido}
+            onChange={(e) => { setApellido(e.target.value); setErr(null); }}
+            style={{ ...fieldStyle(C, apellido.length > 0 && !apellidoOk), flex: 1 }}
+          />
+        </div>
         <input
           type="email"
           autoComplete="email"
