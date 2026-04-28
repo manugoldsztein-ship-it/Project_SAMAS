@@ -1,400 +1,708 @@
 // ============================================================
-// SAMAS v2 — Social API (Twitter-like feed)
+// SAMAS v2 — Social API (Supabase-backed)
 // ============================================================
-// Owns: posts, replies, likes, reposts, follows, profiles, reports.
-// Moderation queue is also surfaced here so admin tooling can drain
-// it without a separate service.
+// Owns: posts, replies, likes, reposts, follows, profiles_social,
+// saved_posts, reports. Schema + RLS in supabase/social.sql.
 //
-// PRODUCTION INTEGRATION TARGET — Supabase native
-//   Unlike wallet/card/broker (which integrate with external partners),
-//   the social graph is owned by SAMAS itself. The "production swap"
-//   here means moving from this file's in-memory mock to Supabase
-//   tables + RLS + a few edge functions for write paths. Schema and
-//   policies live in supabase/social.sql (TODO when wiring real).
+// EVERY function on this module exports the same signature it had
+// in the mock — Social.jsx is wired to this surface and doesn't
+// know we swapped storage layers. The DB ↔ JS field mapping is
+// done in row-mapping helpers at the top of the file.
 //
-// SCHEMA WE'LL CREATE WHEN GOING REAL
-//   posts(id, author_id, body, ticker, created_at, deleted_at, ...)
-//   likes(post_id, user_id)
-//   reposts(id, post_id, user_id, created_at)
-//   replies(id, post_id, author_id, body, created_at)
-//   follows(follower_id, following_id)
-//   reports(id, post_id, reporter_id, reason, created_at, resolved_at)
-//   profiles_social(handle, display_name, avatar_color, bio, verified)
+// ROW MAPPING
+//   posts.body                → post.body
+//   posts.ticker              → post.ticker
+//   posts.trade (jsonb)       → post.trade
+//   posts.likes_count         → post.likes
+//   posts.comments_count      → post.comments
+//   posts.reposts_count       → post.reposts
+//   posts.created_at          → post.at (ms epoch) + post.atLabel (relative)
+//   posts.deleted_at          → not surfaced (filtered out by RLS for non-author)
+//
+// PROFILE AUTO-PROVISION
+//   The first time a logged-in user opens Social, getMe() will find
+//   no row in profiles_social and auto-create one with derived
+//   defaults (handle from email local-part, display_name from
+//   first/last name on the legacy profiles row). This is the only
+//   write the user can do without an explicit action.
 // ============================================================
 
-import { jitter, maybeFail, genId, relativeStamp } from "./_mock.js";
-
-const STORAGE_KEY = "samas_v2_social_mock";
-
-function loadState() {
-  if (typeof localStorage === "undefined") return seed();
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : seed();
-  } catch { return seed(); }
-}
-
-function saveState(s) {
-  state = s;
-  if (typeof localStorage !== "undefined") {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch {}
-  }
-}
-
-// ----------------------------------------------------------
-// Seed users + a handful of posts so the feed isn't empty for the
-// first run. The current viewer is "santi" (us); the rest are
-// other accounts we follow.
-// ----------------------------------------------------------
-function seed() {
-  const now = Date.now();
-  const hour = 60 * 60 * 1000;
-  return {
-    me: { id: "u_santi", handle: "@santirola", displayName: "Santi R.", avatarColor: "oklch(0.78 0.16 145)", verified: true },
-    users: [
-      { id: "u_manu", handle: "@manugold",   displayName: "Manuel G.",   avatarColor: "oklch(0.62 0.16 65)" },
-      { id: "u_lupi", handle: "@lupimar",    displayName: "Lucía P.",    avatarColor: "oklch(0.72 0.16 350)" },
-      { id: "u_tk",   handle: "@tk_trader",  displayName: "Tomás K.",    avatarColor: "oklch(0.65 0.18 145)" },
-      { id: "u_caro", handle: "@caroinvest", displayName: "Carolina M.", avatarColor: "oklch(0.62 0.18 280)" },
-    ],
-    posts: [
-      {
-        id: genId(), authorId: "u_manu", at: now - 2 * hour,
-        body: "Cargando NVDA pre-earnings. La narrativa de IA sigue intacta y los multiples se ajustaron. Target 950 en 2 semanas.",
-        trade: { side: "buy", ticker: "NVDA", qty: 2, price: 888.40 },
-        likes: 142, comments: 28, reposts: 11,
-        likedByMe: false, repostedByMe: false,
-      },
-      {
-        id: genId(), authorId: "u_lupi", at: now - 4 * hour,
-        body: "GGAL volando con el resultado del Q1. +18% en el mes. Tomé ganancia de la mitad y dejo correr el resto.",
-        trade: { side: "sell", ticker: "GGAL", qty: 125, price: 4250 },
-        likes: 89, comments: 14, reposts: 6,
-        likedByMe: true, repostedByMe: false,
-      },
-      {
-        id: genId(), authorId: "u_tk", at: now - 6 * hour,
-        body: "Recordatorio: el dólar MEP no baja porque vos lo desees. Cobertura siempre. 70/30 USD/ARS es mi mix.",
-        trade: null,
-        likes: 312, comments: 47, reposts: 38,
-        likedByMe: false, repostedByMe: false,
-      },
-      {
-        id: genId(), authorId: "u_caro", at: now - 9 * hour,
-        body: "Primer trade del mes y salió bien. Gracias a los que respondieron mi pregunta sobre stops ayer 🙌",
-        trade: { side: "buy", ticker: "AAPL", qty: 3, price: 213.10 },
-        likes: 56, comments: 9, reposts: 2,
-        likedByMe: false, repostedByMe: false,
-      },
-    ],
-    follows: ["u_manu", "u_lupi", "u_tk", "u_caro"],
-    reports: [],   // post-id, reporter, reason, status — drains the moderation queue.
-  };
-}
-
-let state = loadState();
+import { supabase } from "../../lib/supabase.js";
+import { jitter, relativeStamp } from "./_mock.js";
 
 // ----------------------------------------------------------
 // Helpers
 // ----------------------------------------------------------
-function userById(id) {
-  if (id === state.me.id) return state.me;
-  return state.users.find((u) => u.id === id) || { id, handle: "@unknown", displayName: "?" };
+
+async function currentUserId() {
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data?.user?.id) throw new Error("Sesión no encontrada.");
+  return data.user.id;
 }
 
-function denormalizePost(p) {
-  const author = userById(p.authorId);
+function profileRowToUser(r) {
+  if (!r) return null;
   return {
-    id: p.id,
-    body: p.body,
-    trade: p.trade,
-    at: p.at,
-    atLabel: relativeStamp(p.at),
-    likes: p.likes, comments: p.comments, reposts: p.reposts,
-    likedByMe: p.likedByMe, repostedByMe: p.repostedByMe,
-    author: {
-      id: author.id, handle: author.handle, displayName: author.displayName,
-      avatarColor: author.avatarColor, verified: author.verified || false,
-    },
+    id: r.user_id,
+    handle: r.handle,
+    displayName: r.display_name,
+    avatarColor: r.avatar_color || "#16C784",
+    bio: r.bio || "",
+    verified: !!r.verified,
+    isAdmin: !!r.is_admin,
   };
 }
 
+function postRowToPost(r, opts = {}) {
+  const { likedByMe = false, repostedByMe = false, savedByMe = false, author } = opts;
+  const at = r.created_at ? new Date(r.created_at).getTime() : Date.now();
+  return {
+    id: r.id,
+    body: r.body,
+    ticker: r.ticker || null,
+    trade: r.trade || null,
+    at,
+    atLabel: relativeStamp(at),
+    likes: r.likes_count || 0,
+    comments: r.comments_count || 0,
+    reposts: r.reposts_count || 0,
+    likedByMe,
+    repostedByMe,
+    savedByMe,
+    author: author || (r.author ? profileRowToUser({
+      user_id: r.author.user_id || r.author_id,
+      handle: r.author.handle,
+      display_name: r.author.display_name,
+      avatar_color: r.author.avatar_color,
+      bio: r.author.bio,
+      verified: r.author.verified,
+      is_admin: r.author.is_admin,
+    }) : null),
+  };
+}
+
+// Try to derive a handle from the legacy profiles row. Falls back to
+// the email local-part if no profile row exists yet (newly-signed-up
+// user opening Social before completing onboarding).
+async function deriveDefaults(userId) {
+  // Pull display_name from the legacy `profiles` table if present.
+  let firstName = "";
+  let lastName = "";
+  let email = "";
+  try {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("nombre, apellido")
+      .eq("id", userId)
+      .maybeSingle();
+    firstName = (profile?.nombre || "").trim();
+    lastName  = (profile?.apellido || "").trim();
+  } catch {}
+  try {
+    const { data: u } = await supabase.auth.getUser();
+    email = u?.user?.email || "";
+  } catch {}
+  const fullName = [firstName, lastName].filter(Boolean).join(" ")
+    || (email ? email.split("@")[0] : "Usuario");
+  // handle: lowercase email local-part, with random suffix to avoid
+  // collisions on common names. Profile UI lets the user change it.
+  const base = (email.split("@")[0] || fullName.toLowerCase())
+    .replace(/[^a-z0-9_]/gi, "")
+    .slice(0, 12) || "user";
+  const suffix = Math.floor(Math.random() * 9000 + 1000); // 4 digits
+  const handle = `@${base}${suffix}`;
+  // Pick a color from a small palette so the avatar isn't always the
+  // same accent green.
+  const palette = ["#16C784", "#3B82F6", "#F59E0B", "#EC4899", "#8B5CF6", "#06B6D4"];
+  const avatarColor = palette[Math.floor(Math.random() * palette.length)];
+  return { handle, display_name: fullName, avatar_color: avatarColor };
+}
+
 // ----------------------------------------------------------
-// Public API
+// PROFILE
+// ----------------------------------------------------------
+
+/**
+ * getMe() — current user's social profile. Auto-creates the row on
+ * first access (no separate "social signup" step).
+ */
+export async function getMe() {
+  const userId = await currentUserId();
+  const { data, error } = await supabase
+    .from("profiles_social")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (data) return profileRowToUser(data);
+
+  // Auto-provision with derived defaults.
+  const defaults = await deriveDefaults(userId);
+  const { data: created, error: insErr } = await supabase
+    .from("profiles_social")
+    .insert({ user_id: userId, ...defaults })
+    .select("*")
+    .single();
+  if (insErr) {
+    // Race: another tab provisioned at the same time. Re-read.
+    const { data: again } = await supabase
+      .from("profiles_social")
+      .select("*")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (again) return profileRowToUser(again);
+    throw new Error(insErr.message);
+  }
+  return profileRowToUser(created);
+}
+
+/**
+ * updateMe({ handle, displayName, bio, avatarColor }) — patch the
+ * caller's profile_social row. Only the user themselves can flip
+ * these fields (RLS); verified / is_admin are admin-only.
+ */
+export async function updateMe(patch) {
+  const userId = await currentUserId();
+  const dbPatch = {};
+  if (patch.handle != null)       dbPatch.handle = patch.handle;
+  if (patch.displayName != null)  dbPatch.display_name = patch.displayName;
+  if (patch.bio != null)          dbPatch.bio = patch.bio;
+  if (patch.avatarColor != null)  dbPatch.avatar_color = patch.avatarColor;
+  const { data, error } = await supabase
+    .from("profiles_social")
+    .update(dbPatch)
+    .eq("user_id", userId)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return profileRowToUser(data);
+}
+
+// ----------------------------------------------------------
+// FEED
 // ----------------------------------------------------------
 
 /**
  * getFeed({ tab, limit }) — list of posts for a given tab.
  *
- * tabs:
- *   "following"   only people I follow (default)
- *   "for_you"     algorithmic / popular
- *   "trades"      only posts that contain a trade card
- *   "near"        geographic — TODO
- *
- * Production: GET /social/feed?tab=...  with cursor pagination.
+ * Implementation: one query for posts (joined to author profile),
+ * one query for "my likes" / "my reposts" / "my saves" to compute
+ * the per-row flags. Three queries total, all batched in parallel.
  */
-export async function getFeed({ tab = "following", limit = 20 } = {}) {
-  await jitter();
-  let rows = state.posts;
-  if (tab === "following") rows = rows.filter((p) => state.follows.includes(p.authorId));
-  else if (tab === "trades") rows = rows.filter((p) => !!p.trade);
-  // for_you / near use the full set in the mock.
-  return rows.slice(0, limit).map(denormalizePost);
+export async function getFeed({ tab = "for_you", limit = 20 } = {}) {
+  const userId = await currentUserId();
+
+  // Step 1: figure out which posts to fetch.
+  // For "following" we need the list of authors I follow first.
+  let authorFilter = null;
+  if (tab === "following") {
+    const { data: follows, error: fErr } = await supabase
+      .from("follows")
+      .select("following_id")
+      .eq("follower_id", userId);
+    if (fErr) throw new Error(fErr.message);
+    const ids = (follows || []).map((r) => r.following_id);
+    if (ids.length === 0) return [];     // not following anyone yet
+    authorFilter = ids;
+  }
+
+  let q = supabase
+    .from("posts")
+    .select(`
+      id, author_id, body, ticker, trade,
+      likes_count, comments_count, reposts_count, created_at,
+      author:profiles_social!author_id (
+        user_id, handle, display_name, avatar_color, verified
+      )
+    `)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (authorFilter) q = q.in("author_id", authorFilter);
+  if (tab === "trades") q = q.not("trade", "is", null);
+
+  const { data: posts, error } = await q;
+  if (error) throw new Error(error.message);
+  if (!posts || posts.length === 0) return [];
+
+  const postIds = posts.map((p) => p.id);
+
+  // Step 2 (parallel): my likes / reposts / saves on these posts.
+  const [likesRes, repostsRes, savesRes] = await Promise.all([
+    supabase.from("likes").select("post_id").eq("user_id", userId).in("post_id", postIds),
+    supabase.from("reposts").select("post_id").eq("user_id", userId).in("post_id", postIds),
+    supabase.from("saved_posts").select("post_id").eq("user_id", userId).in("post_id", postIds),
+  ]);
+  const liked = new Set((likesRes.data || []).map((r) => r.post_id));
+  const reposted = new Set((repostsRes.data || []).map((r) => r.post_id));
+  const saved = new Set((savesRes.data || []).map((r) => r.post_id));
+
+  return posts.map((p) =>
+    postRowToPost(p, {
+      likedByMe: liked.has(p.id),
+      repostedByMe: reposted.has(p.id),
+      savedByMe: saved.has(p.id),
+      author: p.author ? profileRowToUser(p.author) : null,
+    })
+  );
 }
 
 /**
- * getPost(postId) — single post + denormalized author.
+ * getPost(postId) — single post with denormalized author + my flags.
  */
 export async function getPost(postId) {
-  await jitter();
-  const p = state.posts.find((x) => x.id === postId);
-  if (!p) throw new Error("Post no encontrado.");
-  return denormalizePost(p);
+  const userId = await currentUserId();
+  const { data, error } = await supabase
+    .from("posts")
+    .select(`
+      id, author_id, body, ticker, trade,
+      likes_count, comments_count, reposts_count, created_at,
+      author:profiles_social!author_id (
+        user_id, handle, display_name, avatar_color, verified
+      )
+    `)
+    .eq("id", postId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Post no encontrado.");
+
+  const [{ data: lk }, { data: rp }, { data: sv }] = await Promise.all([
+    supabase.from("likes").select("post_id").eq("user_id", userId).eq("post_id", postId).maybeSingle(),
+    supabase.from("reposts").select("post_id").eq("user_id", userId).eq("post_id", postId).maybeSingle(),
+    supabase.from("saved_posts").select("post_id").eq("user_id", userId).eq("post_id", postId).maybeSingle(),
+  ]);
+  return postRowToPost(data, {
+    likedByMe: !!lk,
+    repostedByMe: !!rp,
+    savedByMe: !!sv,
+    author: data.author ? profileRowToUser(data.author) : null,
+  });
 }
 
+// ----------------------------------------------------------
+// CREATE / DELETE POSTS
+// ----------------------------------------------------------
+
 /**
- * createPost({ body, ticker, trade }) — publish a new post.
- *
- * Production: POST /social/posts. The server should run cheap
- * server-side moderation (banned-words list) and return 422 with a
- * reason if rejected. We return the created post on success.
- *
- * @param {{
- *   body: string,                  // 1..280 chars (we'll enforce server-side)
- *   trade?: { side: "buy"|"sell", ticker: string, qty: number, price: number },
- * }} input
+ * createPost({ body, trade }) — publish a new post. Body is
+ * client-side trimmed and length-checked; the server enforces the
+ * same limits via the CHECK constraint (defense in depth).
  */
 export async function createPost({ body, trade }) {
-  await jitter(300, 700);
+  const userId = await currentUserId();
   if (!body || !body.trim()) throw new Error("El post está vacío.");
   if (body.length > 280) throw new Error("Máximo 280 caracteres.");
 
-  // Demo-time moderation gate. In production this lives server-side.
+  // Light client-side moderation. Server-side moderation is a future
+  // Edge Function; the point of this list is to make the demo feel
+  // less spammable, not to be a real filter.
   const banned = ["spam", "scam", "estafa garantizada"];
   if (banned.some((w) => body.toLowerCase().includes(w))) {
     throw new Error("Tu post fue marcado por moderación. Revisalo y volvé a intentarlo.");
   }
 
-  await maybeFail(0.02, "No pudimos publicar tu post. Probá de nuevo.");
+  const ticker = trade?.ticker ? String(trade.ticker).toUpperCase() : null;
 
-  const post = {
-    id: genId(),
-    authorId: state.me.id,
-    at: Date.now(),
-    body: body.trim(),
-    trade: trade || null,
-    likes: 0, comments: 0, reposts: 0,
-    likedByMe: false, repostedByMe: false,
-  };
-  saveState({ ...state, posts: [post, ...state.posts] });
-  return denormalizePost(post);
+  const { data, error } = await supabase
+    .from("posts")
+    .insert({
+      author_id: userId,
+      body: body.trim(),
+      ticker,
+      trade: trade || null,
+    })
+    .select(`
+      id, author_id, body, ticker, trade,
+      likes_count, comments_count, reposts_count, created_at,
+      author:profiles_social!author_id (
+        user_id, handle, display_name, avatar_color, verified
+      )
+    `)
+    .single();
+  if (error) throw new Error(error.message);
+  return postRowToPost(data, {
+    likedByMe: false, repostedByMe: false, savedByMe: false,
+    author: data.author ? profileRowToUser(data.author) : null,
+  });
 }
 
 /**
- * deletePost(postId) — soft-delete (sets deleted_at server-side; in
- * the mock we just remove it from the list).
+ * deletePost(postId) — soft-delete (sets deleted_at). Only the
+ * author can call this; RLS enforces.
  */
 export async function deletePost(postId) {
-  await jitter();
-  const p = state.posts.find((x) => x.id === postId);
-  if (!p) throw new Error("Post no encontrado.");
-  if (p.authorId !== state.me.id) throw new Error("Solo podés borrar tus propios posts.");
-  saveState({ ...state, posts: state.posts.filter((x) => x.id !== postId) });
+  const userId = await currentUserId();
+  const { error } = await supabase
+    .from("posts")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", postId)
+    .eq("author_id", userId);
+  if (error) throw new Error(error.message);
   return { ok: true };
 }
 
-/**
- * likePost(postId) / unlikePost(postId) — toggle like.
- * Server should be idempotent (calling like twice = single row).
- */
+// ----------------------------------------------------------
+// LIKES / REPOSTS
+// ----------------------------------------------------------
+// Insert/delete patterns. Composite PKs make the writes idempotent
+// at the database level — calling like twice doesn't create two rows.
+// We swallow the unique-violation error on insert so the caller
+// always sees a successful "now liked" response.
+
+async function fetchPostCount(postId, field) {
+  const { data, error } = await supabase
+    .from("posts")
+    .select(field)
+    .eq("id", postId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data?.[field] || 0;
+}
+
 export async function likePost(postId) {
-  await jitter(80, 200);
-  const idx = state.posts.findIndex((p) => p.id === postId);
-  if (idx < 0) throw new Error("Post no encontrado.");
-  if (state.posts[idx].likedByMe) return { likes: state.posts[idx].likes, likedByMe: true };
-  const next = { ...state, posts: [...state.posts] };
-  next.posts[idx] = { ...next.posts[idx], likes: next.posts[idx].likes + 1, likedByMe: true };
-  saveState(next);
-  return { likes: next.posts[idx].likes, likedByMe: true };
+  const userId = await currentUserId();
+  const { error } = await supabase
+    .from("likes")
+    .insert({ post_id: postId, user_id: userId });
+  // 23505 = unique_violation = already liked. Treat as success.
+  if (error && error.code !== "23505") throw new Error(error.message);
+  const likes = await fetchPostCount(postId, "likes_count");
+  return { likes, likedByMe: true };
 }
+
 export async function unlikePost(postId) {
-  await jitter(80, 200);
-  const idx = state.posts.findIndex((p) => p.id === postId);
-  if (idx < 0) throw new Error("Post no encontrado.");
-  if (!state.posts[idx].likedByMe) return { likes: state.posts[idx].likes, likedByMe: false };
-  const next = { ...state, posts: [...state.posts] };
-  next.posts[idx] = { ...next.posts[idx], likes: Math.max(0, next.posts[idx].likes - 1), likedByMe: false };
-  saveState(next);
-  return { likes: next.posts[idx].likes, likedByMe: false };
+  const userId = await currentUserId();
+  const { error } = await supabase
+    .from("likes").delete()
+    .eq("post_id", postId).eq("user_id", userId);
+  if (error) throw new Error(error.message);
+  const likes = await fetchPostCount(postId, "likes_count");
+  return { likes, likedByMe: false };
 }
 
-/**
- * repostPost(postId) — repost (boost). Mock just increments the count
- * and flips the flag. Real impl creates a row in `reposts`.
- */
 export async function repostPost(postId) {
-  await jitter();
-  const idx = state.posts.findIndex((p) => p.id === postId);
-  if (idx < 0) throw new Error("Post no encontrado.");
-  if (state.posts[idx].repostedByMe) return { reposts: state.posts[idx].reposts, repostedByMe: true };
-  const next = { ...state, posts: [...state.posts] };
-  next.posts[idx] = { ...next.posts[idx], reposts: next.posts[idx].reposts + 1, repostedByMe: true };
-  saveState(next);
-  return { reposts: next.posts[idx].reposts, repostedByMe: true };
+  const userId = await currentUserId();
+  const { error } = await supabase
+    .from("reposts")
+    .insert({ post_id: postId, user_id: userId });
+  if (error && error.code !== "23505") throw new Error(error.message);
+  const reposts = await fetchPostCount(postId, "reposts_count");
+  return { reposts, repostedByMe: true };
 }
 
-/**
- * follow(userId) / unfollow(userId) — mutate the follow graph.
- */
-export async function follow(userId) {
-  await jitter();
-  if (state.follows.includes(userId)) return { ok: true };
-  saveState({ ...state, follows: [...state.follows, userId] });
+export async function unrepostPost(postId) {
+  const userId = await currentUserId();
+  const { error } = await supabase
+    .from("reposts").delete()
+    .eq("post_id", postId).eq("user_id", userId);
+  if (error) throw new Error(error.message);
+  const reposts = await fetchPostCount(postId, "reposts_count");
+  return { reposts, repostedByMe: false };
+}
+
+// ----------------------------------------------------------
+// FOLLOWS
+// ----------------------------------------------------------
+
+export async function follow(targetUserId) {
+  const userId = await currentUserId();
+  if (userId === targetUserId) throw new Error("No te podés seguir a vos mismo.");
+  const { error } = await supabase
+    .from("follows")
+    .insert({ follower_id: userId, following_id: targetUserId });
+  if (error && error.code !== "23505") throw new Error(error.message);
   return { ok: true };
 }
-export async function unfollow(userId) {
-  await jitter();
-  saveState({ ...state, follows: state.follows.filter((id) => id !== userId) });
+
+export async function unfollow(targetUserId) {
+  const userId = await currentUserId();
+  const { error } = await supabase
+    .from("follows").delete()
+    .eq("follower_id", userId).eq("following_id", targetUserId);
+  if (error) throw new Error(error.message);
   return { ok: true };
 }
 
-/**
- * reportPost({ postId, reason }) — flag a post for moderator review.
- *
- * Production: POST /social/reports. Inserts into `reports` table; an
- * admin sees it in their queue (getModerationQueue below).
- */
-export async function reportPost({ postId, reason }) {
-  await jitter();
-  if (!reason || !reason.trim()) throw new Error("Indicá el motivo del reporte.");
-  const report = {
-    id: genId(),
-    postId,
-    reporterId: state.me.id,
-    reason: reason.trim().slice(0, 500),
-    at: Date.now(),
-    status: "pending",
-  };
-  saveState({ ...state, reports: [report, ...state.reports] });
-  return { ok: true, reportId: report.id };
-}
+// ----------------------------------------------------------
+// USERS / SEARCH / FOLLOWING LIST
+// ----------------------------------------------------------
 
 /**
- * getMe() — current user's social profile.
- */
-export async function getMe() {
-  await jitter(50, 150);
-  return { ...state.me };
-}
-
-/**
- * getUsers({ query }) — list of accounts (everyone except me),
- * optionally filtered by handle/displayName substring. Used by the
- * Buscar tab inside Social.
+ * getUsers({ query }) — accounts other than me, optional handle/name
+ * substring filter, with `followedByMe` flag computed via a second
+ * lightweight query.
  */
 export async function getUsers({ query = "" } = {}) {
-  await jitter(60, 180);
-  const q = query.trim().toLowerCase();
-  return state.users
-    .map((u) => ({
-      ...u,
-      followedByMe: state.follows.includes(u.id),
-    }))
-    .filter((u) => {
-      if (!q) return true;
-      return (
-        u.handle.toLowerCase().includes(q) ||
-        u.displayName.toLowerCase().includes(q)
-      );
-    });
+  const userId = await currentUserId();
+  let q = supabase
+    .from("profiles_social")
+    .select("user_id, handle, display_name, avatar_color, verified")
+    .neq("user_id", userId)
+    .limit(50);
+  const trimmed = (query || "").trim();
+  if (trimmed) {
+    // Case-insensitive contains on either handle or display_name.
+    const pattern = `%${trimmed.replace(/[%_]/g, "")}%`;
+    q = q.or(`handle.ilike.${pattern},display_name.ilike.${pattern}`);
+  }
+  const { data: users, error } = await q;
+  if (error) throw new Error(error.message);
+  if (!users || users.length === 0) return [];
+
+  // followedByMe in one query: fetch follow rows for the visible set.
+  const ids = users.map((u) => u.user_id);
+  const { data: follows } = await supabase
+    .from("follows")
+    .select("following_id")
+    .eq("follower_id", userId)
+    .in("following_id", ids);
+  const followed = new Set((follows || []).map((r) => r.following_id));
+
+  return users.map((u) => ({
+    ...profileRowToUser(u),
+    followedByMe: followed.has(u.user_id),
+  }));
 }
 
 /**
- * getFollowing() — users I follow, denormalized.
+ * getFollowing() — users I follow, denormalized to the social profile.
  */
 export async function getFollowing() {
-  await jitter(60, 180);
-  return state.follows
-    .map((id) => state.users.find((u) => u.id === id))
-    .filter(Boolean);
+  const userId = await currentUserId();
+  const { data, error } = await supabase
+    .from("follows")
+    .select(`
+      following_id,
+      profile:profiles_social!following_id (
+        user_id, handle, display_name, avatar_color, verified
+      )
+    `)
+    .eq("follower_id", userId);
+  if (error) throw new Error(error.message);
+  return (data || [])
+    .map((r) => r.profile)
+    .filter(Boolean)
+    .map(profileRowToUser);
 }
 
-/**
- * savePost / unsavePost / getSavedPosts — Instagram-style bookmarks.
- * Stored separately from likes (a like is public, a save is private).
- * Mock keeps a "saves" array of postIds. Production = saved_posts table.
- */
+// ----------------------------------------------------------
+// SAVED POSTS (private bookmarks)
+// ----------------------------------------------------------
+
 export async function savePost(postId) {
-  await jitter();
-  if (!state.saves) state.saves = [];
-  if (state.saves.includes(postId)) return { ok: true };
-  saveState({ ...state, saves: [...state.saves, postId] });
+  const userId = await currentUserId();
+  const { error } = await supabase
+    .from("saved_posts")
+    .insert({ user_id: userId, post_id: postId });
+  if (error && error.code !== "23505") throw new Error(error.message);
   return { ok: true };
 }
+
 export async function unsavePost(postId) {
-  await jitter();
-  saveState({ ...state, saves: (state.saves || []).filter((id) => id !== postId) });
+  const userId = await currentUserId();
+  const { error } = await supabase
+    .from("saved_posts").delete()
+    .eq("user_id", userId).eq("post_id", postId);
+  if (error) throw new Error(error.message);
   return { ok: true };
 }
+
 export async function getSavedPosts() {
-  await jitter();
-  const ids = state.saves || [];
-  return state.posts
-    .filter((p) => ids.includes(p.id))
-    .map(denormalizePost);
+  const userId = await currentUserId();
+  const { data, error } = await supabase
+    .from("saved_posts")
+    .select(`
+      created_at,
+      post:posts!post_id (
+        id, author_id, body, ticker, trade,
+        likes_count, comments_count, reposts_count, created_at,
+        author:profiles_social!author_id (
+          user_id, handle, display_name, avatar_color, verified
+        )
+      )
+    `)
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+
+  const posts = (data || []).map((r) => r.post).filter(Boolean);
+  if (posts.length === 0) return [];
+
+  const ids = posts.map((p) => p.id);
+  const [likesRes, repostsRes] = await Promise.all([
+    supabase.from("likes").select("post_id").eq("user_id", userId).in("post_id", ids),
+    supabase.from("reposts").select("post_id").eq("user_id", userId).in("post_id", ids),
+  ]);
+  const liked = new Set((likesRes.data || []).map((r) => r.post_id));
+  const reposted = new Set((repostsRes.data || []).map((r) => r.post_id));
+  return posts.map((p) =>
+    postRowToPost(p, {
+      likedByMe: liked.has(p.id),
+      repostedByMe: reposted.has(p.id),
+      savedByMe: true,
+      author: p.author ? profileRowToUser(p.author) : null,
+    })
+  );
 }
 
 // ----------------------------------------------------------
-// Admin / Moderation — only callable by users with is_admin=true
-// (server-side enforced via RLS on the real impl).
+// REPLIES
 // ----------------------------------------------------------
+
+export async function getReplies(postId) {
+  const { data, error } = await supabase
+    .from("replies")
+    .select(`
+      id, post_id, body, created_at,
+      author:profiles_social!author_id (
+        user_id, handle, display_name, avatar_color, verified
+      )
+    `)
+    .eq("post_id", postId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data || []).map((r) => {
+    const at = r.created_at ? new Date(r.created_at).getTime() : Date.now();
+    return {
+      id: r.id,
+      postId: r.post_id,
+      body: r.body,
+      at,
+      atLabel: relativeStamp(at),
+      author: r.author ? profileRowToUser(r.author) : null,
+    };
+  });
+}
+
+export async function createReply({ postId, body }) {
+  const userId = await currentUserId();
+  if (!body || !body.trim()) throw new Error("La respuesta está vacía.");
+  if (body.length > 280) throw new Error("Máximo 280 caracteres.");
+  const { data, error } = await supabase
+    .from("replies")
+    .insert({ post_id: postId, author_id: userId, body: body.trim() })
+    .select(`
+      id, post_id, body, created_at,
+      author:profiles_social!author_id (
+        user_id, handle, display_name, avatar_color, verified
+      )
+    `)
+    .single();
+  if (error) throw new Error(error.message);
+  const at = new Date(data.created_at).getTime();
+  return {
+    id: data.id,
+    postId: data.post_id,
+    body: data.body,
+    at,
+    atLabel: relativeStamp(at),
+    author: data.author ? profileRowToUser(data.author) : null,
+  };
+}
+
+// ----------------------------------------------------------
+// REPORTS / MODERATION
+// ----------------------------------------------------------
+
+export async function reportPost({ postId, reason }) {
+  const userId = await currentUserId();
+  if (!reason || !reason.trim()) throw new Error("Indicá un motivo.");
+  const { data, error } = await supabase
+    .from("reports")
+    .insert({ post_id: postId, reporter_id: userId, reason: reason.trim() })
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+  return { ok: true, reportId: data.id };
+}
 
 /**
- * getModerationQueue({ status }) — open reports.
- * Admin sees everything; regular users get 403 in production.
+ * getModerationQueue({ status }) — RLS will silently return [] for
+ * non-admins because the select policy gates rows on is_admin (or
+ * own reports). The frontend should hide the moderation tab if
+ * profile.isAdmin is false anyway.
  */
 export async function getModerationQueue({ status = "pending" } = {}) {
-  await jitter();
-  return state.reports
-    .filter((r) => r.status === status)
-    .map((r) => {
-      const post = state.posts.find((p) => p.id === r.postId);
-      const reporter = userById(r.reporterId);
-      return {
-        ...r,
-        atLabel: relativeStamp(r.at),
-        post: post ? denormalizePost(post) : null,
-        reporter: { id: reporter.id, handle: reporter.handle, displayName: reporter.displayName },
-      };
-    });
+  const { data, error } = await supabase
+    .from("reports")
+    .select(`
+      id, reason, status, action, created_at, resolved_at,
+      reporter:profiles_social!reporter_id (
+        user_id, handle, display_name, avatar_color, verified
+      ),
+      post:posts!post_id (
+        id, author_id, body, ticker, trade,
+        likes_count, comments_count, reposts_count, created_at,
+        author:profiles_social!author_id (
+          user_id, handle, display_name, avatar_color, verified
+        )
+      )
+    `)
+    .eq("status", status)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []).map((r) => ({
+    id: r.id,
+    reason: r.reason,
+    status: r.status,
+    action: r.action,
+    at: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+    atLabel: relativeStamp(r.created_at ? new Date(r.created_at).getTime() : Date.now()),
+    resolvedAt: r.resolved_at,
+    reporter: r.reporter ? profileRowToUser(r.reporter) : null,
+    post: r.post ? postRowToPost(r.post, {
+      author: r.post.author ? profileRowToUser(r.post.author) : null,
+    }) : null,
+  }));
 }
 
 /**
- * resolveReport({ reportId, action }) — admin decides.
- * action: "dismiss" | "delete_post" | "ban_user"
+ * resolveReport({ reportId, action }) — admin endpoint. Action drives
+ * the side effect:
+ *   "dismiss"      → mark resolved, no post change
+ *   "delete_post"  → mark resolved, soft-delete the reported post
+ *   "ban_user"     → TODO (not implemented; leaves a marker for future)
  */
 export async function resolveReport({ reportId, action }) {
-  await jitter();
-  const idx = state.reports.findIndex((r) => r.id === reportId);
-  if (idx < 0) throw new Error("Report no encontrado.");
-  const r = state.reports[idx];
+  if (!["dismiss", "delete_post", "ban_user"].includes(action)) {
+    throw new Error("Acción inválida.");
+  }
+  // Pull the post_id first so we can soft-delete it if needed.
+  const { data: report, error: rErr } = await supabase
+    .from("reports").select("post_id").eq("id", reportId).maybeSingle();
+  if (rErr) throw new Error(rErr.message);
+  if (!report) throw new Error("Report no encontrado.");
 
-  const next = { ...state, reports: [...state.reports] };
-  next.reports[idx] = { ...r, status: "resolved", action, resolvedAt: Date.now() };
+  const { error: uErr } = await supabase
+    .from("reports")
+    .update({ status: "resolved", action, resolved_at: new Date().toISOString() })
+    .eq("id", reportId);
+  if (uErr) throw new Error(uErr.message);
 
   if (action === "delete_post") {
-    next.posts = next.posts.filter((p) => p.id !== r.postId);
+    await supabase
+      .from("posts")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", report.post_id);
   }
-  // ban_user is a stub for the demo — would flag the user in real impl.
-
-  saveState(next);
   return { ok: true };
 }
 
 // ----------------------------------------------------------
-// Demo helpers
+// Demo / dev helpers — no-op in real backend (kept for compat
+// with any UI that still calls _resetDemo from the legacy mock).
 // ----------------------------------------------------------
 export function _resetDemo() {
-  saveState(seed());
+  if (typeof console !== "undefined") {
+    console.warn("[social] _resetDemo is a no-op against the real backend.");
+  }
+  return { ok: false, reason: "live-backend" };
 }
+
+// jitter is no longer needed (real network latency is real), but
+// leave the import surface stable so any future debug code can
+// re-add artificial latency without changing imports.
+void jitter;
