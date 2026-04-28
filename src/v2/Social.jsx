@@ -48,6 +48,11 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
   // dismisses the profile because tab change re-renders the active
   // sub-view from scratch.
   const [profileUserId, setProfileUserId] = useState(null);
+  // Drilled-in thread view (post + replies). Same overlay pattern
+  // as profileUserId above, but stacks on top of profile so a user
+  // can: open profile → tap a post in their feed → see replies →
+  // back out → still on profile → back out → still on feed.
+  const [threadPost, setThreadPost] = useState(null);
   const navBottom = isNativeApp
     ? "calc(env(safe-area-inset-bottom) + 12px)"
     : 12;
@@ -76,6 +81,15 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
     setProfileUserId(peerUserId);
   }
   function closeProfile() { setProfileUserId(null); }
+
+  // openThread(post) — drill into the replies thread for a post.
+  // The post object is the full denormalized PostCard payload, so
+  // ThreadView can render it as the parent without an extra fetch.
+  function openThread(post) {
+    if (!post) return;
+    setThreadPost(post);
+  }
+  function closeThread() { setThreadPost(null); }
 
   // iOS-style swipe-from-left-edge back to the wallet shell.
   const { bind: swipeBind, style: swipeStyle } = useEdgeSwipeBack(onBack);
@@ -142,10 +156,10 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
         WebkitOverflowScrolling: "touch",
       }}>
         {ptrIndicator}
-        {tab === "feed"     && <FeedView T={T} lang={lang} user={user} onOpenProfile={openProfile} />}
+        {tab === "feed"     && <FeedView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} />}
         {tab === "search"   && <SearchView T={T} lang={lang} user={user} onMessageUser={openDmWith} onOpenProfile={openProfile} />}
         {tab === "messages" && <MessagesView T={T} lang={lang} user={user} onOpenProfile={openProfile} />}
-        {tab === "profile"  && <ProfileView T={T} lang={lang} user={user} onOpenProfile={openProfile} />}
+        {tab === "profile"  && <ProfileView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} />}
       </div>
 
       {/* Drill-in peer profile overlay. Sits above the current
@@ -176,13 +190,37 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
               onBack={closeProfile}
               onOpenProfile={openProfile}
               onMessage={openDmWith}
+              onOpenThread={openThread}
             />
           </div>
         </div>
       )}
 
+      {/* Drill-in thread view. Rendered on top of the profile
+          overlay (via z-order via render order) so a user can drill
+          profile → tap one of their posts → see replies → back out
+          to profile → back out to feed. */}
+      {threadPost && (
+        <div style={{
+          position: "absolute", inset: 0,
+          background: T.bg, color: T.text,
+          overflow: "hidden",
+          display: "flex", flexDirection: "column",
+          animation: "samas-shell-in 220ms cubic-bezier(.2,.8,.2,1)",
+          zIndex: 30,
+        }}>
+          <ThreadView
+            T={T}
+            lang={lang}
+            post={threadPost}
+            onBack={closeThread}
+            onOpenProfile={openProfile}
+          />
+        </div>
+      )}
+
       {/* Bottom nav */}
-      <SocialNav T={T} tab={tab} setTab={(t) => { setProfileUserId(null); setTab(t); }} bottomInset={navBottom} lang={lang} />
+      <SocialNav T={T} tab={tab} setTab={(t) => { setProfileUserId(null); setThreadPost(null); setTab(t); }} bottomInset={navBottom} lang={lang} />
     </div>
   );
 }
@@ -236,7 +274,7 @@ const FEED_TABS = [
   { id: "trades",    key: "social.tab.trades"    },
 ];
 
-function FeedView({ T, lang = "es", user = null, onOpenProfile }) {
+function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread }) {
   const [tab, setTab] = useState("for_you");
   const [posts, setPosts] = useState([]);
   const [me, setMe] = useState(null);
@@ -529,6 +567,7 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile }) {
               onRepost={() => repost(p)}
               onSave={() => toggleSave(p)}
               onOpenAuthor={onOpenProfile}
+              onOpenThread={onOpenThread}
             />
           ))
         )}
@@ -1086,7 +1125,7 @@ function ConversationView({ T, lang = "es", thread, onBack, onOpenProfile }) {
 //      Follow/Unfollow + DM buttons, only their post list (no
 //      saved tab). Followers + Following + Posts counts.
 // ============================================================
-function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack, onOpenProfile, onMessage }) {
+function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack, onOpenProfile, onMessage, onOpenThread }) {
   const [me, setMe] = useState(null);          // logged-in user (for fallback color, isSelf check)
   const [profile, setProfile] = useState(null); // person being viewed (me or peer)
   const [posts, setPosts] = useState([]);
@@ -1292,6 +1331,7 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
               p={p}
               readonly
               onOpenAuthor={onOpenProfile}
+              onOpenThread={onOpenThread}
             />
           ))
         )}
@@ -1301,9 +1341,269 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
 }
 
 // ============================================================
+// ThreadView — drill-in conversation around a single post
+// ============================================================
+// Renders the parent post on top + chronological replies + a
+// compose box. Subscribes to INSERTs on the replies table filtered
+// to this post_id so peer responses arrive live (~500ms). Replies
+// have author profiles denormalized via the relational select on
+// the FK we added in samas-0.0.21 (replies_author_profile_fkey).
+//
+// Tap any reply author's avatar/handle → drills into their profile
+// (recursive navigation, supported by the SocialPage overlay stack).
+// ============================================================
+function ThreadView({ T, lang = "es", post, onBack, onOpenProfile }) {
+  const [replies, setReplies] = useState(null); // null = loading
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [me, setMe] = useState(null);
+
+  // Initial load.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const [list, m] = await Promise.all([
+          socialApi.getReplies(post.id),
+          socialApi.getMe().catch(() => null),
+        ]);
+        if (alive) {
+          setReplies(list);
+          setMe(m);
+        }
+      } catch (e) {
+        console.error("[thread] load:", e);
+        if (alive) setReplies([]);
+      }
+    })();
+    return () => { alive = false; };
+  }, [post.id]);
+
+  // Realtime: stream new replies for this post. Most posts will
+  // have a small reply count, so re-running getReplies on each
+  // INSERT (instead of point-mapping the payload) is cheap and
+  // means we always show denormalized authors without an extra
+  // profile lookup. The optimistic prepend on send dedupes by id.
+  useEffect(() => {
+    let alive = true;
+    let channel = null;
+    (async () => {
+      const { data: u } = await supabase.auth.getUser();
+      const uid = u?.user?.id;
+      if (!uid || !alive) return;
+      channel = supabase
+        .channel(`replies-${post.id}`)
+        .on("postgres_changes", {
+          event: "INSERT",
+          schema: "public",
+          table: "replies",
+          filter: `post_id=eq.${post.id}`,
+        }, async (payload) => {
+          if (!alive) return;
+          // Skip replies the local user just sent — createReply
+          // already prepended via the optimistic update path.
+          if (payload?.new?.author_id === uid) return;
+          try {
+            const fresh = await socialApi.getReplies(post.id);
+            if (alive) setReplies(fresh);
+          } catch {}
+        })
+        .subscribe();
+    })();
+    return () => {
+      alive = false;
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [post.id]);
+
+  async function send() {
+    setErr(null);
+    if (!body.trim()) return;
+    if (busy) return;
+    setBusy(true);
+    const text = body;
+    setBody("");
+    try {
+      const created = await socialApi.createReply({ postId: post.id, body: text });
+      setReplies((prev) => {
+        const list = prev || [];
+        if (list.some((r) => r.id === created.id)) return list;
+        // Replies render in chronological order; new ones go to the end.
+        return [...list, created];
+      });
+    } catch (e) {
+      setErr(e.message);
+      setBody(text); // restore on failure
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column",
+      flex: 1, minHeight: 0,
+    }}>
+      {/* Header */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10,
+        padding: "12px 16px",
+        borderBottom: `1px solid ${T.border}`,
+        background: T.surface,
+      }}>
+        <button onClick={onBack} aria-label="Volver" style={{
+          width: 32, height: 32, borderRadius: 10,
+          background: T.bg, border: `1px solid ${T.border}`,
+          color: T.text, cursor: "pointer", padding: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
+        <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, color: T.text }}>
+          Hilo
+        </div>
+      </div>
+
+      {/* Scrollable: parent post + replies */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px 16px" }}>
+        {/* Parent post — same PostCard the feed uses, readonly so
+            we don't re-render the action row twice. Tapping the
+            author still opens their profile via onOpenAuthor. */}
+        <PostCard T={T} p={post} readonly onOpenAuthor={onOpenProfile} />
+
+        {/* Section divider */}
+        <div style={{
+          marginTop: 6, marginBottom: 8, padding: "0 4px",
+          fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+          color: T.textMute, letterSpacing: 0.4, textTransform: "uppercase",
+        }}>
+          {replies === null
+            ? "Cargando…"
+            : replies.length === 0
+              ? "Sé el primero en responder."
+              : `Respuestas · ${replies.length}`}
+        </div>
+
+        {/* Replies list */}
+        {replies && replies.length > 0 && replies.map((r) => (
+          <ReplyRow
+            key={r.id}
+            T={T}
+            r={r}
+            onOpenAuthor={onOpenProfile}
+          />
+        ))}
+      </div>
+
+      {/* Compose bar */}
+      <div style={{
+        padding: "10px 12px",
+        borderTop: `1px solid ${T.border}`,
+        background: T.bg,
+        display: "flex", alignItems: "flex-end", gap: 8,
+      }}>
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value.slice(0, 280))}
+          placeholder="Escribí tu respuesta…"
+          rows={1}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              send();
+            }
+          }}
+          style={{
+            flex: 1, resize: "none",
+            padding: "9px 12px", borderRadius: 14,
+            background: T.surface, border: `1px solid ${T.border}`,
+            color: T.text, fontFamily: FONT.sans, fontSize: 14,
+            outline: "none", minHeight: 0, maxHeight: 110,
+          }}
+        />
+        <button
+          onClick={send}
+          disabled={busy || !body.trim()}
+          aria-label="Responder"
+          style={{
+            width: 38, height: 38, borderRadius: 12,
+            background: !body.trim() ? T.surface : T.accent,
+            color: !body.trim() ? T.textMute : T.accentInk,
+            border: !body.trim() ? `1px solid ${T.border}` : "none",
+            cursor: busy || !body.trim() ? "default" : "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            opacity: busy ? 0.6 : 1,
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
+      {err && (
+        <div style={{
+          padding: "0 16px 10px", fontFamily: FONT.sans, fontSize: 12,
+          color: T.danger, background: T.bg,
+        }}>{err}</div>
+      )}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------
+// ReplyRow — compact card for a single reply inside ThreadView.
+// Mirrors PostCard's author header but no action row (replies
+// can't be liked / reposted in this MVP).
+// ----------------------------------------------------------
+function ReplyRow({ T, r, onOpenAuthor }) {
+  const handle = (r.author?.handle || "@user").replace(/^@/, "");
+  const { initials, color } = avatarPropsFor(r.author, T.accent);
+  const displayName = r.author?.displayName || "Usuario";
+  const openAuthor = (e) => {
+    if (!onOpenAuthor || !r.author?.id) return;
+    e.stopPropagation();
+    onOpenAuthor(r.author.id);
+  };
+  const authorRowProps = onOpenAuthor && r.author?.id
+    ? { onClick: openAuthor, style: { cursor: "pointer" } }
+    : {};
+  return (
+    <div style={{
+      padding: 12, marginBottom: 6, borderRadius: 14,
+      background: T.surface, border: `1px solid ${T.border}`,
+    }}>
+      <div {...authorRowProps} style={{
+        display: "flex", gap: 10, marginBottom: 6,
+        ...authorRowProps.style,
+      }}>
+        <Avatar T={T} initials={initials} color={color} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
+            <span style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text }}>
+              {displayName}
+            </span>
+            <span style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute }}>
+              @{handle} · {r.atLabel || ""}
+            </span>
+          </div>
+        </div>
+      </div>
+      <div style={{
+        fontFamily: FONT.sans, fontSize: 13, color: T.text,
+        lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word",
+      }}>{r.body}</div>
+    </div>
+  );
+}
+
+// ============================================================
 // PostCard — used by Feed + Profile
 // ============================================================
-function PostCard({ T, p, saved, onLike, onRepost, onSave, readonly, onOpenAuthor }) {
+function PostCard({ T, p, saved, onLike, onRepost, onSave, readonly, onOpenAuthor, onOpenThread }) {
   const handle = (p.author?.handle || "@user").replace(/^@/, "");
   // avatarPropsFor handles the displayName-missing case AND falls
   // back to a deterministic color so two posters in the same feed
@@ -1373,7 +1673,8 @@ function PostCard({ T, p, saved, onLike, onRepost, onSave, readonly, onOpenAutho
             icon={<Ico.Repeat size={16}/>} count={p.reposts}
             active={p.repostedByMe} activeColor={T.accent} onClick={onRepost} />
           <ActionBtn T={T}
-            icon={<Ico.Comment size={16}/>} count={p.comments} />
+            icon={<Ico.Comment size={16}/>} count={p.comments}
+            onClick={onOpenThread ? () => onOpenThread(p) : undefined} />
           <ActionBtn T={T}
             icon={<Ico.Bookmark size={16} {...(saved ? { fill: "currentColor" } : {})}/>}
             active={saved} activeColor={T.accent} onClick={onSave} />
