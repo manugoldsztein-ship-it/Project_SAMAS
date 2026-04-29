@@ -1446,10 +1446,49 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
               {profile.displayName}
             </span>
             {profile.verified && <span style={{ color: T.accent, fontFamily: FONT.mono, fontSize: 13, fontWeight: 800 }}>✓</span>}
+            {/* University verification — small green check next to the
+                name. Only renders when both university and the
+                trigger-set verified flag are true (claim alone does
+                nothing). The chip below carries the long-form label. */}
+            {profile.universityVerified && profile.university && (
+              <span aria-label="Universidad verificada" title="Universidad verificada" style={{
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                width: 16, height: 16, borderRadius: 999,
+                background: T.accent, color: T.accentInk || "#0a0",
+                fontSize: 10, fontWeight: 900, lineHeight: 1,
+              }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </span>
+            )}
           </div>
           <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute }}>
             @{handle}
           </div>
+          {/* University chip — long-form "Verificado · UBA" pill.
+              Sits between handle and bio so it reads as part of the
+              identity block. Tap is a no-op for now (could open the
+              uni's profile page in a later patch). */}
+          {profile.universityVerified && profile.university && (
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              marginTop: 8, padding: "4px 10px", borderRadius: 999,
+              background: T.accentSoft, color: T.accent,
+              border: `1px solid ${T.accent}33`,
+              fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+              maxWidth: "100%",
+            }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {tr("profile.uni_verified", lang, { name: socialApi.universityLabel(profile.university) })}
+              </span>
+            </div>
+          )}
           {profile.bio && (
             <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.text, marginTop: 8, lineHeight: 1.4 }}>
               {profile.bio}

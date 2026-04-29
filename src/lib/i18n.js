@@ -87,6 +87,13 @@ const V2 = {
     "profile.edit.save":          "Guardar",
     "profile.edit.cancel":        "Cancelar",
 
+    // University verification (signup + profile badge)
+    "auth.signup.uni_label":      "Universidad (opcional)",
+    "auth.signup.uni_none":       "Ninguna",
+    "auth.signup.uni_hint":       "Si te registrás con tu mail universitario, tu perfil queda verificado.",
+    "profile.uni_verified":       "Verificado · {name}",
+    "profile.uni_claimed":        "{name}",
+
     "settings.done":              "Listo",
     "wallet.balance_total": "BALANCE TOTAL",
     "wallet.today": "hoy",
@@ -318,6 +325,13 @@ const V2 = {
     "profile.edit.color":         "Avatar color",
     "profile.edit.save":          "Save",
     "profile.edit.cancel":        "Cancel",
+
+    // University verification (signup + profile badge)
+    "auth.signup.uni_label":      "University (optional)",
+    "auth.signup.uni_none":       "None",
+    "auth.signup.uni_hint":       "Sign up with your university email to verify your profile automatically.",
+    "profile.uni_verified":       "Verified · {name}",
+    "profile.uni_claimed":        "{name}",
 
     "settings.done":              "Done",
     "wallet.balance_total": "TOTAL BALANCE",

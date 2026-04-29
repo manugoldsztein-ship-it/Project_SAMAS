@@ -50,7 +50,37 @@ function profileRowToUser(r) {
     bio: r.bio || "",
     verified: !!r.verified,
     isAdmin: !!r.is_admin,
+    // University claim + auto-verified flag. The verified flag is set
+    // by the BEFORE-INSERT trigger on profiles_social — see
+    // supabase/social_university.sql. Frontend only renders the badge
+    // when both are present (a claim alone isn't enough).
+    university: r.university || null,
+    universityVerified: !!r.university_verified,
   };
+}
+
+// Map a stored university key (uba / udesa / itba / ...) to the human
+// label we render in the badge. Mirrors AR_UNIVERSITIES in
+// src/auth/SupabaseAuth.jsx — keep in sync if you add a new uni.
+const AR_UNI_LABELS = {
+  uba:      "Universidad de Buenos Aires",
+  udesa:    "Universidad de San Andrés",
+  itba:     "ITBA",
+  utdt:     "Universidad Torcuato Di Tella",
+  austral:  "Universidad Austral",
+  uca:      "UCA",
+  palermo:  "Universidad de Palermo",
+  ub:       "Universidad de Belgrano",
+  utn:      "UTN",
+  unlp:     "Universidad Nacional de La Plata",
+  unc:      "Universidad Nacional de Córdoba",
+  ucema:    "UCEMA",
+  siglo21:  "Universidad Siglo 21",
+};
+
+export function universityLabel(key) {
+  if (!key) return "";
+  return AR_UNI_LABELS[String(key).toLowerCase()] || String(key);
 }
 
 function postRowToPost(r, opts = {}) {
@@ -89,6 +119,14 @@ async function deriveDefaults(userId) {
   let firstName = "";
   let lastName = "";
   let email = "";
+  // signupUni — the optional university key the user picked at
+  // signup. Lives in auth.users.raw_user_meta_data.university (set
+  // by SignupView in src/auth/SupabaseAuth.jsx). Empty / undefined =
+  // user didn't claim a uni. The BEFORE-INSERT trigger on
+  // profiles_social validates whatever we pass against the email
+  // domain — so even if a malicious client sets a uni they don't
+  // belong to, the trigger refuses to flip university_verified.
+  let signupUni = "";
   try {
     const { data: profile } = await supabase
       .from("profiles")
@@ -101,6 +139,7 @@ async function deriveDefaults(userId) {
   try {
     const { data: u } = await supabase.auth.getUser();
     email = u?.user?.email || "";
+    signupUni = String(u?.user?.user_metadata?.university || "").trim();
   } catch {}
   const fullName = [firstName, lastName].filter(Boolean).join(" ")
     || (email ? email.split("@")[0] : "Usuario");
@@ -115,7 +154,9 @@ async function deriveDefaults(userId) {
   // same accent green.
   const palette = ["#16C784", "#3B82F6", "#F59E0B", "#EC4899", "#8B5CF6", "#06B6D4"];
   const avatarColor = palette[Math.floor(Math.random() * palette.length)];
-  return { handle, display_name: fullName, avatar_color: avatarColor };
+  const out = { handle, display_name: fullName, avatar_color: avatarColor };
+  if (signupUni) out.university = signupUni;
+  return out;
 }
 
 // ----------------------------------------------------------
@@ -393,7 +434,7 @@ export async function getUserById(userId) {
   const [profileRes, postsCountRes, followersCountRes, followingCountRes, iFollowRes] = await Promise.all([
     supabase
       .from("profiles_social")
-      .select("user_id, handle, display_name, avatar_color, bio, verified, is_admin, created_at")
+      .select("user_id, handle, display_name, avatar_color, bio, verified, is_admin, created_at, university, university_verified")
       .eq("user_id", userId)
       .maybeSingle(),
     supabase

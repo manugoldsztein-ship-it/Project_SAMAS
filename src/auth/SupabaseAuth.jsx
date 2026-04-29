@@ -22,6 +22,27 @@
 import { useEffect, useState } from "react";
 import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "../lib/supabase";
 
+// AR university list — keys MUST match the case branches in
+// public.is_university_email() (supabase/social_university.sql).
+// The label is what the dropdown shows; the key is what the trigger
+// reads from raw_user_meta_data.university to decide verification.
+// Add a new uni? Update both this list AND the SQL function.
+const AR_UNIVERSITIES = [
+  { key: "uba",      label: "Universidad de Buenos Aires (UBA)" },
+  { key: "udesa",    label: "Universidad de San Andrés" },
+  { key: "itba",     label: "ITBA" },
+  { key: "utdt",     label: "Universidad Torcuato Di Tella" },
+  { key: "austral",  label: "Universidad Austral" },
+  { key: "uca",      label: "UCA" },
+  { key: "palermo",  label: "Universidad de Palermo" },
+  { key: "ub",       label: "Universidad de Belgrano" },
+  { key: "utn",      label: "UTN" },
+  { key: "unlp",     label: "Universidad Nacional de La Plata" },
+  { key: "unc",      label: "Universidad Nacional de Córdoba" },
+  { key: "ucema",    label: "UCEMA" },
+  { key: "siglo21",  label: "Universidad Siglo 21" },
+];
+
 // Raw fetch helper for Edge Functions. The SDK's `functions.invoke`
 // has been flaky in our setup — sometimes hangs before even dispatching
 // the request (observed in DevTools Network tab staying empty). Doing
@@ -301,6 +322,12 @@ function SignupView({ C, onSwitchLogin, onSignupDone }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passConfirm, setPassConfirm] = useState("");
+  // university_key (string) selected from AR_UNIVERSITIES. Empty
+  // string = "Ninguna" — no claim, no badge, no trigger work.
+  // If the user picks a uni AND signs up with that uni's email
+  // domain, the profiles_social BEFORE-INSERT trigger flips
+  // university_verified to true so the badge renders right away.
+  const [uniKey, setUniKey] = useState("");
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -328,9 +355,14 @@ function SignupView({ C, onSwitchLogin, onSignupDone }) {
       options: {
         // raw_user_meta_data — picked up by the handle_new_user trigger
         // (see supabase/schema.sql) and copied onto public.profiles.
+        // The optional `university` field is read by the social
+        // provisioning step (see ensureProfile / getMe in
+        // api/social.js) and the BEFORE-INSERT trigger on
+        // profiles_social validates it against the email domain.
         data: {
           nombre:   nombre.trim(),
           apellido: apellido.trim(),
+          ...(uniKey ? { university: uniKey } : {}),
         },
       },
     });
@@ -400,6 +432,47 @@ function SignupView({ C, onSwitchLogin, onSignupDone }) {
           onKeyDown={(e) => { if (e.key === "Enter" && allOk) submit(); }}
           style={fieldStyle(C, passConfirm.length > 0 && !pwdMatch)}
         />
+
+        {/* University dropdown — optional. A native <select> looks
+            uglier than a custom popover but plays nicely with iOS's
+            picker UX (the wheel) and saves us a whole component. The
+            empty option means "no claim", which is what most users
+            should pick if they're not students. */}
+        <div>
+          <label style={{
+            display: "block", fontSize: 11, fontWeight: 700, color: C.textMd,
+            marginBottom: 6, paddingLeft: 2,
+          }}>Universidad (opcional)</label>
+          <select
+            value={uniKey}
+            onChange={(e) => { setUniKey(e.target.value); setErr(null); }}
+            style={{
+              ...fieldStyle(C),
+              // Native selects pick up a default chrome on iOS that
+              // looks fine — we just want our font + colors. The
+              // appearance:none lets us own the chevron later if
+              // needed; for now the OS chevron is acceptable.
+              appearance: "none", WebkitAppearance: "none",
+              paddingRight: 32,
+              backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23${(C.textMd || '#888').replace('#','')}' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>")`,
+              backgroundRepeat: "no-repeat",
+              backgroundPosition: "right 12px center",
+            }}
+          >
+            <option value="">Ninguna</option>
+            {AR_UNIVERSITIES.map((u) => (
+              <option key={u.key} value={u.key}>{u.label}</option>
+            ))}
+          </select>
+          {uniKey && (
+            <div style={{
+              fontSize: 11, color: C.textMd, marginTop: 6, lineHeight: 1.45,
+              paddingLeft: 2,
+            }}>
+              Si te registrás con tu mail universitario, tu perfil queda verificado.
+            </div>
+          )}
+        </div>
       </div>
 
       <button onClick={submit} disabled={!allOk || busy} style={primaryBtn(C, !allOk || busy)}>
