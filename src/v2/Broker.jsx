@@ -25,7 +25,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useContext } from "react";
 import { FONT, fmtMoney, fmtPct } from "./theme.js";
 import { Ico } from "./icons.jsx";
-import { Pill, SectionHead, AssetLogo, AssetSparkline } from "./shared.jsx";
+import { Pill, SectionHead, AssetLogo, AssetSparkline, AssetRowSkeletonList } from "./shared.jsx";
 import { useLivePrice, LivePricesContext } from "./livePrices.jsx";
 import { broker as brokerApi, wallet as walletApi } from "./api/index.js";
 // The Objetivos wizard is shared with the legacy MobileApp UI. It
@@ -374,7 +374,11 @@ function SubNav({ T, tab, setTab, bottomInset, lang = "es" }) {
 // holdings + top/bottom movers + AI plan card.
 // ----------------------------------------------------------
 function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, onOpenAIPlan, savedPlan, proMode = true, onGoToMercado, lang = "es" }) {
-  if (!portfolio) return <Loader T={T}/>;
+  // While the portfolio fetches, render asset-row-shaped shimmer
+  // skeletons in the same horizontal padding the real list will
+  // use. Same trick on MercadoView below — keeps the page layout
+  // stable instead of jumping when data arrives.
+  if (!portfolio) return <div style={{ paddingTop: 12 }}><AssetRowSkeletonList T={T} count={5} /></div>;
 
   const ccySym = ccy === "ARS" ? "$" : "US$";
   const total = ccy === "ARS" ? portfolio.totalArs : portfolio.totalUsd;
@@ -550,7 +554,7 @@ function MercadoView({ T, assets, onSelectAsset, proMode = false, lang = "es" })
     return rows;
   }, [assets, cat, query]);
 
-  if (assets.length === 0) return <Loader T={T}/>;
+  if (assets.length === 0) return <div style={{ paddingTop: 12 }}><AssetRowSkeletonList T={T} count={6} /></div>;
 
   return (
     <div style={{ paddingBottom: 110 }}>
@@ -4133,13 +4137,10 @@ function MoverGroup({ T, label, rows, positive, tickCount, onSelectAsset }) {
   );
 }
 
-function Loader({ T }) {
-  return (
-    <div style={{ padding: 30, textAlign: "center", color: T.textMute, fontFamily: FONT.sans, fontSize: 13 }}>
-      Cargando…
-    </div>
-  );
-}
+// Loader removed in 0.0.65 — replaced everywhere by AssetRowSkeletonList
+// (and the skeleton composites in shared.jsx). Left this comment as a
+// breadcrumb so anyone grepping for "Cargando" in Broker.jsx sees why
+// it's gone.
 
 // Empty state — icon + title + subtitle + optional CTA. Used wherever
 // a list comes back with zero rows. icon defaults to an "open box"

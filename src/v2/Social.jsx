@@ -22,7 +22,7 @@ import { social as socialApi, messages as messagesApi, broker as brokerApi } fro
 import { useEdgeSwipeBack } from "./useEdgeSwipeBack.js";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { setRefreshHandler, callRefreshFor } from "./refreshRegistry.js";
-import { avatarPropsFor } from "./shared.jsx";
+import { avatarPropsFor, PostCardSkeleton, DmThreadSkeleton } from "./shared.jsx";
 import { supabase } from "../lib/supabase.js";
 import { t as tr } from "../lib/i18n.js";
 import { hapticNative } from "../lib/native.js";
@@ -1668,9 +1668,14 @@ function MessagesView({ T, lang = "es", user = null, onOpenProfile, onOpenTicker
   }
 
   if (threads === null) {
+    // Shimmer placeholders shaped like real DM thread rows so the
+    // page layout doesn't jump when threads arrive (replaces the
+    // bare "Cargando…" text that was here before 0.0.65).
     return (
-      <div style={{ padding: 24, color: T.textMute, fontFamily: FONT.sans, fontSize: 13 }}>
-        Cargando…
+      <div style={{ padding: "8px 16px" }}>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <DmThreadSkeleton key={i} T={T} />
+        ))}
       </div>
     );
   }
@@ -2864,9 +2869,15 @@ function TickerFeedView({ T, lang = "es", ticker, onBack, onOpenProfile, onOpenT
       {/* Scrollable feed */}
       <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px 110px" }}>
         {posts === null ? (
-          <div style={{ color: T.textMute, fontFamily: FONT.sans, fontSize: 13, textAlign: "center", padding: 30 }}>
-            Cargando…
-          </div>
+          // Post-shaped shimmer placeholders so the feed silhouette
+          // is visible while the request is in flight. Three cards
+          // is enough to fill the visible area on most phones
+          // without overshooting into wasted DOM.
+          <>
+            <PostCardSkeleton T={T} />
+            <PostCardSkeleton T={T} />
+            <PostCardSkeleton T={T} />
+          </>
         ) : posts.length === 0 ? (
           <div style={{ color: T.textMute, fontFamily: FONT.sans, fontSize: 13, textAlign: "center", padding: 30 }}>
             Sin posts sobre ${symbol} todavía. Sé el primero — andá al Broker, comprá o vendé, y compartí el trade.

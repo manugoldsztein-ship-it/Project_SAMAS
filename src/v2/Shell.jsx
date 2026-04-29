@@ -245,6 +245,13 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
           0%   { background-color: rgba(239, 68, 68, 0.30); }
           100% { background-color: transparent; }
         }
+        /* Shimmer for the <Skeleton> primitive in shared.jsx —
+           defined once globally instead of being re-injected by
+           every Skeleton instance. */
+        @keyframes samas-skel {
+          0%   { background-position: 100% 0; }
+          100% { background-position: -100% 0; }
+        }
       `}</style>
 
       {/* ---------- scrollable page content ---------- */}
@@ -2311,6 +2318,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.0.65",
+    title: "Loading skeletons across the app",
+    bullets: [
+      "Mercado / Portafolio / Watchlist now show 5-6 asset-row-shaped shimmer placeholders while data loads (was: bare \"Cargando…\" text).",
+      "Mensajes shows 5 thread-shaped skeletons; ticker drill-in feed shows 3 post-card-shaped skeletons. News skeletons were already in place from 0.0.x.",
+      "Composite skeletons live in shared.jsx (AssetRowSkeleton, PostCardSkeleton, DmThreadSkeleton) — match the exact silhouette of the resolved row, so loading → loaded reads as fill-in instead of swap.",
+    ],
+  },
   {
     version: "0.0.64",
     title: "Bell badge actually lights up — notification triggers + seed engagement",

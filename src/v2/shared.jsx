@@ -468,23 +468,119 @@ export function ChromeBtn({ T, children, onClick, dot }) {
 
 // ----------------------------------------------------------
 // Skeleton — shimmering placeholder block while data loads. Used by
-// News / Wallet etc. to avoid a flash of "Cargando…" text. Renders
-// a div sized to the props and animates a light gradient across it.
+// News / Broker / Social to avoid a flash of "Cargando…" text.
+// Renders a div sized to the props and animates a light gradient
+// across it. The @keyframes samas-skel definition lives in
+// Shell.jsx's global <style> block so we don't re-inject it on
+// every render.
 // ----------------------------------------------------------
-export function Skeleton({ T, width = "100%", height = 14, borderRadius = 8, marginBottom = 0 }) {
+export function Skeleton({ T, width = "100%", height = 14, borderRadius = 8, marginBottom = 0, style }) {
   return (
     <div style={{
       width, height, borderRadius, marginBottom,
       background: `linear-gradient(90deg, ${T.surface} 0%, ${T.bgElev} 50%, ${T.surface} 100%)`,
       backgroundSize: "200% 100%",
       animation: "samas-skel 1.4s ease-in-out infinite",
+      ...(style || {}),
+    }}/>
+  );
+}
+
+// ----------------------------------------------------------
+// Composite skeletons — match the EXACT layout of the row they
+// replace so the loading → loaded transition feels like the same
+// shape filling in, not a different component swapping. Used by
+// the Broker / Social loaders so the user sees the eventual list
+// silhouette while data is in flight.
+// ----------------------------------------------------------
+
+// AssetRowSkeleton — mirrors AssetRow's layout (logo 40 + name +
+// sparkline 50w + price 92w fixed-width column). Used by
+// MercadoView / PortafolioView / WatchlistView while assets/holdings
+// are loading.
+export function AssetRowSkeleton({ T, isLast = false }) {
+  return (
+    <div style={{
+      width: "100%", padding: "12px 0",
+      borderBottom: isLast ? "none" : `1px solid ${T.border}`,
+      display: "flex", alignItems: "center", gap: 12,
     }}>
-      <style>{`
-        @keyframes samas-skel {
-          0%   { background-position: 100% 0; }
-          100% { background-position: -100% 0; }
-        }
-      `}</style>
+      <Skeleton T={T} width={40} height={40} borderRadius={12} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <Skeleton T={T} width="40%" height={14} borderRadius={6} marginBottom={6} />
+        <Skeleton T={T} width="65%" height={12} borderRadius={6} />
+      </div>
+      <Skeleton T={T} width={50} height={20} borderRadius={6} />
+      <div style={{ width: 92, marginLeft: 8, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+        <Skeleton T={T} width={70} height={13} borderRadius={6} />
+        <Skeleton T={T} width={50} height={11} borderRadius={6} />
+      </div>
+    </div>
+  );
+}
+
+// AssetRowSkeletonList — N stacked AssetRowSkeletons inside the
+// same horizontal padding the real list uses, so the loading state
+// occupies exactly the same screen real estate as the resolved
+// list. Default 6 rows ≈ a phone screen of content.
+export function AssetRowSkeletonList({ T, count = 6 }) {
+  return (
+    <div style={{ margin: "0 16px" }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <AssetRowSkeleton key={i} T={T} isLast={i === count - 1} />
+      ))}
+    </div>
+  );
+}
+
+// PostCardSkeleton — mirrors a single PostCard in Social.jsx (the
+// rounded card with avatar + handle/timestamp + body lines + an
+// action row). Used by feed / search / ticker / profile loaders.
+export function PostCardSkeleton({ T }) {
+  return (
+    <div style={{
+      padding: 14, marginBottom: 8, borderRadius: 18,
+      background: T.surface, border: `1px solid ${T.border}`,
+    }}>
+      {/* Author row */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 10, alignItems: "center" }}>
+        <Skeleton T={T} width={38} height={38} borderRadius={12} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Skeleton T={T} width="35%" height={13} borderRadius={6} marginBottom={5} />
+          <Skeleton T={T} width="55%" height={11} borderRadius={6} />
+        </div>
+      </div>
+      {/* Body lines — 3 of varying widths so it reads as text */}
+      <Skeleton T={T} height={12} borderRadius={6} marginBottom={6} />
+      <Skeleton T={T} height={12} borderRadius={6} marginBottom={6} />
+      <Skeleton T={T} width="78%" height={12} borderRadius={6} marginBottom={12} />
+      {/* Action row — 4 evenly-spaced pills, mirrors the heart /
+          repost / comment / bookmark icons. */}
+      <div style={{ display: "flex", gap: 22 }}>
+        <Skeleton T={T} width={42} height={14} borderRadius={6} />
+        <Skeleton T={T} width={42} height={14} borderRadius={6} />
+        <Skeleton T={T} width={42} height={14} borderRadius={6} />
+        <Skeleton T={T} width={42} height={14} borderRadius={6} />
+      </div>
+    </div>
+  );
+}
+
+// DmThreadSkeleton — mirrors a row in MessagesView (avatar + name
+// + last-message preview + relative timestamp on the right).
+export function DmThreadSkeleton({ T }) {
+  return (
+    <div style={{
+      padding: "12px 4px",
+      borderBottom: `1px solid ${T.border}`,
+      display: "flex", alignItems: "center", gap: 12,
+    }}>
+      <Skeleton T={T} width={42} height={42} borderRadius={14} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <Skeleton T={T} width="45%" height={14} borderRadius={6} marginBottom={6} />
+        <Skeleton T={T} width="78%" height={12} borderRadius={6} />
+      </div>
+      <Skeleton T={T} width={40} height={11} borderRadius={6} />
     </div>
   );
 }
