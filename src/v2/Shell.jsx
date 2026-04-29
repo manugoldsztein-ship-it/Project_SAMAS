@@ -2413,6 +2413,16 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.85",
+    title: "AI insight on every asset — tap a ticker, get a take",
+    bullets: [
+      "Tap any asset (NVDA / GGAL / AAPL / BTC / etc.) → the detail sheet now has an \"Análisis IA\" section. Tap to generate a one-line headline + 3 short bullets (fundamentals / news / valuation) + a thesis statement + a sentiment chip (Alcista / Neutral / Bajista).",
+      "New analyze-asset Edge Function (twin of analyze-portfolio): takes a ticker, calls Claude Haiku, returns the structured response. Server-side templated fallback uses a curated per-ticker thesis library when ANTHROPIC_API_KEY isn't set — AAPL / NVDA / TSLA / GGAL / YPF / etc. each have their own pre-written take so the demo feels real before we wire the real LLM.",
+      "Insights cached per-ticker per-session: re-opening the same asset's sheet doesn't burn another LLM call. Switching to a different ticker resets the panel cleanly.",
+      "Visible to every user (not Pro-gated) — AI is the differentiator, Cohen needs to see this on every tap.",
+    ],
+  },
+  {
     version: "0.0.84",
     title: "Bottom-nav stacking-context fix + AI demo fallback",
     bullets: [

@@ -43,3 +43,36 @@ export async function analyzePortfolio() {
   if (data?.error) throw new Error(`Análisis IA falló: ${data.error}`);
   return data;
 }
+
+/**
+ * analyzeAsset(ticker) — POST /functions/v1/analyze-asset
+ *
+ * Server reads asset metadata for the requested ticker, passes it
+ * to Claude Haiku, returns:
+ *   {
+ *     headline:    string,
+ *     bullets:     string[],   // ~3 observations
+ *     thesis:      string,     // concrete takeaway
+ *     sentiment:   "bullish" | "neutral" | "bearish",
+ *     generatedAt: string,
+ *   }
+ *
+ * Falls back to a templated insight server-side if the Anthropic
+ * key isn't set, so the demo always returns a 200 with content.
+ */
+export async function analyzeAsset(ticker) {
+  if (!ticker) throw new Error("Ticker requerido.");
+  const { data, error } = await supabase.functions.invoke("analyze-asset", {
+    body: { ticker: String(ticker).toUpperCase() },
+  });
+  if (error) {
+    let detail = "";
+    try {
+      const body = await error?.context?.json?.();
+      if (body?.error) detail = `: ${body.error}`;
+    } catch (_) { /* fall through */ }
+    throw new Error(`Análisis IA falló${detail || ": " + (error.message || "error desconocido")}`);
+  }
+  if (data?.error) throw new Error(`Análisis IA falló: ${data.error}`);
+  return data;
+}

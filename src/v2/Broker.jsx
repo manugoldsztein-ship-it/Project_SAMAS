@@ -38,6 +38,7 @@ import { hapticNative } from "../lib/native.js";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { toast } from "./toast.jsx";
 import { t as tr } from "../lib/i18n.js";
+import { analyzeAsset } from "../lib/ai.js";
 
 // Sub-tabs metadata — drives both the bottom nav and the content
 // switch in the top-level <BrokerShell/> render.
@@ -2057,6 +2058,14 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
             </>
           )}
 
+          {/* AI insight (samas-0.0.85) — Análisis IA card. Visible to
+              every user (not Pro-gated) since AI is the differentiator.
+              Hidden during confirm/done sub-steps to keep the trade
+              flow focused. */}
+          {!done && !confirm && (
+            <AssetAIInsight T={T} ticker={asset.ticker} lang={lang} />
+          )}
+
           {done ? (
             <DoneScreen
               T={T}
@@ -3759,6 +3768,193 @@ function fmtCompactNumber(n) {
   if (n >= 1e6)  return `${(n / 1e6).toFixed(1)}M`;
   if (n >= 1e3)  return `${(n / 1e3).toFixed(1)}K`;
   return n.toFixed(0);
+}
+
+// ============================================================
+// AssetAIInsight (samas-0.0.85) — AI-generated take on a single
+// asset. Reads ticker → calls analyze-asset → renders headline +
+// bullets + thesis + sentiment chip. Self-contained: starts in a
+// "tap to analyze" state, async-loads on demand, caches the result
+// for the session by ticker so re-opening the same AssetSheet
+// doesn't burn another LLM call.
+//
+// Deliberately NOT pro-gated — AI is the demo differentiator;
+// Cohen should see this on every asset they tap. Templated server
+// fallback keeps the demo working without an Anthropic key.
+// ============================================================
+const ASSET_INSIGHT_CACHE = new Map(); // ticker → response
+
+function AssetAIInsight({ T, ticker, lang = "es" }) {
+  const [data, setData] = useState(() => ASSET_INSIGHT_CACHE.get(ticker) || null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  // Reset when the user navigates between assets (sheet stays
+  // mounted, ticker changes via prop) so we don't show NVDA's
+  // analysis on the GGAL detail.
+  useEffect(() => {
+    setData(ASSET_INSIGHT_CACHE.get(ticker) || null);
+    setBusy(false);
+    setErr(null);
+  }, [ticker]);
+
+  async function run() {
+    if (busy) return;
+    setErr(null); setBusy(true);
+    hapticNative("tap").catch(() => {});
+    try {
+      const result = await analyzeAsset(ticker);
+      ASSET_INSIGHT_CACHE.set(ticker, result);
+      setData(result);
+      hapticNative("success").catch(() => {});
+    } catch (e) {
+      setErr(e?.message || String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Sentiment chip styling — bullish/neutral/bearish map to
+  // accent / textMute / danger so the at-a-glance read is fast.
+  const sentimentMeta = data ? (() => {
+    if (data.sentiment === "bullish")
+      return { label: tr("broker.ai.sentiment.bullish", lang), color: T.accent, bg: T.accentSoft };
+    if (data.sentiment === "bearish")
+      return { label: tr("broker.ai.sentiment.bearish", lang), color: T.danger, bg: T.dangerSoft };
+    return { label: tr("broker.ai.sentiment.neutral", lang), color: T.textMute, bg: T.bg };
+  })() : null;
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      {/* Header: SAMAS logo + "Análisis IA" + sentiment chip when loaded. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, padding: "0 4px" }}>
+        <div style={{
+          width: 24, height: 24, borderRadius: 8,
+          background: T.accent, color: "#06180c", flexShrink: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
+          </svg>
+        </div>
+        <div style={{
+          flex: 1, fontFamily: FONT.sans, fontSize: 12, fontWeight: 700,
+          color: T.text, letterSpacing: 0.4, textTransform: "uppercase",
+        }}>
+          {tr("broker.ai.title", lang)}
+        </div>
+        {sentimentMeta && (
+          <div style={{
+            padding: "3px 8px", borderRadius: 999,
+            background: sentimentMeta.bg, color: sentimentMeta.color,
+            fontFamily: FONT.sans, fontSize: 10, fontWeight: 700,
+            textTransform: "uppercase", letterSpacing: 0.5,
+          }}>{sentimentMeta.label}</div>
+        )}
+      </div>
+
+      {/* Idle CTA — gradient pill. Tap to fetch. */}
+      {!data && !busy && !err && (
+        <button
+          onClick={run}
+          style={{
+            width: "100%", padding: "14px 16px", borderRadius: 16,
+            background: `linear-gradient(135deg, ${T.accentSoft} 0%, ${T.surface} 70%)`,
+            border: `1px solid ${T.accent}55`,
+            color: T.text, cursor: "pointer", textAlign: "left",
+            fontFamily: FONT.sans, fontSize: 13, fontWeight: 600,
+            display: "flex", alignItems: "center", gap: 10,
+          }}
+        >
+          <span style={{ flex: 1 }}>{tr("broker.ai.cta", lang)}</span>
+          <span style={{
+            padding: "2px 8px", borderRadius: 999,
+            background: T.accent, color: "#06180c",
+            fontFamily: FONT.sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6,
+          }}>IA</span>
+        </button>
+      )}
+
+      {/* Loading */}
+      {busy && (
+        <div style={{
+          padding: "20px 16px", borderRadius: 16,
+          background: T.surface, border: `1px solid ${T.border}`,
+          display: "flex", alignItems: "center", gap: 12,
+          color: T.textMute, fontFamily: FONT.sans, fontSize: 13,
+        }}>
+          <div style={{
+            width: 20, height: 20, borderRadius: 999,
+            border: `2.4px solid ${T.border}`, borderTopColor: T.accent,
+            animation: "samas-spin 800ms linear infinite", flexShrink: 0,
+          }} />
+          {tr("broker.ai.thinking", lang)}
+        </div>
+      )}
+
+      {/* Error */}
+      {err && !busy && (
+        <div style={{
+          padding: "12px 14px", borderRadius: 14,
+          background: T.dangerSoft, color: T.danger,
+          fontFamily: FONT.sans, fontSize: 12, lineHeight: 1.5,
+        }}>{err}</div>
+      )}
+
+      {/* Result */}
+      {data && !busy && (
+        <div style={{
+          padding: 14, borderRadius: 16,
+          background: T.surface, border: `1px solid ${T.border}`,
+        }}>
+          <div style={{
+            fontFamily: FONT.sans, fontSize: 14, fontWeight: 700,
+            color: T.text, lineHeight: 1.4, marginBottom: 12,
+          }}>{data.headline}</div>
+          {Array.isArray(data.bullets) && data.bullets.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              {data.bullets.map((b, i) => (
+                <div key={i} style={{
+                  display: "flex", gap: 8, padding: "6px 0",
+                  borderTop: i === 0 ? "none" : `1px solid ${T.border}`,
+                }}>
+                  <span style={{
+                    width: 14, height: 14, marginTop: 4, flexShrink: 0,
+                    borderRadius: 7, background: T.accent,
+                  }} />
+                  <div style={{
+                    fontFamily: FONT.sans, fontSize: 12, color: T.text, lineHeight: 1.5,
+                  }}>{b}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {data.thesis && (
+            <div style={{
+              padding: "10px 12px", borderRadius: 12,
+              background: `linear-gradient(135deg, ${T.accentSoft}, transparent 80%)`,
+              border: `1.5px solid ${T.accent}`,
+            }}>
+              <div style={{
+                fontFamily: FONT.sans, fontSize: 10, fontWeight: 700,
+                color: T.accent, letterSpacing: 0.6, textTransform: "uppercase",
+                marginBottom: 4,
+              }}>{tr("broker.ai.thesis", lang)}</div>
+              <div style={{
+                fontFamily: FONT.sans, fontSize: 12, color: T.text, lineHeight: 1.5,
+              }}>{data.thesis}</div>
+            </div>
+          )}
+          <div style={{
+            marginTop: 8, fontFamily: FONT.sans, fontSize: 9,
+            color: T.textMute, textAlign: "right",
+          }}>
+            {tr("broker.ai.disclaimer", lang)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function FundamentalsCard({ T, asset, lang = "es" }) {
