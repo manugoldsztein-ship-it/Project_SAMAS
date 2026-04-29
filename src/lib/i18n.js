@@ -260,6 +260,8 @@ const V2 = {
     // Portfolio share — generates a text snapshot of the user's
     // current holdings and inserts into the compose body.
     "social.compose.share_portfolio":      "Pegar mi portafolio",
+    "social.compose.portfolio_chip":       "Compartir cartera",
+    "social.feed.empty.cta_portfolio":     "O compartí tu cartera",
     "social.compose.portfolio_header":     "Mi cartera SAMAS:",
     "social.compose.portfolio_total":      "Total: {amount}",
     "social.compose.portfolio_empty":      "Tu portafolio está vacío. Comprá algo desde Invertir y volvé.",
@@ -713,6 +715,8 @@ const V2 = {
     // Portfolio share — generates a text snapshot of the user's
     // current holdings and inserts into the compose body.
     "social.compose.share_portfolio":      "Paste my portfolio",
+    "social.compose.portfolio_chip":       "Share portfolio",
+    "social.feed.empty.cta_portfolio":     "Or share your portfolio",
     "social.compose.portfolio_header":     "My SAMAS portfolio:",
     "social.compose.portfolio_total":      "Total: {amount}",
     "social.compose.portfolio_empty":      "Your portfolio is empty. Buy something from Invest and come back.",

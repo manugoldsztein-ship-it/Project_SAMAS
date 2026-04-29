@@ -2368,6 +2368,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.77",
+    title: "Portfolio share: front-and-center in social compose",
+    bullets: [
+      "The compose toolbar's \"Pegar mi portafolio\" button got promoted from a tiny 36px circle to a labeled accent-bordered pill (\"Compartir cartera\" + pie-chart glyph). It's now the first action you read in the toolbar — impossible to miss during the Cohen demo.",
+      "For-you empty state gets a secondary \"O compartí tu cartera\" CTA next to the existing \"Escribir una idea\" button. New accounts that land on an empty feed now see two equally-weighted ways to break the silence: write a thought, or hand-paste a snapshot of their book.",
+      "Two new i18n keys (social.compose.portfolio_chip + social.feed.empty.cta_portfolio) wired in es + en. Existing portfolio-share plumbing untouched — this is purely visual emphasis.",
+    ],
+  },
+  {
     version: "0.0.76",
     title: "Real persistence: holdings + orders move to Supabase",
     bullets: [

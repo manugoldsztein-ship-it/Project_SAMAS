@@ -1179,25 +1179,35 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
                     <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
                   </svg>
                 </button>
+                {/* Portfolio-paste button — promoted in 0.0.77 from
+                    an icon-only 36×32 circle to a labeled accent-
+                    bordered pill so it stands out as the SAMAS-
+                    distinctive social action (no other broker app
+                    lets you snapshot your portfolio into a post).
+                    Sits alongside the other utility buttons but
+                    visually paired with Publicar via the accent
+                    treatment. */}
                 <button
                   onClick={sharePortfolio}
                   disabled={busy}
                   aria-label={tr("social.compose.share_portfolio", lang)}
                   title={tr("social.compose.share_portfolio", lang)}
                   style={{
-                    width: 36, height: 32, borderRadius: 999,
-                    background: T.surface, border: `1px solid ${T.border}`,
-                    color: T.text, cursor: busy ? "default" : "pointer",
-                    padding: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                    height: 32, padding: "0 12px", borderRadius: 999,
+                    background: "transparent", border: `1.5px solid ${T.accent}`,
+                    color: T.accent, cursor: busy ? "default" : "pointer",
+                    display: "flex", alignItems: "center", gap: 6,
                     opacity: busy ? 0.6 : 1,
+                    fontFamily: FONT.sans, fontSize: 12, fontWeight: 700,
                   }}
                 >
                   {/* Pie chart icon — represents portfolio composition */}
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21.21 15.89A10 10 0 1 1 8 2.83"/>
                     <path d="M22 12A10 10 0 0 0 12 2v10z"/>
                   </svg>
+                  <span style={{ whiteSpace: "nowrap" }}>{tr("social.compose.portfolio_chip", lang)}</span>
                 </button>
                 <button
                   onClick={publish}
@@ -1253,15 +1263,43 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
                 fontFamily: FONT.sans, fontSize: 13, color: T.textMute,
                 lineHeight: 1.5, marginBottom: 16,
               }}>{tr("social.feed.empty.subtitle", lang)}</div>
-              <button
-                onClick={() => composeRef.current?.focus()}
-                style={{
-                  padding: "10px 20px", borderRadius: 999,
-                  background: T.accent, color: T.accentInk,
-                  border: "none", cursor: "pointer",
-                  fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
-                }}
-              >{tr("social.feed.empty.cta", lang)}</button>
+              <div style={{
+                display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap",
+              }}>
+                <button
+                  onClick={() => composeRef.current?.focus()}
+                  style={{
+                    padding: "10px 20px", borderRadius: 999,
+                    background: T.accent, color: T.accentInk,
+                    border: "none", cursor: "pointer",
+                    fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+                  }}
+                >{tr("social.feed.empty.cta", lang)}</button>
+                {/* Secondary CTA — surfaces the portfolio-sharing
+                    feature in the most visible empty state. Same
+                    sharePortfolio handler that the toolbar pill
+                    calls; pre-populates compose with the user's
+                    holdings snapshot. Outline-style so it doesn't
+                    compete with the primary "Publicar mi primer
+                    post" CTA. */}
+                <button
+                  onClick={sharePortfolio}
+                  style={{
+                    padding: "10px 18px", borderRadius: 999,
+                    background: "transparent", color: T.accent,
+                    border: `1.5px solid ${T.accent}`, cursor: "pointer",
+                    fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+                    display: "inline-flex", alignItems: "center", gap: 7,
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21.21 15.89A10 10 0 1 1 8 2.83"/>
+                    <path d="M22 12A10 10 0 0 0 12 2v10z"/>
+                  </svg>
+                  {tr("social.feed.empty.cta_portfolio", lang)}
+                </button>
+              </div>
             </div>
           ) : (
             <div style={{
