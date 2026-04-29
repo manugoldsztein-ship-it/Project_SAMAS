@@ -2319,6 +2319,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.66",
+    title: "Mercado redesign — Apple Stocks aesthetic",
+    bullets: [
+      "Dropped the logo column from every asset row + the AssetSheet header. Bigger / bolder ticker text on the left edge replaces the visual weight the logo was carrying.",
+      "Sparkline upgraded to area chart with fill gradient (subtle line-color fade to transparent toward the bottom). 64×28 instead of 50×20 — reads as a tiny chart instead of a pencil stroke.",
+      "Change indicator restyled as a SOLID FILLED PILL (white text on accent / danger background) under the price, instead of tinted text. Matches the broker-app convention Manuel referenced.",
+    ],
+  },
+  {
     version: "0.0.65",
     title: "Loading skeletons across the app",
     bullets: [

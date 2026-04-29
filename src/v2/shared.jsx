@@ -30,8 +30,25 @@ export function Sparkline({ data, color, w = 60, h = 22, sw = 1.5 }) {
     const y = h - ((v - min) / range) * h;
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(" ");
+  // Closed polygon for the fill: stroke path + line down to bottom-
+  // right corner + line to bottom-left + close. Gives the
+  // Apple-Stocks area-chart look (subtle gradient fading from the
+  // line color to transparent toward the bottom).
+  const areaPts = `${pts} ${w.toFixed(1)},${h.toFixed(1)} 0.0,${h.toFixed(1)}`;
+  // Unique id per gradient instance — derived from the color hex
+  // so we don't render N <defs> for the same color, but stable
+  // across re-renders. SVG <defs> with the same id are harmless
+  // duplicates as long as the gradient definition matches.
+  const gradId = `samas-spark-${color.replace(/[^a-zA-Z0-9]/g, "")}`;
   return (
     <svg width={w} height={h} style={{ overflow: "visible" }}>
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.32" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polygon points={areaPts} fill={`url(#${gradId})`} />
       <polyline points={pts} fill="none" stroke={color} strokeWidth={sw}
         strokeLinecap="round" strokeLinejoin="round" />
     </svg>
@@ -494,26 +511,25 @@ export function Skeleton({ T, width = "100%", height = 14, borderRadius = 8, mar
 // silhouette while data is in flight.
 // ----------------------------------------------------------
 
-// AssetRowSkeleton — mirrors AssetRow's layout (logo 40 + name +
-// sparkline 50w + price 92w fixed-width column). Used by
-// MercadoView / PortafolioView / WatchlistView while assets/holdings
-// are loading.
+// AssetRowSkeleton — mirrors AssetRow's redesigned layout
+// (samas-0.0.66: no logo, bigger ticker, sparkline 64×28, price
+// column 96w with stacked solid-bg pill). Used by MercadoView /
+// PortafolioView / WatchlistView while assets/holdings are loading.
 export function AssetRowSkeleton({ T, isLast = false }) {
   return (
     <div style={{
-      width: "100%", padding: "12px 0",
+      width: "100%", padding: "14px 0",
       borderBottom: isLast ? "none" : `1px solid ${T.border}`,
       display: "flex", alignItems: "center", gap: 12,
     }}>
-      <Skeleton T={T} width={40} height={40} borderRadius={12} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <Skeleton T={T} width="40%" height={14} borderRadius={6} marginBottom={6} />
-        <Skeleton T={T} width="65%" height={12} borderRadius={6} />
+        <Skeleton T={T} width={68} height={17} borderRadius={6} marginBottom={6} />
+        <Skeleton T={T} width="60%" height={13} borderRadius={6} />
       </div>
-      <Skeleton T={T} width={50} height={20} borderRadius={6} />
-      <div style={{ width: 92, marginLeft: 8, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-        <Skeleton T={T} width={70} height={13} borderRadius={6} />
-        <Skeleton T={T} width={50} height={11} borderRadius={6} />
+      <Skeleton T={T} width={64} height={28} borderRadius={6} />
+      <div style={{ width: 96, marginLeft: 6, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+        <Skeleton T={T} width={74} height={15} borderRadius={6} />
+        <Skeleton T={T} width={56} height={20} borderRadius={6} />
       </div>
     </div>
   );

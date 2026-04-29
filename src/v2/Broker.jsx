@@ -1685,72 +1685,82 @@ function OrderRow({ T, order, isLast, busy, onCancel }) {
 
 // AssetRow — the canonical "one asset, one line" component. Used in
 // every list across the broker (Mercado, Portafolio, Watchlist) so
-// the same asset shows up identically everywhere. Key invariants:
-//   - Logo column: 40x40 AssetLogo. Real brand logo from
-//     asset.logo when present, with a deterministic ticker-hashed
-//     initials fallback when not. Same fallback color on every
-//     surface for the same ticker.
-//   - Name column: ticker bold + caller-decided subline.
-//   - Sparkline: per-ticker deterministic series whose endpoint
-//     matches the asset's changePct sign.
-//   - Right column: FIXED 92px so sparklines line up vertically
-//     across rows even when prices have wildly different lengths.
+// the same asset shows up identically everywhere.
+//
+// REDESIGN (samas-0.0.66) — Apple Stocks aesthetic per Manuel's
+// reference screenshot. Key shape changes from prior versions:
+//   - NO logo column. Just bigger / bolder ticker text on the
+//     left edge. AssetLogo still exists in shared.jsx and is used
+//     by CompareSheet + AddAssetModal, but the main asset-list
+//     row is now logo-free.
+//   - Sparkline grew slightly + uses the new area-fill gradient
+//     (also in 0.0.66) so it reads as a tiny chart rather than a
+//     pencil-thin stroke.
+//   - Change is now a SOLID FILLED PILL (white text on accent
+//     bg for + / danger bg for -), stacked under the price.
+//     Was tinted text before — pill version reads more like a
+//     traditional broker UI.
 //
 // LIVE PRICE TICKING (samas-0.0.57)
-//   The right-column top number is now driven by useLivePrice, so
-//   every row in Mercado / Portafolio / Watchlist ticks every 2.5s
-//   and flashes green or red on each update. Pass `liveMultiplier`
-//   for Portfolio rows so the holding's value (qty × price) ticks
-//   together with the underlying price. Default is 1 — works for
-//   Mercado / Watchlist where the row already shows per-unit price.
-//   The `rightTop` prop still exists as a fallback for callers that
+//   The price text is still driven by useLivePrice and flashes
+//   green/red on tick. Pass `liveMultiplier` for Portfolio rows.
+//   `rightTop` prop still exists as a fallback for callers that
 //   want to render a literal string (not currently used).
 function AssetRow({ T, asset, subline, liveMultiplier = 1, rightTop, rightBottom, rightBottomColor, isLast, onClick }) {
   const live = useLivePrice(asset?.ticker, asset?.price);
-  // Compute the displayed value. liveMultiplier defaults to 1 for
-  // per-unit rows; Portfolio passes h.qty so the column shows the
-  // holding's full value live-ticking.
   const value = live.price * liveMultiplier;
   const cur = asset?.currency === "ARS" ? "$" : "US$";
-  // Prefer the live-formatted price; fall back to the legacy
-  // rightTop string only when ticker info is missing.
   const displayedTop = asset?.ticker
     ? `${cur}${fmtMoney(value, asset.currency)}`
     : rightTop;
 
+  // Pill background tracks the change-direction. We derive from
+  // rightBottomColor (passed in by parents — accent for positive,
+  // danger for negative) so the parent's existing color logic
+  // still drives the visual.
+  const isNegative = (rightBottom || "").trim().startsWith("-");
+  const pillBg = isNegative ? T.danger : T.accent;
+
   return (
     <button onClick={onClick} style={{
-      width: "100%", padding: "12px 0",
+      width: "100%", padding: "14px 0",
       background: "transparent", border: "none",
       borderBottom: isLast ? "none" : `1px solid ${T.border}`,
       display: "flex", alignItems: "center", gap: 12,
       cursor: "pointer", textAlign: "left",
     }}>
-      <AssetLogo asset={asset} size={40} T={T} />
+      {/* Identity column — ticker (bold display font) + subline.
+          Replaces the old logo + ticker + subline triple. */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
-          fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, color: T.text,
+          fontFamily: FONT.display, fontSize: 17, fontWeight: 800, color: T.text,
+          letterSpacing: -0.3, lineHeight: 1.15,
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          marginBottom: 2,
         }}>{asset.ticker}</div>
         <div style={{
-          fontFamily: FONT.sans, fontSize: 12, color: T.textMute,
+          fontFamily: FONT.sans, fontSize: 13, color: T.textMute,
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}>{subline}</div>
       </div>
-      <AssetSparkline asset={asset} color={rightBottomColor} w={50} h={20} sw={1.5} />
+      {/* Bigger sparkline now that there's no logo competing for
+          horizontal space. 64×28 fits the row nicely and the
+          area-fill gradient reads at this size (was barely visible
+          at 50×20). */}
+      <AssetSparkline asset={asset} color={rightBottomColor} w={64} h={28} sw={1.5} />
+      {/* Right column: price on top (live-tick flashes), solid
+          colored pill underneath with the change. Fixed 96px so
+          sparklines line up vertically across rows. */}
       <div style={{
-        textAlign: "right", marginLeft: 8, width: 92,
+        textAlign: "right", marginLeft: 6, width: 96,
         fontVariantNumeric: "tabular-nums",
         flexShrink: 0,
+        display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4,
       }}>
-        {/* key={live.tickCount} re-mounts the inline-block on every
-            tick so the samas-tick-up / samas-tick-down keyframe
-            re-runs from the start. The keyframe paints a soft
-            green or red wash that fades to transparent over 600ms. */}
         <div
           key={live.tickCount}
           style={{
-            fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: T.text,
+            fontFamily: FONT.display, fontSize: 15, fontWeight: 700, color: T.text,
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
             display: "inline-block",
             borderRadius: 4,
@@ -1761,7 +1771,14 @@ function AssetRow({ T, asset, subline, liveMultiplier = 1, rightTop, rightBottom
               : {}),
           }}
         >{displayedTop}</div>
-        <div style={{ fontFamily: FONT.mono, fontSize: 11, fontWeight: 600, color: rightBottomColor }}>{rightBottom}</div>
+        <div style={{
+          fontFamily: FONT.mono, fontSize: 12, fontWeight: 700,
+          color: "#ffffff",
+          background: pillBg,
+          padding: "3px 9px",
+          borderRadius: 6,
+          letterSpacing: 0.2,
+        }}>{rightBottom}</div>
       </div>
     </button>
   );
@@ -1930,21 +1947,22 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
           display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "20px 20px 8px",
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-            <AssetLogo asset={asset} size={44} T={T} />
-            <div style={{ minWidth: 0 }}>
-              <div style={{
-                fontFamily: FONT.display, fontSize: 22, fontWeight: 700, color: T.text,
-                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-              }}>
-                {asset.ticker}
-              </div>
-              <div style={{
-                fontFamily: FONT.sans, fontSize: 12, color: T.textMute,
-                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-              }}>
-                {asset.name || asset.ticker}
-              </div>
+          {/* Header identity — ticker + name only. Logo dropped in
+              0.0.66 to match the Apple-Stocks-style detail page where
+              the brand mark isn't needed (the name spells it out). */}
+          <div style={{ minWidth: 0 }}>
+            <div style={{
+              fontFamily: FONT.display, fontSize: 22, fontWeight: 800, color: T.text,
+              letterSpacing: -0.4,
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }}>
+              {asset.ticker}
+            </div>
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 13, color: T.textMute,
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }}>
+              {asset.name || asset.ticker}
             </div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
