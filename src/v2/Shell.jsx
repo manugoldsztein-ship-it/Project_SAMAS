@@ -42,6 +42,7 @@ import { LANGUAGES } from "../lib/languages.js";
 import { t as tr } from "../lib/i18n.js";
 import { toast } from "./toast.jsx";
 import { seedDemoAccount, resetDemoAccount } from "../lib/demoSeed.js";
+import { seedSocialDemo } from "../lib/seedSocial.js";
 
 // localStorage flag for the Pro mode toggle. Default ON — power users
 // see the full broker surface (ticker banner, distribución, top movers)
@@ -278,6 +279,11 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
   const [show2FA, setShow2FA] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
+  // Server-side social seed (Edge Function) — busy flag so the row
+  // shows "Sembrando…" while the function runs and the button can't
+  // be re-tapped mid-flight. Idempotent on the server, but the UX is
+  // cleaner if we don't fire two seeds at once.
+  const [seedingSocial, setSeedingSocial] = useState(false);
   // Privacy / Terms sub-sheets — App Store submission requires both
   // policies to be reachable from the app. We render them inline as
   // modals (same pattern as 2FA / EditProfile) instead of opening the
@@ -696,6 +702,56 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="7 10 12 15 17 10"/>
             <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </button>
+        {/* Sembrar red social — calls the seed-social-demo Edge
+            Function (service-role bypass of RLS) to bulk-create 12
+            seed users with posts, replies, follows, likes, reposts,
+            and DMs to the caller. Investor-pitch fixture so the
+            Social tab never reads as empty. Idempotent on the server.
+            See supabase/functions/seed-social-demo/index.ts. */}
+        <button
+          disabled={seedingSocial}
+          onClick={async () => {
+            if (seedingSocial) return;
+            if (!confirm(tr("settings.demo.seed_social_confirm", lang))) return;
+            setSeedingSocial(true);
+            toast.info(tr("settings.demo.seed_social_running", lang));
+            try {
+              const result = await seedSocialDemo();
+              toast.success(tr("settings.demo.seed_social_done", lang, {
+                posts:   String(result?.postsCreated ?? 0),
+                follows: String(result?.followsCreated ?? 0),
+              }));
+            } catch (e) {
+              toast.error(tr("settings.demo.seed_social_fail", lang, {
+                error: e?.message || String(e),
+              }));
+            } finally {
+              setSeedingSocial(false);
+            }
+          }}
+          style={{
+            width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 8,
+            background: T.surface, border: `1px solid ${T.accent}55`,
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            cursor: seedingSocial ? "default" : "pointer", textAlign: "left",
+            opacity: seedingSocial ? 0.6 : 1,
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text }}>
+              {tr("settings.demo.seed_social", lang)}
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+              {seedingSocial
+                ? tr("settings.demo.seed_social_running", lang)
+                : tr("settings.demo.seed_social_sub", lang)}
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>
           </svg>
         </button>
         <button
@@ -1645,6 +1701,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.0.51",
+    title: "Sembrar red social para el demo",
+    bullets: [
+      "Botón \"Sembrar red social\" en Settings → Demo (idempotente).",
+      "12 usuarios AR con posts, hilos, follows, likes y DMs.",
+      "Edge Function seed-social-demo (service-role bypassa RLS).",
+    ],
+  },
   {
     version: "0.0.41",
     title: "Pantalla de Novedades",
