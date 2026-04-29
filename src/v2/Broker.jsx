@@ -3824,22 +3824,36 @@ function AssetAIInsight({ T, ticker, lang = "es" }) {
   })() : null;
 
   return (
-    <div style={{ marginTop: 16 }}>
-      {/* Header: SAMAS logo + "Análisis IA" + sentiment chip when loaded. */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, padding: "0 4px" }}>
+    <div style={{
+      // Match sibling sections (RangeBar52w / FundamentalsCard) so the
+      // AssetSheet body has consistent left/right alignment + bottom
+      // rhythm. Header now sits INSIDE this card's padding line
+      // instead of floating at 4px-from-edge (samas-0.0.86 fix).
+      margin: "0 0 18px",
+      padding: "14px 16px",
+      borderRadius: 18,
+      background: T.surface, border: `1px solid ${T.border}`,
+    }}>
+      {/* Header row — icon + AI INSIGHT label + sentiment chip on the
+          right when loaded. Title styled to MATCH the FUNDAMENTALS /
+          RANGE titles in sibling cards (mono 11 textMute) so the
+          AssetSheet has one consistent section-title typography
+          (samas-0.0.86 alignment sweep). */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
         <div style={{
-          width: 24, height: 24, borderRadius: 8,
+          width: 22, height: 22, borderRadius: 6,
           background: T.accent, color: "#06180c", flexShrink: 0,
           display: "flex", alignItems: "center", justifyContent: "center",
         }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
           </svg>
         </div>
         <div style={{
-          flex: 1, fontFamily: FONT.sans, fontSize: 12, fontWeight: 700,
-          color: T.text, letterSpacing: 0.4, textTransform: "uppercase",
+          flex: 1,
+          fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+          color: T.textMute, letterSpacing: 0.4, textTransform: "uppercase",
         }}>
           {tr("broker.ai.title", lang)}
         </div>
@@ -3853,13 +3867,14 @@ function AssetAIInsight({ T, ticker, lang = "es" }) {
         )}
       </div>
 
-      {/* Idle CTA — gradient pill. Tap to fetch. */}
+      {/* Idle CTA — flat pill INSIDE the card. No nested gradient (the
+          card itself provides the chrome). */}
       {!data && !busy && !err && (
         <button
           onClick={run}
           style={{
-            width: "100%", padding: "14px 16px", borderRadius: 16,
-            background: `linear-gradient(135deg, ${T.accentSoft} 0%, ${T.surface} 70%)`,
+            width: "100%", padding: "12px 14px", borderRadius: 12,
+            background: `linear-gradient(135deg, ${T.accentSoft} 0%, transparent 80%)`,
             border: `1px solid ${T.accent}55`,
             color: T.text, cursor: "pointer", textAlign: "left",
             fontFamily: FONT.sans, fontSize: 13, fontWeight: 600,
@@ -3875,16 +3890,15 @@ function AssetAIInsight({ T, ticker, lang = "es" }) {
         </button>
       )}
 
-      {/* Loading */}
+      {/* Loading — inline spinner row, no nested card. */}
       {busy && (
         <div style={{
-          padding: "20px 16px", borderRadius: 16,
-          background: T.surface, border: `1px solid ${T.border}`,
           display: "flex", alignItems: "center", gap: 12,
           color: T.textMute, fontFamily: FONT.sans, fontSize: 13,
+          padding: "8px 0",
         }}>
           <div style={{
-            width: 20, height: 20, borderRadius: 999,
+            width: 18, height: 18, borderRadius: 999,
             border: `2.4px solid ${T.border}`, borderTopColor: T.accent,
             animation: "samas-spin 800ms linear infinite", flexShrink: 0,
           }} />
@@ -3895,35 +3909,38 @@ function AssetAIInsight({ T, ticker, lang = "es" }) {
       {/* Error */}
       {err && !busy && (
         <div style={{
-          padding: "12px 14px", borderRadius: 14,
+          padding: "10px 12px", borderRadius: 12,
           background: T.dangerSoft, color: T.danger,
           fontFamily: FONT.sans, fontSize: 12, lineHeight: 1.5,
         }}>{err}</div>
       )}
 
-      {/* Result */}
+      {/* Result body — also inline (no nested card). Headline → bullets
+          → thesis → disclaimer. */}
       {data && !busy && (
-        <div style={{
-          padding: 14, borderRadius: 16,
-          background: T.surface, border: `1px solid ${T.border}`,
-        }}>
+        <>
           <div style={{
             fontFamily: FONT.sans, fontSize: 14, fontWeight: 700,
-            color: T.text, lineHeight: 1.4, marginBottom: 12,
+            color: T.text, lineHeight: 1.4, marginBottom: 10,
           }}>{data.headline}</div>
           {Array.isArray(data.bullets) && data.bullets.length > 0 && (
             <div style={{ marginBottom: 12 }}>
               {data.bullets.map((b, i) => (
                 <div key={i} style={{
-                  display: "flex", gap: 8, padding: "6px 0",
+                  display: "flex", alignItems: "flex-start", gap: 10,
+                  padding: "8px 0",
                   borderTop: i === 0 ? "none" : `1px solid ${T.border}`,
                 }}>
+                  {/* Smaller dot (8px) with 6px top offset → centers on
+                      the first line of 13px text (line-height ~1.5 = 19px,
+                      midpoint ~9px from top; dot top:6 + radius:4 = 10).
+                      Old 14px dot with margin:4 sat 4px below text center. */}
                   <span style={{
-                    width: 14, height: 14, marginTop: 4, flexShrink: 0,
-                    borderRadius: 7, background: T.accent,
+                    width: 8, height: 8, marginTop: 6, flexShrink: 0,
+                    borderRadius: 4, background: T.accent,
                   }} />
                   <div style={{
-                    fontFamily: FONT.sans, fontSize: 12, color: T.text, lineHeight: 1.5,
+                    fontFamily: FONT.sans, fontSize: 13, color: T.text, lineHeight: 1.5,
                   }}>{b}</div>
                 </div>
               ))}
@@ -3941,17 +3958,17 @@ function AssetAIInsight({ T, ticker, lang = "es" }) {
                 marginBottom: 4,
               }}>{tr("broker.ai.thesis", lang)}</div>
               <div style={{
-                fontFamily: FONT.sans, fontSize: 12, color: T.text, lineHeight: 1.5,
+                fontFamily: FONT.sans, fontSize: 13, color: T.text, lineHeight: 1.5,
               }}>{data.thesis}</div>
             </div>
           )}
           <div style={{
-            marginTop: 8, fontFamily: FONT.sans, fontSize: 9,
+            marginTop: 10, fontFamily: FONT.sans, fontSize: 10,
             color: T.textMute, textAlign: "right",
           }}>
             {tr("broker.ai.disclaimer", lang)}
           </div>
-        </div>
+        </>
       )}
     </div>
   );

@@ -2413,6 +2413,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.86",
+    title: "AssetSheet alignment sweep — AI Insight chrome matches siblings",
+    bullets: [
+      "Fix: AI INSIGHT card on the AssetSheet had its header (icon + label + sentiment chip) floating OUTSIDE the card's padding line — visually misaligned with FUNDAMENTALS, RANGE, and the rest of the AssetSheet sections. Now uses the same card chrome (margin: 0 0 18px, padding: 14px 16px, borderRadius: 18) and the title typography matches the other section titles (mono 11 textMute uppercase). Header icon shrunk from 26 to 22px so the row height matches sibling card title rows.",
+      "Bullet dots in the AI insight realigned: 8px circles with 6px top offset center on the first line of 13px text instead of sitting 4px below it. Wallet's numbered-bullet badges also got alignItems: flex-start so multi-line bullets don't stretch the badge to full row height.",
+      "Loading + idle states no longer have nested-card chrome — they live INSIDE the same outer card now, so the section reads as one coherent unit instead of \"label outside · button inside · result inside another card\".",
+    ],
+  },
+  {
     version: "0.0.85",
     title: "AI insight on every asset — tap a ticker, get a take",
     bullets: [

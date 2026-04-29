@@ -1125,10 +1125,15 @@ function AIAnalysisCard({ T, lang = "es" }) {
                   <div style={{ marginBottom: 16 }}>
                     {result.bullets.map((b, i) => (
                       <div key={i} style={{
-                        display: "flex", gap: 10, marginBottom: 10,
+                        display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 10,
                         padding: "10px 12px", borderRadius: 12,
                         background: T.bg, border: `1px solid ${T.border}`,
                       }}>
+                        {/* Numbered badge — alignSelf-flex-start so multi-
+                            line bullets don't stretch the badge to full
+                            row height. marginTop: 0 leaves the badge
+                            top-aligned with the first line of text
+                            (samas-0.0.86 alignment sweep). */}
                         <div style={{
                           width: 20, height: 20, borderRadius: 10, flexShrink: 0,
                           background: T.accent, color: "#06180c",
@@ -1137,6 +1142,7 @@ function AIAnalysisCard({ T, lang = "es" }) {
                         }}>{i + 1}</div>
                         <div style={{
                           fontFamily: FONT.sans, fontSize: 13, color: T.text, lineHeight: 1.5,
+                          flex: 1, minWidth: 0,
                         }}>{b}</div>
                       </div>
                     ))}
