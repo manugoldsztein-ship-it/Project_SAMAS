@@ -72,6 +72,16 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
     }
   }, [proMode]);
 
+  // Pro upsell modal — global because Wallet, Broker, etc all need
+  // to be able to open it. Listens for "samas:open-pro-upsell" so
+  // any view can pop it without having to thread a prop through.
+  const [showProUpsell, setShowProUpsell] = useState(false);
+  useEffect(() => {
+    function open() { setShowProUpsell(true); }
+    window.addEventListener("samas:open-pro-upsell", open);
+    return () => window.removeEventListener("samas:open-pro-upsell", open);
+  }, []);
+
   // Cross-shell handoff: the Broker DoneScreen fires
   // "samas:share-trade" when the user taps "Compartir este trade"
   // on a filled order. We stash the trade payload in localStorage
@@ -160,6 +170,7 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
             onToggleDark={onToggleDark}
             onOpenSettings={() => setShowSettings(true)}
             proMode={proMode}
+            onOpenProUpsell={() => setShowProUpsell(true)}
             lang={lang}
           />
         );
@@ -239,6 +250,18 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
           isNativeApp={isNativeApp}
           lang={lang}
           setLang={setLang}
+        />
+      )}
+
+      {/* Pro upsell modal — global so any view can dispatch
+          "samas:open-pro-upsell" or pass onOpenProUpsell down. */}
+      {showProUpsell && (
+        <ProUpsellModal
+          T={T}
+          lang={lang}
+          isPro={proMode}
+          onActivate={() => { setProMode(true); setShowProUpsell(false); }}
+          onClose={() => setShowProUpsell(false)}
         />
       )}
     </div>
@@ -1209,6 +1232,155 @@ function inputStyle(T) {
     color: T.text, fontFamily: FONT.sans, fontSize: 14,
     outline: "none",
   };
+}
+
+// ============================================================
+// ProUpsellModal — "Activar Pro" sales pitch
+// ============================================================
+// Mounted at the shell level so any view can open it (Wallet hint
+// card, Mercado heatmap toggle when locked, etc). Lists the Pro
+// features as a scrollable cards grid + a sticky CTA at the bottom.
+// During beta the CTA flips proMode on directly; in commercial
+// launch it'll route to App Store IAP.
+// ============================================================
+const PRO_FEATURE_KEYS = [
+  { key: "sector",   icon: "📊" },
+  { key: "risk",     icon: "📈" },
+  { key: "bench",    icon: "🆚" },
+  { key: "chart",    icon: "📉" },
+  { key: "heatmap",  icon: "🔥" },
+  { key: "earnings", icon: "📅" },
+  { key: "cashflow", icon: "💸" },
+  { key: "tax",      icon: "🧾" },
+  { key: "wl",       icon: "🎨" },
+];
+
+function ProUpsellModal({ T, lang = "es", isPro, onActivate, onClose }) {
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 120,
+        background: "rgba(0,0,0,0.7)",
+        display: "flex", alignItems: "flex-end", justifyContent: "center",
+      }}
+    >
+      <div style={{
+        width: "100%", maxWidth: 540, maxHeight: "92dvh",
+        background: T.bgElev || T.bg, color: T.text,
+        borderTopLeftRadius: 28, borderTopRightRadius: 28,
+        border: `1px solid ${T.border}`, borderBottom: "none",
+        display: "flex", flexDirection: "column", overflow: "hidden",
+      }}>
+        {/* Drag handle */}
+        <div style={{ display: "flex", justifyContent: "center", paddingTop: 12 }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: T.border }}/>
+        </div>
+
+        {/* Header — accent badge + title + subtitle. The hero strip
+            uses a green→accent-soft gradient to set the "this is
+            premium" tone before the user reads anything. */}
+        <div style={{
+          padding: "16px 22px 14px",
+          background: `linear-gradient(180deg, ${T.accentSoft} 0%, transparent 100%)`,
+        }}>
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            padding: "4px 10px", borderRadius: 999,
+            background: T.accent, color: T.accentInk,
+            fontFamily: FONT.mono, fontSize: 10, fontWeight: 800,
+            letterSpacing: 0.6, textTransform: "uppercase",
+            marginBottom: 10,
+          }}>
+            ★ PRO
+          </div>
+          <div style={{
+            fontFamily: FONT.display, fontSize: 24, fontWeight: 700,
+            color: T.text, letterSpacing: -0.6, marginBottom: 6,
+          }}>{tr("pro.upsell.title", lang)}</div>
+          <div style={{
+            fontFamily: FONT.sans, fontSize: 13, color: T.textMute,
+            lineHeight: 1.45,
+          }}>{tr("pro.upsell.subtitle", lang)}</div>
+        </div>
+
+        {/* Feature grid — 9 cards, 1 column on phone width, 2 on
+            wider devices. Each card is a stat-style block with an
+            emoji icon, title, one-line description. */}
+        <div style={{
+          flex: 1, overflowY: "auto",
+          padding: "8px 18px 12px",
+        }}>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "1fr",
+            gap: 8,
+          }}>
+            {PRO_FEATURE_KEYS.map((f) => (
+              <div key={f.key} style={{
+                padding: "12px 14px", borderRadius: 14,
+                background: T.surface, border: `1px solid ${T.border}`,
+                display: "flex", alignItems: "flex-start", gap: 12,
+              }}>
+                <div style={{
+                  fontSize: 20, lineHeight: 1, flexShrink: 0,
+                  width: 32, height: 32, borderRadius: 8,
+                  background: T.bg, border: `1px solid ${T.border}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>{f.icon}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+                    color: T.text, marginBottom: 2,
+                  }}>{tr(`pro.upsell.feat.${f.key}`, lang)}</div>
+                  <div style={{
+                    fontFamily: FONT.sans, fontSize: 12, color: T.textMute,
+                    lineHeight: 1.4,
+                  }}>{tr(`pro.upsell.feat.${f.key}_d`, lang)}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{
+            marginTop: 12, padding: "10px 12px", borderRadius: 12,
+            background: T.bg, border: `1px dashed ${T.border}`,
+            fontFamily: FONT.sans, fontSize: 11, color: T.textMute,
+            lineHeight: 1.45, textAlign: "center",
+          }}>{tr("pro.upsell.beta_note", lang)}</div>
+        </div>
+
+        {/* Sticky CTA */}
+        <div style={{
+          padding: "12px 18px calc(env(safe-area-inset-bottom) + 16px)",
+          borderTop: `1px solid ${T.border}`,
+          background: T.bgElev || T.bg,
+          display: "flex", gap: 10,
+        }}>
+          <button
+            onClick={onClose}
+            style={{
+              flex: 1, padding: "13px 16px", borderRadius: 14,
+              background: "transparent", border: `1px solid ${T.border}`,
+              color: T.text, fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >{tr("pro.upsell.cta_later", lang)}</button>
+          <button
+            onClick={isPro ? onClose : onActivate}
+            disabled={isPro}
+            style={{
+              flex: 2, padding: "13px 16px", borderRadius: 14,
+              background: T.accent, border: "none",
+              color: T.accentInk, fontFamily: FONT.sans, fontSize: 14, fontWeight: 800,
+              cursor: isPro ? "default" : "pointer",
+              opacity: isPro ? 0.6 : 1,
+              letterSpacing: 0.2,
+            }}
+          >{isPro ? "Pro activado ✓" : tr("pro.upsell.cta_activate", lang)}</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ============================================================

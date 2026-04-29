@@ -31,7 +31,7 @@ import { toast } from "./toast.jsx";
 import { setRefreshHandler } from "./refreshRegistry.js";
 import { t as tr } from "../lib/i18n.js";
 
-export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark, onOpenSettings, proMode = false, lang = "es" }) {
+export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark, onOpenSettings, proMode = false, onOpenProUpsell, lang = "es" }) {
   // ----------- data state -----------
   const [balance, setBalance] = useState(null);
   const [fx, setFx] = useState(null);
@@ -255,6 +255,49 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
           <Quote T={T} label="DÓLAR MEP"     value={fx.mep.value}     delta={fx.mep.change} />
           <Quote T={T} label="DÓLAR OFICIAL" value={fx.oficial.value} delta={fx.oficial.change} />
         </div>
+      )}
+
+      {/* ---------- Pro hint card ----------
+          Only when Pro is OFF — pushes the user toward the upsell
+          modal that lists every Pro feature. Sits between FX and
+          portfolio peek so it's visible above the fold without
+          competing with the hero balance card. */}
+      {!proMode && onOpenProUpsell && (
+        <button
+          onClick={onOpenProUpsell}
+          style={{
+            display: "flex", alignItems: "center", gap: 14,
+            margin: "16px 16px 0", padding: "14px 16px",
+            borderRadius: 18, cursor: "pointer", textAlign: "left",
+            width: "calc(100% - 32px)",
+            background: `linear-gradient(135deg, ${T.accentSoft} 0%, ${T.surface} 80%)`,
+            border: `1px solid ${T.border}`,
+            color: T.text,
+          }}
+        >
+          <div style={{
+            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+            background: T.accent, color: T.accentInk,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 18, fontWeight: 800,
+          }}>★</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontFamily: FONT.display, fontSize: 14, fontWeight: 700,
+              color: T.text, marginBottom: 2,
+            }}>{tr("pro.upsell.hint.title", lang)}</div>
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 12, color: T.textMute,
+              lineHeight: 1.4,
+              overflow: "hidden", textOverflow: "ellipsis",
+              display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+            }}>{tr("pro.upsell.hint.sub", lang)}</div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute}
+            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
       )}
 
       {/* ---------- portfolio peek ---------- */}
