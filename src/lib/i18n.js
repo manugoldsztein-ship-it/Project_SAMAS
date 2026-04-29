@@ -2740,16 +2740,37 @@ const V2 = {
  * @returns {string} translated string, or es fallback, or the key itself
  */
 export function t(key, lang = "es", vars = {}) {
-  const table = V2[lang] || V2.es;
-  let s = table[key];
-  if (s === undefined) s = V2.es[key];
-  if (s === undefined) return key; // surface the missing key, don't blank
-  if (vars && Object.keys(vars).length) {
-    for (const [k, v] of Object.entries(vars)) {
-      s = s.replace(new RegExp(`\\{${k}\\}`, "g"), v);
+  // Defensive wrapper — a translation lookup must NEVER throw, even
+  // if the caller passed garbage. Pre-0.0.50 a malformed call could
+  // bubble a ReferenceError up through React's render path and
+  // trigger the global ErrorBoundary, which is overkill for "an
+  // i18n string went missing". Worst case now: we return the key
+  // verbatim and the user sees something like "pro.upsell.title"
+  // which is at least diagnosable.
+  try {
+    // Coerce lang defensively. Some build paths can pass undefined
+    // (a stale closure, a stripped prop, a .map index leaking) and
+    // we don't want to crash on that.
+    const safeLang = (typeof lang === "string" && lang) || "es";
+    const table = V2[safeLang] || V2.es;
+    let s = table[key];
+    if (s === undefined) s = V2.es[key];
+    if (s === undefined) return key; // surface the missing key, don't blank
+    if (vars && typeof vars === "object" && Object.keys(vars).length) {
+      for (const [k, v] of Object.entries(vars)) {
+        s = s.replace(new RegExp(`\\{${k}\\}`, "g"), String(v));
+      }
     }
+    return s;
+  } catch (e) {
+    // Never throw out of t(). Log so we can find the call site
+    // through console history during dev / when looking at WebKit
+    // Inspector in Capacitor.
+    if (typeof console !== "undefined") {
+      console.warn("[i18n] t() failed for key:", key, "lang:", lang, "err:", e?.message);
+    }
+    return String(key);
   }
-  return s;
 }
 
 // Tiny convenience: a curried helper if the caller would rather not

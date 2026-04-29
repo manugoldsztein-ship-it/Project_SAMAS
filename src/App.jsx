@@ -499,14 +499,26 @@ function usePersistedState(key, initialValue) {
 // Error boundary so one broken component doesn't take down the whole app.
 // React functional components can't catch errors — this has to be a class.
 class ErrorBoundary extends React.Component {
-  constructor(props) { super(props); this.state = { error: null }; }
+  constructor(props) { super(props); this.state = { error: null, info: null }; }
   static getDerivedStateFromError(error) { return { error }; }
   componentDidCatch(error, info) {
     console.error("[SAMAS] component crash:", error, info?.componentStack);
+    this.setState({ info });
   }
-  reset = () => this.setState({ error: null });
+  reset = () => this.setState({ error: null, info: null });
   render() {
     if (this.state.error) {
+      // Trim the component stack so the user sees ~6 lines of context.
+      // The full stack is in console for whoever's poking at WebKit
+      // Inspector. We strip leading whitespace + 'in ' so each line
+      // names a component cleanly.
+      const stackLines = (this.state.info?.componentStack || "")
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .slice(0, 6)
+        .map((l) => l.replace(/^in\s+/, ""))
+        .join("\n");
       return (
         <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", padding:20, background:"#080808", color:"#F7F7F5", fontFamily:"Sora,sans-serif" }}>
           <div style={{ maxWidth:420, textAlign:"center" }}>
@@ -515,10 +527,22 @@ class ErrorBoundary extends React.Component {
             <p style={{ fontSize:14, color:"#9CA3AF", lineHeight:1.5, marginBottom:20 }}>
               Se cayo una parte de la app. Tus datos en localStorage siguen a salvo. Proba reintentar; si sigue fallando, recarga la pagina.
             </p>
-            <pre style={{ background:"#161B22", border:"1px solid #2A313C", borderRadius:10, padding:"10px 12px", fontSize:11, color:"#E05555", whiteSpace:"pre-wrap", wordBreak:"break-word", textAlign:"left", marginBottom:20, maxHeight:140, overflowY:"auto" }}>{String(this.state.error?.message || this.state.error)}</pre>
+            <pre style={{ background:"#161B22", border:"1px solid #2A313C", borderRadius:10, padding:"10px 12px", fontSize:11, color:"#E05555", whiteSpace:"pre-wrap", wordBreak:"break-word", textAlign:"left", marginBottom:10, maxHeight:140, overflowY:"auto" }}>{String(this.state.error?.message || this.state.error)}</pre>
+            {/* Component stack — when set, helps localize which file
+                the crash came from. Empty during the first paint /
+                react-dom errors that don't surface a stack. */}
+            {stackLines && (
+              <pre style={{ background:"#0d1117", border:"1px solid #2A313C", borderRadius:10, padding:"8px 10px", fontSize:10, color:"#8b95a5", whiteSpace:"pre-wrap", wordBreak:"break-word", textAlign:"left", marginBottom:20, maxHeight:120, overflowY:"auto", fontFamily:"monospace" }}>{stackLines}</pre>
+            )}
             <div style={{ display:"flex", gap:10, justifyContent:"center" }}>
               <button onClick={this.reset} style={{ background:"#16C784", color:"#fff", border:"none", borderRadius:10, padding:"10px 18px", fontWeight:700, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>Reintentar</button>
               <button onClick={() => window.location.reload()} style={{ background:"transparent", color:"#9CA3AF", border:"1px solid #2A313C", borderRadius:10, padding:"10px 18px", fontWeight:600, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>Recargar</button>
+            </div>
+            {/* Build version readout — hard-coded per patch so we can
+                tell at a glance if the user is on stale code (their
+                bundle should match the latest commit). */}
+            <div style={{ marginTop:18, fontSize:10, color:"#5a6573", fontFamily:"monospace" }}>
+              SAMAS samas-0.0.50
             </div>
           </div>
         </div>
