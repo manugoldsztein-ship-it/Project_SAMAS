@@ -2319,6 +2319,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.67",
+    title: "Apple Stocks aesthetic now consistent everywhere",
+    bullets: [
+      "0.0.66 stripped logos from main rows + AssetSheet header but left them in CompareSheet (×2) and the watchlist's add-asset picker. Visible inconsistency: main lists logo-free, modals still had them. Now all four broker surfaces match.",
+      "Compare-sheet picked grid: logo replaced with a bigger / bolder display-font ticker (16px, weight 800).",
+      "Pickable list rows + AddAssetModal rows: same ticker treatment + change indicator promoted to a solid-fill pill matching the main row aesthetic.",
+    ],
+  },
+  {
     version: "0.0.66",
     title: "Mercado redesign — Apple Stocks aesthetic",
     bullets: [

@@ -25,7 +25,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useContext } from "react";
 import { FONT, fmtMoney, fmtPct } from "./theme.js";
 import { Ico } from "./icons.jsx";
-import { Pill, SectionHead, AssetLogo, AssetSparkline, AssetRowSkeletonList } from "./shared.jsx";
+import { Pill, SectionHead, AssetSparkline, AssetRowSkeletonList } from "./shared.jsx";
 import { useLivePrice, LivePricesContext } from "./livePrices.jsx";
 import { broker as brokerApi, wallet as walletApi } from "./api/index.js";
 // The Objetivos wizard is shared with the legacy MobileApp UI. It
@@ -775,10 +775,13 @@ function CompareSheet({ T, assets, onClose }) {
           }}>
             {items.map((a) => (
               <div key={a.ticker}>
-                <div style={{ marginBottom: 8 }}>
-                  <AssetLogo asset={a} size={32} T={T} />
-                </div>
-                <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text }}>{a.ticker}</div>
+                {/* Logo dropped in 0.0.67 to match the unified
+                    Apple-Stocks aesthetic from 0.0.66. Ticker bumps
+                    up in size to fill the visual weight. */}
+                <div style={{
+                  fontFamily: FONT.display, fontSize: 16, fontWeight: 800, color: T.text,
+                  letterSpacing: -0.3, lineHeight: 1.1,
+                }}>{a.ticker}</div>
                 <div style={{ fontFamily: FONT.sans, fontSize: 10, color: T.textMute, marginBottom: 8 }}>{a.category || a.cat}</div>
                 <Stat T={T} label="Precio" value={`${a.currency === "ARS" ? "$" : "US$"}${fmtMoney(a.price, a.currency)}`} mono />
                 <Stat T={T} label="24h"
@@ -822,22 +825,31 @@ function CompareSheet({ T, assets, onClose }) {
           ) : (
             filtered.map((a) => (
               <button key={a.ticker} onClick={() => add(a.ticker)} style={{
-                width: "100%", padding: "8px 4px", background: "transparent",
+                width: "100%", padding: "10px 4px", background: "transparent",
                 border: "none", borderBottom: `1px solid ${T.border}`,
                 display: "flex", alignItems: "center", gap: 10,
                 cursor: "pointer", textAlign: "left",
               }}>
-                <AssetLogo asset={a} size={30} T={T} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text }}>{a.ticker}</div>
+                  <div style={{
+                    fontFamily: FONT.display, fontSize: 14, fontWeight: 800, color: T.text,
+                    letterSpacing: -0.3, lineHeight: 1.15, marginBottom: 2,
+                  }}>{a.ticker}</div>
                   <div style={{
                     fontFamily: FONT.sans, fontSize: 11, color: T.textMute,
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}>{a.name}</div>
                 </div>
-                <div style={{ fontFamily: FONT.mono, fontSize: 11, color: a.changePct >= 0 ? T.accent : T.danger }}>
-                  {fmtPct(a.changePct)}
-                </div>
+                {/* Solid pill for the change, matching AssetRow's
+                    treatment so picker rows look like miniature
+                    versions of the main list rows. */}
+                <div style={{
+                  fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+                  color: "#ffffff",
+                  background: a.changePct >= 0 ? T.accent : T.danger,
+                  padding: "3px 8px", borderRadius: 6,
+                  letterSpacing: 0.2,
+                }}>{fmtPct(a.changePct)}</div>
               </button>
             ))
           )}
@@ -1687,12 +1699,12 @@ function OrderRow({ T, order, isLast, busy, onCancel }) {
 // every list across the broker (Mercado, Portafolio, Watchlist) so
 // the same asset shows up identically everywhere.
 //
-// REDESIGN (samas-0.0.66) — Apple Stocks aesthetic per Manuel's
-// reference screenshot. Key shape changes from prior versions:
-//   - NO logo column. Just bigger / bolder ticker text on the
-//     left edge. AssetLogo still exists in shared.jsx and is used
-//     by CompareSheet + AddAssetModal, but the main asset-list
-//     row is now logo-free.
+// REDESIGN (samas-0.0.66 → 0.0.67) — Apple Stocks aesthetic per
+// Manuel's reference screenshot. Key shape changes:
+//   - NO logo column anywhere in the broker. Just bigger / bolder
+//     ticker text on the left edge. AssetLogo still exists as an
+//     export from shared.jsx (callers outside the broker can opt
+//     in) but no broker surface uses it anymore.
 //   - Sparkline grew slightly + uses the new area-fill gradient
 //     (also in 0.0.66) so it reads as a tiny chart rather than a
 //     pencil-thin stroke.
@@ -2351,17 +2363,20 @@ function AddAssetModal({ T, assets, excludeTickers = [], listName, onClose, onPi
                   cursor: busy ? "default" : "pointer", textAlign: "left",
                 }}
               >
-                <AssetLogo asset={a} size={36} T={T} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, color: T.text }}>
-                    {a.ticker}
-                  </div>
+                  <div style={{
+                    fontFamily: FONT.display, fontSize: 16, fontWeight: 800, color: T.text,
+                    letterSpacing: -0.3, lineHeight: 1.15, marginBottom: 2,
+                  }}>{a.ticker}</div>
                   <div style={{
                     fontFamily: FONT.sans, fontSize: 12, color: T.textMute,
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}>{a.name}</div>
                 </div>
-                <div style={{ fontFamily: FONT.mono, fontSize: 12, color: T.textMute }}>
+                <div style={{
+                  fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: T.text,
+                  fontVariantNumeric: "tabular-nums",
+                }}>
                   {a.currency === "ARS" ? "$" : "US$"}{fmtMoney(a.price, a.currency)}
                 </div>
               </button>
