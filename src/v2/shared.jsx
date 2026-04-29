@@ -10,6 +10,7 @@ import React, { useState, useMemo } from "react";
 import { FONT } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import { t as tr } from "../lib/i18n.js";
+import { hapticNative } from "../lib/native.js";
 
 // ----------------------------------------------------------
 // Sparkline — single polyline, no axes / labels.
@@ -280,7 +281,12 @@ export function SamasTabBar({ tab, setTab, T, bottomInset = 12, lang = "es" }) {
         const active = t.id === tab;
         const TabIco = t.ico;
         return (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{
+          <button key={t.id} onClick={() => {
+            // Light haptic on tab switch — only when actually changing.
+            // Tapping the tab you're already on shouldn't buzz.
+            if (!active) hapticNative("tap").catch(() => {});
+            setTab(t.id);
+          }} style={{
             background: "none", border: "none", cursor: "pointer", padding: "6px 10px",
             display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
             color: active ? T.accent : T.textMute, position: "relative",

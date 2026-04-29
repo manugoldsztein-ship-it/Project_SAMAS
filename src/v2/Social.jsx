@@ -15,7 +15,7 @@
 //              own posts + saved posts shortcut
 // ============================================================
 
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { FONT } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import { social as socialApi, messages as messagesApi, broker as brokerApi } from "./api/index.js";
@@ -25,6 +25,7 @@ import { setRefreshHandler, callRefreshFor } from "./refreshRegistry.js";
 import { avatarPropsFor } from "./shared.jsx";
 import { supabase } from "../lib/supabase.js";
 import { t as tr } from "../lib/i18n.js";
+import { hapticNative } from "../lib/native.js";
 
 // SUB_TABS labels are looked up dynamically below so they re-translate
 // when the user changes language. We keep id + icon static here.
@@ -3266,18 +3267,22 @@ function PostCard({ T, p, lang = "es", saved, meId, onLike, onRepost, onSave, on
   // The wrapper owns the 8px gap so owned + non-owned posts match.
   return (
     <div style={{ position: "relative", marginBottom: 8 }}>
-      {/* Red delete action panel — sits behind, revealed by swipe.
-          Only the right corners are rounded so the panel reads as
-          "tucked behind the card" instead of as a floating standalone
-          button. Top/bottom span the wrapper exactly (no inset)
-          because the card no longer adds its own marginBottom. */}
+      {/* Red delete action panel — fills the ENTIRE row behind the
+          card (inset: 0) with the same borderRadius as the card. The
+          old fix had the panel pinned to a fixed 96px on the right,
+          but the swipe clamp goes to -125px (1.3 × ACTION_WIDTH) so
+          the card could slide past the panel's left edge and expose
+          the page background between them. By making the panel
+          identical in size to the card, the panel always fills the
+          space the card vacates, regardless of overshoot. The
+          delete button stays visually right-anchored via
+          justifyContent: flex-end + paddingRight. */}
       <div style={{
-        position: "absolute", top: 0, right: 0, bottom: 0,
-        width: ACTION_WIDTH,
-        borderTopRightRadius: 18, borderBottomRightRadius: 18,
-        borderTopLeftRadius: 0, borderBottomLeftRadius: 0,
+        position: "absolute", inset: 0,
+        borderRadius: 18,
         background: T.danger,
-        display: "flex", alignItems: "center", justifyContent: "center",
+        display: "flex", alignItems: "center", justifyContent: "flex-end",
+        paddingRight: 28,
         // Hide the panel entirely when at rest so its rounded corner
         // doesn't peek out from under the card border.
         opacity: dx < -2 ? 1 : 0,
@@ -3377,16 +3382,53 @@ function PostCard({ T, p, lang = "es", saved, meId, onLike, onRepost, onSave, on
   );
 }
 
+// ActionBtn — heart / repost / comment / bookmark button under each
+// post. Three feel-improvements layered in 0.0.55:
+//   1. Light haptic on every tap so the button feels "real" on
+//      device. Fire-and-forget — never blocks the click handler.
+//   2. Bump animation when `active` flips false → true (i.e. user
+//      just liked / reposted / saved). The icon span re-mounts on
+//      bumpKey change which re-runs the samas-action-bump keyframe
+//      defined globally in Shell.jsx.
+//   3. The universal button:active scale-down rule from Shell.jsx
+//      already covers the press-down feel — nothing extra here.
 function ActionBtn({ T, icon, count, active, activeColor, onClick }) {
+  const [bumpKey, setBumpKey] = useState(0);
+  const prevActiveRef = useRef(active);
+  useEffect(() => {
+    if (!prevActiveRef.current && active) {
+      setBumpKey((k) => k + 1);
+    }
+    prevActiveRef.current = active;
+  }, [active]);
+
+  const handleClick = onClick ? () => {
+    hapticNative("tap").catch(() => {});
+    onClick();
+  } : undefined;
+
   return (
-    <button onClick={onClick} style={{
+    <button onClick={handleClick} style={{
       display: "flex", alignItems: "center", gap: 6,
       background: "transparent", border: "none", padding: 4,
       cursor: onClick ? "pointer" : "default",
       color: active ? activeColor : T.textMute,
       fontFamily: FONT.mono, fontSize: 12, fontWeight: 600,
     }}>
-      {icon}
+      <span
+        key={bumpKey}
+        style={{
+          display: "inline-flex",
+          // Only animate AFTER the first user toggle (bumpKey > 0).
+          // bumpKey === 0 is the initial mount; running the bump
+          // keyframe there would pop every heart on page load.
+          ...(bumpKey > 0
+            ? { animation: "samas-action-bump 350ms cubic-bezier(.34,1.56,.64,1)" }
+            : {}),
+        }}
+      >
+        {icon}
+      </span>
       {count != null && <span>{count || 0}</span>}
     </button>
   );

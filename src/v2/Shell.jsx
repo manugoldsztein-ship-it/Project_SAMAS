@@ -43,6 +43,7 @@ import { t as tr } from "../lib/i18n.js";
 import { toast } from "./toast.jsx";
 import { seedDemoAccount, resetDemoAccount } from "../lib/demoSeed.js";
 import { seedSocialDemo } from "../lib/seedSocial.js";
+import { hapticNative } from "../lib/native.js";
 
 // localStorage flag for the Pro mode toggle. Default ON — power users
 // see the full broker surface (ticker banner, distribución, top movers)
@@ -201,6 +202,34 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
       fontFamily: FONT.sans,
       color: T.text,
     }}>
+      {/* Global animation styles — injected once at the shell root so
+          every interactive element in the tree picks them up. Two
+          rules:
+            1. Universal press-down: every button shrinks slightly
+               while active. Adds a tactile "this is responsive"
+               feel without per-component plumbing. We exclude the
+               edge-swipe-back transform which lives on a div, not a
+               button, and we exclude already-disabled buttons.
+            2. samas-action-bump: the heart-bounce keyframe used by
+               ActionBtn in Social.jsx when likedByMe flips on. Same
+               keyframes tag works for any element that wants the
+               "you tapped me" pop. */}
+      <style>{`
+        button:active:not(:disabled) {
+          transform: scale(0.97);
+          transition: transform 80ms ease-out;
+        }
+        button:not(:active):not(:disabled) {
+          transition: transform 140ms ease-out;
+        }
+        @keyframes samas-action-bump {
+          0%   { transform: scale(1); }
+          30%  { transform: scale(1.4); }
+          60%  { transform: scale(0.92); }
+          100% { transform: scale(1); }
+        }
+      `}</style>
+
       {/* ---------- scrollable page content ---------- */}
       <ScrollWithPTR T={T} tab={baseTab}>
         {renderTab()}
@@ -1489,10 +1518,18 @@ function ProPricingSheet({ T, lang = "es", onSubscribe, onClose }) {
   async function handleSubscribe() {
     if (busy) return;
     setBusy(true);
+    // Light haptic the moment the user commits — same pattern as
+    // App Store IAP feels on iOS. Fire-and-forget; we don't block
+    // the UI on the haptic call.
+    hapticNative("tap").catch(() => {});
     // Fake processing delay so the demo feels real. ~700ms is the
     // sweet spot — long enough to read as "doing something",
     // short enough that the investor doesn't think we hung.
     await new Promise((r) => setTimeout(r, 700));
+    // Success haptic on completion — the iOS notification-style
+    // double-tap pattern that broker / payment apps fire on a
+    // confirmed transaction.
+    hapticNative("success").catch(() => {});
     onSubscribe(plan);
     setBusy(false);
   }
@@ -1967,6 +2004,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.0.55",
+    title: "Más smooth: bounce, press-down y haptics",
+    bullets: [
+      "Swipe-to-delete: el panel rojo ahora cubre toda la card (sin gap entre card y panel cuando overshootteás).",
+      "Press-down universal: cualquier botón se achica un poquito (scale 0.97) al tocar, suelta con un poquito de bounce.",
+      "Bounce en los botones de like / repost / save al activarlos + haptic light en cada tap social, en cambio de tab y en Suscribirme (success haptic en confirmación).",
+    ],
+  },
   {
     version: "0.0.54",
     title: "Pantalla de precios para Pro",
