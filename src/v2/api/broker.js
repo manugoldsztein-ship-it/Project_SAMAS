@@ -24,6 +24,19 @@
 // ============================================================
 
 import { jitter, maybeFail, genId, relativeStamp } from "./_mock.js";
+import { supabase } from "../../lib/supabase.js";
+
+// ----------------------------------------------------------
+// Auth helper — every Supabase-backed broker call needs the
+// caller's user_id. supabase-js caches the session internally so
+// re-calling getUser() is cheap; mirrors how src/v2/api/social.js
+// does the same lookup.
+// ----------------------------------------------------------
+async function currentUserId() {
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data?.user?.id) throw new Error("Sesión no encontrada.");
+  return data.user.id;
+}
 
 // ----------------------------------------------------------
 // Asset universe
@@ -162,18 +175,28 @@ export async function getQuote(ticker) {
  *   ticker, qty, avgCost, currency, price, value, gainAbs, gainPct
  */
 export async function getPortfolio() {
-  await jitter();
+  // 0.0.76: holdings now live in Supabase (public.holdings, RLS
+  // scoped to auth.uid). The local ASSETS table still owns the
+  // metadata (name / category / live price) — those are quote-side
+  // concerns that don't need to persist per user.
+  const userId = await currentUserId();
+  const { data: rows, error } = await supabase
+    .from("holdings")
+    .select("ticker, qty, avg_cost, currency, updated_at")
+    .eq("user_id", userId);
+  if (error) throw new Error(`Error al cargar holdings: ${error.message}`);
+
   const mepRate = state.fx.mep.value;
-  const enriched = state.holdings.map((h) => {
+  const enriched = (rows || []).map((h) => {
     const a = ASSETS.find((x) => x.ticker === h.ticker);
     if (!a) return null;
     const price = a.price;
     const value = h.qty * price;
-    const cost = h.qty * h.avgCost;
+    const cost = h.qty * h.avg_cost;
     const gainAbs = value - cost;
     const gainPct = cost === 0 ? 0 : (gainAbs / cost) * 100;
     return {
-      ticker: h.ticker, qty: h.qty, avgCost: h.avgCost,
+      ticker: h.ticker, qty: Number(h.qty), avgCost: Number(h.avg_cost),
       currency: a.currency, name: a.name, category: a.category,
       price, value, gainAbs, gainPct,
     };
@@ -252,42 +275,135 @@ export async function placeOrder({ ticker, side, qty, type = "market", limitPric
   if (!a) throw new Error("Ticker no encontrado.");
   await maybeFail(0.03, "El mercado rechazó la orden. Intentá de nuevo.");
 
+  const userId = await currentUserId();
   const price = type === "limit" ? limitPrice : a.price;
-
-  // Mock: market orders fill instantly. Limit orders stay open.
   const filled = type === "market";
-  const order = {
-    id: genId(), ticker, side, qty, type,
-    limitPrice: limitPrice || null,
-    status: filled ? "filled" : "open",
-    fillPrice: filled ? price : null,
-    at: Date.now(),
-  };
 
-  const next = { ...state, orders: [order, ...state.orders] };
-  if (filled) {
-    // Adjust holdings
-    const idx = next.holdings.findIndex((h) => h.ticker === ticker);
-    if (side === "buy") {
-      if (idx >= 0) {
-        const h = next.holdings[idx];
-        const newQty = h.qty + qty;
-        const newCost = (h.avgCost * h.qty + price * qty) / newQty;
-        next.holdings[idx] = { ...h, qty: newQty, avgCost: newCost };
-      } else {
-        next.holdings.push({ ticker, qty, avgCost: price });
-      }
-    } else {
-      if (idx < 0 || next.holdings[idx].qty < qty) throw new Error("Cantidad insuficiente para vender.");
-      const h = next.holdings[idx];
-      const remaining = h.qty - qty;
-      if (remaining === 0) next.holdings.splice(idx, 1);
-      else next.holdings[idx] = { ...h, qty: remaining };
+  // 0.0.76: orders now persist to public.orders. Holdings are
+  // upserted on fill; a transaction-ledger row is inserted so the
+  // user has an auditable record of every trade. Price-deduction
+  // from the cash balance lands in 0.0.78 (wallet migration);
+  // for now the holdings/orders layer is the source of truth.
+  //
+  // SELL guard: pre-check holdings before inserting the order so
+  // we don't end up with an "filled" sell that has no matching
+  // position. Schema lacks an UPDATE/DELETE policy on orders so we
+  // can't roll back the row if the holdings update fails — the
+  // pre-check is the safest pattern available client-side.
+  if (filled && side === "sell") {
+    const { data: existing, error: selErr } = await supabase
+      .from("holdings")
+      .select("qty")
+      .eq("user_id", userId)
+      .eq("ticker", ticker)
+      .maybeSingle();
+    if (selErr) throw new Error(`Error al verificar holdings: ${selErr.message}`);
+    if (!existing || Number(existing.qty) < qty) {
+      throw new Error("Cantidad insuficiente para vender.");
     }
   }
-  saveState(next);
 
-  return { orderId: order.id, status: order.status, fillPrice: order.fillPrice };
+  // Insert the order row first. RLS WITH CHECK enforces user_id =
+  // auth.uid() so the caller can only insert orders as themselves.
+  const { data: orderRow, error: insErr } = await supabase
+    .from("orders")
+    .insert({
+      user_id: userId,
+      ticker,
+      side,
+      qty,
+      price,
+      currency: a.currency,
+      status: filled ? "filled" : "open",
+      executed_at: filled ? new Date().toISOString() : null,
+    })
+    .select("id, status")
+    .single();
+  if (insErr) throw new Error(`Error al colocar orden: ${insErr.message}`);
+
+  // For market orders that fill on submit, mutate holdings + write
+  // the transaction ledger entry. For limit orders, none of this
+  // runs — the order sits in `open` until a future cron / broker
+  // event executes it.
+  if (filled) {
+    if (side === "buy") {
+      // Read current holding to compute the new weighted-average
+      // cost basis. maybeSingle returns null when the user doesn't
+      // own this ticker yet.
+      const { data: existing } = await supabase
+        .from("holdings")
+        .select("qty, avg_cost")
+        .eq("user_id", userId)
+        .eq("ticker", ticker)
+        .maybeSingle();
+      const oldQty = existing ? Number(existing.qty) : 0;
+      const oldAvg = existing ? Number(existing.avg_cost) : 0;
+      const newQty = oldQty + qty;
+      const newAvg = newQty > 0 ? (oldAvg * oldQty + price * qty) / newQty : price;
+      const { error: upErr } = await supabase
+        .from("holdings")
+        .upsert({
+          user_id: userId,
+          ticker,
+          qty: newQty,
+          avg_cost: newAvg,
+          currency: a.currency,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id,ticker" });
+      if (upErr) throw new Error(`Error al actualizar holdings: ${upErr.message}`);
+    } else {
+      // Sell — pre-check passed above so we know existing.qty >= qty.
+      const { data: existing } = await supabase
+        .from("holdings")
+        .select("qty, avg_cost")
+        .eq("user_id", userId)
+        .eq("ticker", ticker)
+        .maybeSingle();
+      const remainingQty = Number(existing.qty) - qty;
+      if (remainingQty === 0) {
+        // Position closed — delete the row entirely.
+        const { error: delErr } = await supabase
+          .from("holdings")
+          .delete()
+          .eq("user_id", userId)
+          .eq("ticker", ticker);
+        if (delErr) throw new Error(`Error al cerrar posición: ${delErr.message}`);
+      } else {
+        // Partial sell — qty drops, avg_cost stays put.
+        const { error: updErr } = await supabase
+          .from("holdings")
+          .update({ qty: remainingQty, updated_at: new Date().toISOString() })
+          .eq("user_id", userId)
+          .eq("ticker", ticker);
+        if (updErr) throw new Error(`Error al actualizar holdings: ${updErr.message}`);
+      }
+    }
+
+    // Append a transactions row so the user has an audit log.
+    // Sign convention: buy = negative (cash out), sell = positive
+    // (cash in). The wallet migration (0.0.78) will use this same
+    // ledger for balance computation.
+    const txAmount = qty * price * (side === "buy" ? -1 : 1);
+    await supabase
+      .from("transactions")
+      .insert({
+        user_id: userId,
+        kind: side === "buy" ? "trade_buy" : "trade_sell",
+        amount: txAmount,
+        currency: a.currency,
+        reference: `order:${orderRow.id}`,
+        memo: `${side === "buy" ? "Compra" : "Venta"} ${qty} ${ticker} @ ${price}`,
+      });
+    // Don't throw on tx insert failure — the order + holdings
+    // already settled and the ledger is auxiliary. Log so we can
+    // audit gaps later.
+  }
+
+  return {
+    orderId: orderRow.id,
+    status: orderRow.status,
+    fillPrice: filled ? price : null,
+  };
 }
 
 /**
@@ -295,26 +411,50 @@ export async function placeOrder({ ticker, side, qty, type = "market", limitPric
  * Production: GET /orders?status=open|filled|all.
  */
 export async function getOrders({ status = "all" } = {}) {
-  await jitter();
-  let rows = state.orders;
-  if (status !== "all") rows = rows.filter((o) => o.status === status);
-  return rows.map((o) => ({
-    ...o,
-    atLabel: relativeStamp(o.at),
-  }));
+  // 0.0.76: reads from public.orders. RLS scopes to caller. Sorted
+  // newest-first to match the historical UI expectation.
+  const userId = await currentUserId();
+  let q = supabase
+    .from("orders")
+    .select("id, ticker, side, qty, price, currency, status, fees, created_at, executed_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (status !== "all") q = q.eq("status", status);
+  const { data, error } = await q;
+  if (error) throw new Error(`Error al cargar órdenes: ${error.message}`);
+  return (data || []).map((o) => {
+    const at = o.created_at ? new Date(o.created_at).getTime() : Date.now();
+    return {
+      id: o.id,
+      ticker: o.ticker,
+      side: o.side,
+      qty: Number(o.qty),
+      price: Number(o.price),
+      currency: o.currency,
+      status: o.status,
+      // type — derived from whether limitPrice would have been set.
+      // We don't currently persist `type` separately; orders with
+      // status="open" are limit orders, "filled" are market in our
+      // model. Refine when real broker integration distinguishes.
+      type: o.status === "open" ? "limit" : "market",
+      limitPrice: o.status === "open" ? Number(o.price) : null,
+      fillPrice: o.status === "filled" ? Number(o.price) : null,
+      at,
+      atLabel: relativeStamp(at),
+    };
+  });
 }
 
 /**
- * cancelOrder(orderId) — remove an open order.
- * Production: DELETE /orders/{id}.
+ * cancelOrder(orderId) — currently disabled until the orders table
+ * gets an UPDATE policy or a server-side RPC. The schema's RLS only
+ * allows INSERT + SELECT today; there's no path to flip an open
+ * order to "cancelled" from the client. Tracked as a follow-up
+ * post 0.0.76. Throws so the UI can surface the limitation.
  */
-export async function cancelOrder(orderId) {
+export async function cancelOrder(_orderId) {
   await jitter();
-  const order = state.orders.find((o) => o.id === orderId);
-  if (!order) throw new Error("Orden no encontrada.");
-  if (order.status !== "open") throw new Error("La orden no se puede cancelar.");
-  saveState({ ...state, orders: state.orders.map((o) => o.id === orderId ? { ...o, status: "cancelled" } : o) });
-  return { ok: true };
+  throw new Error("Cancelar órdenes está deshabilitado en esta versión.");
 }
 
 /**

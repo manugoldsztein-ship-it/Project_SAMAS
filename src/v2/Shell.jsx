@@ -2368,6 +2368,16 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.76",
+    title: "Real persistence: holdings + orders move to Supabase",
+    bullets: [
+      "Mindset shift — treating SAMAS as the actual app, not a demo. Step 1 of the migration: holdings + orders + trade-ledger transactions now live in Supabase (RLS-scoped to auth.uid). Reinstall the app and your portfolio is preserved instead of vanishing.",
+      "placeOrder is now an end-to-end pipeline: insert into orders → upsert holdings (computes weighted-avg cost on buys, deletes the row on full sells) → insert into transactions (audit log of every trade with sign convention buy=negative cash, sell=positive).",
+      "Sell pre-check reads holdings before inserting the order so we don't end up with a \"filled\" sell against no position. cancelOrder is temporarily disabled — schema lacks an UPDATE policy on orders; tracked as a follow-up.",
+      "Settings → \"Cargar cuenta demo\" now upserts 7 demo holdings into Supabase (idempotent on re-run); \"Vaciar cuenta\" deletes holdings + trade transactions. Watchlists / wallet balance still localStorage; they migrate in 0.0.77 / 0.0.78.",
+    ],
+  },
+  {
     version: "0.0.75",
     title: "DM conversation: timestamps, date dividers, read receipts",
     bullets: [

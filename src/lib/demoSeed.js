@@ -1,103 +1,103 @@
 // ============================================================
-// DEMO SEED — populate the app with a realistic demo state.
+// DEMO SEED — populate the user's account with starter holdings.
 // ============================================================
-// SAMAS is shown to investors as a working prototype. A fresh signup
-// lands on the empty-state onboarding screen, which is the wrong UX
-// to show — the surfaces people are paying to see (Wallet hero,
-// 30-day sparkline, holdings table, broker PnL, plan progress) only
-// render once there's data behind them.
+// Triggered from Settings → Demo section. Inserts a curated mix of
+// holdings + watchlists into Supabase so a fresh account doesn't
+// land on empty-state screens during a walkthrough.
 //
-// seedDemoAccount() drops a curated mix of holdings + balance + a
-// synthetic 30-day portfolio history into localStorage, then reloads
-// the page so usePersistedState rehydrates from the new values on
-// next mount. Triggered from the Demo section of SettingsSheet.
+// 0.0.76: migrated from localStorage to real Supabase tables. The
+// seed now lands in public.holdings (RLS-scoped to the caller) so
+// uninstalling/reinstalling the app preserves the seeded portfolio
+// instead of losing it. Same intent, durable storage.
 //
-// resetDemoAccount() does the inverse: removes the user-facing state
-// keys so the next render returns to the empty-state onboarding.
-// Settings (theme, language, view mode, app shell) are left alone —
-// those are personal preferences, not demo data.
+// resetDemoAccount() does the inverse: deletes every holding +
+// transaction the user has so the next render shows the empty-
+// state onboarding. Profile / preferences / social state stay put.
 // ============================================================
+
+import { supabase } from "./supabase.js";
 
 // Seven holdings: three ARG stocks, three US CEDEARs, one BTC. Avg
-// prices are set slightly below the live ASSETS quotes (in App.jsx)
-// so PnL renders positive across the board — matters for screenshots
-// and demo flow ("look at the green numbers"). When Finnhub isn't
-// wired (no key), the simulator uses these avg prices as the live
-// quote, so PnL will read 0% — that's fine, the holdings table still
-// looks fully populated.
+// prices are set slightly below the live ASSETS quotes in
+// src/v2/api/broker.js so PnL renders positive across the board —
+// matters for any screenshot / walkthrough where the user expects
+// to see green numbers as a baseline state.
 const DEMO_HOLDINGS = [
-  { ticker: "GGAL", qty: 500,  avg: 7800    },
-  { ticker: "YPF",  qty: 120,  avg: 38000   },
-  { ticker: "ALUA", qty: 800,  avg: 1600    },
-  { ticker: "AAPL", qty: 60,   avg: 16200   },
-  { ticker: "NVDA", qty: 25,   avg: 54000   },
-  { ticker: "MSFT", qty: 40,   avg: 46000   },
-  { ticker: "BTC",  qty: 0.05, avg: 7500000 },
+  { ticker: "GGAL", qty: 500,  avgCost: 4150    , currency: "ARS" },
+  { ticker: "YPF",  qty: 120,  avgCost: 38000   , currency: "ARS" },
+  { ticker: "PAMP", qty: 800,  avgCost: 5600    , currency: "ARS" },
+  { ticker: "AAPL", qty: 60,   avgCost: 200.00  , currency: "USD" },
+  { ticker: "NVDA", qty: 25,   avgCost: 850.00  , currency: "USD" },
+  { ticker: "MSFT", qty: 40,   avgCost: 420.00  , currency: "USD" },
+  { ticker: "BTC",  qty: 0.05, avgCost: 90000.00, currency: "USD" },
 ];
 
-// 5M ARS in idle balance — enough to demo the "buy" flow without
-// looking like the user is broke, and modest enough to feel
-// realistic for a retail Argentine account.
-const DEMO_BALANCE = 5_000_000;
-
-// Watchlist seed — a small, recognizable mix that lets the user open
-// AssetDetail on any tab and see useful chrome (chart, news, etc.)
-// without first having to add tickers manually.
-const DEMO_WATCHLISTS = [
-  { id: "default", name: "Mi Watchlist", tickers: ["SPY", "BTC", "GGAL", "NVDA"] },
-];
-
-// Build a synthetic 30-day portfolio history. Linear ramp from ~88%
-// of target → target, with small daily noise (±1%) so the sparkline
-// reads as "real" rather than perfectly straight. Target is a rough
-// estimate of the live portfolio value (sum of qty * avg) so the
-// hero card's ARS total roughly matches the holdings sum on first
-// render. Real value comes from quotes once Finnhub is wired.
-function buildDemoPortfolioHistory(days = 30) {
-  const today = new Date();
-  const target = 13_500_000; // ≈ sum(DEMO_HOLDINGS.qty * avg) + balance
-  const start = target * 0.88;
-  const out = [];
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const progress = (days - 1 - i) / (days - 1); // 0 → 1
-    const noise = (Math.random() - 0.5) * 0.02;   // ±1%
-    const value = Math.round(start + (target - start) * progress * (1 + noise));
-    out.push({ date: d.toISOString().slice(0, 10), value });
-  }
-  return out;
+async function currentUserId() {
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data?.user?.id) throw new Error("Sesión no encontrada.");
+  return data.user.id;
 }
 
-export function seedDemoAccount() {
+/**
+ * seedDemoAccount() — bulk-upsert the demo holdings onto the
+ * caller's account. Idempotent: re-running replaces each holding's
+ * qty + avg_cost with the seed values (re-tapping the button in
+ * Settings doesn't compound). Reloads the page on success so
+ * Wallet / Broker re-fetch the new state on mount.
+ */
+export async function seedDemoAccount() {
   try {
-    localStorage.setItem("samas_holdings", JSON.stringify(DEMO_HOLDINGS));
-    localStorage.setItem("samas_balance",  JSON.stringify(DEMO_BALANCE));
-    localStorage.setItem("samas_portfolio_history", JSON.stringify(buildDemoPortfolioHistory(30)));
-    localStorage.setItem("samas_watchlists", JSON.stringify(DEMO_WATCHLISTS));
-    // Reload so usePersistedState picks up the new values on mount.
-    // The 200ms delay lets any closing modal / haptic finish first.
+    const userId = await currentUserId();
+    const rows = DEMO_HOLDINGS.map((h) => ({
+      user_id: userId,
+      ticker:  h.ticker,
+      qty:     h.qty,
+      avg_cost: h.avgCost,
+      currency: h.currency,
+      updated_at: new Date().toISOString(),
+    }));
+    // onConflict on the (user_id, ticker) composite PK so re-runs
+    // overwrite cleanly rather than duplicating rows.
+    const { error } = await supabase
+      .from("holdings")
+      .upsert(rows, { onConflict: "user_id,ticker" });
+    if (error) throw new Error(error.message);
+
+    // Reload so any cached state in the v2 broker (none today, but
+    // future caching layers might) gets a clean re-fetch on mount.
     setTimeout(() => window.location.reload(), 200);
   } catch (e) {
     console.error("[demoSeed] seed failed:", e);
+    alert(`No pudimos cargar los datos demo: ${e?.message || e}`);
   }
 }
 
-export function resetDemoAccount() {
+/**
+ * resetDemoAccount() — the inverse: drops every holding + trade
+ * transaction for the caller. Profile / posts / follows / DMs /
+ * preferences are intentionally NOT touched (those are durable
+ * social state, not "demo portfolio"). For full account deletion
+ * use Settings → Mi cuenta → Borrar mi cuenta (0.0.63).
+ */
+export async function resetDemoAccount() {
   try {
-    // Clear user-facing portfolio state so the app falls back to the
-    // empty-state onboarding. Personal prefs (theme, language, view
-    // mode, app shell) are intentionally preserved.
-    localStorage.removeItem("samas_holdings");
-    localStorage.removeItem("samas_balance");
-    localStorage.removeItem("samas_portfolio_history");
-    localStorage.removeItem("samas_orders");
-    localStorage.removeItem("samas_stop_losses");
-    localStorage.removeItem("samas_price_alerts");
-    localStorage.removeItem("samas_plan");
-    localStorage.removeItem("samas_recurring_aporte");
+    const userId = await currentUserId();
+    // Holdings — delete every row keyed to me.
+    const { error: hErr } = await supabase
+      .from("holdings").delete().eq("user_id", userId);
+    if (hErr) throw new Error(hErr.message);
+    // Transactions — drop trade-related rows. Aportes / dividends
+    // (when wired) stay; this is scoped to broker activity only.
+    await supabase.from("transactions").delete()
+      .eq("user_id", userId)
+      .in("kind", ["trade_buy", "trade_sell"]);
+    // Orders — RLS lacks DELETE policy so we leave orders as
+    // historical record (insert-only ledger). They'll show as
+    // "filled" against now-zero positions; that's acceptable for
+    // an audit log.
     setTimeout(() => window.location.reload(), 200);
   } catch (e) {
     console.error("[demoSeed] reset failed:", e);
+    alert(`No pudimos vaciar la cuenta: ${e?.message || e}`);
   }
 }
