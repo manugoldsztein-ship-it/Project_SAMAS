@@ -562,6 +562,26 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
     }
   }, [lang]);
 
+  // Same one-shot drain for the watchlist-share briefcase (set by
+  // the Watchlist tab's Share button via "samas:share-watchlist").
+  // We just dump the prepared body string straight into the compose
+  // box — the dispatcher already formatted it with the $TICKER chips.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("samas_pending_text_share");
+      if (!raw) return;
+      localStorage.removeItem("samas_pending_text_share");
+      setBody(raw.slice(0, 280));
+      setTimeout(() => {
+        const el = composeRef.current;
+        if (!el) return;
+        try { el.focus(); el.setSelectionRange(raw.length, raw.length); } catch {}
+      }, 0);
+    } catch (e) {
+      console.warn("[social] text-share prefill failed:", e);
+    }
+  }, []);
+
   const refresh = useCallback(async () => {
     try {
       const [feed, m, saved] = await Promise.all([

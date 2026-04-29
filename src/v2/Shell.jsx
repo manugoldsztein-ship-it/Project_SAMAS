@@ -92,6 +92,24 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
     return () => window.removeEventListener("samas:share-trade", onShareTrade);
   }, []);
 
+  // Watchlist share — same handoff pattern as share-trade above. The
+  // BrokerShell's WatchlistView dispatches "samas:share-watchlist"
+  // when the user taps the Share button on a list. We stash a body
+  // string in the briefcase (already-formatted in the dispatcher so
+  // the format stays close to the source) and switch to Social.
+  useEffect(() => {
+    function onShareWatchlist(e) {
+      try {
+        const body = e?.detail?.body;
+        if (!body) return;
+        localStorage.setItem("samas_pending_text_share", body);
+      } catch {}
+      setTab("social");
+    }
+    window.addEventListener("samas:share-watchlist", onShareWatchlist);
+    return () => window.removeEventListener("samas:share-watchlist", onShareWatchlist);
+  }, []);
+
   const T = isDark ? SAMAS_THEME.dark : SAMAS_THEME.light;
   // The chrome layout fix moved safe-area handling out of #root and
   // onto the chrome elements themselves. So inside the shell we now

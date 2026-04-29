@@ -337,13 +337,53 @@ export async function removeFromWatchlist(watchlistId, ticker) {
   saveState({ ...state, watchlists: state.watchlists.map((w) => w.id === watchlistId ? { ...w, tickers: w.tickers.filter((t) => t !== ticker) } : w) });
   return { ok: true };
 }
-export async function createWatchlist(name) {
+export async function createWatchlist(name, opts = {}) {
   await jitter();
   if (!name || !name.trim()) throw new Error("Indicá un nombre.");
   const trimmed = name.trim().slice(0, 40);
-  const wl = { id: genId(), name: trimmed, tickers: [] };
+  // Color is optional — Pro feature added in samas-0.0.47. Pre-Pro
+  // lists keep `color: null` and render with the default border.
+  const wl = {
+    id: genId(),
+    name: trimmed,
+    tickers: [],
+    color: opts.color || null,
+  };
   saveState({ ...state, watchlists: [...state.watchlists, wl] });
   return wl;
+}
+
+/**
+ * setWatchlistColor(id, color) — Pro feature (samas-0.0.47). Assigns
+ * a color tag to a watchlist for the colored-dot pill + ticker-row
+ * accent. Pass null to clear the tag back to the default styling.
+ */
+export async function setWatchlistColor(id, color) {
+  await jitter();
+  saveState({
+    ...state,
+    watchlists: state.watchlists.map((w) =>
+      w.id === id ? { ...w, color: color || null } : w
+    ),
+  });
+  return { ok: true };
+}
+
+/**
+ * reorderWatchlist(id, tickers) — replace a watchlist's ticker
+ * order with the given array. Server validates that the array is a
+ * permutation of the current set; we just trust the client here.
+ */
+export async function reorderWatchlist(id, tickers) {
+  await jitter();
+  if (!Array.isArray(tickers)) throw new Error("Orden inválido.");
+  saveState({
+    ...state,
+    watchlists: state.watchlists.map((w) =>
+      w.id === id ? { ...w, tickers: [...tickers] } : w
+    ),
+  });
+  return { ok: true };
 }
 
 /**

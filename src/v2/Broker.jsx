@@ -255,7 +255,15 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true, la
           <MercadoView T={T} assets={assets} ccy={ccy} setCcy={setCcy} onSelectAsset={setSelectedAsset} proMode={proMode} lang={lang} />
         )}
         {tab === "watchlist" && (
-          <WatchlistView T={T} watchlists={watchlists} assets={assets} onSelectAsset={setSelectedAsset} onRefresh={refresh} lang={lang} />
+          <WatchlistView
+            T={T}
+            watchlists={watchlists}
+            assets={assets}
+            onSelectAsset={setSelectedAsset}
+            onRefresh={refresh}
+            proMode={proMode}
+            lang={lang}
+          />
         )}
         {tab === "ordenes" && (
           <OrdenesView
@@ -846,11 +854,26 @@ function Stat({ T, label, value, color, mono }) {
 // ----------------------------------------------------------
 // Watchlist — multiple lists with name/create/rename/delete.
 // ----------------------------------------------------------
-function WatchlistView({ T, watchlists, assets, onSelectAsset, onRefresh, lang = "es" }) {
+// Color tag palette for watchlists v2. 8 colors keep the picker
+// compact; we map by name → hex so a future migration could swap
+// out a single hue without breaking persisted state.
+const WL_COLORS = [
+  { id: "green",  hex: "#16C784" },
+  { id: "blue",   hex: "#3B82F6" },
+  { id: "purple", hex: "#8B5CF6" },
+  { id: "pink",   hex: "#EC4899" },
+  { id: "orange", hex: "#F59E0B" },
+  { id: "red",    hex: "#EF4444" },
+  { id: "cyan",   hex: "#06B6D4" },
+  { id: "lime",   hex: "#84CC16" },
+];
+
+function WatchlistView({ T, watchlists, assets, onSelectAsset, onRefresh, proMode = false, lang = "es" }) {
   // Selected list ID. Default to the first one; if it gets deleted
   // we fall back to whichever is now first.
   const [selectedId, setSelectedId] = useState(null);
-  const [modal, setModal] = useState(null); // "create" | "rename" | "confirm-delete" | null
+  const [modal, setModal] = useState(null); // "create" | "rename" | "confirm-delete" | "add-asset" | "color" | null
+  const [reorderBusy, setReorderBusy] = useState(false);
 
   // Pick a sensible initial selection when lists arrive. Re-runs if
   // the list set changes (e.g. after creating or deleting).
@@ -899,6 +922,12 @@ function WatchlistView({ T, watchlists, assets, onSelectAsset, onRefresh, lang =
       }}>
         {watchlists.map((w) => {
           const active = w.id === selectedId;
+          // Color tag — small dot leading the pill text. Renders
+          // for any list that has a color set (Pro feature) and
+          // falls back to no dot for legacy / non-Pro lists.
+          const tagColor = w.color
+            ? (WL_COLORS.find((c) => c.id === w.color)?.hex || w.color)
+            : null;
           return (
             <button key={w.id} onClick={() => setSelectedId(w.id)} style={{
               flexShrink: 0, padding: "8px 14px", borderRadius: 999,
@@ -907,7 +936,16 @@ function WatchlistView({ T, watchlists, assets, onSelectAsset, onRefresh, lang =
               color: active ? T.accent : T.text,
               fontFamily: FONT.sans, fontSize: 13, fontWeight: 600,
               cursor: "pointer", whiteSpace: "nowrap",
-            }}>{w.name} <span style={{ color: T.textMute, marginLeft: 4 }}>{w.tickers.length}</span></button>
+              display: "inline-flex", alignItems: "center", gap: 8,
+            }}>
+              {tagColor && (
+                <span style={{
+                  width: 8, height: 8, borderRadius: "50%",
+                  background: tagColor, flexShrink: 0,
+                }}/>
+              )}
+              {w.name} <span style={{ color: T.textMute, marginLeft: 4 }}>{w.tickers.length}</span>
+            </button>
           );
         })}
         <button onClick={() => setModal("create")} style={{
@@ -929,7 +967,41 @@ function WatchlistView({ T, watchlists, assets, onSelectAsset, onRefresh, lang =
             fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text,
             letterSpacing: -0.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
           }}>{selected.name}</div>
-          <div style={{ display: "flex", gap: 6 }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {/* Pro: Compartir — dispatches the watchlist body to the
+                Social compose box via the briefcase pattern (same as
+                share-trade). Hidden in non-Pro. */}
+            {proMode && selected.tickers.length > 0 && (
+              <button
+                onClick={() => {
+                  const tickers = selected.tickers.map((t) => `$${t}`).join(" ");
+                  const body = tr("pro.wl.share_template", lang, {
+                    name: selected.name,
+                    tickers,
+                  }).slice(0, 280);
+                  try {
+                    window.dispatchEvent(new CustomEvent("samas:share-watchlist", {
+                      detail: { body },
+                    }));
+                  } catch {}
+                }}
+                style={{
+                  padding: "5px 10px", borderRadius: 8,
+                  background: T.accentSoft, border: `1px solid ${T.accent}55`,
+                  color: T.accent, fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >{tr("pro.wl.share", lang)}</button>
+            )}
+            {/* Pro: color tag picker. Tap → swatch row sheet. */}
+            {proMode && (
+              <button onClick={() => setModal("color")} style={{
+                padding: "5px 10px", borderRadius: 8,
+                background: "transparent", border: `1px solid ${T.border}`,
+                color: T.textMute, fontFamily: FONT.sans, fontSize: 11, fontWeight: 600,
+                cursor: "pointer",
+              }}>{tr("pro.wl.color", lang)}</button>
+            )}
             <button onClick={() => setModal("rename")} style={{
               padding: "5px 10px", borderRadius: 8,
               background: "transparent", border: `1px solid ${T.border}`,
@@ -958,17 +1030,75 @@ function WatchlistView({ T, watchlists, assets, onSelectAsset, onRefresh, lang =
       ) : (
         <div style={{ margin: "0 16px" }}>
           {items.map((a, i) => (
-            <AssetRow
-              key={a.ticker}
-              T={T}
-              asset={a}
-              subline={a.name}
-              rightTop={`${a.currency === "ARS" ? "$" : "US$"}${fmtMoney(a.price, a.currency)}`}
-              rightBottom={fmtPct(a.changePct)}
-              rightBottomColor={a.changePct >= 0 ? T.accent : T.danger}
-              isLast={i === items.length - 1}
-              onClick={() => onSelectAsset(a)}
-            />
+            <div key={a.ticker} style={{ display: "flex", alignItems: "stretch", gap: 6 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <AssetRow
+                  T={T}
+                  asset={a}
+                  subline={a.name}
+                  rightTop={`${a.currency === "ARS" ? "$" : "US$"}${fmtMoney(a.price, a.currency)}`}
+                  rightBottom={fmtPct(a.changePct)}
+                  rightBottomColor={a.changePct >= 0 ? T.accent : T.danger}
+                  isLast={i === items.length - 1}
+                  onClick={() => onSelectAsset(a)}
+                />
+              </div>
+              {/* Pro reorder arrows — only render in Pro mode and only
+                  when the list has at least 2 tickers (otherwise the
+                  arrows would always be disabled). */}
+              {proMode && items.length > 1 && (
+                <div style={{
+                  display: "flex", flexDirection: "column", gap: 4,
+                  paddingTop: 8,
+                }}>
+                  {[
+                    { dir: "up",   disabled: i === 0,                offset: -1 },
+                    { dir: "down", disabled: i === items.length - 1, offset: 1 },
+                  ].map(({ dir, disabled, offset }) => (
+                    <button
+                      key={dir}
+                      disabled={disabled || reorderBusy}
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (disabled || reorderBusy) return;
+                        setReorderBusy(true);
+                        try {
+                          // Compute the new ticker order from the
+                          // currently-rendered items so we don't
+                          // depend on `selected.tickers` ordering
+                          // matching the visual ordering exactly.
+                          const order = items.map((x) => x.ticker);
+                          const j = i + offset;
+                          [order[i], order[j]] = [order[j], order[i]];
+                          await brokerApi.reorderWatchlist(selected.id, order);
+                          await onRefresh();
+                        } finally {
+                          setReorderBusy(false);
+                        }
+                      }}
+                      aria-label={tr(dir === "up" ? "pro.wl.move_up" : "pro.wl.move_down", lang)}
+                      style={{
+                        width: 28, height: 28, borderRadius: 8,
+                        background: T.surface,
+                        border: `1px solid ${T.border}`,
+                        color: disabled ? T.textMute : T.text,
+                        cursor: disabled ? "default" : "pointer",
+                        opacity: disabled ? 0.4 : 1,
+                        padding: 0, display: "flex",
+                        alignItems: "center", justifyContent: "center",
+                      }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                        {dir === "up"
+                          ? <polyline points="18 15 12 9 6 15"/>
+                          : <polyline points="6 9 12 15 18 9"/>}
+                      </svg>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           ))}
         </div>
       )}
@@ -1020,6 +1150,66 @@ function WatchlistView({ T, watchlists, assets, onSelectAsset, onRefresh, lang =
             setModal(null);
           }}
         />
+      )}
+      {modal === "color" && selected && (
+        <div onClick={(e) => { if (e.target === e.currentTarget) setModal(null); }} style={{
+          position: "fixed", inset: 0, zIndex: 110,
+          background: "rgba(0,0,0,0.6)",
+          display: "flex", alignItems: "flex-end", justifyContent: "center",
+        }}>
+          <div style={{
+            width: "100%", maxWidth: 540,
+            background: T.bgElev || T.surface, color: T.text,
+            borderTopLeftRadius: 24, borderTopRightRadius: 24,
+            border: `1px solid ${T.border}`, borderBottom: "none",
+            padding: "20px 20px 28px",
+          }}>
+            <div style={{
+              fontFamily: FONT.display, fontSize: 17, fontWeight: 700,
+              color: T.text, marginBottom: 14,
+            }}>{tr("pro.wl.color", lang)}</div>
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(4, 1fr)",
+              gap: 10, marginBottom: 12,
+            }}>
+              {/* "None" swatch — clears the color tag back to default. */}
+              <button
+                onClick={async () => {
+                  await brokerApi.setWatchlistColor(selected.id, null);
+                  await onRefresh();
+                  setModal(null);
+                }}
+                style={{
+                  aspectRatio: "1 / 1", borderRadius: 999,
+                  background: "transparent", border: `2px dashed ${T.border}`,
+                  color: T.textMute, cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 18, lineHeight: 1, padding: 0,
+                }}
+              >×</button>
+              {WL_COLORS.map((c) => {
+                const active = selected.color === c.id;
+                return (
+                  <button
+                    key={c.id}
+                    onClick={async () => {
+                      await brokerApi.setWatchlistColor(selected.id, c.id);
+                      await onRefresh();
+                      setModal(null);
+                    }}
+                    style={{
+                      aspectRatio: "1 / 1", borderRadius: 999,
+                      background: c.hex,
+                      border: active ? `3px solid ${T.text}` : `2px solid ${T.border}`,
+                      cursor: "pointer", padding: 0,
+                    }}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        </div>
       )}
       {modal === "add-asset" && selected && (
         <AddAssetModal

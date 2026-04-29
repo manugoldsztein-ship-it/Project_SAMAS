@@ -99,6 +99,13 @@ const V2 = {
     "pro.wallet.tax.unrealized":  "No realizado",
     "pro.wallet.tax.note":        "Solo a fines informativos. Verificá con tu contador.",
 
+    // Watchlists v2 (samas-0.0.47)
+    "pro.wl.share":               "Compartir",
+    "pro.wl.color":               "Color",
+    "pro.wl.move_up":             "Subir",
+    "pro.wl.move_down":           "Bajar",
+    "pro.wl.share_template":      "📋 Mi watchlist {name}: {tickers}",
+
     "settings.light_mode":        "Modo claro",
     "settings.dark_mode":         "Modo oscuro",
     "settings.theme_to_light":    "Pasar a tema claro",
@@ -457,6 +464,13 @@ const V2 = {
     "pro.wallet.tax.realized":    "Realized",
     "pro.wallet.tax.unrealized":  "Unrealized",
     "pro.wallet.tax.note":        "For info only. Verify with your accountant.",
+
+    // Watchlists v2 (samas-0.0.47)
+    "pro.wl.share":               "Share",
+    "pro.wl.color":               "Color",
+    "pro.wl.move_up":             "Move up",
+    "pro.wl.move_down":           "Move down",
+    "pro.wl.share_template":      "📋 My {name} watchlist: {tickers}",
 
     "settings.light_mode":        "Light mode",
     "settings.dark_mode":         "Dark mode",
