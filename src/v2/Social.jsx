@@ -434,9 +434,10 @@ function SocialNav({ T, tab, setTab, bottomInset, lang = "es" }) {
 // lives. Following is second (curated stream), Trades is the
 // always-trade-card filter.
 const FEED_TABS = [
-  { id: "for_you",   key: "social.tab.for_you"  },
-  { id: "following", key: "social.tab.following" },
-  { id: "trades",    key: "social.tab.trades"    },
+  { id: "for_you",    key: "social.tab.for_you"   },
+  { id: "following",  key: "social.tab.following" },
+  { id: "trades",     key: "social.tab.trades"    },
+  { id: "portfolios", key: "social.tab.portfolios" },
 ];
 
 function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, onOpenTicker, onOpenMention, onOpenHashtag }) {
@@ -453,6 +454,14 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
   // so the post lands with a trade card. The user can clear the
   // attachment with the X button (body stays).
   const [pendingTrade, setPendingTrade] = useState(null);
+  // Portfolio attachment (samas-0.0.79): when the user taps "Compartir
+  // cartera" we snapshot their broker portfolio and stash the structured
+  // payload here. publish() forwards it to createPost as `portfolio`,
+  // which lands on posts.payload with kind='portfolio'. The compose
+  // shows a read-only card preview above the textarea so the user CAN'T
+  // edit the numbers (anti-fake-screenshot mitigation). Body becomes
+  // optional commentary for portfolio posts.
+  const [pendingPortfolio, setPendingPortfolio] = useState(null);
   // Image attachment — File from the picker + a local object URL for
   // the preview thumbnail. Uploaded to Supabase Storage on publish().
   // We keep the File around (not the URL) because the preview URL
@@ -667,6 +676,7 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
           // Tab-specific filtering on the wire:
           if (tab === "following" && (!followingSet || !followingSet.has(row.author_id))) return;
           if (tab === "trades" && !row.trade) return;
+          if (tab === "portfolios" && row.kind !== "portfolio") return;
           // Skip duplicates — createPost prepended the same row already.
           if (row.author_id === myUserId) {
             // Still re-fetch for OTHER tabs where my own posts should
@@ -758,18 +768,22 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
 
   async function publish() {
     setErr(null);
-    if (!body.trim()) { setErr("El post está vacío."); return; }
+    // Portfolio posts can ship with empty body — the card IS the post.
+    // Text posts still need a non-empty body.
+    if (!pendingPortfolio && !body.trim()) { setErr("El post está vacío."); return; }
     setBusy(true);
     try {
       await socialApi.createPost({
         body,
         trade: pendingTrade || undefined,
         image: pendingImage || undefined,
+        portfolio: pendingPortfolio || undefined,
       });
       setBody("");
       setPendingTrade(null);
       setPendingImage(null);
       setPendingImagePreview(null);
+      setPendingPortfolio(null);
       await refresh();
     } catch (e) { setErr(e.message); }
     setBusy(false);
@@ -797,12 +811,12 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
     setPendingImagePreview(null);
   }
 
-  // Share-portfolio: pull holdings from the broker mock, format as
-  // a compact text snapshot, and insert into the compose body. Each
-  // line is one ticker with qty + gain%; the bottom line is the
-  // total. We cap at top 6 holdings so the post stays under 280
-  // chars even on a heavy portfolio. Tickers are kept as $XXX so
-  // the linkifyTickers helper renders them as taps later.
+  // Share-portfolio (samas-0.0.79 — restructured): snapshot the
+  // user's holdings as a structured payload and attach it to the
+  // compose. The card preview above the textarea is read-only —
+  // the user can't edit the numbers, which kills the "fake your
+  // gains" attack from the previous text-paste implementation.
+  // Body remains editable as optional commentary.
   async function sharePortfolio() {
     setErr(null);
     try {
@@ -812,32 +826,35 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
         setErr(tr("social.compose.portfolio_empty", lang));
         return;
       }
-      // Sort by absolute value descending so the top contributors
-      // surface first (a 0.01-NVDA position shouldn't outrank a
-      // 100-share GGAL just by alphabetical order).
+      // Rank by absolute value descending so the top contributors
+      // surface first when we cap to 6 rows. A 0.01-NVDA position
+      // shouldn't outrank a 100-share GGAL just by alphabetical
+      // order. Cap at 6 to keep the card visually digestible.
       const ranked = [...holdings].sort((a, b) => (b.value || 0) - (a.value || 0)).slice(0, 6);
-      const fmtPct = (n) => `${n >= 0 ? "+" : ""}${(n || 0).toFixed(1)}%`;
-      const lines = ranked.map((h) => {
-        // qty: integer when whole, else 2 decimals (BTC 0.25 etc).
-        const qty = Number.isInteger(h.qty) ? h.qty : Number(h.qty).toFixed(2);
-        return `$${h.ticker} · ${qty} (${fmtPct(h.gainPct)})`;
+      const rows = ranked.map((h) => ({
+        ticker: h.ticker,
+        qty: Number(h.qty) || 0,
+        gainPct: Number(h.gainPct) || 0,
+        currency: h.currency || "USD",
+      }));
+      // Aggregate gain percent across the snapshot — value-weighted
+      // mean of the per-row pct, so the headline number doesn't get
+      // skewed by a tiny position with an outsized %.
+      const totalValue = ranked.reduce((acc, h) => acc + (h.value || 0), 0);
+      const weightedGain = totalValue > 0
+        ? ranked.reduce((acc, h) => acc + ((h.value || 0) * (h.gainPct || 0)), 0) / totalValue
+        : 0;
+      setPendingPortfolio({
+        totalUsd: Math.round(p.totalUsd || 0),
+        gainPct: Number(weightedGain.toFixed(2)),
+        capturedAt: new Date().toISOString(),
+        rows,
       });
-      const totalUsd = Math.round(p.totalUsd || 0).toLocaleString("es-AR");
-      const header = tr("social.compose.portfolio_header", lang);
-      const totalLine = tr("social.compose.portfolio_total", lang, {
-        amount: `US$${totalUsd}`,
-      });
-      const text = [header, ...lines, "", totalLine].join("\n").slice(0, 280);
-      setBody(text);
-      // Move the cursor to the end and focus so the user can edit
-      // before publishing.
+      // Focus the textarea so the user can add commentary if they
+      // want — the card itself is read-only.
       setTimeout(() => {
         const el = composeRef.current;
-        if (!el) return;
-        try {
-          el.focus();
-          el.setSelectionRange(text.length, text.length);
-        } catch {}
+        if (el) try { el.focus(); } catch {}
       }, 0);
     } catch (e) {
       console.warn("[social] share portfolio failed:", e);
@@ -1119,6 +1136,21 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
                 >×</button>
               </div>
             )}
+            {/* Portfolio attachment preview (samas-0.0.79). Read-only —
+                no editable fields inside, so the published numbers
+                always match what the broker API returned at the
+                snapshot moment. The × removes the attachment without
+                touching the body. */}
+            {pendingPortfolio && (
+              <div style={{ marginTop: 10 }}>
+                <PortfolioPostCard
+                  T={T}
+                  payload={pendingPortfolio}
+                  lang={lang}
+                  onRemove={() => setPendingPortfolio(null)}
+                />
+              </div>
+            )}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6, gap: 8 }}>
               {/* Counter — left edge */}
               <span style={{ fontFamily: FONT.mono, fontSize: 11, color: T.textMute, flexShrink: 0 }}>
@@ -1300,6 +1332,43 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
                   {tr("social.feed.empty.cta_portfolio", lang)}
                 </button>
               </div>
+            </div>
+          ) : tab === "portfolios" ? (
+            // Portfolios empty state — invite the user to be the
+            // first to share their book. Mirrors the Trending empty
+            // state visually but with the portfolio-share CTA as
+            // the primary action.
+            <div style={{
+              marginTop: 8, padding: "24px 20px", borderRadius: 18,
+              background: `linear-gradient(180deg, ${T.accentSoft} 0%, ${T.surface} 100%)`,
+              border: `1px solid ${T.border}`,
+              textAlign: "center",
+            }}>
+              <div style={{
+                fontFamily: FONT.display, fontSize: 18, fontWeight: 700,
+                color: T.text, marginBottom: 6, letterSpacing: -0.3,
+              }}>{tr("social.portfolios_tab.empty_title", lang)}</div>
+              <div style={{
+                fontFamily: FONT.sans, fontSize: 13, color: T.textMute,
+                lineHeight: 1.5, marginBottom: 16,
+              }}>{tr("social.portfolios_tab.empty_subtitle", lang)}</div>
+              <button
+                onClick={sharePortfolio}
+                style={{
+                  padding: "10px 20px", borderRadius: 999,
+                  background: T.accent, color: T.accentInk,
+                  border: "none", cursor: "pointer",
+                  fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+                  display: "inline-flex", alignItems: "center", gap: 7,
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21.21 15.89A10 10 0 1 1 8 2.83"/>
+                  <path d="M22 12A10 10 0 0 0 12 2v10z"/>
+                </svg>
+                {tr("social.feed.empty.cta_portfolio", lang)}
+              </button>
             </div>
           ) : (
             <div style={{
@@ -3206,6 +3275,145 @@ async function resolveHandleToUserId(handle) {
 }
 
 // ============================================================
+// PortfolioPostCard (samas-0.0.79) — render a snapshot post.
+// ============================================================
+// payload shape ({ totalUsd, gainPct, capturedAt, rows: [...] })
+// is generated client-side by sharePortfolio() at compose time
+// and stored verbatim on posts.payload (jsonb). This component
+// renders both:
+//   1. The compose-attachment preview (above the textarea)
+//   2. The feed post body when post.kind === 'portfolio'
+//
+// It's deliberately read-only — there's no editable text inside
+// the card. That kills the "I'll just edit my numbers before I
+// post" path that the previous text-paste implementation allowed.
+//
+// onRemove is optional; when provided we render a × button (used
+// by the compose preview). Feed posts pass undefined and the X
+// is omitted.
+function PortfolioPostCard({ T, payload, lang = "es", onRemove, onOpenTicker }) {
+  if (!payload) return null;
+  const rows = Array.isArray(payload.rows) ? payload.rows : [];
+  const total = Math.round(payload.totalUsd || 0).toLocaleString("es-AR");
+  const gain = Number(payload.gainPct || 0);
+  const gainColor = gain >= 0 ? T.accent : T.danger;
+  const gainBg = gain >= 0 ? T.accentSoft : T.dangerSoft;
+  const fmtPct = (n) => `${n >= 0 ? "+" : ""}${(n || 0).toFixed(1)}%`;
+  return (
+    <div style={{
+      borderRadius: 16, overflow: "hidden",
+      background: T.bg, border: `1.5px solid ${T.accent}`,
+      // Subtle accent-tinted gradient header so the card reads
+      // visually distinct from a regular text post at a glance.
+      position: "relative",
+    }}>
+      <div style={{
+        padding: "12px 14px",
+        background: `linear-gradient(135deg, ${T.accentSoft}, transparent 70%)`,
+        borderBottom: `1px solid ${T.border}`,
+        display: "flex", alignItems: "center", gap: 10,
+      }}>
+        {/* Pie-chart glyph */}
+        <div style={{
+          width: 28, height: 28, borderRadius: 999,
+          background: T.accent, color: "#06180c",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          flexShrink: 0,
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21.21 15.89A10 10 0 1 1 8 2.83"/>
+            <path d="M22 12A10 10 0 0 0 12 2v10z"/>
+          </svg>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+            color: T.accent, letterSpacing: 0.6, textTransform: "uppercase" }}>
+            {tr("social.portfolio_card.title", lang)}
+          </div>
+          <div style={{ fontFamily: FONT.mono, fontSize: 18, fontWeight: 700, color: T.text, marginTop: 2 }}>
+            US${total}
+          </div>
+        </div>
+        <div style={{
+          padding: "4px 10px", borderRadius: 999,
+          background: gainBg, color: gainColor,
+          fontFamily: FONT.mono, fontSize: 12, fontWeight: 700,
+        }}>
+          {fmtPct(gain)}
+        </div>
+        {onRemove && (
+          <button
+            onClick={onRemove}
+            aria-label={tr("social.compose.remove_portfolio", lang)}
+            style={{
+              width: 24, height: 24, borderRadius: 12,
+              background: T.surface, border: `1px solid ${T.border}`,
+              color: T.textMute, fontFamily: FONT.sans, fontSize: 13,
+              lineHeight: 1, cursor: "pointer", padding: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >×</button>
+        )}
+      </div>
+      {/* Holdings rows. Each row: ticker chip · qty · gain%. The
+          ticker is tappable when onOpenTicker is provided so a
+          reader can drill into that asset's feed. The compose
+          preview passes onOpenTicker=undefined → non-interactive. */}
+      <div style={{ padding: "8px 14px 12px" }}>
+        {rows.length === 0 ? (
+          <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, padding: "6px 0" }}>
+            {tr("social.portfolio_card.empty", lang)}
+          </div>
+        ) : rows.map((r) => {
+          const pct = Number(r.gainPct || 0);
+          const pctColor = pct >= 0 ? T.accent : T.danger;
+          const qtyLabel = Number.isInteger(r.qty) ? r.qty : Number(r.qty).toFixed(2);
+          return (
+            <div key={r.ticker} style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "8px 0",
+              borderBottom: `1px solid ${T.border}`,
+            }}>
+              <button
+                onClick={(e) => {
+                  if (!onOpenTicker) return;
+                  e.stopPropagation();
+                  onOpenTicker(r.ticker);
+                }}
+                disabled={!onOpenTicker}
+                style={{
+                  padding: "3px 8px", borderRadius: 6,
+                  background: T.surface, border: `1px solid ${T.border}`,
+                  color: T.text, fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+                  letterSpacing: 0.4, cursor: onOpenTicker ? "pointer" : "default",
+                }}
+              >${r.ticker}</button>
+              <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute }}>
+                {qtyLabel}
+              </div>
+              <div style={{
+                marginLeft: "auto",
+                fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: pctColor,
+              }}>
+                {fmtPct(pct)}
+              </div>
+            </div>
+          );
+        })}
+        <div style={{
+          marginTop: 8, fontFamily: FONT.sans, fontSize: 10,
+          color: T.textMute, letterSpacing: 0.3, textAlign: "right",
+        }}>
+          {tr("social.portfolio_card.locked_label", lang)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // PostCard — used by Feed + Profile
 // ============================================================
 // SWIPE-LEFT-TO-DELETE (samas-0.0.36)
@@ -3355,10 +3563,25 @@ function PostCard({ T, p, lang = "es", saved, meId, onLike, onRepost, onSave, on
         onClick={onOpenThread ? withSwipeGuard(() => onOpenThread(p)) : undefined}
         style={{ cursor: onOpenThread ? "pointer" : "default" }}
       >
-        <div style={{
-          fontFamily: FONT.sans, fontSize: 14, color: T.text,
-          lineHeight: 1.5, whiteSpace: "pre-wrap", marginBottom: 10,
-        }}>{linkifyTickers(p.body, T, onOpenTicker, onOpenMention, onOpenHashtag)}</div>
+        {/* Body — for portfolio posts the body is OPTIONAL commentary
+            (can be empty) so we only render the text block when there's
+            something to show. For text posts body is always present and
+            non-empty (CHECK constraint). */}
+        {p.body && p.body.trim() && (
+          <div style={{
+            fontFamily: FONT.sans, fontSize: 14, color: T.text,
+            lineHeight: 1.5, whiteSpace: "pre-wrap", marginBottom: 10,
+          }}>{linkifyTickers(p.body, T, onOpenTicker, onOpenMention, onOpenHashtag)}</div>
+        )}
+
+        {/* Portfolio card body (samas-0.0.79). Read-only — the values
+            were generated by sharePortfolio() at compose time from
+            the broker API and immutably stored on posts.payload. */}
+        {p.kind === "portfolio" && p.portfolio && (
+          <div style={{ marginBottom: 10 }} onClick={(e) => e.stopPropagation()}>
+            <PortfolioPostCard T={T} payload={p.portfolio} lang={lang} onOpenTicker={onOpenTicker} />
+          </div>
+        )}
 
         {/* Image attachment — rendered between body and trade card.
             object-fit: cover keeps tall portraits and wide screenshots

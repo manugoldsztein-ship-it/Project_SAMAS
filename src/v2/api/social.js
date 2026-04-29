@@ -101,6 +101,11 @@ function postRowToPost(r, opts = {}) {
     body: r.body,
     ticker: r.ticker || null,
     trade: r.trade || null,
+    // Post kind — 'text' (default) or 'portfolio'. portfolio posts
+    // render as a read-only card built from `portfolio` payload.
+    // 0.0.79 — see supabase/social_post_kinds.sql.
+    kind: r.kind || "text",
+    portfolio: r.kind === "portfolio" ? (r.payload || null) : null,
     // Image attachment URL — stored on posts.image_url. Public URL
     // from the post-images Storage bucket (see social_post_images.sql).
     // null when the post has no image, which is the common case.
@@ -240,7 +245,7 @@ export async function updateMe(patch) {
 /**
  * getFeed({ tab, ticker, limit }) — list of posts for a given tab.
  *
- * tab:    'for_you' | 'following' | 'trades'   (default 'for_you')
+ * tab:    'for_you' | 'following' | 'trades' | 'portfolios'   (default 'for_you')
  *           - 'for_you' is the Trending feed (post-0.0.36): the user
  *             sees posts ranked by engagement, not chronologically.
  *             Implementation pulls a wider candidate window of recent
@@ -291,7 +296,7 @@ export async function getFeed({ tab = "for_you", ticker = null, limit = 20 } = {
   let q = supabase
     .from("posts")
     .select(`
-      id, author_id, body, ticker, trade, image_url,
+      id, author_id, body, ticker, trade, image_url, kind, payload,
       likes_count, comments_count, reposts_count, created_at,
       author:profiles_social!author_id (
         user_id, handle, display_name, avatar_color, verified
@@ -311,6 +316,9 @@ export async function getFeed({ tab = "for_you", ticker = null, limit = 20 } = {
 
   if (authorFilter) q = q.in("author_id", authorFilter);
   if (tab === "trades") q = q.not("trade", "is", null);
+  // Portfolios sub-tab — show only kind='portfolio' posts. Backed
+  // by the posts_kind_portfolio_idx partial index (0.0.79).
+  if (tab === "portfolios") q = q.eq("kind", "portfolio");
   if (ticker) q = q.eq("ticker", String(ticker).toUpperCase());
 
   const { data: posts, error } = await q;
@@ -366,7 +374,7 @@ export async function getPost(postId) {
   const { data, error } = await supabase
     .from("posts")
     .select(`
-      id, author_id, body, ticker, trade, image_url,
+      id, author_id, body, ticker, trade, image_url, kind, payload,
       likes_count, comments_count, reposts_count, created_at,
       author:profiles_social!author_id (
         user_id, handle, display_name, avatar_color, verified
@@ -438,16 +446,20 @@ export async function uploadPostImage(file) {
   return { url: pub.publicUrl, path };
 }
 
-export async function createPost({ body, trade, image }) {
+export async function createPost({ body, trade, image, portfolio }) {
   const userId = await currentUserId();
-  if (!body || !body.trim()) throw new Error("El post está vacío.");
-  if (body.length > 280) throw new Error("Máximo 280 caracteres.");
+  // Portfolio posts can have empty body — the card IS the post.
+  // Text posts still require non-empty body.
+  const isPortfolio = !!portfolio;
+  const trimmed = (body || "").trim();
+  if (!isPortfolio && !trimmed) throw new Error("El post está vacío.");
+  if (trimmed.length > 280) throw new Error("Máximo 280 caracteres.");
 
   // Light client-side moderation. Server-side moderation is a future
   // Edge Function; the point of this list is to make the demo feel
   // less spammable, not to be a real filter.
   const banned = ["spam", "scam", "estafa garantizada"];
-  if (banned.some((w) => body.toLowerCase().includes(w))) {
+  if (trimmed && banned.some((w) => trimmed.toLowerCase().includes(w))) {
     throw new Error("Tu post fue marcado por moderación. Revisalo y volvé a intentarlo.");
   }
 
@@ -466,13 +478,15 @@ export async function createPost({ body, trade, image }) {
     .from("posts")
     .insert({
       author_id: userId,
-      body: body.trim(),
+      body: trimmed,
       ticker,
       trade: trade || null,
       image_url: imageUrl,
+      kind: isPortfolio ? "portfolio" : "text",
+      payload: isPortfolio ? portfolio : null,
     })
     .select(`
-      id, author_id, body, ticker, trade, image_url,
+      id, author_id, body, ticker, trade, image_url, kind, payload,
       likes_count, comments_count, reposts_count, created_at,
       author:profiles_social!author_id (
         user_id, handle, display_name, avatar_color, verified
@@ -497,7 +511,7 @@ export async function getPostsByAuthor(authorId, { limit = 30, beforeMs } = {}) 
   let q = supabase
     .from("posts")
     .select(`
-      id, author_id, body, ticker, trade, image_url,
+      id, author_id, body, ticker, trade, image_url, kind, payload,
       likes_count, comments_count, reposts_count, created_at,
       author:profiles_social!author_id (
         user_id, handle, display_name, avatar_color, verified
@@ -703,7 +717,7 @@ export async function searchPostsByBody(query, { limit = 20 } = {}) {
   const { data: posts, error } = await supabase
     .from("posts")
     .select(`
-      id, author_id, body, ticker, trade, image_url,
+      id, author_id, body, ticker, trade, image_url, kind, payload,
       likes_count, comments_count, reposts_count, created_at,
       author:profiles_social!author_id (
         user_id, handle, display_name, avatar_color, verified

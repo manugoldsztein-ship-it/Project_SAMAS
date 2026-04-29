@@ -2368,6 +2368,16 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.79",
+    title: "Portfolio shares: real card, can't be edited, dedicated tab",
+    bullets: [
+      "Portfolio sharing went from text-paste to a first-class post type. New posts.kind + posts.payload columns store the snapshot as structured jsonb (totalUsd / weighted gainPct / per-row holdings) — values come straight from the broker API and the user can't edit them in the textarea before posting. \"Verified by SAMAS\" badge on the card makes it visible.",
+      "Compose UX: tapping \"Compartir cartera\" now attaches a read-only card preview above the textarea instead of dumping text. Body becomes optional commentary. Posts published with kind='portfolio' render the same card on the feed — accent border, gradient header, ticker chips that drill into per-asset feed.",
+      "New \"Carteras\" sub-tab in the social feed. Filters posts where kind='portfolio' (backed by posts_kind_portfolio_idx partial index). Empty state has a single primary CTA that triggers sharePortfolio so the user lands on the compose with their own snapshot already attached.",
+      "DB-side: posts_body_check loosened so portfolio posts can publish with an empty body (the card IS the post); text posts still require ≥1 char.",
+    ],
+  },
+  {
     version: "0.0.78",
     title: "Watchlists move to Supabase — durable across reinstalls",
     bullets: [

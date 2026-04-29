@@ -266,6 +266,12 @@ const V2 = {
     "social.compose.portfolio_total":      "Total: {amount}",
     "social.compose.portfolio_empty":      "Tu portafolio está vacío. Comprá algo desde Invertir y volvé.",
     "social.compose.portfolio_err":        "No pudimos leer tu portafolio.",
+    "social.compose.remove_portfolio":     "Quitar cartera",
+    "social.portfolio_card.title":         "Mi cartera SAMAS",
+    "social.portfolio_card.empty":         "Sin posiciones",
+    "social.portfolio_card.locked_label":  "Verificado por SAMAS",
+    "social.portfolios_tab.empty_title":   "Sé el primero en mostrar tu cartera",
+    "social.portfolios_tab.empty_subtitle":"Compartí tu portafolio actual. Las cifras se generan desde tu cuenta y nadie puede editarlas.",
 
     // Empty-feed CTA — shown on Trending when there are 0 posts
     "social.feed.empty.title":             "Sé el primero en romperla",
@@ -319,6 +325,7 @@ const V2 = {
     "social.tab.for_you": "Trending",
     "social.tab.following": "Siguiendo",
     "social.tab.trades": "Trades",
+    "social.tab.portfolios": "Carteras",
     "social.subnav.feed": "Feed",
     "social.subnav.search": "Buscar",
     "social.subnav.messages": "Mensajes",
@@ -721,6 +728,12 @@ const V2 = {
     "social.compose.portfolio_total":      "Total: {amount}",
     "social.compose.portfolio_empty":      "Your portfolio is empty. Buy something from Invest and come back.",
     "social.compose.portfolio_err":        "Couldn't read your portfolio.",
+    "social.compose.remove_portfolio":     "Remove portfolio",
+    "social.portfolio_card.title":         "My SAMAS portfolio",
+    "social.portfolio_card.empty":         "No holdings",
+    "social.portfolio_card.locked_label":  "Verified by SAMAS",
+    "social.portfolios_tab.empty_title":   "Be the first to show your book",
+    "social.portfolios_tab.empty_subtitle":"Share your current portfolio. The numbers are pulled from your account and can't be edited.",
 
     // Empty-feed CTA — shown on Trending when there are 0 posts
     "social.feed.empty.title":             "Be the first to break out",
@@ -774,6 +787,7 @@ const V2 = {
     "social.tab.for_you": "Trending",
     "social.tab.following": "Following",
     "social.tab.trades": "Trades",
+    "social.tab.portfolios": "Portfolios",
     "social.subnav.feed": "Feed",
     "social.subnav.search": "Search",
     "social.subnav.messages": "Messages",
