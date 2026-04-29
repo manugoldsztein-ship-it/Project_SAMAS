@@ -2021,6 +2021,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.58",
+    title: "Real brand logos in Mercado (finally)",
+    bullets: [
+      "Closing the gap from 0.0.52: I added Clearbit logo URLs to the legacy ASSETS table in App.jsx, but the v2 broker (the iOS UI you actually use) reads from src/v2/api/broker.js — that table had no logo field, so every row fell through to the colored-initials tile.",
+      "Added logos for Apple, NVIDIA, Tesla, Microsoft, Alphabet, Galicia, YPF, Pampa, Bitcoin, Ethereum, SPY, QQQ, IWM, EWZ, GLD, SLV. Bonds (AL30) and Petróleo (USO) keep the colored fallback — no clean brand logo for those.",
+      "Names canonicalized too: \"Apple\" not \"Apple Inc.\", \"YPF\" not \"YPF S.A.\".",
+    ],
+  },
+  {
     version: "0.0.57",
     title: "Live price ticks across the broker",
     bullets: [

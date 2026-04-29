@@ -37,25 +37,31 @@ import { jitter, maybeFail, genId, relativeStamp } from "./_mock.js";
 //   price       last traded
 //   changePct   24h percentage change
 // ----------------------------------------------------------
+// `logo` is a Clearbit brand-icon URL (or null when no good match
+// exists — bonds, ETFs from less-known issuers). The AssetLogo
+// component shows the real PNG when set and falls back to the
+// category-colored initials tile when null or 404. Names are kept
+// short (drop "Inc.", "S.A.", "Corp.") so they fit the row subline
+// and read consistently with how Robinhood / Cocos display them.
 const ASSETS = [
-  { ticker: "AAPL", name: "Apple Inc.",       category: "CEDEAR", currency: "USD", price: 215.40, changePct:  1.84 },
-  { ticker: "NVDA", name: "NVIDIA",           category: "CEDEAR", currency: "USD", price: 892.15, changePct:  4.21 },
-  { ticker: "TSLA", name: "Tesla",            category: "CEDEAR", currency: "USD", price: 248.30, changePct: -1.20 },
-  { ticker: "MSFT", name: "Microsoft",        category: "CEDEAR", currency: "USD", price: 432.10, changePct:  0.74 },
-  { ticker: "GOOGL",name: "Alphabet",         category: "CEDEAR", currency: "USD", price: 184.20, changePct:  1.12 },
-  { ticker: "GGAL", name: "Grupo Galicia",    category: "ACCION", currency: "ARS", price: 4250,   changePct: -2.10 },
-  { ticker: "YPF",  name: "YPF S.A.",         category: "ACCION", currency: "ARS", price: 38500,  changePct:  3.45 },
-  { ticker: "PAMP", name: "Pampa Energía",    category: "ACCION", currency: "ARS", price: 5820,   changePct:  0.92 },
-  { ticker: "BTC",  name: "Bitcoin",          category: "CRYPTO", currency: "USD", price: 92450,  changePct:  0.92 },
-  { ticker: "ETH",  name: "Ethereum",         category: "CRYPTO", currency: "USD", price: 2845,   changePct:  2.18 },
-  { ticker: "AL30", name: "Bonar 2030",       category: "BONO",   currency: "USD", price: 56.70,  changePct:  0.40 },
-  { ticker: "SPY",  name: "S&P 500 ETF",      category: "ETF",    currency: "USD", price: 512.40, changePct:  0.62 },
-  { ticker: "QQQ",  name: "Nasdaq-100 ETF",   category: "ETF",    currency: "USD", price: 431.20, changePct:  0.88 },
-  { ticker: "IWM",  name: "Russell 2000 ETF", category: "ETF",    currency: "USD", price: 218.65, changePct: -0.34 },
-  { ticker: "EWZ",  name: "Brasil ETF",       category: "ETF",    currency: "USD", price:  29.40, changePct:  1.05 },
-  { ticker: "GLD",  name: "Oro (SPDR Gold)",  category: "COMMOD", currency: "USD", price: 228.60, changePct:  1.24 },
-  { ticker: "SLV",  name: "Plata (iShares)",  category: "COMMOD", currency: "USD", price:  27.85, changePct: -0.51 },
-  { ticker: "USO",  name: "Petróleo (USO)",   category: "COMMOD", currency: "USD", price:  81.30, changePct: -0.72 },
+  { ticker: "AAPL", name: "Apple",           category: "CEDEAR", currency: "USD", price: 215.40, changePct:  1.84, logo: "https://logo.clearbit.com/apple.com" },
+  { ticker: "NVDA", name: "NVIDIA",          category: "CEDEAR", currency: "USD", price: 892.15, changePct:  4.21, logo: "https://logo.clearbit.com/nvidia.com" },
+  { ticker: "TSLA", name: "Tesla",           category: "CEDEAR", currency: "USD", price: 248.30, changePct: -1.20, logo: "https://logo.clearbit.com/tesla.com" },
+  { ticker: "MSFT", name: "Microsoft",       category: "CEDEAR", currency: "USD", price: 432.10, changePct:  0.74, logo: "https://logo.clearbit.com/microsoft.com" },
+  { ticker: "GOOGL",name: "Alphabet",        category: "CEDEAR", currency: "USD", price: 184.20, changePct:  1.12, logo: "https://logo.clearbit.com/google.com" },
+  { ticker: "GGAL", name: "Grupo Galicia",   category: "ACCION", currency: "ARS", price: 4250,   changePct: -2.10, logo: "https://logo.clearbit.com/galiciaseguros.com.ar" },
+  { ticker: "YPF",  name: "YPF",             category: "ACCION", currency: "ARS", price: 38500,  changePct:  3.45, logo: "https://logo.clearbit.com/ypf.com" },
+  { ticker: "PAMP", name: "Pampa Energía",   category: "ACCION", currency: "ARS", price: 5820,   changePct:  0.92, logo: "https://logo.clearbit.com/pampaenergia.com" },
+  { ticker: "BTC",  name: "Bitcoin",         category: "CRYPTO", currency: "USD", price: 92450,  changePct:  0.92, logo: "https://logo.clearbit.com/bitcoin.org" },
+  { ticker: "ETH",  name: "Ethereum",        category: "CRYPTO", currency: "USD", price: 2845,   changePct:  2.18, logo: "https://logo.clearbit.com/ethereum.org" },
+  { ticker: "AL30", name: "Bonar 2030",      category: "BONO",   currency: "USD", price: 56.70,  changePct:  0.40, logo: null },
+  { ticker: "SPY",  name: "S&P 500 ETF",     category: "ETF",    currency: "USD", price: 512.40, changePct:  0.62, logo: "https://logo.clearbit.com/ssga.com" },
+  { ticker: "QQQ",  name: "Nasdaq-100 ETF",  category: "ETF",    currency: "USD", price: 431.20, changePct:  0.88, logo: "https://logo.clearbit.com/invesco.com" },
+  { ticker: "IWM",  name: "Russell 2000 ETF",category: "ETF",    currency: "USD", price: 218.65, changePct: -0.34, logo: "https://logo.clearbit.com/ishares.com" },
+  { ticker: "EWZ",  name: "Brasil ETF",      category: "ETF",    currency: "USD", price:  29.40, changePct:  1.05, logo: "https://logo.clearbit.com/ishares.com" },
+  { ticker: "GLD",  name: "Oro (SPDR Gold)", category: "COMMOD", currency: "USD", price: 228.60, changePct:  1.24, logo: "https://logo.clearbit.com/spdrs.com" },
+  { ticker: "SLV",  name: "Plata (iShares)", category: "COMMOD", currency: "USD", price:  27.85, changePct: -0.51, logo: "https://logo.clearbit.com/ishares.com" },
+  { ticker: "USO",  name: "Petróleo (USO)",  category: "COMMOD", currency: "USD", price:  81.30, changePct: -0.72, logo: null },
 ];
 
 // ----------------------------------------------------------
