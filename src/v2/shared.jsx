@@ -6,7 +6,7 @@
 // one design-system layer — easier to grep and tweak together.
 // ============================================================
 
-import React from "react";
+import React, { useState, useMemo } from "react";
 import { FONT } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import { t as tr } from "../lib/i18n.js";
@@ -37,7 +37,10 @@ export function Sparkline({ data, color, w = 60, h = 22, sw = 1.5 }) {
   );
 }
 
-// Sample sparkline series — used until we wire the real history feed.
+// Sample sparkline series — used by the wallet hero + any future
+// surface that doesn't yet have real history data wired up. Per-asset
+// rendering uses sparkSeriesFor() below instead so the same row in
+// Mercado / Portafolio / Watchlist always lands on the same shape.
 export const SAMAS_SPARKS = {
   up:    [4, 5, 4, 6, 5, 7, 6, 8, 7, 9, 10, 11, 10, 12],
   down:  [12, 11, 10, 11, 9, 10, 8, 9, 7, 6, 7, 5, 6, 4],
@@ -45,6 +48,163 @@ export const SAMAS_SPARKS = {
   bull:  [3, 4, 3, 5, 6, 5, 7, 8, 7, 9, 8, 10, 11, 13],
   bear:  [10, 11, 9, 10, 8, 9, 7, 8, 6, 7, 5, 6, 4, 3],
 };
+
+// ----------------------------------------------------------
+// ASSET IDENTITY — shared logo / fallback / spark / normalizer
+// ----------------------------------------------------------
+// One source of truth for "this is what an asset looks like in a row."
+// Used by Mercado, Portafolio, Watchlist, the AssetSheet header, the
+// Compare sheet, and the watchlist add-asset picker — every place
+// that previously had its own ad-hoc tile + ticker.slice(0,4) tile
+// rendering with a category color that always fell through to gray
+// because the source data uses `cat`, not `category`.
+// ----------------------------------------------------------
+
+// Stable color palette for the initials fallback. We hash the ticker
+// to pick one — that way GGAL is always the same blue, AAPL is always
+// the same orange, etc. A user opening Portafolio + Mercado side by
+// side sees matching tiles for the same row.
+const FALLBACK_PALETTE = [
+  "#3B82F6", "#16C784", "#F59E0B", "#EF4444",
+  "#8B5CF6", "#EC4899", "#06B6D4", "#84CC16",
+];
+
+// FNV-1a 32-bit. Cheap, deterministic, no deps. Used for both the
+// fallback color picker and the sparkline RNG seed.
+function hashTicker(s) {
+  let h = 2166136261 >>> 0;
+  const t = String(s || "");
+  for (let i = 0; i < t.length; i++) {
+    h ^= t.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+
+// Mulberry32 PRNG — deterministic 32-bit seeded. Same ticker → same
+// random walk every render so the sparkline doesn't shimmer between
+// re-renders.
+function mulberry32(seed) {
+  return function() {
+    seed = (seed + 0x6D2B79F5) >>> 0;
+    let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * normalizeAsset(raw) — accept either of the legacy field shapes
+ * (`cat` or `category`, `change` or `changePct`) and return one
+ * canonical object. The renderer never has to know which shape the
+ * caller had. Pass-through for everything else so existing fields
+ * (price, currency, logo, etc.) stay intact.
+ */
+export function normalizeAsset(raw) {
+  if (!raw) return null;
+  const category = raw.category ?? raw.cat ?? null;
+  const changePct = typeof raw.changePct === "number" ? raw.changePct
+                  : typeof raw.change === "number" ? raw.change
+                  : 0;
+  return { ...raw, category, changePct };
+}
+
+/**
+ * sparkSeriesFor(asset, n) — deterministic per-asset 1-month sparkline
+ * data. Endpoint is biased toward the asset's `changePct` (or `change`)
+ * so a -3% asset's line ends below where it started; noise scales
+ * with that magnitude. Same ticker + same changePct always returns
+ * the exact same series — no shimmer between re-renders.
+ *
+ * Returns 16 floats; pass to <Sparkline data={...}/>.
+ */
+export function sparkSeriesFor(asset, n = 16) {
+  const ticker = asset?.ticker || "?";
+  const changePct = Number(
+    asset?.changePct ?? asset?.change ?? asset?.chg1m ?? 0
+  );
+  const rng = mulberry32(hashTicker(ticker));
+  const target = changePct / 100;
+  // Floor the noise so flat assets still draw a recognizable line.
+  const noiseAmp = Math.max(Math.abs(target) * 1.4, 0.006);
+  const out = [];
+  let drift = 0;
+  for (let i = 0; i < n; i++) {
+    const progress = i / (n - 1);
+    drift += (rng() - 0.5) * noiseAmp;
+    out.push(100 * (1 + target * progress + drift));
+  }
+  return out;
+}
+
+/**
+ * AssetLogo — `<img>` of the brand logo (Clearbit URLs in our ASSETS
+ * table) with a deterministic initials fallback when the URL is
+ * missing or 404s. The container is a white card so colored or
+ * partially-transparent PNGs stay legible on both dark and light
+ * themes — same pattern Robinhood / Cocos use.
+ *
+ * Props:
+ *   asset  { ticker, logo? }
+ *   size   pixel side length (default 40)
+ *   T      theme object (border color)
+ */
+export function AssetLogo({ asset, size = 40, T }) {
+  const [failed, setFailed] = useState(false);
+  const ticker = asset?.ticker || "?";
+  const logoUrl = asset?.logo;
+  const radius = Math.round(size * 0.3);
+
+  if (logoUrl && !failed) {
+    return (
+      <div style={{
+        width: size, height: size, borderRadius: radius,
+        background: "#ffffff",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        flexShrink: 0, overflow: "hidden",
+        border: T?.border ? `1px solid ${T.border}` : "none",
+      }}>
+        <img
+          src={logoUrl}
+          alt={ticker}
+          loading="lazy"
+          onError={() => setFailed(true)}
+          style={{
+            width: size - 10, height: size - 10,
+            objectFit: "contain",
+          }}
+        />
+      </div>
+    );
+  }
+
+  // Deterministic fallback — same ticker, same color, every render.
+  const bg = FALLBACK_PALETTE[hashTicker(ticker) % FALLBACK_PALETTE.length];
+  const initials = ticker.slice(0, Math.min(3, ticker.length));
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: radius,
+      background: bg,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      color: "#ffffff",
+      fontFamily: FONT.mono,
+      fontSize: Math.max(9, Math.round(size * 0.28)),
+      fontWeight: 800, letterSpacing: 0.5,
+      flexShrink: 0,
+    }}>{initials}</div>
+  );
+}
+
+// useMemo'd sparkline — wraps Sparkline for callers that want
+// per-asset deterministic history without recomputing every render.
+export function AssetSparkline({ asset, color, w = 50, h = 20, sw = 1.5 }) {
+  const data = useMemo(
+    () => sparkSeriesFor(asset),
+    [asset?.ticker, asset?.changePct, asset?.change, asset?.chg1m],
+  );
+  return <Sparkline data={data} color={color} w={w} h={h} sw={sw}/>;
+}
 
 // ----------------------------------------------------------
 // SamasTabBar — floating bottom nav with 4 tabs.

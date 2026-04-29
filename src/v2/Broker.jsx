@@ -25,7 +25,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { FONT, fmtMoney, fmtPct } from "./theme.js";
 import { Ico } from "./icons.jsx";
-import { Pill, SectionHead, Sparkline, SAMAS_SPARKS } from "./shared.jsx";
+import { Pill, SectionHead, AssetLogo, AssetSparkline } from "./shared.jsx";
 import { broker as brokerApi, wallet as walletApi } from "./api/index.js";
 // The Objetivos wizard is shared with the legacy MobileApp UI. It
 // expects a legacy-shape theme `C`, so we pass an adapter built from
@@ -479,19 +479,31 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
         />
       ) : (
         <div style={{ margin: "0 16px" }}>
-          {portfolio.holdings.map((h, i) => (
-            <AssetRow
-              key={h.ticker}
-              T={T}
-              asset={h}
-              subline={`${h.qty} u · ${tr("broker.qty_avg", lang)} ${h.currency === "ARS" ? "$" : "US$"}${fmtMoney(h.avgCost, h.currency)}`}
-              rightTop={`${h.currency === "ARS" ? "$" : "US$"}${fmtMoney(h.value, h.currency)}`}
-              rightBottom={fmtPct(h.gainPct)}
-              rightBottomColor={h.gainPct >= 0 ? T.accent : T.danger}
-              isLast={i === portfolio.holdings.length - 1}
-              onClick={() => onSelectAsset(h)}
-            />
-          ))}
+          {portfolio.holdings.map((h, i) => {
+            // Holdings carry only { ticker, qty, avg, value, gainPct,
+            // currency }. We need the asset metadata (name, logo,
+            // category) to render the row identically to Mercado /
+            // Watchlist — so denormalize against `assets` here. The
+            // enriched object also flows into AssetSheet via
+            // onSelectAsset, so opening a holding lands on a sheet
+            // with the same name + logo as opening from Mercado.
+            const meta = assets.find((a) => a.ticker === h.ticker) || {};
+            const enriched = { ...meta, ...h };
+            const name = meta.name || h.ticker;
+            return (
+              <AssetRow
+                key={h.ticker}
+                T={T}
+                asset={enriched}
+                subline={`${name} · ${h.qty} u`}
+                rightTop={`${h.currency === "ARS" ? "$" : "US$"}${fmtMoney(h.value, h.currency)}`}
+                rightBottom={fmtPct(h.gainPct)}
+                rightBottomColor={h.gainPct >= 0 ? T.accent : T.danger}
+                isLast={i === portfolio.holdings.length - 1}
+                onClick={() => onSelectAsset(enriched)}
+              />
+            );
+          })}
         </div>
       )}
 
@@ -758,15 +770,11 @@ function CompareSheet({ T, assets, onClose }) {
           }}>
             {items.map((a) => (
               <div key={a.ticker}>
-                <div style={{
-                  width: 32, height: 32, borderRadius: 8,
-                  background: tileForCategory(a.category),
-                  fontFamily: FONT.mono, fontSize: 9, fontWeight: 800, color: "#06170D",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  marginBottom: 8,
-                }}>{a.ticker.slice(0,4)}</div>
+                <div style={{ marginBottom: 8 }}>
+                  <AssetLogo asset={a} size={32} T={T} />
+                </div>
                 <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text }}>{a.ticker}</div>
-                <div style={{ fontFamily: FONT.sans, fontSize: 10, color: T.textMute, marginBottom: 8 }}>{a.category}</div>
+                <div style={{ fontFamily: FONT.sans, fontSize: 10, color: T.textMute, marginBottom: 8 }}>{a.category || a.cat}</div>
                 <Stat T={T} label="Precio" value={`${a.currency === "ARS" ? "$" : "US$"}${fmtMoney(a.price, a.currency)}`} mono />
                 <Stat T={T} label="24h"
                   value={fmtPct(a.changePct)}
@@ -814,12 +822,7 @@ function CompareSheet({ T, assets, onClose }) {
                 display: "flex", alignItems: "center", gap: 10,
                 cursor: "pointer", textAlign: "left",
               }}>
-                <div style={{
-                  width: 30, height: 30, borderRadius: 8, flexShrink: 0,
-                  background: tileForCategory(a.category),
-                  fontFamily: FONT.mono, fontSize: 9, fontWeight: 800, color: "#06170D",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>{a.ticker.slice(0,4)}</div>
+                <AssetLogo asset={a} size={30} T={T} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text }}>{a.ticker}</div>
                   <div style={{
@@ -1675,22 +1678,22 @@ function OrderRow({ T, order, isLast, busy, onCancel }) {
 // Shared row + AssetSheet + helpers
 // ============================================================
 
-// Tile background per asset category — same color for all CEDEAR, all
-// ACCION, all CRYPTO etc. Keeps the list visually grouped instead of
-// the chaotic per-ticker hue we had before.
-const CATEGORY_TILES = {
-  CEDEAR:  "#2563EB", // blue
-  ACCION:  "#16C784", // green (Argentine equities)
-  CRYPTO:  "#F7931A", // bitcoin orange
-  ETF:     "#7C3AED", // violet
-  COMMOD:  "#C9A84C", // gold
-  BONO:    "#0EA5E9", // sky blue
-};
-function tileForCategory(category) {
-  return CATEGORY_TILES[category] || "#6B7280";
-}
+// AssetRow — the canonical "one asset, one line" component. Used in
+// every list across the broker (Mercado, Portafolio, Watchlist) so
+// the same asset shows up identically everywhere. Key invariants:
+//   - Logo column: 40x40 AssetLogo. Real brand logo from
+//     asset.logo when present (Clearbit URLs in ASSETS), with a
+//     deterministic initials fallback hashed by ticker so a 404
+//     produces the same fallback color on every surface.
+//   - Name column: ticker bold + caller-decided subline.
+//   - Sparkline: per-ticker deterministic series whose endpoint
+//     matches the asset's changePct sign. Same asset always draws
+//     the same chart — no shimmer between re-renders, no "every
+//     bull row looks the same" anymore.
+//   - Right column: FIXED 92px so sparklines line up vertically
+//     across rows even when prices have very different lengths
+//     ("$8,342,000" vs "$452"). tabular-nums for digit alignment.
 function AssetRow({ T, asset, subline, rightTop, rightBottom, rightBottomColor, isLast, onClick }) {
-  const tile = tileForCategory(asset.category);
   return (
     <button onClick={onClick} style={{
       width: "100%", padding: "12px 0",
@@ -1699,12 +1702,7 @@ function AssetRow({ T, asset, subline, rightTop, rightBottom, rightBottomColor, 
       display: "flex", alignItems: "center", gap: 12,
       cursor: "pointer", textAlign: "left",
     }}>
-      <div style={{
-        width: 40, height: 40, borderRadius: 12, background: tile,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        color: "#06170D",
-        fontFamily: FONT.mono, fontSize: 11, fontWeight: 800, flexShrink: 0,
-      }}>{asset.ticker.slice(0, 4)}</div>
+      <AssetLogo asset={asset} size={40} T={T} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, color: T.text,
@@ -1715,12 +1713,16 @@ function AssetRow({ T, asset, subline, rightTop, rightBottom, rightBottomColor, 
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}>{subline}</div>
       </div>
-      <Sparkline
-        data={(rightBottom || "").startsWith("-") ? SAMAS_SPARKS.bear : SAMAS_SPARKS.bull}
-        color={rightBottomColor} w={50} h={20} sw={1.5}
-      />
-      <div style={{ textAlign: "right", marginLeft: 8, minWidth: 70 }}>
-        <div style={{ fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: T.text }}>{rightTop}</div>
+      <AssetSparkline asset={asset} color={rightBottomColor} w={50} h={20} sw={1.5} />
+      <div style={{
+        textAlign: "right", marginLeft: 8, width: 92,
+        fontVariantNumeric: "tabular-nums",
+        flexShrink: 0,
+      }}>
+        <div style={{
+          fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: T.text,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}>{rightTop}</div>
         <div style={{ fontFamily: FONT.mono, fontSize: 11, fontWeight: 600, color: rightBottomColor }}>{rightBottom}</div>
       </div>
     </button>
@@ -1864,12 +1866,21 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
           display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "20px 20px 8px",
         }}>
-          <div>
-            <div style={{ fontFamily: FONT.display, fontSize: 22, fontWeight: 700, color: T.text }}>
-              {asset.ticker}
-            </div>
-            <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute }}>
-              {asset.name || asset.ticker}
+          <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+            <AssetLogo asset={asset} size={44} T={T} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{
+                fontFamily: FONT.display, fontSize: 22, fontWeight: 700, color: T.text,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}>
+                {asset.ticker}
+              </div>
+              <div style={{
+                fontFamily: FONT.sans, fontSize: 12, color: T.textMute,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}>
+                {asset.name || asset.ticker}
+              </div>
             </div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
@@ -2253,13 +2264,7 @@ function AddAssetModal({ T, assets, excludeTickers = [], listName, onClose, onPi
                   cursor: busy ? "default" : "pointer", textAlign: "left",
                 }}
               >
-                <div style={{
-                  width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-                  background: tileForCategory(a.category),
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "#06170D",
-                  fontFamily: FONT.mono, fontSize: 10, fontWeight: 800,
-                }}>{a.ticker.slice(0, 4)}</div>
+                <AssetLogo asset={a} size={36} T={T} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, color: T.text }}>
                     {a.ticker}

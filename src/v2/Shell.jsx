@@ -1702,6 +1702,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.52",
+    title: "Consistencia visual en el broker",
+    bullets: [
+      "Logos reales (Apple, YPF, NVIDIA, etc.) en cada fila — antes solo se veían las letras del ticker en un cuadrado gris.",
+      "Sparkline determinística por ticker: misma acción dibuja siempre el mismo gráfico, distinta de las otras (antes todos los verdes eran idénticos).",
+      "Columna de precio con ancho fijo: las sparklines ahora se alinean verticalmente fila a fila, sin importar si el precio es $452 o $8.342.000.",
+    ],
+  },
+  {
     version: "0.0.51",
     title: "Sembrar red social para el demo",
     bullets: [
