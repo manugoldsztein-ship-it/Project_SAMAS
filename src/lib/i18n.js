@@ -433,6 +433,20 @@ const V2 = {
     "onb.continue": "Continuar",
     "onb.skip": "Saltar",
     "onb.start": "Empezar",
+    "onb.back":  "Atrás",
+    "onb.next":  "Siguiente",
+    // Slide 1 — wallet
+    "onb.s1.title": "Tu wallet en pesos y dólares",
+    "onb.s1.body":  "Cargá saldo desde MercadoPago, transferencia o cripto. Manejá ARS y USD desde el mismo lugar, con tipo de cambio MEP en vivo.",
+    // Slide 2 — broker
+    "onb.s2.title": "Invertí desde la app",
+    "onb.s2.body":  "Comprá CEDEARs, ETFs, bonos y cripto. Configurá alertas de precio y stop-loss por activo. Tu portafolio, distribución y top movers — todo en un solo lugar.",
+    // Slide 3 — social
+    "onb.s3.title": "Aprendé con la comunidad",
+    "onb.s3.body":  "Seguí a inversores argentinos, compartí tus trades y descubrí qué están mirando. Idóneos CNV verificados con tilde azul.",
+    // Slide 4 — AI plan
+    "onb.s4.title": "Plan personalizado con IA",
+    "onb.s4.body":  "Decinos tu objetivo y horizonte. La IA clasifica tu perfil (conservador / moderado / agresivo) y te arma una asignación sugerida adaptada al mercado argentino.",
 
     "notif.title": "Notificaciones",
     "notif.clear_all": "Vaciar",
@@ -849,6 +863,16 @@ const V2 = {
     "onb.continue": "Continue",
     "onb.skip": "Skip",
     "onb.start": "Get started",
+    "onb.back":  "Back",
+    "onb.next":  "Next",
+    "onb.s1.title": "Your wallet in pesos and dollars",
+    "onb.s1.body":  "Top up from MercadoPago, transfer, or crypto. Manage ARS and USD from one place, with live MEP exchange rate.",
+    "onb.s2.title": "Invest from the app",
+    "onb.s2.body":  "Buy CEDEARs, ETFs, bonds, and crypto. Configure price alerts and stop-loss per asset. Your portfolio, breakdown, and top movers — all in one place.",
+    "onb.s3.title": "Learn with the community",
+    "onb.s3.body":  "Follow Argentine investors, share your trades, and see what they're watching. CNV-licensed advisors verified with a blue check.",
+    "onb.s4.title": "Personalized AI plan",
+    "onb.s4.body":  "Tell us your goal and horizon. The AI classifies your profile (conservative / moderate / aggressive) and suggests an allocation tuned to the Argentine market.",
 
     "notif.title": "Notifications",
     "notif.clear_all": "Clear all",

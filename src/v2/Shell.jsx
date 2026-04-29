@@ -143,6 +143,7 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
       <Onboarding
         T={T}
         isNativeApp={isNativeApp}
+        lang={lang}
         onDone={() => setNeedsOnboarding(false)}
       />
     );
@@ -2020,6 +2021,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.0.62",
+    title: "Onboarding polish — first impression for the pitch",
+    bullets: [
+      "Strings now flow through tr() (was hardcoded Spanish, broke for English-set users). New \"social\" slide added so the 4-tab story (Wallet / Invertir / Social / IA) matches what's in the app.",
+      "SAMAS wordmark + green dot at the top of every slide so the user learns the brand mark before tapping in.",
+      "Slide-in animation + horizontal swipe gesture + tap-a-dot to jump + haptic on every step + success haptic on \"Empezar\".",
+    ],
+  },
   {
     version: "0.0.61",
     title: "Live like / repost / reply counts in the feed",
