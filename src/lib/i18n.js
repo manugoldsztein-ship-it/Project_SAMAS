@@ -107,6 +107,12 @@ const V2 = {
     // Compose hint — discoverability nudge below an empty compose box
     "social.compose.hint":        "Tip: usá $TICKER para destacar un activo o @usuario para mencionar.",
 
+    // Image attachments
+    "social.compose.add_photo":   "Foto",
+    "social.compose.remove_photo":"Quitar foto",
+    "social.compose.uploading":   "Subiendo foto…",
+    "social.post.photo":          "Foto",
+
     // Post: delete (swipe-left action + confirm dialog)
     "social.post.delete":         "Borrar",
     "social.post.delete_confirm": "¿Querés borrar este post?",
@@ -369,6 +375,12 @@ const V2 = {
     "social.compose.paste_err":   "Couldn't read clipboard.",
     // Compose hint — discoverability nudge below an empty compose box
     "social.compose.hint":        "Tip: use $TICKER to highlight an asset or @username to tag someone.",
+
+    // Image attachments
+    "social.compose.add_photo":   "Photo",
+    "social.compose.remove_photo":"Remove photo",
+    "social.compose.uploading":   "Uploading photo…",
+    "social.post.photo":          "Photo",
 
     // Post: delete (swipe-left action + confirm dialog)
     "social.post.delete":         "Delete",

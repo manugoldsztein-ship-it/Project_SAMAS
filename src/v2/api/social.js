@@ -101,6 +101,10 @@ function postRowToPost(r, opts = {}) {
     body: r.body,
     ticker: r.ticker || null,
     trade: r.trade || null,
+    // Image attachment URL — stored on posts.image_url. Public URL
+    // from the post-images Storage bucket (see social_post_images.sql).
+    // null when the post has no image, which is the common case.
+    imageUrl: r.image_url || null,
     at,
     atLabel: relativeStamp(at),
     likes: r.likes_count || 0,
@@ -287,7 +291,7 @@ export async function getFeed({ tab = "for_you", ticker = null, limit = 20 } = {
   let q = supabase
     .from("posts")
     .select(`
-      id, author_id, body, ticker, trade,
+      id, author_id, body, ticker, trade, image_url,
       likes_count, comments_count, reposts_count, created_at,
       author:profiles_social!author_id (
         user_id, handle, display_name, avatar_color, verified
@@ -362,7 +366,7 @@ export async function getPost(postId) {
   const { data, error } = await supabase
     .from("posts")
     .select(`
-      id, author_id, body, ticker, trade,
+      id, author_id, body, ticker, trade, image_url,
       likes_count, comments_count, reposts_count, created_at,
       author:profiles_social!author_id (
         user_id, handle, display_name, avatar_color, verified
@@ -392,11 +396,49 @@ export async function getPost(postId) {
 // ----------------------------------------------------------
 
 /**
- * createPost({ body, trade }) — publish a new post. Body is
+ * createPost({ body, trade, image }) — publish a new post. Body is
  * client-side trimmed and length-checked; the server enforces the
  * same limits via the CHECK constraint (defense in depth).
+ *
+ * IMAGE ATTACHMENTS (samas-0.0.38)
+ *   `image` is optional and accepts a browser File. We upload it to
+ *   the post-images bucket under <user_id>/<uuid>.<ext> first (so
+ *   it survives even if the post insert fails — orphans are rare
+ *   and cheap), then insert the post with the public URL on
+ *   posts.image_url. Storage RLS only lets the user write to their
+ *   own user_id-prefixed folder, so this round-trip is secure even
+ *   though it lives client-side.
  */
-export async function createPost({ body, trade }) {
+const POST_IMAGE_BUCKET = "post-images";
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8MB — generous for iPhone photos
+
+export async function uploadPostImage(file) {
+  if (!file) return null;
+  if (file.size > MAX_IMAGE_BYTES) {
+    throw new Error("La imagen es demasiado grande (máx 8 MB).");
+  }
+  if (!String(file.type || "").startsWith("image/")) {
+    throw new Error("Solo se aceptan imágenes.");
+  }
+  const userId = await currentUserId();
+  // Filename: random uuid + original extension. We never trust the
+  // user-supplied name (could collide / could carry weird characters).
+  const ext = (file.name || "").match(/\.([a-zA-Z0-9]+)$/)?.[1]?.toLowerCase() || "jpg";
+  const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+  const { error: upErr } = await supabase.storage
+    .from(POST_IMAGE_BUCKET)
+    .upload(path, file, {
+      cacheControl: "31536000", // 1 year — image content is content-addressed by uuid
+      upsert: false,
+      contentType: file.type || undefined,
+    });
+  if (upErr) throw new Error(`Subida fallida: ${upErr.message}`);
+  const { data: pub } = supabase.storage.from(POST_IMAGE_BUCKET).getPublicUrl(path);
+  if (!pub?.publicUrl) throw new Error("No pudimos obtener la URL pública.");
+  return { url: pub.publicUrl, path };
+}
+
+export async function createPost({ body, trade, image }) {
   const userId = await currentUserId();
   if (!body || !body.trim()) throw new Error("El post está vacío.");
   if (body.length > 280) throw new Error("Máximo 280 caracteres.");
@@ -411,6 +453,15 @@ export async function createPost({ body, trade }) {
 
   const ticker = trade?.ticker ? String(trade.ticker).toUpperCase() : null;
 
+  // Upload first so we have a URL to write into the post row. If the
+  // upload fails the post is never created, which is the safer order
+  // (vs creating a post then realizing we can't attach the image).
+  let imageUrl = null;
+  if (image) {
+    const up = await uploadPostImage(image);
+    imageUrl = up?.url || null;
+  }
+
   const { data, error } = await supabase
     .from("posts")
     .insert({
@@ -418,9 +469,10 @@ export async function createPost({ body, trade }) {
       body: body.trim(),
       ticker,
       trade: trade || null,
+      image_url: imageUrl,
     })
     .select(`
-      id, author_id, body, ticker, trade,
+      id, author_id, body, ticker, trade, image_url,
       likes_count, comments_count, reposts_count, created_at,
       author:profiles_social!author_id (
         user_id, handle, display_name, avatar_color, verified
@@ -445,7 +497,7 @@ export async function getPostsByAuthor(authorId, { limit = 30, beforeMs } = {}) 
   let q = supabase
     .from("posts")
     .select(`
-      id, author_id, body, ticker, trade,
+      id, author_id, body, ticker, trade, image_url,
       likes_count, comments_count, reposts_count, created_at,
       author:profiles_social!author_id (
         user_id, handle, display_name, avatar_color, verified
@@ -719,7 +771,7 @@ export async function getSavedPosts() {
     .select(`
       created_at,
       post:posts!post_id (
-        id, author_id, body, ticker, trade,
+        id, author_id, body, ticker, trade, image_url,
         likes_count, comments_count, reposts_count, created_at,
         author:profiles_social!author_id (
           user_id, handle, display_name, avatar_color, verified
@@ -837,7 +889,7 @@ export async function getModerationQueue({ status = "pending" } = {}) {
         user_id, handle, display_name, avatar_color, verified
       ),
       post:posts!post_id (
-        id, author_id, body, ticker, trade,
+        id, author_id, body, ticker, trade, image_url,
         likes_count, comments_count, reposts_count, created_at,
         author:profiles_social!author_id (
           user_id, handle, display_name, avatar_color, verified

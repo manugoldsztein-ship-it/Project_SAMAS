@@ -359,6 +359,22 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
   // so the post lands with a trade card. The user can clear the
   // attachment with the X button (body stays).
   const [pendingTrade, setPendingTrade] = useState(null);
+  // Image attachment — File from the picker + a local object URL for
+  // the preview thumbnail. Uploaded to Supabase Storage on publish().
+  // We keep the File around (not the URL) because the preview URL
+  // is local-only; the upload happens at publish time so the user
+  // can change their mind without burning a storage write.
+  const [pendingImage, setPendingImage] = useState(null);
+  const [pendingImagePreview, setPendingImagePreview] = useState(null);
+  const fileInputRef = React.useRef(null);
+  // Free the object URL when the preview changes / unmounts so we
+  // don't leak memory on iOS WebView (which doesn't aggressively GC
+  // these on its own).
+  useEffect(() => {
+    return () => {
+      if (pendingImagePreview) URL.revokeObjectURL(pendingImagePreview);
+    };
+  }, [pendingImagePreview]);
   // $-mention autocomplete state. We load the asset universe once
   // (small list, ~20 entries) and surface matching tickers in a
   // dropdown when the user types $ followed by 0+ alphanumerics.
@@ -573,12 +589,40 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
     if (!body.trim()) { setErr("El post está vacío."); return; }
     setBusy(true);
     try {
-      await socialApi.createPost({ body, trade: pendingTrade || undefined });
+      await socialApi.createPost({
+        body,
+        trade: pendingTrade || undefined,
+        image: pendingImage || undefined,
+      });
       setBody("");
       setPendingTrade(null);
+      setPendingImage(null);
+      setPendingImagePreview(null);
       await refresh();
     } catch (e) { setErr(e.message); }
     setBusy(false);
+  }
+
+  // Handle the file picker selection. The native iOS picker only
+  // returns one file at a time even though our input lacks `multiple`,
+  // but we defensively only take files[0] to be future-proof.
+  function onPickImage(e) {
+    const f = e?.target?.files?.[0];
+    e.target.value = ""; // reset so the same file can be re-picked
+    if (!f) return;
+    if (!String(f.type || "").startsWith("image/")) {
+      setErr("Solo se aceptan imágenes.");
+      return;
+    }
+    if (pendingImagePreview) URL.revokeObjectURL(pendingImagePreview);
+    setPendingImage(f);
+    setPendingImagePreview(URL.createObjectURL(f));
+    setErr(null);
+  }
+  function clearImage() {
+    if (pendingImagePreview) URL.revokeObjectURL(pendingImagePreview);
+    setPendingImage(null);
+    setPendingImagePreview(null);
   }
 
   // Paste from the system clipboard. We use the Clipboard API (works
@@ -787,6 +831,39 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
                 ))}
               </div>
             )}
+            {/* Image preview — shown when the user picked a photo.
+                Square-ish thumbnail with an X to remove. Stacks
+                above the trade-card preview when both are present. */}
+            {pendingImagePreview && (
+              <div style={{
+                marginTop: 10, position: "relative",
+                borderRadius: 14, overflow: "hidden",
+                border: `1px solid ${T.border}`,
+                background: T.bg,
+                maxHeight: 220,
+              }}>
+                <img
+                  src={pendingImagePreview}
+                  alt={tr("social.post.photo", lang)}
+                  style={{
+                    display: "block", width: "100%", maxHeight: 220,
+                    objectFit: "cover",
+                  }}
+                />
+                <button
+                  onClick={clearImage}
+                  aria-label={tr("social.compose.remove_photo", lang)}
+                  style={{
+                    position: "absolute", top: 8, right: 8,
+                    width: 28, height: 28, borderRadius: 14,
+                    background: "rgba(0,0,0,0.55)", color: "#fff",
+                    border: "none", cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 16, lineHeight: 1, padding: 0,
+                  }}
+                >×</button>
+              </div>
+            )}
             {/* Trade-card preview — shown when the Broker handed off
                 a filled trade. Same visual as the published trade
                 card on a feed item; an X button removes the
@@ -827,10 +904,39 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
               <span style={{ fontFamily: FONT.mono, fontSize: 11, color: T.textMute, flexShrink: 0 }}>
                 {body.length}/280
               </span>
-              {/* Action row — paste + publish. Paste sits to the
-                  left of publish so the publish button stays anchored
-                  in its usual spot. */}
+              {/* Action row — photo + paste + publish. Photo sits
+                  on the far left so the most-used action (publish)
+                  stays anchored on the right. Hidden file input
+                  triggered by the photo button click. */}
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={onPickImage}
+                  style={{ display: "none" }}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={busy}
+                  aria-label={tr("social.compose.add_photo", lang)}
+                  title={tr("social.compose.add_photo", lang)}
+                  style={{
+                    width: 36, height: 32, borderRadius: 999,
+                    background: T.surface, border: `1px solid ${T.border}`,
+                    color: T.text, cursor: busy ? "default" : "pointer",
+                    padding: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                    opacity: busy ? 0.6 : 1,
+                  }}
+                >
+                  {/* Inline photo icon — landscape with a sun/moon */}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21 15 16 10 5 21"/>
+                  </svg>
+                </button>
                 <button
                   onClick={pasteFromClipboard}
                   disabled={busy}
@@ -870,9 +976,10 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
             </div>
             {err && <div style={{ marginTop: 8, color: T.danger, fontFamily: FONT.sans, fontSize: 12 }}>{err}</div>}
             {/* Discoverability hint — only when the compose box is
-                empty. Disappears as soon as the user starts typing
-                so it doesn't compete with the character counter. */}
-            {!body && !pendingTrade && (
+                empty AND no attachments. Disappears as soon as the
+                user starts typing so it doesn't compete with the
+                character counter. */}
+            {!body && !pendingTrade && !pendingImage && (
               <div style={{
                 marginTop: 6, fontFamily: FONT.sans, fontSize: 11,
                 color: T.textMute, lineHeight: 1.4,
@@ -2609,6 +2716,28 @@ function PostCard({ T, p, lang = "es", saved, meId, onLike, onRepost, onSave, on
           fontFamily: FONT.sans, fontSize: 14, color: T.text,
           lineHeight: 1.5, whiteSpace: "pre-wrap", marginBottom: 10,
         }}>{linkifyTickers(p.body, T, onOpenTicker, onOpenMention)}</div>
+
+        {/* Image attachment — rendered between body and trade card.
+            object-fit: cover keeps tall portraits and wide screenshots
+            both readable inside the same max-height card. Tap goes
+            through the wrapper's onOpenThread (no separate handler). */}
+        {p.imageUrl && (
+          <div style={{
+            marginBottom: 10, borderRadius: 14, overflow: "hidden",
+            border: `1px solid ${T.border}`, background: T.bg,
+            maxHeight: 360,
+          }}>
+            <img
+              src={p.imageUrl}
+              alt={tr("social.post.photo", lang)}
+              loading="lazy"
+              style={{
+                display: "block", width: "100%", maxHeight: 360,
+                objectFit: "cover",
+              }}
+            />
+          </div>
+        )}
 
         {p.trade && (
           <div style={{
