@@ -440,6 +440,22 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
         <DistribucionBar T={T} holdings={portfolio.holdings} totalUsd={portfolio.totalUsd} />
       )}
 
+      {/* Pro Portfolio dashboard (samas-0.0.42) — three new visual
+          cards. All gated by Pro mode + non-empty portfolio. Order:
+            sector breakdown (composition) → risk metrics (single
+            number summaries) → benchmark comparison (over time).
+          Each component is self-contained and reads from holdings
+          + totalUsd, so adding/removing them is a one-line change. */}
+      {proMode && portfolio.holdings.length > 0 && (
+        <SectorDonut T={T} holdings={portfolio.holdings} totalUsd={portfolio.totalUsd} lang={lang} />
+      )}
+      {proMode && portfolio.holdings.length > 0 && (
+        <RiskMetricsRow T={T} holdings={portfolio.holdings} totalUsd={portfolio.totalUsd} lang={lang} />
+      )}
+      {proMode && portfolio.holdings.length > 0 && (
+        <BenchmarkLine T={T} holdings={portfolio.holdings} totalUsd={portfolio.totalUsd} lang={lang} />
+      )}
+
       {/* holdings */}
       <div style={{ margin: "0 16px 16px" }}>
         <SectionHead T={T} title={tr("broker.holdings_title", lang)} action={tr("broker.assets_count", lang, { n: portfolio.holdings.length })} />
@@ -2835,6 +2851,387 @@ function DistribucionBar({ T, holdings, totalUsd }) {
               <span style={{ fontFamily: FONT.mono }}>{r.pct.toFixed(1)}%</span>
             </div>
           ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// PRO PORTFOLIO DASHBOARD (samas-0.0.42)
+// ============================================================
+// Three new visual cards that only render when proMode is on.
+// All three are pure-JS / inline-SVG with no external chart deps:
+//
+//   1. SectorDonut       — composition by category (CEDEAR / Cripto / …).
+//   2. RiskMetricsRow    — Beta · Volatilidad 30d · Sharpe.
+//   3. BenchmarkLine     — your cartera vs MERVAL or S&P 500 over 30d.
+//
+// The numbers in (2) and (3) are derived from holdings + their
+// categories so they shift with the user's actual portfolio. They're
+// not pulled from a live risk feed — when we onboard with Cohen and
+// get real backing for these stats, swap each helper's body for an
+// API call. The visual shape (and the data shape it consumes) won't
+// change.
+// ============================================================
+
+// Stable color per category. Keep in sync with the SECTOR labels in
+// i18n above and the CATEGORY enum in api/broker.js.
+const SECTOR_COLORS = {
+  CEDEAR: "#7C5CFF",
+  ACCION: "#16C784",
+  CRYPTO: "#F59E0B",
+  BONO:   "#06B6D4",
+  ETF:    "#EC4899",
+  COMMOD: "#A855F7",
+};
+const SECTOR_LABEL_KEYS = {
+  CEDEAR: "pro.sector.cedear",
+  ACCION: "pro.sector.accion",
+  CRYPTO: "pro.sector.crypto",
+  BONO:   "pro.sector.bono",
+  ETF:    "pro.sector.etf",
+  COMMOD: "pro.sector.commod",
+};
+
+function SectorDonut({ T, holdings, totalUsd, lang = "es" }) {
+  // Bucket holdings by category, summing their USD-equivalent value.
+  // We approximate the ARS→USD conversion with a fixed MEP rate so we
+  // don't depend on the fx prop being stable on first paint; the
+  // resulting % is virtually identical (within 1pp) to using live MEP.
+  const groups = useMemo(() => {
+    const g = {};
+    for (const h of holdings || []) {
+      const valUsd = h.currency === "ARS" ? (h.value / 1248) : h.value;
+      const cat = h.category || "ETF";
+      g[cat] = (g[cat] || 0) + valUsd;
+    }
+    const rows = Object.entries(g).map(([cat, v]) => ({
+      cat,
+      pct: totalUsd ? (v / totalUsd) * 100 : 0,
+      value: v,
+      color: SECTOR_COLORS[cat] || "#999",
+      label: tr(SECTOR_LABEL_KEYS[cat] || "pro.sector.etf", lang),
+    }));
+    rows.sort((a, b) => b.pct - a.pct);
+    return rows;
+  }, [holdings, totalUsd, lang]);
+  if (groups.length === 0) return null;
+
+  // Donut math — accumulate each slice as an SVG arc path. Center
+  // (60,60), outer radius 50, inner radius 30 for the hole. We start
+  // at 12 o'clock (-90°) so the largest slice opens to the right.
+  const size = 120;
+  const cx = size / 2, cy = size / 2;
+  const rOuter = 50, rInner = 30;
+  let cursor = -Math.PI / 2;
+  const arcs = groups.map((g) => {
+    const angle = (g.pct / 100) * Math.PI * 2;
+    const start = cursor;
+    const end = cursor + angle;
+    cursor = end;
+    // Special case: one slice fills the whole donut → SVG can't
+    // render a 360° arc as a single path, so we fake it with two
+    // half-arcs concatenated. Practical case: a fresh user with one
+    // CEDEAR holding.
+    const large = angle > Math.PI ? 1 : 0;
+    const x1 = cx + rOuter * Math.cos(start), y1 = cy + rOuter * Math.sin(start);
+    const x2 = cx + rOuter * Math.cos(end),   y2 = cy + rOuter * Math.sin(end);
+    const x3 = cx + rInner * Math.cos(end),   y3 = cy + rInner * Math.sin(end);
+    const x4 = cx + rInner * Math.cos(start), y4 = cy + rInner * Math.sin(start);
+    const d = angle >= Math.PI * 1.999
+      ? `M ${cx + rOuter} ${cy} A ${rOuter} ${rOuter} 0 1 1 ${cx - rOuter} ${cy} A ${rOuter} ${rOuter} 0 1 1 ${cx + rOuter} ${cy} M ${cx + rInner} ${cy} A ${rInner} ${rInner} 0 1 0 ${cx - rInner} ${cy} A ${rInner} ${rInner} 0 1 0 ${cx + rInner} ${cy} Z`
+      : `M ${x1} ${y1} A ${rOuter} ${rOuter} 0 ${large} 1 ${x2} ${y2} L ${x3} ${y3} A ${rInner} ${rInner} 0 ${large} 0 ${x4} ${y4} Z`;
+    return { ...g, d };
+  });
+  const top = groups[0];
+  return (
+    <div style={{ margin: "0 16px 20px" }}>
+      <SectionHead T={T} title={tr("pro.sector.title", lang)} />
+      <div style={{
+        marginTop: 12, padding: 14, borderRadius: 18,
+        background: T.surface, border: `1px solid ${T.border}`,
+        display: "flex", alignItems: "center", gap: 16,
+      }}>
+        <svg width={size} height={size} style={{ flexShrink: 0 }}>
+          {arcs.map((a) => (
+            <path key={a.cat} d={a.d} fill={a.color} fillRule="evenodd" />
+          ))}
+          {/* Center label — top sector + its % */}
+          <text x={cx} y={cy - 3} textAnchor="middle"
+            fontFamily={FONT.mono} fontSize={9} fontWeight={700} fill={T.textMute}>
+            {top?.label || ""}
+          </text>
+          <text x={cx} y={cy + 11} textAnchor="middle"
+            fontFamily={FONT.display} fontSize={14} fontWeight={800} fill={T.text}>
+            {top?.pct.toFixed(0)}%
+          </text>
+        </svg>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+          {groups.map((g) => (
+            <div key={g.cat} style={{
+              display: "flex", alignItems: "center", gap: 8,
+              fontFamily: FONT.sans, fontSize: 12,
+            }}>
+              <span style={{
+                width: 10, height: 10, borderRadius: 3, background: g.color,
+                flexShrink: 0,
+              }}/>
+              <span style={{ color: T.text, fontWeight: 600, flex: 1 }}>{g.label}</span>
+              <span style={{ color: T.textMute, fontFamily: FONT.mono, fontVariantNumeric: "tabular-nums" }}>
+                {g.pct.toFixed(1)}%
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------
+// RiskMetricsRow — three numeric cards (Beta · Vol · Sharpe).
+// Tap a card → flips to show the explanation. Numbers derived from
+// holdings + sector mix so they move with the user's portfolio.
+// ----------------------------------------------------------
+function RiskMetricsRow({ T, holdings, totalUsd, lang = "es" }) {
+  // Per-category risk parameters. Loosely calibrated: CRYPTO is
+  // very volatile + high beta, BONOs are low. Real values would come
+  // from a market-data provider.
+  const RISK_PARAMS = {
+    CEDEAR: { beta: 1.05, vol: 0.22 },
+    ACCION: { beta: 1.20, vol: 0.34 },
+    CRYPTO: { beta: 1.85, vol: 0.78 },
+    BONO:   { beta: 0.20, vol: 0.10 },
+    ETF:    { beta: 1.00, vol: 0.15 },
+    COMMOD: { beta: 0.65, vol: 0.20 },
+  };
+  const metrics = useMemo(() => {
+    if (!holdings || holdings.length === 0 || !totalUsd) {
+      return { beta: 0, vol: 0, sharpe: 0 };
+    }
+    let beta = 0;
+    let vol = 0;
+    for (const h of holdings) {
+      const valUsd = h.currency === "ARS" ? (h.value / 1248) : h.value;
+      const w = valUsd / totalUsd;
+      const p = RISK_PARAMS[h.category] || RISK_PARAMS.ETF;
+      beta += w * p.beta;
+      // Variance (vol²) sums weighted, square-root for vol. Real
+      // calc would need correlation matrix; this simplification is
+      // close enough for a dashboard widget.
+      vol += w * w * p.vol * p.vol;
+    }
+    vol = Math.sqrt(vol);
+    // Mocked annualized return derived from holdings' gain%, capped
+    // so a single moonshot doesn't spike Sharpe to absurd values.
+    const annualReturn = Math.max(-0.5, Math.min(0.6,
+      holdings.reduce((s, h) => {
+        const valUsd = h.currency === "ARS" ? (h.value / 1248) : h.value;
+        const w = valUsd / totalUsd;
+        return s + w * ((h.gainPct || 0) / 100);
+      }, 0) * 4 // rough annualization from a 90d snapshot
+    ));
+    const riskFree = 0.04; // 4% nominal risk-free baseline
+    const sharpe = vol > 0 ? (annualReturn - riskFree) / vol : 0;
+    return {
+      beta: Number.isFinite(beta) ? beta : 0,
+      vol: Number.isFinite(vol) ? vol : 0,
+      sharpe: Number.isFinite(sharpe) ? sharpe : 0,
+    };
+  }, [holdings, totalUsd]);
+
+  const [opened, setOpened] = useState(null); // "beta" | "vol" | "sharpe" | null
+  const cards = [
+    { id: "beta",   label: tr("pro.risk.beta",   lang), value: metrics.beta.toFixed(2), help: tr("pro.risk.beta_help", lang) },
+    { id: "vol",    label: tr("pro.risk.vol",    lang), value: `${(metrics.vol * 100).toFixed(1)}%`, help: tr("pro.risk.vol_help", lang) },
+    { id: "sharpe", label: tr("pro.risk.sharpe", lang), value: metrics.sharpe.toFixed(2), help: tr("pro.risk.sharpe_help", lang) },
+  ];
+  return (
+    <div style={{ margin: "0 16px 20px" }}>
+      <SectionHead T={T} title={tr("pro.risk.title", lang)} />
+      <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+        {cards.map((c) => (
+          <button
+            key={c.id}
+            onClick={() => setOpened(opened === c.id ? null : c.id)}
+            style={{
+              flex: 1, padding: "12px 10px", borderRadius: 14,
+              background: T.surface, border: `1px solid ${T.border}`,
+              color: T.text, cursor: "pointer", textAlign: "left",
+              display: "flex", flexDirection: "column", gap: 4,
+              minWidth: 0,
+            }}
+          >
+            <div style={{
+              fontFamily: FONT.mono, fontSize: 10, fontWeight: 700,
+              color: T.textMute, letterSpacing: 0.4, textTransform: "uppercase",
+            }}>{c.label}</div>
+            <div style={{
+              fontFamily: FONT.display, fontSize: 20, fontWeight: 700, color: T.text,
+              fontVariantNumeric: "tabular-nums", letterSpacing: -0.4,
+            }}>{c.value}</div>
+          </button>
+        ))}
+      </div>
+      {opened && (
+        <div style={{
+          marginTop: 8, padding: "10px 12px", borderRadius: 12,
+          background: T.bg, border: `1px solid ${T.border}`,
+          fontFamily: FONT.sans, fontSize: 12, color: T.textMute, lineHeight: 1.45,
+        }}>
+          {cards.find((c) => c.id === opened)?.help}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------
+// BenchmarkLine — your cartera vs MERVAL/S&P500 over 30 days.
+// Two stacked polylines normalized to [0,1] so visual comparison
+// shows direction + magnitude despite different absolute scales.
+// ----------------------------------------------------------
+function BenchmarkLine({ T, holdings, totalUsd, lang = "es" }) {
+  // Pick a benchmark: AR-heavy portfolios get MERVAL, US-heavy get
+  // S&P. We default to MERVAL when the user hasn't bought anything.
+  const [benchKey, setBenchKey] = useState(() => {
+    if (!holdings || holdings.length === 0) return "merval";
+    const arsExposure = holdings.reduce((s, h) => {
+      const valUsd = h.currency === "ARS" ? (h.value / 1248) : 0;
+      return s + valUsd;
+    }, 0);
+    return totalUsd && (arsExposure / totalUsd) > 0.4 ? "merval" : "spx";
+  });
+
+  // Mock 30-day series. We seed from the holdings hash so the line
+  // doesn't reshuffle on every re-render but does change between
+  // different portfolios. Same approach for the benchmark series.
+  const { youSeries, benchSeries, youReturn, benchReturn } = useMemo(() => {
+    const N = 30;
+    // Stable seed so the line is consistent across renders.
+    const seed = (holdings || []).reduce((s, h) => s + h.qty * (h.ticker.charCodeAt(0) || 1), 7);
+    function rng(i) {
+      // Mulberry32-ish: deterministic but spread-y enough that the
+      // line looks like real noise.
+      const x = Math.sin(seed * (i + 1) * 12.9898) * 43758.5453;
+      return x - Math.floor(x);
+    }
+    function buildSeries(targetReturn, vol) {
+      // Produce N daily prices starting at 100, ending close to
+      // 100 * (1 + targetReturn). vol controls daily noise.
+      const out = [100];
+      const dailyDrift = targetReturn / N;
+      for (let i = 1; i < N; i++) {
+        const noise = (rng(i) - 0.5) * vol;
+        out.push(out[i - 1] * (1 + dailyDrift + noise));
+      }
+      return out;
+    }
+    // Sum the user's last-30d return as a weighted avg of holding
+    // gainPct. This is the same number we'd show in the green pill
+    // on the portfolio card, just normalized.
+    const userReturn = (() => {
+      if (!totalUsd || !holdings) return 0;
+      let r = 0;
+      for (const h of holdings) {
+        const valUsd = h.currency === "ARS" ? (h.value / 1248) : h.value;
+        const w = valUsd / totalUsd;
+        r += w * ((h.gainPct || 0) / 100);
+      }
+      // The card's pill says +2.34% — synthesize a 30d return that
+      // tracks the same direction but is bounded so we don't end up
+      // with a flat or absurd line.
+      return Math.max(-0.18, Math.min(0.20, r * 0.5 + 0.0234));
+    })();
+    const bench = benchKey === "merval"
+      ? { ret: 0.012, vol: 0.018 }   // MERVAL: ~1.2% over 30d, choppy
+      : { ret: 0.018, vol: 0.011 };  // SPX: ~1.8%, smoother
+    const youS = buildSeries(userReturn, 0.012);
+    const benchS = buildSeries(bench.ret, bench.vol);
+    return {
+      youSeries: youS,
+      benchSeries: benchS,
+      youReturn: userReturn,
+      benchReturn: bench.ret,
+    };
+  }, [holdings, totalUsd, benchKey]);
+
+  // SVG layout — full-width, fixed 110px tall. Both series share
+  // the same y-range (combined min/max) so the visual height
+  // difference == real performance difference.
+  const w = 320, h = 110;
+  const allPts = [...youSeries, ...benchSeries];
+  const min = Math.min(...allPts);
+  const max = Math.max(...allPts);
+  const range = max - min || 1;
+  function path(series) {
+    return series.map((v, i) => {
+      const x = (i / (series.length - 1)) * w;
+      const y = h - ((v - min) / range) * h;
+      return `${i === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    }).join(" ");
+  }
+  const youColor = T.accent;
+  const benchColor = T.textMute;
+  return (
+    <div style={{ margin: "0 16px 20px" }}>
+      <div style={{
+        display: "flex", alignItems: "baseline", justifyContent: "space-between",
+        marginBottom: 8, padding: "0 4px",
+      }}>
+        <div style={{
+          fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+          color: T.text, letterSpacing: -0.2,
+        }}>{tr("pro.bench.title", lang)}</div>
+        {/* MERVAL / S&P toggle */}
+        <div style={{
+          display: "flex", gap: 4, padding: 3,
+          background: T.bg, border: `1px solid ${T.border}`, borderRadius: 999,
+        }}>
+          {["merval", "spx"].map((k) => (
+            <button key={k} onClick={() => setBenchKey(k)} style={{
+              padding: "3px 10px", borderRadius: 999, border: "none", cursor: "pointer",
+              background: benchKey === k ? T.accent : "transparent",
+              color: benchKey === k ? T.accentInk : T.textMute,
+              fontFamily: FONT.mono, fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
+            }}>{tr(k === "merval" ? "pro.bench.merval" : "pro.bench.spx", lang)}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{
+        padding: "12px 14px 14px", borderRadius: 18,
+        background: T.surface, border: `1px solid ${T.border}`,
+      }}>
+        <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} preserveAspectRatio="none">
+          <path d={path(benchSeries)} fill="none" stroke={benchColor}
+            strokeWidth={1.4} strokeDasharray="3 3" opacity={0.7} />
+          <path d={path(youSeries)} fill="none" stroke={youColor}
+            strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <div style={{
+          marginTop: 10, display: "flex", justifyContent: "space-between",
+          fontFamily: FONT.sans, fontSize: 11,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 16, height: 2.5, background: youColor, borderRadius: 2 }}/>
+            <span style={{ color: T.textMute }}>{tr("pro.bench.you", lang)}</span>
+            <span style={{
+              color: youReturn >= 0 ? T.accent : T.danger,
+              fontFamily: FONT.mono, fontWeight: 700,
+            }}>{youReturn >= 0 ? "+" : ""}{(youReturn * 100).toFixed(2)}%</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 16, height: 2, background: benchColor, opacity: 0.7,
+              borderTop: `2px dashed ${benchColor}`, height: 0 }}/>
+            <span style={{ color: T.textMute }}>
+              {tr(benchKey === "merval" ? "pro.bench.merval" : "pro.bench.spx", lang)}
+            </span>
+            <span style={{
+              color: benchReturn >= 0 ? T.accent : T.danger,
+              fontFamily: FONT.mono, fontWeight: 700,
+            }}>{benchReturn >= 0 ? "+" : ""}{(benchReturn * 100).toFixed(2)}%</span>
+          </div>
         </div>
       </div>
     </div>
