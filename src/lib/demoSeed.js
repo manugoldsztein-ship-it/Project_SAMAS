@@ -41,6 +41,22 @@ const DEMO_WATCHLISTS = [
   { name: "Cripto",            color: "amber",  tickers: ["BTC", "ETH"] },
 ];
 
+// Wallet seed (0.0.80) — a starter cash balance + a few transaction
+// rows so the Wallet tab renders something on a fresh demo account.
+// Amounts roughly match what the legacy localStorage seed had in
+// pesos/dollars, give-or-take. We seed transactions backdated by a
+// few hours/days so the "Movimientos" list looks real.
+const DEMO_BALANCE_ARS = 2_487_350.00;
+const DEMO_BALANCE_USD = 4_218.42;
+const DEMO_TRANSACTIONS = [
+  { kind: "deposit",    amount:   320_000.00, currency: "ARS", reference: "Mercado Pago",   memo: "Cobro freelance",   ageHours: 24 },
+  { kind: "deposit",    amount:    85_000.00, currency: "ARS", reference: "Manuel G.",      memo: "Asado",             ageHours: 2 },
+  { kind: "swap",       amount:       200.00, currency: "USD", reference: "ARS → USD",     memo: "Cambio MEP",         ageHours: 48 },
+  { kind: "swap",       amount:  -249_000.00, currency: "ARS", reference: "ARS → USD",     memo: "Cambio MEP",         ageHours: 48 },
+  { kind: "withdrawal", amount:   -12_500.00, currency: "ARS", reference: "Lucía P.",       memo: "Cumple Tomi",       ageHours: 72 },
+  { kind: "dividend",   amount:        18.40, currency: "USD", reference: "KO",             memo: "Coca-Cola Q1 2026", ageHours: 96 },
+];
+
 async function currentUserId() {
   const { data, error } = await supabase.auth.getUser();
   if (error || !data?.user?.id) throw new Error("Sesión no encontrada.");
@@ -108,6 +124,30 @@ export async function seedDemoAccount() {
       }
     }
 
+    // Wallet (0.0.80) — seed cash balance + transactions ledger so
+    // the Wallet tab isn't empty either. Idempotent: balance upsert
+    // overwrites; transactions get cleared by reference matching.
+    await supabase.from("accounts").upsert([
+      { user_id: userId, currency: "ARS", balance: DEMO_BALANCE_ARS, updated_at: new Date().toISOString() },
+      { user_id: userId, currency: "USD", balance: DEMO_BALANCE_USD, updated_at: new Date().toISOString() },
+    ], { onConflict: "user_id,currency" });
+    // Wipe prior demo tx rows (matched by memo) before re-inserting
+    // so re-running the seed doesn't compound the ledger.
+    const demoMemos = DEMO_TRANSACTIONS.map((t) => t.memo);
+    await supabase.from("transactions").delete()
+      .eq("user_id", userId).in("memo", demoMemos);
+    const txRows = DEMO_TRANSACTIONS.map((t) => ({
+      user_id:    userId,
+      kind:       t.kind,
+      amount:     t.amount,
+      currency:   t.currency,
+      reference:  t.reference,
+      memo:       t.memo,
+      created_at: new Date(Date.now() - t.ageHours * 60 * 60 * 1000).toISOString(),
+    }));
+    const { error: txErr } = await supabase.from("transactions").insert(txRows);
+    if (txErr) console.warn("[demoSeed] tx insert:", txErr.message);
+
     // Reload so any cached state in the v2 broker (none today, but
     // future caching layers might) gets a clean re-fetch on mount.
     setTimeout(() => window.location.reload(), 200);
@@ -131,11 +171,13 @@ export async function resetDemoAccount() {
     const { error: hErr } = await supabase
       .from("holdings").delete().eq("user_id", userId);
     if (hErr) throw new Error(hErr.message);
-    // Transactions — drop trade-related rows. Aportes / dividends
-    // (when wired) stay; this is scoped to broker activity only.
-    await supabase.from("transactions").delete()
-      .eq("user_id", userId)
-      .in("kind", ["trade_buy", "trade_sell"]);
+    // Transactions — wipe ALL rows so the Wallet tab lands on the
+    // empty-state onboarding (same intent as wiping holdings).
+    // Pre-0.0.80 we only dropped trade rows; now we own the whole
+    // ledger so the seed/reset semantics need to match.
+    await supabase.from("transactions").delete().eq("user_id", userId);
+    // Accounts — zero out cash balances (0.0.80).
+    await supabase.from("accounts").delete().eq("user_id", userId);
     // Watchlists — drop every list (and cascade-drops every ticker
     // row). Same intent as wiping holdings: empty-state onboarding.
     await supabase.from("watchlists").delete().eq("user_id", userId);

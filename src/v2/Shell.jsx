@@ -2368,6 +2368,16 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.80",
+    title: "Wallet moves to Supabase — balance + ledger fully durable",
+    bullets: [
+      "Step 3 of the persistence migration: cash balance (ARS + USD) and the transactions ledger now live in public.accounts + public.transactions. Reinstall the app and your saldo / movimientos are still there. Holdings + watchlists already moved in 0.0.76 + 0.0.78; with this patch every \"important\" piece of state is server-side.",
+      "deposit / withdraw / swap each go through one helper that reads current balance, upserts the new value, and inserts a SIGNED-amount ledger row (positive=in, negative=out). SUM(amount) over the ledger reconciles the balance for free — useful when we want a server-side audit later.",
+      "Bug fix: broker.js trade transactions (samas-0.0.76) were silently failing because the transactions.kind CHECK only allowed deposit/withdrawal/dividend/fee/adjustment. Loosened to also accept trade_buy / trade_sell / swap. From now on every fill writes a real ledger row.",
+      "Demo seed now plants ~2.5M ARS + US$4,200 + 6 starter movements (deposit, swap legs, withdrawal, dividend) so the Wallet tab isn't an empty stage during the Cohen demo. Reset wipes accounts + transactions cleanly.",
+    ],
+  },
+  {
     version: "0.0.79",
     title: "Portfolio shares: real card, can't be edited, dedicated tab",
     bullets: [

@@ -1,9 +1,9 @@
 // ============================================================
-// SAMAS v2 — Wallet API
+// SAMAS v2 — Wallet API (Supabase-backed since samas-0.0.80)
 // ============================================================
-// Owns: ARS + USD cash balance, deposits, withdrawals, transactions.
-// Does NOT own: invested holdings (broker.js), card movements
-// (card.js), social interactions (social.js).
+// Owns: ARS + USD cash balance, deposits, withdrawals, swaps, the
+// transactions ledger. Does NOT own: invested holdings (broker.js),
+// card movements (card.js), social interactions (social.js).
 //
 // PRODUCTION INTEGRATION TARGET — Argentine wallet rail
 //   Likely partners: Mercado Pago Marketplace API, MODO, Geopagos,
@@ -15,66 +15,85 @@
 //     4. We register every state change as a "transaction" row in
 //        our own DB so the UI list is fast.
 //
-// The mock implementation below stores everything in memory + a
-// localStorage snapshot so a refresh doesn't wipe demo state.
-// Replace each function's BODY when the real partner API arrives;
-// the SIGNATURE stays the same so the UI keeps working.
+// 0.0.80 — moved from in-memory mock to Supabase tables:
+//   public.accounts       (user_id, currency)  →  numeric balance per pair
+//   public.transactions   (id, user_id, kind, amount, currency, reference, memo, created_at)
+//
+// CVU + alias are still static synthetic strings — they're fake (no
+// real wallet rail wired) and only exist so the UI has something to
+// render in the "Cómo recibir" section. When a real partner lands
+// these come from the partner's onboarding response.
 // ============================================================
 
-import { jitter, maybeFail, genId, relativeStamp } from "./_mock.js";
+import { jitter, maybeFail, relativeStamp } from "./_mock.js";
+import { supabase } from "../../lib/supabase.js";
 
-// ----------------------------------------------------------
-// In-memory state (mirrored to localStorage for demo continuity).
-// ----------------------------------------------------------
-const STORAGE_KEY = "samas_v2_wallet_mock";
+// Static synthetic CVU/alias. Same values for every user during
+// the prototype phase — replace with a per-user issuance call when
+// MP/MODO is wired.
+const DEMO_CVU   = "0000003100012345678901";
+const DEMO_ALIAS = "samas.santi.wallet";
 
-function loadState() {
-  if (typeof localStorage === "undefined") return seed();
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : seed();
-  } catch {
-    return seed();
-  }
+async function currentUserId() {
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data?.user?.id) throw new Error("Sesión no encontrada.");
+  return data.user.id;
 }
 
-function saveState(s) {
-  state = s;
-  if (typeof localStorage !== "undefined") {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch {}
-  }
-}
-
-function seed() {
+// ----------------------------------------------------------
+// Row mapping — DB transactions row → UI Transaction shape.
+// ----------------------------------------------------------
+// DB schema:
+//   { id, user_id, kind, amount (signed), currency, reference, memo, created_at }
+// UI shape (preserved from the legacy mock so PaymentsView /
+// WalletPage / TransactionsList don't have to change):
+//   { id, type, who, amount (positive), ccy, note, cat, at, atLabel }
+// ----------------------------------------------------------
+function txRowToUi(r) {
+  const amount = Number(r.amount || 0);
+  const at = r.created_at ? new Date(r.created_at).getTime() : Date.now();
+  // Type: signed amount drives in/out; swap stays as its own type so
+  // the UI can render the dual-arrow icon.
+  const type = r.kind === "swap" ? "swap" : (amount >= 0 ? "in" : "out");
+  // Category: maps DB kind → UI category bucket.
+  const cat = (() => {
+    switch (r.kind) {
+      case "deposit":     return "income";
+      case "withdrawal":  return "transfer";
+      case "trade_buy":
+      case "trade_sell":
+      case "dividend":    return "invest";
+      case "swap":        return "swap";
+      case "fee":         return "fee";
+      default:            return "transfer";
+    }
+  })();
+  // Counter-party label: reference is the canonical slot for this
+  // (e.g. "Mercado Pago", "AAPL", "ARS → USD"). Falls back to a
+  // sensible default per kind.
+  const who = r.reference || (() => {
+    switch (r.kind) {
+      case "deposit":     return "Depósito";
+      case "withdrawal":  return "Retiro";
+      case "trade_buy":   return "Compra";
+      case "trade_sell":  return "Venta";
+      case "swap":        return r.currency === "USD" ? "ARS → USD" : "USD → ARS";
+      case "dividend":    return "Dividendo";
+      default:            return "Movimiento";
+    }
+  })();
   return {
-    // Balances are kept in cents/centavos to avoid float drift.
-    ars_centavos: 248_735_000,        // $2,487,350.00
-    usd_cents: 421_842,               // US$4,218.42
-    // CVU we "issued" — used for inbound deposits.
-    cvu: "0000003100012345678901",
-    alias: "samas.santi.wallet",
-    // Last 50 movements. Newer first.
-    transactions: seedTransactions(),
+    id: r.id,
+    type,
+    who,
+    amount: Math.abs(amount),
+    ccy: r.currency,
+    note: r.memo || "",
+    cat,
+    at,
+    atLabel: relativeStamp(at),
   };
 }
-
-function seedTransactions() {
-  const now = Date.now();
-  const min = 60_000;
-  const hour = 60 * min;
-  const day = 24 * hour;
-  return [
-    { id: genId(), type: "in",   who: "Manuel G.",     amount: 85_000_00, ccy: "ARS", note: "Asado",                    cat: "transfer", at: now - 2 * hour },
-    { id: genId(), type: "out",  who: "Compra AAPL",   amount: 215_40,    ccy: "USD", note: "1 acción @ US$215,40",      cat: "invest",   at: now - 5 * hour },
-    { id: genId(), type: "in",   who: "Mercado Pago",  amount: 320_000_00,ccy: "ARS", note: "Cobro freelance",           cat: "income",   at: now - 1 * day },
-    { id: genId(), type: "out",  who: "Café Martínez", amount: 4_800_00,  ccy: "ARS", note: "Tarjeta · Palermo",          cat: "card",     at: now - 1 * day - 3 * hour },
-    { id: genId(), type: "swap", who: "ARS → USD",     amount: 200_00,    ccy: "USD", note: "Cambio MEP · $249.000",      cat: "swap",     at: now - 2 * day },
-    { id: genId(), type: "out",  who: "Lucía P.",      amount: 12_500_00, ccy: "ARS", note: "Cumple Tomi",                cat: "transfer", at: now - 3 * day },
-    { id: genId(), type: "in",   who: "Dividendo KO",  amount: 18_40,     ccy: "USD", note: "Coca-Cola Q1 2026",          cat: "invest",   at: now - 4 * day },
-  ];
-}
-
-let state = loadState();
 
 // ----------------------------------------------------------
 // Public API
@@ -83,217 +102,235 @@ let state = loadState();
 /**
  * getBalance() — current ARS + USD cash balance.
  *
- * Production: GET /v1/wallets/{userId}/balance from the wallet rail.
+ * Reads two rows from public.accounts (one per currency). Missing
+ * rows default to 0 — first-time users won't have any account row
+ * until they deposit / get seeded.
  *
- * @returns {Promise<{
- *   ars: number,            // ARS amount in pesos (NOT centavos)
- *   usd: number,            // USD amount in dollars
- *   cvu: string,            // user's CVU for inbound transfers
- *   alias: string,          // user's alias (also valid for inbound)
- * }>}
+ * @returns {Promise<{ ars: number, usd: number, cvu: string, alias: string }>}
  */
 export async function getBalance() {
-  await jitter();
+  const userId = await currentUserId();
+  const { data, error } = await supabase
+    .from("accounts")
+    .select("currency, balance")
+    .eq("user_id", userId);
+  if (error) throw new Error(error.message);
+  const map = Object.fromEntries((data || []).map((r) => [r.currency, Number(r.balance) || 0]));
   return {
-    ars: state.ars_centavos / 100,
-    usd: state.usd_cents / 100,
-    cvu: state.cvu,
-    alias: state.alias,
+    ars: map.ARS || 0,
+    usd: map.USD || 0,
+    cvu: DEMO_CVU,
+    alias: DEMO_ALIAS,
   };
 }
 
 /**
- * getTransactions({ limit, before }) — paginated movement list.
+ * getTransactions({ limit, before }) — newest-first movement list.
  *
- * Production: GET /v1/wallets/{userId}/transactions?limit=50&before=ts
- *
- * @param {{ limit?: number, before?: number }} opts
- * @returns {Promise<Array<Transaction>>}
- *
- * Transaction shape:
- *   id        unique
- *   type      "in" | "out" | "swap"
- *   who       counter-party display name
- *   amount    in major units (pesos / dollars), always positive
- *   ccy       "ARS" | "USD"
- *   note      free-form description
- *   cat       "transfer" | "income" | "card" | "invest" | "swap" | "fee"
- *   at        unix ms timestamp
- *   atLabel   pre-formatted relative stamp ("Hoy 14:32")
+ * Pulls every kind from the ledger (cash in/out, swaps, trade fills
+ * from broker.js placeOrder, dividends when wired). The `before`
+ * cursor uses created_at for keyset pagination — pass the at value
+ * from the last row of the previous page to fetch the next one.
  */
 export async function getTransactions({ limit = 50, before } = {}) {
-  await jitter();
-  let rows = state.transactions;
-  if (before) rows = rows.filter((t) => t.at < before);
-  return rows.slice(0, limit).map((t) => ({
-    id: t.id,
-    type: t.type,
-    who: t.who,
-    amount: t.amount / 100,
-    ccy: t.ccy,
-    note: t.note,
-    cat: t.cat,
-    at: t.at,
-    atLabel: relativeStamp(t.at),
-  }));
+  const userId = await currentUserId();
+  let q = supabase
+    .from("transactions")
+    .select("id, kind, amount, currency, reference, memo, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (before) q = q.lt("created_at", new Date(before).toISOString());
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return (data || []).map(txRowToUi);
+}
+
+// ----------------------------------------------------------
+// Internal helper — atomically apply a balance delta + ledger row.
+// ----------------------------------------------------------
+// We don't have a single SQL transaction here; supabase-js doesn't
+// expose multi-statement transactions on the client. The order is:
+//   1. Read current balance (default 0).
+//   2. Compute new balance.
+//   3. Upsert account row.
+//   4. Insert transaction row.
+// If step 4 fails the balance change is already in place, which is
+// the wrong direction for atomicity. Acceptable for the prototype —
+// when we wire a partner rail the partner's settlement webhook is
+// the source of truth and we'll re-derive both. A real production
+// implementation would call a Postgres function via RPC that wraps
+// both writes in a single transaction.
+async function applyLedgerEntry({ userId, currency, delta, kind, reference, memo }) {
+  // Read current.
+  const { data: cur, error: rErr } = await supabase
+    .from("accounts")
+    .select("balance")
+    .eq("user_id", userId)
+    .eq("currency", currency)
+    .maybeSingle();
+  if (rErr) throw new Error(rErr.message);
+  const currentBalance = Number(cur?.balance || 0);
+  const newBalance = Number((currentBalance + delta).toFixed(2));
+  // Upsert account.
+  const { error: aErr } = await supabase
+    .from("accounts")
+    .upsert(
+      { user_id: userId, currency, balance: newBalance, updated_at: new Date().toISOString() },
+      { onConflict: "user_id,currency" }
+    );
+  if (aErr) throw new Error(aErr.message);
+  // Insert ledger row. amount is SIGNED — positive for inflow,
+  // negative for outflow — so a SUM(amount) over the ledger
+  // reconciles the balance trivially.
+  const { data: tx, error: tErr } = await supabase
+    .from("transactions")
+    .insert({
+      user_id: userId,
+      kind,
+      amount: delta,
+      currency,
+      reference: reference || null,
+      memo: memo || null,
+    })
+    .select("id, created_at")
+    .single();
+  if (tErr) throw new Error(tErr.message);
+  return { txId: tx.id, newBalance };
 }
 
 /**
- * deposit({ amount, ccy, source }) — request a deposit.
+ * deposit({ amount, ccy, source }) — credit cash to the user's
+ * account and write a deposit row to the ledger.
  *
- * In production this DOES NOT move money on its own. It returns a
- * payment intent (e.g. an MP checkout URL) for amounts coming from
- * the user's bank/MP. The real money lands when the partner notifies
- * us via webhook, at which point we record the transaction. The mock
- * just adds the balance immediately and creates a transaction row.
- *
- * @param {{
- *   amount: number,           // major units, > 0
- *   ccy: "ARS" | "USD",
- *   source: "mp" | "transfer", // mp = Mercado Pago link, transfer = via CVU
- *   note?: string,
- * }} input
- * @returns {Promise<{
- *   txnId: string,
- *   newBalance: number,        // post-deposit balance in `ccy`
- *   redirectUrl?: string,      // present when source==="mp"
- * }>}
+ * Mock semantics: lands instantly. Real semantics: returns a
+ * payment intent (MP checkout URL etc.) and the partner's webhook
+ * actually credits when the money clears.
  */
 export async function deposit({ amount, ccy = "ARS", source = "mp", note }) {
   await jitter(400, 900);
   if (!amount || amount <= 0) throw new Error("Monto inválido.");
+  if (ccy !== "ARS" && ccy !== "USD") throw new Error("Moneda inválida.");
   await maybeFail(0.05, "El depósito fue rechazado por el banco. Probá de nuevo.");
 
-  const cents = Math.round(amount * 100);
-  const next = { ...state };
-  if (ccy === "ARS") next.ars_centavos += cents;
-  else if (ccy === "USD") next.usd_cents += cents;
-  else throw new Error("Moneda inválida.");
+  const userId = await currentUserId();
+  const reference = source === "mp" ? "Mercado Pago" : "Transferencia";
+  const memo = note || (source === "mp" ? "Depósito MP" : "Transferencia entrante");
 
-  const txn = {
-    id: genId(), type: "in",
-    who: source === "mp" ? "Mercado Pago" : "Transferencia",
-    amount: cents, ccy,
-    note: note || (source === "mp" ? "Depósito MP" : "Transferencia entrante"),
-    cat: "income",
-    at: Date.now(),
-  };
-  next.transactions = [txn, ...next.transactions].slice(0, 50);
-  saveState(next);
+  const { txId, newBalance } = await applyLedgerEntry({
+    userId,
+    currency: ccy,
+    delta: amount,
+    kind: "deposit",
+    reference,
+    memo,
+  });
 
   return {
-    txnId: txn.id,
-    newBalance: ccy === "ARS" ? next.ars_centavos / 100 : next.usd_cents / 100,
-    redirectUrl: source === "mp" ? `https://mock.mp/checkout/${txn.id}` : undefined,
+    txnId: txId,
+    newBalance,
+    redirectUrl: source === "mp" ? `https://mock.mp/checkout/${txId}` : undefined,
   };
 }
 
 /**
- * withdraw({ amount, ccy, destinationCbu, destinationAlias }) — push
- * funds out to a user-supplied CBU or alias.
+ * withdraw({ amount, ccy, destinationCbu, destinationAlias }) — debit
+ * cash + write a withdrawal row.
  *
- * Production: POST /v1/transfers with the destination + amount. The
- * partner clears it within seconds (on Coelsa/CCE rails).
- *
- * Validation we do client-side: balance ≥ amount, CBU has 22 digits
- * OR alias is non-empty. Server-side validation in production should
- * also check the destination is reachable.
- *
- * @param {{
- *   amount: number,
- *   ccy: "ARS" | "USD",
- *   destinationCbu?: string,    // 22-digit CBU
- *   destinationAlias?: string,  // free-form alias (max 30 chars)
- *   note?: string,
- * }} input
- * @returns {Promise<{ txnId: string, newBalance: number }>}
+ * Validates balance ≥ amount client-side (the read-then-write race is
+ * acceptable for a prototype — RLS still prevents cross-user mischief,
+ * and a real partner would re-validate).
  */
 export async function withdraw({ amount, ccy = "ARS", destinationCbu, destinationAlias, note }) {
   await jitter(400, 900);
   if (!amount || amount <= 0) throw new Error("Monto inválido.");
   if (!destinationCbu && !destinationAlias) throw new Error("Indicá CBU o alias destino.");
 
-  const balance = ccy === "ARS" ? state.ars_centavos : state.usd_cents;
-  const cents = Math.round(amount * 100);
-  if (cents > balance) throw new Error("Saldo insuficiente.");
+  const userId = await currentUserId();
+  // Read current balance to enforce sufficient funds.
+  const { data: cur } = await supabase
+    .from("accounts")
+    .select("balance")
+    .eq("user_id", userId).eq("currency", ccy)
+    .maybeSingle();
+  if ((Number(cur?.balance || 0)) < amount) throw new Error("Saldo insuficiente.");
 
   await maybeFail(0.04, "El retiro fue rechazado. El destinatario no es válido.");
 
-  const next = { ...state };
-  if (ccy === "ARS") next.ars_centavos -= cents;
-  else next.usd_cents -= cents;
+  const reference = destinationAlias || (destinationCbu ? destinationCbu.slice(0, 6) + "…" : "Retiro");
+  const memo = note || `Retiro a ${destinationAlias || "CBU"}`;
 
-  const txn = {
-    id: genId(), type: "out",
-    who: destinationAlias || destinationCbu.slice(0, 6) + "…",
-    amount: cents, ccy,
-    note: note || `Retiro a ${destinationAlias || "CBU"}`,
-    cat: "transfer",
-    at: Date.now(),
-  };
-  next.transactions = [txn, ...next.transactions].slice(0, 50);
-  saveState(next);
+  const { txId, newBalance } = await applyLedgerEntry({
+    userId,
+    currency: ccy,
+    delta: -amount,                // outflow → negative
+    kind: "withdrawal",
+    reference,
+    memo,
+  });
 
-  return { txnId: txn.id, newBalance: ccy === "ARS" ? next.ars_centavos / 100 : next.usd_cents / 100 };
+  return { txnId: txId, newBalance };
 }
 
 /**
- * swap({ from, to, amountFrom, rate }) — convert ARS↔USD inside the
- * wallet at a given rate. The UI gets the rate from broker.getQuote()
- * (MEP rate) and passes it here.
+ * swap({ from, to, amountFrom, rate }) — convert ARS↔USD.
  *
- * @param {{
- *   from: "ARS" | "USD",
- *   to: "ARS" | "USD",
- *   amountFrom: number,
- *   rate: number,         // ARS per USD (e.g. 1245)
- * }} input
- * @returns {Promise<{ txnId: string, amountTo: number, balances: { ars: number, usd: number } }>}
+ * One swap = TWO ledger rows (the outgoing leg in `from` currency +
+ * the incoming leg in `to` currency). Both are kind='swap' so the
+ * UI shows them as a single swap entry per leg. Balances on both
+ * accounts move atomically (per the same caveat as applyLedgerEntry).
  */
 export async function swap({ from, to, amountFrom, rate }) {
   await jitter();
   if (from === to) throw new Error("Origen y destino deben diferir.");
   if (!Number.isFinite(amountFrom) || amountFrom <= 0) throw new Error("Monto inválido.");
-  // Guard against rate=0, rate=Infinity, NaN — the math below would
-  // otherwise silently produce 0, Infinity, or NaN and the swap would
-  // appear to succeed with a bogus output.
   if (!Number.isFinite(rate) || rate <= 0) throw new Error("Tipo de cambio inválido.");
 
-  const fromCents = Math.round(amountFrom * 100);
-  const fromKey = from === "ARS" ? "ars_centavos" : "usd_cents";
-  if (fromCents > state[fromKey]) throw new Error("Saldo insuficiente.");
+  const userId = await currentUserId();
+  // Sufficient funds in `from`.
+  const { data: cur } = await supabase
+    .from("accounts")
+    .select("balance")
+    .eq("user_id", userId).eq("currency", from)
+    .maybeSingle();
+  if ((Number(cur?.balance || 0)) < amountFrom) throw new Error("Saldo insuficiente.");
 
   const amountTo = from === "ARS" ? amountFrom / rate : amountFrom * rate;
-  const toCents = Math.round(amountTo * 100);
+  const reference = `${from} → ${to}`;
+  const memo = `Cambio @ ${rate.toFixed(2)}`;
 
-  const next = { ...state };
-  next[fromKey] -= fromCents;
-  next[from === "ARS" ? "usd_cents" : "ars_centavos"] += toCents;
+  // Outgoing leg in `from`.
+  await applyLedgerEntry({
+    userId, currency: from, delta: -amountFrom,
+    kind: "swap", reference, memo,
+  });
+  // Incoming leg in `to`.
+  await applyLedgerEntry({
+    userId, currency: to, delta: amountTo,
+    kind: "swap", reference, memo,
+  });
 
-  const txn = {
-    id: genId(), type: "swap",
-    who: `${from} → ${to}`,
-    amount: toCents, ccy: to,
-    note: `Cambio @ ${rate.toFixed(2)}`,
-    cat: "swap",
-    at: Date.now(),
-  };
-  next.transactions = [txn, ...next.transactions].slice(0, 50);
-  saveState(next);
+  // Re-fetch both balances for the response.
+  const { data: rows } = await supabase
+    .from("accounts").select("currency, balance")
+    .eq("user_id", userId);
+  const map = Object.fromEntries((rows || []).map((r) => [r.currency, Number(r.balance) || 0]));
 
   return {
-    txnId: txn.id,
+    txnId: `swap-${Date.now()}`,
     amountTo,
-    balances: { ars: next.ars_centavos / 100, usd: next.usd_cents / 100 },
+    balances: { ars: map.ARS || 0, usd: map.USD || 0 },
   };
 }
 
 // ----------------------------------------------------------
-// Test helpers — used in dev to reset the demo state. Not part of
-// the production contract; remove when wiring real APIs.
+// Test helpers — used in dev to reset state. The Supabase-backed
+// reset lives in src/lib/demoSeed.js (resetDemoAccount); _resetDemo
+// here is a no-op to preserve the export signature for any caller
+// that hasn't migrated yet.
 // ----------------------------------------------------------
 export function _resetDemo() {
-  saveState(seed());
+  // No-op since 0.0.80 — see resetDemoAccount() in src/lib/demoSeed.js.
 }
 
 // ----------------------------------------------------------
@@ -308,9 +345,6 @@ export function _resetDemo() {
 //
 // Public shape (unchanged so callers don't need updating):
 //   { amount, currency, dayOfMonth, nextAt, lastAt, createdAt }
-// ============================================================
-
-import { supabase } from "../../lib/supabase.js";
 
 const APORTE_KEY = "samas_v2_aporte_mock";
 
@@ -346,9 +380,6 @@ function nextDateFor(dayOfMonth) {
 }
 
 // Convert a YYYY-MM-DD date string (Supabase DATE column) to a JS ms.
-// Supabase returns these as 'YYYY-MM-DD' strings; new Date() parses
-// them as midnight UTC, which is fine for "today vs that day"
-// comparisons in the UI.
 function dateStringToMs(s) {
   if (!s) return null;
   const t = new Date(s).getTime();
@@ -390,15 +421,18 @@ function rowToAporte(row) {
   };
 }
 
+// nextAt drifts as the calendar advances. Recompute on read so the
+// UI doesn't show "next: 5 days ago" if the device was offline.
+function rebaseAporte(a) {
+  if (!a) return null;
+  return { ...a, nextAt: nextDateFor(a.dayOfMonth) };
+}
+
 /**
  * getRecurringAporte() — returns the active schedule or null.
- *
  * Shape: { amount, currency, dayOfMonth, nextAt(ms), lastAt(ms|null), createdAt(ms) }
  */
 export async function getRecurringAporte() {
-  // Prefer server. Fall back to localStorage if no session, no table,
-  // or any other error — we don't want a Supabase hiccup to wipe the
-  // user's "next aporte" badge.
   try {
     const { data: u } = await supabase.auth.getUser();
     const userId = u?.user?.id;
@@ -418,8 +452,6 @@ export async function getRecurringAporte() {
       return rebaseAporte(loadAporteLocal());
     }
     if (!data) return null;
-    // Mirror the server row to localStorage so the next cold start has
-    // something to render before the round-trip resolves.
     const result = rowToAporte(data);
     saveAporteLocal(result);
     return result;
@@ -427,13 +459,6 @@ export async function getRecurringAporte() {
     console.warn("[aporte] get caught:", e?.message);
     return rebaseAporte(loadAporteLocal());
   }
-}
-
-// nextAt drifts as the calendar advances. Recompute on read so the
-// UI doesn't show "next: 5 days ago" if the device was offline.
-function rebaseAporte(a) {
-  if (!a) return null;
-  return { ...a, nextAt: nextDateFor(a.dayOfMonth) };
 }
 
 /**
@@ -483,9 +508,6 @@ export async function setRecurringAporte(input) {
     return local;
   } catch (e) {
     console.warn("[aporte] set:", e?.message);
-    // Still mirror locally so the UI updates even if the upstream write
-    // failed — the user can retry later and the local copy is the one
-    // they see.
     saveAporteLocal(local);
     return local;
   }
