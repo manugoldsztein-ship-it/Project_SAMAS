@@ -537,6 +537,14 @@ function NotificationsInbox({ T, lang = "es", onClose }) {
     }}>
       <div style={{
         width: "100%", maxWidth: 540, maxHeight: "92dvh",
+        // Min height so the sheet feels like a proper bottom sheet
+        // even when the inbox is empty / loading. Without this, the
+        // sheet collapses to fit only the drag handle + header +
+        // bell emoji, and the "empty" title/subtitle get clipped
+        // because the flex:1 scroll area has nothing to expand into
+        // (parent height = sum of content). 55dvh leaves enough
+        // backdrop visible that the user knows they can tap to close.
+        minHeight: "55dvh",
         background: T.bgElev, color: T.text,
         borderTopLeftRadius: 28, borderTopRightRadius: 28,
         border: `1px solid ${T.border}`, borderBottom: "none",
