@@ -2368,6 +2368,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.78",
+    title: "Watchlists move to Supabase — durable across reinstalls",
+    bullets: [
+      "Step 2 of the persistence migration: watchlists + their tickers now live in public.watchlists + public.watchlist_tickers (RLS-scoped to auth.uid). Create / rename / color-tag / reorder / delete all hit Supabase. Reinstall the app and your lists are still there.",
+      "Reorder arrows now persist — watchlist_tickers stores an explicit position column, so the order you set sticks across sessions. No more \"why did NVDA jump back to the top\" after a relaunch.",
+      "\"Cargar cuenta demo\" seeds three curated lists (Tecnología US / Acciones argentinas / Cripto, with color tags). \"Vaciar cuenta\" wipes them. Idempotent on re-run — re-tapping the seed button replaces the demo lists by name without touching anything you created.",
+    ],
+  },
+  {
     version: "0.0.77",
     title: "Portfolio share: front-and-center in social compose",
     bullets: [

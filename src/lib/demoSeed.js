@@ -32,6 +32,15 @@ const DEMO_HOLDINGS = [
   { ticker: "BTC",  qty: 0.05, avgCost: 90000.00, currency: "USD" },
 ];
 
+// Three demo watchlists with tags + curated tickers. Color tags
+// (Pro feature, 0.0.47) make the picker pop visually. Order matters
+// — first list shows up first in the WatchlistView selector.
+const DEMO_WATCHLISTS = [
+  { name: "Tecnología US",     color: "blue",   tickers: ["AAPL", "NVDA", "MSFT", "GOOGL", "TSLA"] },
+  { name: "Acciones argentinas", color: "green", tickers: ["GGAL", "YPF", "PAMP"] },
+  { name: "Cripto",            color: "amber",  tickers: ["BTC", "ETH"] },
+];
+
 async function currentUserId() {
   const { data, error } = await supabase.auth.getUser();
   if (error || !data?.user?.id) throw new Error("Sesión no encontrada.");
@@ -63,6 +72,42 @@ export async function seedDemoAccount() {
       .upsert(rows, { onConflict: "user_id,ticker" });
     if (error) throw new Error(error.message);
 
+    // Watchlists — wipe any existing demo lists and recreate so
+    // re-runs are idempotent (positions stay clean instead of
+    // accumulating). We match by name to avoid touching user-
+    // created lists. ON DELETE CASCADE drops the joined tickers.
+    const demoNames = DEMO_WATCHLISTS.map((w) => w.name);
+    await supabase
+      .from("watchlists")
+      .delete()
+      .eq("user_id", userId)
+      .in("name", demoNames);
+    for (let i = 0; i < DEMO_WATCHLISTS.length; i++) {
+      const wl = DEMO_WATCHLISTS[i];
+      const { data: created, error: cErr } = await supabase
+        .from("watchlists")
+        .insert({
+          user_id: userId,
+          name: wl.name,
+          color: wl.color,
+          position: i,
+        })
+        .select("id")
+        .single();
+      if (cErr) throw new Error(cErr.message);
+      const tickerRows = wl.tickers.map((ticker, idx) => ({
+        watchlist_id: created.id,
+        ticker,
+        position: idx,
+      }));
+      if (tickerRows.length) {
+        const { error: tErr } = await supabase
+          .from("watchlist_tickers")
+          .insert(tickerRows);
+        if (tErr) throw new Error(tErr.message);
+      }
+    }
+
     // Reload so any cached state in the v2 broker (none today, but
     // future caching layers might) gets a clean re-fetch on mount.
     setTimeout(() => window.location.reload(), 200);
@@ -91,6 +136,9 @@ export async function resetDemoAccount() {
     await supabase.from("transactions").delete()
       .eq("user_id", userId)
       .in("kind", ["trade_buy", "trade_sell"]);
+    // Watchlists — drop every list (and cascade-drops every ticker
+    // row). Same intent as wiping holdings: empty-state onboarding.
+    await supabase.from("watchlists").delete().eq("user_id", userId);
     // Orders — RLS lacks DELETE policy so we leave orders as
     // historical record (insert-only ledger). They'll show as
     // "filled" against now-zero positions; that's acceptable for

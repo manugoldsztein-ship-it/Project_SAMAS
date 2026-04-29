@@ -105,9 +105,11 @@ function seed() {
       { ticker: "BTC",  qty: 0.018, avgCost: 89000 },
     ],
     orders: [],                    // submitted but not necessarily filled
-    watchlists: [
-      { id: "wl_main", name: "Mi watchlist", tickers: ["NVDA", "TSLA", "ETH"] },
-    ],
+    // Watchlists migrated to Supabase in 0.0.78 — see public.watchlists +
+    // public.watchlist_tickers. The legacy `watchlists` field is no longer
+    // read by getWatchlists() / mutations; localStorage seed keeps the slot
+    // empty for any drive-by reader during the transition.
+    watchlists: [],
     // Price alerts + stop losses are keyed by ticker (one per asset).
     // alert  = { targetPrice, direction: "above" | "below", createdAt }
     // stop   = { type: "pct" | "price", value, triggerPrice, createdAt }
@@ -457,78 +459,138 @@ export async function cancelOrder(_orderId) {
   throw new Error("Cancelar órdenes está deshabilitado en esta versión.");
 }
 
+// ============================================================
+// WATCHLISTS — Supabase-backed (0.0.78). Two tables:
+//   public.watchlists          one row per named list, owner-scoped via RLS.
+//   public.watchlist_tickers   the join table (watchlist_id, ticker, position).
+// Both are RLS-locked to the calling user via auth.uid().
+//
+// Shape returned to the UI matches the legacy localStorage one:
+//   { id, name, color, tickers: [string, ...] }
+// — so WatchlistView / AssetSheet don't need to change.
+// ============================================================
+
 /**
- * getWatchlists() — user's saved watchlists.
- * Production: GET /watchlists.
+ * getWatchlists() — every list the caller owns, with embedded
+ * tickers in user-chosen order. Single round-trip via PostgREST's
+ * relational embed (`watchlist_tickers(*)`). Sort tickers by their
+ * stored `position` so reorder arrows stick.
  */
 export async function getWatchlists() {
-  await jitter();
-  return state.watchlists.map((w) => ({ ...w, tickers: [...w.tickers] }));
+  const userId = await currentUserId();
+  const { data, error } = await supabase
+    .from("watchlists")
+    .select("id, name, color, position, watchlist_tickers(ticker, position)")
+    .eq("user_id", userId)
+    .order("position", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data || []).map((w) => ({
+    id: w.id,
+    name: w.name,
+    color: w.color || null,
+    tickers: (w.watchlist_tickers || [])
+      .slice()
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+      .map((t) => t.ticker),
+  }));
 }
 
 /**
- * Watchlist mutations — addTicker / removeTicker / create / rename / remove.
- * Production: standard REST patterns on /watchlists.
+ * addToWatchlist(watchlistId, ticker) — append ticker to the end of
+ * the list. Composite PK (watchlist_id, ticker) means dupes upsert
+ * cleanly. New tickers get position = (current max + 1).
  */
 export async function addToWatchlist(watchlistId, ticker) {
-  await jitter();
-  const wl = state.watchlists.find((w) => w.id === watchlistId);
-  if (!wl) throw new Error("Watchlist no encontrada.");
-  if (wl.tickers.includes(ticker)) return { ok: true };
-  saveState({ ...state, watchlists: state.watchlists.map((w) => w.id === watchlistId ? { ...w, tickers: [...w.tickers, ticker] } : w) });
+  // Read existing positions so the new ticker lands at the bottom.
+  const { data: existing, error: readErr } = await supabase
+    .from("watchlist_tickers")
+    .select("position")
+    .eq("watchlist_id", watchlistId)
+    .order("position", { ascending: false })
+    .limit(1);
+  if (readErr) throw new Error(readErr.message);
+  const nextPos = existing?.length ? (existing[0].position ?? 0) + 1 : 0;
+  const { error } = await supabase
+    .from("watchlist_tickers")
+    .upsert(
+      { watchlist_id: watchlistId, ticker, position: nextPos },
+      { onConflict: "watchlist_id,ticker" }
+    );
+  if (error) throw new Error(error.message);
   return { ok: true };
 }
+
 export async function removeFromWatchlist(watchlistId, ticker) {
-  await jitter();
-  saveState({ ...state, watchlists: state.watchlists.map((w) => w.id === watchlistId ? { ...w, tickers: w.tickers.filter((t) => t !== ticker) } : w) });
+  const { error } = await supabase
+    .from("watchlist_tickers")
+    .delete()
+    .eq("watchlist_id", watchlistId)
+    .eq("ticker", ticker);
+  if (error) throw new Error(error.message);
   return { ok: true };
 }
+
+/**
+ * createWatchlist(name, opts) — insert a new named list. Returns
+ * the same {id, name, color, tickers} shape the UI expects.
+ */
 export async function createWatchlist(name, opts = {}) {
-  await jitter();
   if (!name || !name.trim()) throw new Error("Indicá un nombre.");
   const trimmed = name.trim().slice(0, 40);
-  // Color is optional — Pro feature added in samas-0.0.47. Pre-Pro
-  // lists keep `color: null` and render with the default border.
-  const wl = {
-    id: genId(),
-    name: trimmed,
-    tickers: [],
-    color: opts.color || null,
-  };
-  saveState({ ...state, watchlists: [...state.watchlists, wl] });
-  return wl;
+  const userId = await currentUserId();
+  // Place the new list at the bottom of the picker.
+  const { data: existing } = await supabase
+    .from("watchlists")
+    .select("position")
+    .eq("user_id", userId)
+    .order("position", { ascending: false })
+    .limit(1);
+  const nextPos = existing?.length ? (existing[0].position ?? 0) + 1 : 0;
+  const { data, error } = await supabase
+    .from("watchlists")
+    .insert({
+      user_id: userId,
+      name: trimmed,
+      color: opts.color || null,
+      position: nextPos,
+    })
+    .select("id, name, color")
+    .single();
+  if (error) throw new Error(error.message);
+  return { id: data.id, name: data.name, color: data.color || null, tickers: [] };
 }
 
 /**
- * setWatchlistColor(id, color) — Pro feature (samas-0.0.47). Assigns
- * a color tag to a watchlist for the colored-dot pill + ticker-row
- * accent. Pass null to clear the tag back to the default styling.
+ * setWatchlistColor(id, color) — Pro feature (samas-0.0.47). Pass
+ * null to clear the tag back to the default border.
  */
 export async function setWatchlistColor(id, color) {
-  await jitter();
-  saveState({
-    ...state,
-    watchlists: state.watchlists.map((w) =>
-      w.id === id ? { ...w, color: color || null } : w
-    ),
-  });
+  const { error } = await supabase
+    .from("watchlists")
+    .update({ color: color || null })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
   return { ok: true };
 }
 
 /**
- * reorderWatchlist(id, tickers) — replace a watchlist's ticker
- * order with the given array. Server validates that the array is a
- * permutation of the current set; we just trust the client here.
+ * reorderWatchlist(id, tickers) — replace position values for the
+ * given tickers in their array order. We don't validate that the
+ * array is a permutation of the current set — RLS enforces parent
+ * ownership and the upsert is idempotent on (watchlist_id, ticker).
  */
 export async function reorderWatchlist(id, tickers) {
-  await jitter();
   if (!Array.isArray(tickers)) throw new Error("Orden inválido.");
-  saveState({
-    ...state,
-    watchlists: state.watchlists.map((w) =>
-      w.id === id ? { ...w, tickers: [...tickers] } : w
-    ),
-  });
+  if (tickers.length === 0) return { ok: true };
+  const rows = tickers.map((ticker, idx) => ({
+    watchlist_id: id,
+    ticker,
+    position: idx,
+  }));
+  const { error } = await supabase
+    .from("watchlist_tickers")
+    .upsert(rows, { onConflict: "watchlist_id,ticker" });
+  if (error) throw new Error(error.message);
   return { ok: true };
 }
 
@@ -536,28 +598,26 @@ export async function reorderWatchlist(id, tickers) {
  * renameWatchlist(id, newName) — update display name.
  */
 export async function renameWatchlist(id, newName) {
-  await jitter();
   if (!newName || !newName.trim()) throw new Error("Indicá un nombre.");
   const trimmed = newName.trim().slice(0, 40);
-  const next = {
-    ...state,
-    watchlists: state.watchlists.map((w) => w.id === id ? { ...w, name: trimmed } : w),
-  };
-  saveState(next);
+  const { error } = await supabase
+    .from("watchlists")
+    .update({ name: trimmed })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
   return { ok: true };
 }
 
 /**
- * removeWatchlist(id) — delete the list and all its tickers. Server
- * should verify ownership via RLS in production.
+ * removeWatchlist(id) — delete the list. ON DELETE CASCADE on
+ * watchlist_tickers.watchlist_id drops every ticker row in one go.
  *
- * The user can delete every list — the WatchlistView shows an empty
- * state with a "+ Crear lista" button when watchlists is empty, so
- * we no longer require keeping at least one around.
+ * The user can delete every list — WatchlistView's empty state
+ * with "+ Crear lista" handles the no-lists case.
  */
 export async function removeWatchlist(id) {
-  await jitter();
-  saveState({ ...state, watchlists: state.watchlists.filter((w) => w.id !== id) });
+  const { error } = await supabase.from("watchlists").delete().eq("id", id);
+  if (error) throw new Error(error.message);
   return { ok: true };
 }
 
