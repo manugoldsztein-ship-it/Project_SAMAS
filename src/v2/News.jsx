@@ -128,7 +128,7 @@ export function NewsPage({ T, lang = "es" }) {
   }
 
   return (
-    <div style={{ paddingBottom: 110 }}>
+    <div style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 96px)" }}>
       {/* Header */}
       <div style={{
         padding: "calc(env(safe-area-inset-top) + 20px) 20px 0",

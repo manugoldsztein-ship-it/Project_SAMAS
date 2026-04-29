@@ -245,7 +245,7 @@ export async function updateMe(patch) {
 /**
  * getFeed({ tab, ticker, limit }) — list of posts for a given tab.
  *
- * tab:    'for_you' | 'following' | 'trades' | 'portfolios'   (default 'for_you')
+ * tab:    'for_you' | 'newest' | 'following' | 'trades' | 'portfolios'   (default 'for_you')
  *           - 'for_you' is the Trending feed (post-0.0.36): the user
  *             sees posts ranked by engagement, not chronologically.
  *             Implementation pulls a wider candidate window of recent

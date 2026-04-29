@@ -2390,6 +2390,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.82",
+    title: "Bottom-nav clearance + compose-expand + Newest sort",
+    bullets: [
+      "Fixed: bottom nav covering content on big-screen iPhones. Replaced the hardcoded 110px bottom padding (17 sites) with calc(env(safe-area-inset-bottom) + 96px) so larger devices clear the floating tab bar properly. Last list item / menu / button no longer hides under the nav.",
+      "Compose got real estate. Tapping the textarea now expands it ~3x taller (rows 3 → 7) and dims the rest of the page behind a backdrop. The compose floats above the bottom nav with a soft drop-shadow — feels like a sheet, not a static box. Tap-outside or hit Post to collapse.",
+      "Social feed gets a \"Nuevos\" sub-tab next to Trending. Same scope, but ordered chronologically (newest first) instead of by engagement. Tab strip is now horizontally scrollable so the 5 tabs (Trending / Nuevos / Siguiendo / Trades / Carteras) fit on narrow phones without crushing labels.",
+    ],
+  },
+  {
     version: "0.0.81",
     title: "UI polish: smoother tab transitions + extended press feedback",
     bullets: [
@@ -2793,7 +2802,7 @@ function SettingsToggle({ T, title, subtitle, value, onChange }) {
 function Placeholder({ T, title, subtitle }) {
   return (
     <div style={{
-      paddingBottom: 110,
+      paddingBottom: "calc(env(safe-area-inset-bottom) + 96px)",
       minHeight: "100%",
       display: "flex", flexDirection: "column",
     }}>

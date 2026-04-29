@@ -391,7 +391,7 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
   const total = ccy === "ARS" ? portfolio.totalArs : portfolio.totalUsd;
 
   return (
-    <div style={{ paddingBottom: 110 }}>
+    <div style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 96px)" }}>
       {/* portfolio summary card */}
       <div style={{
         margin: "16px", padding: 22, borderRadius: 24,
@@ -564,7 +564,7 @@ function MercadoView({ T, assets, onSelectAsset, proMode = false, lang = "es" })
   if (assets.length === 0) return <div style={{ paddingTop: 12 }}><AssetRowSkeletonList T={T} count={6} /></div>;
 
   return (
-    <div style={{ paddingBottom: 110 }}>
+    <div style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 96px)" }}>
       {/* Pro: upcoming earnings strip — sits above search so the
           next event is visible without scrolling. Tap a chip to
           jump straight to that asset's sheet. */}
@@ -918,7 +918,7 @@ function WatchlistView({ T, watchlists, assets, onSelectAsset, onRefresh, proMod
 
   if (!watchlists.length) {
     return (
-      <div style={{ paddingBottom: 110, padding: 16 }}>
+      <div style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 96px)", padding: 16 }}>
         <Empty T={T}
           icon={<Ico.Star size={26}/>}
           title="Sin watchlists"
@@ -941,7 +941,7 @@ function WatchlistView({ T, watchlists, assets, onSelectAsset, onRefresh, proMod
   }
 
   return (
-    <div style={{ paddingBottom: 110 }}>
+    <div style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 96px)" }}>
       {/* Pills row — each watchlist + "+" to create a new one. */}
       <div style={{
         display: "flex", gap: 8, padding: "16px 16px 12px",
@@ -1428,7 +1428,7 @@ function OrdenesView({ T, orders, alerts, stops, holdings, onRefresh }) {
     return (
       <div style={{
         padding: "16px",
-        paddingBottom: 110,
+        paddingBottom: "calc(env(safe-area-inset-bottom) + 96px)",
         // minHeight 100% of the scroll container so flex centering works.
         minHeight: "calc(100vh - 200px)",
         display: "flex", flexDirection: "column",
@@ -1462,7 +1462,7 @@ function OrdenesView({ T, orders, alerts, stops, holdings, onRefresh }) {
   ];
 
   return (
-    <div style={{ paddingBottom: 110 }}>
+    <div style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 96px)" }}>
       <div style={{ margin: "16px" }}>
         <SectionHead T={T} title="Órdenes" action={`${totalActive} activas`} />
       </div>

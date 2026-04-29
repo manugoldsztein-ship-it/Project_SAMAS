@@ -272,7 +272,7 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
             flex: 1, overflowY: "auto",
             overscrollBehavior: "contain",
             WebkitOverflowScrolling: "touch",
-            paddingBottom: 110, // leave room for the bottom nav
+            paddingBottom: "calc(env(safe-area-inset-bottom) + 96px)", // leave room for the bottom nav
           }}>
             <ProfileView
               T={T}
@@ -439,6 +439,9 @@ function SocialNav({ T, tab, setTab, bottomInset, lang = "es" }) {
 // always-trade-card filter.
 const FEED_TABS = [
   { id: "for_you",    key: "social.tab.for_you"   },
+  // "newest" — chronological alternative to Trending (samas-0.0.82).
+  // Same posts, but ordered by created_at desc instead of by engagement.
+  { id: "newest",     key: "social.tab.newest"    },
   { id: "following",  key: "social.tab.following" },
   { id: "trades",     key: "social.tab.trades"    },
   { id: "portfolios", key: "social.tab.portfolios" },
@@ -452,6 +455,11 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  // Compose expand state (samas-0.0.82). When the textarea is focused,
+  // the compose card grows ~3x taller, a backdrop dim fades in behind
+  // the rest of the page, and the compose floats above the bottom nav
+  // (z-index escalation). Tap-outside / publish / cancel collapses it.
+  const [composeExpanded, setComposeExpanded] = useState(false);
   // Trade attachment: when the Broker hands off a filled trade, we
   // prefill `body` with a default sentence and `pendingTrade` with
   // the jsonb-shaped payload. publish() forwards both to createPost
@@ -788,6 +796,10 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
       setPendingImage(null);
       setPendingImagePreview(null);
       setPendingPortfolio(null);
+      // Collapse the expanded compose on successful publish — the
+      // user is done writing, get out of their way (samas-0.0.82).
+      setComposeExpanded(false);
+      try { composeRef.current?.blur(); } catch {}
       await refresh();
     } catch (e) { setErr(e.message); }
     setBusy(false);
@@ -958,31 +970,67 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
   }
 
   return (
-    <div style={{ paddingBottom: 110 }}>
-      {/* Top tabs */}
+    <div style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 96px)" }}>
+      {/* Top tabs — horizontally scrollable so the 5 tabs fit on
+          narrow phones without crushing labels. The strip itself is
+          a contained pill; tabs are min-width auto so each tab sizes
+          to its label. samas-0.0.82 added scroll + Newest tab. */}
       <div style={{
         display: "flex", gap: 4, padding: 4, margin: "16px 16px 0",
         background: T.surface, border: `1px solid ${T.border}`,
         borderRadius: 12,
+        overflowX: "auto",
+        WebkitOverflowScrolling: "touch",
+        scrollbarWidth: "none",         // Firefox
       }}>
+        <style>{`
+          /* Hide the WebKit scrollbar on the FEED_TABS strip without
+             affecting other scrollable areas (would be too aggressive
+             as a global rule). */
+          .samas-feed-tabs::-webkit-scrollbar { display: none; }
+        `}</style>
         {FEED_TABS.map((t) => {
           const active = t.id === tab;
           return (
             <button key={t.id} onClick={() => setTab(t.id)} style={{
-              flex: 1, padding: "10px 0", borderRadius: 8,
+              flexShrink: 0,
+              padding: "10px 14px", borderRadius: 8,
               background: active ? T.bg : "transparent",
               border: active ? `1px solid ${T.border}` : "1px solid transparent",
               color: active ? T.text : T.textMute,
               fontFamily: FONT.sans, fontSize: 13, fontWeight: 600, cursor: "pointer",
+              whiteSpace: "nowrap",
             }}>{tr(t.key, lang)}</button>
           );
         })}
       </div>
 
-      {/* Compose */}
+      {/* Backdrop — fades in when the compose is expanded so the
+          rest of the page dims behind it. Tap to collapse + blur the
+          textarea. samas-0.0.82. */}
+      {composeExpanded && (
+        <div
+          onClick={() => {
+            setComposeExpanded(false);
+            try { composeRef.current?.blur(); } catch {}
+          }}
+          style={{
+            position: "fixed", inset: 0, zIndex: 30,
+            background: "rgba(0,0,0,0.55)",
+            animation: "samas-fade-in 160ms ease-out",
+          }}
+        />
+      )}
+
+      {/* Compose — when expanded, escalates above the backdrop +
+          bottom nav so it reads as a floating sheet (samas-0.0.82). */}
       <div style={{
         margin: "16px", padding: 14, borderRadius: 18,
         background: T.surface, border: `1px solid ${T.border}`,
+        position: "relative",
+        zIndex: composeExpanded ? 35 : "auto",
+        boxShadow: composeExpanded ? "0 18px 50px rgba(0,0,0,0.5)" : "none",
+        transition: "box-shadow 160ms ease-out",
       }}>
         <div style={{ display: "flex", gap: 10 }}>
           {/* Compose avatar — prefer the social profile if loaded
@@ -1011,18 +1059,20 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
               }}
               onKeyUp={(e) => recomputeTickerMatch(body, e.target.selectionStart)}
               onClick={(e) => recomputeTickerMatch(body, e.target.selectionStart)}
+              onFocus={() => setComposeExpanded(true)}
               onBlur={() => {
                 // Hide the dropdown a tick after blur so a tap on a
                 // suggestion (which fires after blur) still registers.
                 setTimeout(() => setTickerMatch(null), 150);
               }}
               placeholder={tr("social.compose_ph", lang)}
-              rows={3}
+              rows={composeExpanded ? 7 : 3}
               style={{
                 width: "100%", boxSizing: "border-box",
                 background: "transparent", border: "none", outline: "none",
                 color: T.text, fontFamily: FONT.sans, fontSize: 14,
                 resize: "none",
+                transition: "min-height 180ms ease-out",
               }}
             />
             {/* $-mention autocomplete dropdown */}
@@ -1523,7 +1573,7 @@ function SearchView({ T, lang = "es", user = null, onMessageUser, onOpenProfile,
   }
 
   return (
-    <div style={{ paddingBottom: 110 }}>
+    <div style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 96px)" }}>
       <div style={{ padding: "16px" }}>
         <div style={{
           display: "flex", alignItems: "center", gap: 10,
@@ -1824,7 +1874,7 @@ function MessagesView({ T, lang = "es", user = null, onOpenProfile, onOpenTicker
   if (threads.length === 0) {
     return (
       <div style={{
-        padding: 32, paddingBottom: 110,
+        padding: 32, paddingBottom: "calc(env(safe-area-inset-bottom) + 96px)",
         minHeight: "calc(100vh - 200px)",
         display: "flex", alignItems: "center", justifyContent: "center",
       }}>
@@ -1852,7 +1902,7 @@ function MessagesView({ T, lang = "es", user = null, onOpenProfile, onOpenTicker
   }
 
   return (
-    <div style={{ paddingBottom: 110 }}>
+    <div style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 96px)" }}>
       <div style={{ padding: "16px 16px 8px" }}>
         {threads.map((t) => (
           <ThreadRow key={t.id} T={T} thread={t} onOpen={() => setActive(t)} />
@@ -2042,7 +2092,7 @@ function ConversationView({ T, lang = "es", thread, onBack, onOpenProfile, onOpe
 
   return (
     <div style={{
-      paddingBottom: 110,
+      paddingBottom: "calc(env(safe-area-inset-bottom) + 96px)",
       display: "flex", flexDirection: "column",
       // Fill the available scroll viewport so the compose bar can
       // dock at the bottom and the message list scrolls between.
@@ -2337,7 +2387,7 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
   const list = isSelf && view === "saved" ? saved : posts;
 
   return (
-    <div style={{ paddingBottom: 110 }}>
+    <div style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 96px)" }}>
       {/* Header — back arrow when drilled in (peer view).
           Safe-area aware since this overlay covers SocialPage's
           own header chrome. */}
@@ -2950,7 +3000,7 @@ function FollowListView({ T, lang = "es", profileUserId, mode, onBack, onOpenPro
     ? "social.follow_list.empty.followers"
     : "social.follow_list.empty.following";
   return (
-    <div style={{ paddingBottom: 110, height: "100%", display: "flex", flexDirection: "column" }}>
+    <div style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 96px)", height: "100%", display: "flex", flexDirection: "column" }}>
       {/* Header — back + title. Same shape as ProfileView's overlay
           header so the back-navigation feels consistent. */}
       <div style={{

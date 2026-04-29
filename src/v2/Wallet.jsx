@@ -154,7 +154,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
     : null;
 
   return (
-    <div style={{ paddingBottom: 110 }}>
+    <div style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 96px)" }}>
       {/* ---------- header ---------- */}
       <div style={{
         // Top inset = safe-area-top (status bar / DI) + 20px breathing
