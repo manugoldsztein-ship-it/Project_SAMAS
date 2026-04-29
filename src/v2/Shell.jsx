@@ -2005,6 +2005,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.56",
+    title: "Hotfix: \"Can't find variable: lang\" al agregar a watchlist",
+    bullets: [
+      "WatchlistPicker (la modal del ⭐ desde AssetSheet) usaba tr(\"settings.done\", lang) sin recibir lang como prop — ReferenceError, error boundary firea.",
+      "Bug viejo, no tocado por los patches recientes; aparecía cualquier vez que tocabas la estrella en el detalle de un activo.",
+      "Threadeé lang desde AssetSheet → WatchlistPicker. Hice un sweep de las otras 16 funciones que usan tr() — todas tienen lang ya, era el único caso.",
+    ],
+  },
+  {
     version: "0.0.55",
     title: "Más smooth: bounce, press-down y haptics",
     bullets: [

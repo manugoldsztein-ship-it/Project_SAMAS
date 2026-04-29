@@ -2178,6 +2178,7 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
           T={T}
           ticker={asset.ticker}
           watchlists={watchlists}
+          lang={lang}
           onClose={() => setShowListPicker(false)}
           onChange={onWatchlistsChange}
         />
@@ -2291,7 +2292,7 @@ function AddAssetModal({ T, assets, excludeTickers = [], listName, onClose, onPi
   );
 }
 
-function WatchlistPicker({ T, ticker, watchlists, onClose, onChange }) {
+function WatchlistPicker({ T, ticker, watchlists, lang = "es", onClose, onChange }) {
   const [busyId, setBusyId] = useState(null);
 
   async function toggle(wl) {
