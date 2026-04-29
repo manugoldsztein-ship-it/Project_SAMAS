@@ -2337,6 +2337,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.71",
+    title: "Fix: trade success haptic now fires reliably",
+    bullets: [
+      "0.0.70 wired the haptic in DoneScreen's useEffect — fired AFTER placeOrder resolved + state updated + screen mounted, by which point iOS WebView's gesture context was sometimes lost and the haptic silently dropped.",
+      "Moved the call into confirmAndPlace, synchronously right after placeOrder resolves and BEFORE setDone schedules the new render. Same beat as the screen appearing.",
+      "Also added an error-haptic on order failure so a rejected trade pings the wrist with a distinct pattern.",
+    ],
+  },
+  {
     version: "0.0.70",
     title: "Trade Done screen — the moment of \"I just bought GGAL\"",
     bullets: [

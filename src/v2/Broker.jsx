@@ -1918,9 +1918,21 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
         type: confirm.type,
         limitPrice: confirm.limitPrice || undefined,
       });
+      // Fire the success haptic SYNCHRONOUSLY right when the order
+      // resolves, before setDone schedules a re-render. iOS WebView
+      // haptics can be flaky when triggered from a useEffect that
+      // mounts several awaits and animation frames after the user's
+      // tap — the gesture context is lost and the native call still
+      // works in theory, but in practice some configurations swallow
+      // it. Calling here gives the most reliable "feedback at the
+      // right moment" — DoneScreen's mount comes immediately after.
+      hapticNative(r.status === "filled" ? "success" : "tap").catch(() => {});
       setDone(r);
       setConfirm(null);
-    } catch (e) { setErr(e.message); setBusy(false); }
+    } catch (e) {
+      setErr(e.message); setBusy(false);
+      hapticNative("error").catch(() => {});
+    }
   }
 
   return (
@@ -2930,14 +2942,11 @@ function DoneScreen({ T, done, side, qty, asset, holding, onClose }) {
   const filled = done.status === "filled";
   const isBuy = side === "buy";
 
-  // Success haptic on mount — same pattern as the Pro Subscribe
-  // button. Notification-style double-tap on iOS for filled orders
-  // (a real outcome to celebrate); a lighter tap for queued limit
-  // orders that aren't filled yet.
-  useEffect(() => {
-    hapticNative(filled ? "success" : "tap").catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Note: success haptic was previously fired here on mount but
+  // moved to confirmAndPlace (synchronously after placeOrder
+  // resolves) in 0.0.71 — iOS WebView haptics fire more reliably
+  // when called inside the resolving async function rather than
+  // a useEffect that runs after several render frames.
 
   // "Share this trade" hands off to the Social tab via a window
   // CustomEvent (BrokerShell + SocialPage are sibling sub-shells
