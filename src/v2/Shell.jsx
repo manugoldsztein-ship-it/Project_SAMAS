@@ -2312,6 +2312,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.64",
+    title: "Bell badge actually lights up — notification triggers + seed engagement",
+    bullets: [
+      "Found via Management API: supabase/social_notifications.sql migration was never applied — the four AFTER-INSERT triggers (notify_post_liked / _reposted / _replied / _user_followed) didn't exist. Applied + backfilled 80 notification rows for existing seed engagement.",
+      "Seed function had a gap: only created seeded↔seeded engagement, nothing inbound to the caller. Added FOLLOWERS_OF_CALLER (8 seeded users follow you) + LIKERS_OF_CALLER_POSTS (6 like your first post). Idempotent on re-run.",
+      "Manuel's iPhone now has 15 notifications waiting in the bell on next open. Future fresh demo accounts get the same effect automatically via the updated seed.",
+    ],
+  },
+  {
     version: "0.0.63",
     title: "App Store gates: account deletion + data export",
     bullets: [

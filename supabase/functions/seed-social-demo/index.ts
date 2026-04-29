@@ -259,6 +259,26 @@ const REPOSTS_BY_POST_PREFIX: Record<string, string[]> = {
   "Update de coverage: subí mi precio": ["juan.merval", "fede.cedear"],
 };
 
+// Inbound follows — seeded users who follow the CALLER (not the
+// other direction). 0.0.51 only built outbound (caller → seeded)
+// + inter-seed follows, which left the caller with 0 followers
+// and 0 social_follow notifications. Adding these makes the bell
+// badge light up post-seed and gives the caller's profile a
+// realistic follower count for the Cohen demo.
+const FOLLOWERS_OF_CALLER = [
+  "luciainvierte", "juan.merval", "marti.bonos", "fede.cedear",
+  "paula.fintech", "diego.dolar", "valen.research", "camila.utdt",
+];
+
+// Seeded users who like the caller's posts (the post the caller
+// has authored, if any). Same rationale as FOLLOWERS_OF_CALLER —
+// without these, no social_like notifications hit the caller's
+// bell. Skips silently if the caller has no posts yet.
+const LIKERS_OF_CALLER_POSTS = [
+  "luciainvierte", "juan.merval", "paula.fintech",
+  "valen.research", "santi.cripto", "sofi.etf",
+];
+
 // DMs to the caller from a few seeded users — keeps the Mensajes
 // tab from being a ghost town.
 const DMS_TO_CALLER: Array<{ from: string; messages: string[] }> = [
@@ -653,6 +673,47 @@ serve(async (req) => {
       followsCreated++;
     }
 
+    // --- 6.5. Inbound engagement to caller ---
+    // 0.0.64 fix: seeded-user → caller follows + likes on the
+    // caller's first post. Without these the caller has 0 followers
+    // and the social_notifications triggers never fire toward them
+    // (because every other event is seeded↔seeded, never inbound).
+    // ensureFollow already handles the 23505 dup case so re-running
+    // is a no-op.
+    let inboundFollowsCreated = 0;
+    let inboundLikesCreated = 0;
+    for (const handle of FOLLOWERS_OF_CALLER) {
+      const followerId = handleToUserId.get(handle);
+      if (!followerId) continue;
+      await ensureFollow(admin, followerId, callerId);
+      inboundFollowsCreated++;
+    }
+    // The caller's first live post (if any). We skip silently when
+    // they haven't posted yet — likes need a target post.
+    const { data: callerPostRow } = await admin
+      .from("posts")
+      .select("id")
+      .eq("author_id", callerId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (callerPostRow?.id) {
+      const targetPostId = callerPostRow.id;
+      for (const handle of LIKERS_OF_CALLER_POSTS) {
+        const likerId = handleToUserId.get(handle);
+        if (!likerId) continue;
+        const { error } = await admin
+          .from("likes")
+          .insert({ post_id: targetPostId, user_id: likerId });
+        if (error && error.code !== "23505") {
+          console.warn(`[seed-social] caller-post like by ${handle}: ${error.message}`);
+          continue;
+        }
+        inboundLikesCreated++;
+      }
+    }
+
     // --- 7. DMs to caller ---
     let dmThreadsCreated = 0;
     let dmMessagesCreated = 0;
@@ -675,6 +736,8 @@ serve(async (req) => {
         likesCreated,
         repostsCreated,
         followsCreated,
+        inboundFollowsCreated,
+        inboundLikesCreated,
         dmThreadsCreated,
         dmMessagesCreated,
       }),
