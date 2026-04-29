@@ -56,6 +56,9 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
   // Drilled-in ticker feed (posts mentioning a specific ticker).
   // Stacks alongside profile/thread overlays.
   const [tickerFilter, setTickerFilter] = useState(null);
+  // Drilled-in followers/following list. Object form so we can
+  // describe both axes (whose list + which side) in one state slot.
+  const [followList, setFollowList] = useState(null);
   const navBottom = isNativeApp
     ? "calc(env(safe-area-inset-bottom) + 12px)"
     : 12;
@@ -119,6 +122,16 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
       console.warn("[social] openMention failed:", e?.message);
     }
   }
+
+  // openFollowList(userId, mode) — drill into the followers /
+  // following list for a profile. mode is "followers" | "following".
+  // Stacks above the profile overlay so the user can: feed → tap
+  // profile → tap "30 seguidores" → see the list → back back back.
+  function openFollowList(userId, mode) {
+    if (!userId || !mode) return;
+    setFollowList({ userId, mode });
+  }
+  function closeFollowList() { setFollowList(null); }
 
   // openHashtag(tag) — drop the user into the Search tab with the
   // query pre-filled to "#tag". SearchView detects the # prefix and
@@ -205,7 +218,7 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
         {tab === "feed"     && <FeedView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} onOpenMention={openMention} onOpenHashtag={openHashtag} />}
         {tab === "search"   && <SearchView T={T} lang={lang} user={user} onMessageUser={openDmWith} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} onOpenMention={openMention} onOpenHashtag={openHashtag} />}
         {tab === "messages" && <MessagesView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenTicker={openTicker} onOpenMention={openMention} onOpenHashtag={openHashtag} />}
-        {tab === "profile"  && <ProfileView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} onOpenMention={openMention} onOpenHashtag={openHashtag} />}
+        {tab === "profile"  && <ProfileView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} onOpenMention={openMention} onOpenHashtag={openHashtag} onOpenFollowList={openFollowList} />}
       </div>
 
       {/* Drill-in peer profile overlay. Sits above the current
@@ -239,6 +252,7 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
               onOpenThread={openThread}
               onOpenTicker={openTicker}
               onOpenMention={openMention} onOpenHashtag={openHashtag}
+              onOpenFollowList={openFollowList}
             />
           </div>
         </div>
@@ -295,12 +309,46 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
         </div>
       )}
 
+      {/* Followers / Following list overlay — z-index 32 so it sits
+          above the profile overlay (z-index implicit ~10 from
+          render order) but below ThreadView / TickerFeedView (30 /
+          35). User flow: feed → profile → tap "30 seguidores" →
+          this list → back to profile. */}
+      {followList && (
+        <div style={{
+          position: "absolute", inset: 0,
+          background: T.bg, color: T.text,
+          overflow: "hidden",
+          display: "flex", flexDirection: "column",
+          animation: "samas-shell-in 220ms cubic-bezier(.2,.8,.2,1)",
+          zIndex: 32,
+        }}>
+          <FollowListView
+            T={T}
+            lang={lang}
+            profileUserId={followList.userId}
+            mode={followList.mode}
+            onBack={closeFollowList}
+            onOpenProfile={(uid) => {
+              // Tapping a row inside the list drills further into
+              // that user's profile. We close this overlay first so
+              // the profile overlay underneath becomes visible at
+              // the right user, instead of stacking another profile
+              // on top of the list.
+              closeFollowList();
+              openProfile(uid);
+            }}
+            onMessageUser={openDmWith}
+          />
+        </div>
+      )}
+
       {/* Bottom nav — hidden when ANY drill-in overlay is active.
           Each overlay has its own back arrow header for navigation,
           and the compose bars in ThreadView / ConversationView would
           otherwise fight for the same vertical real estate as the
           tab bar. iOS native pattern: tab bar hides on detail push. */}
-      {!profileUserId && !threadPost && !tickerFilter && (
+      {!profileUserId && !threadPost && !tickerFilter && !followList && (
         <SocialNav T={T} tab={tab} setTab={setTab} bottomInset={navBottom} lang={lang} />
       )}
     </div>
@@ -1865,7 +1913,7 @@ function ConversationView({ T, lang = "es", thread, onBack, onOpenProfile, onOpe
 //      Follow/Unfollow + DM buttons, only their post list (no
 //      saved tab). Followers + Following + Posts counts.
 // ============================================================
-function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack, onOpenProfile, onMessage, onOpenThread, onOpenTicker, onOpenMention, onOpenHashtag }) {
+function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack, onOpenProfile, onMessage, onOpenThread, onOpenTicker, onOpenMention, onOpenHashtag, onOpenFollowList }) {
   const [me, setMe] = useState(null);          // logged-in user (for fallback color, isSelf check)
   const [profile, setProfile] = useState(null); // person being viewed (me or peer)
   const [posts, setPosts] = useState([]);
@@ -1880,17 +1928,21 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
       const m = await socialApi.getMe();
       setMe(m);
       if (!profileUserId || m.id === profileUserId) {
-        // Self path
-        const [feed, follows, sav] = await Promise.all([
+        // Self path. We pull counts via getUserById so the follower
+        // count is real (used to be hardcoded 0 — looked weird once
+        // the FollowListView made the count tappable for self too).
+        const [feed, follows, sav, selfMeta] = await Promise.all([
           socialApi.getPostsByAuthor(m.id, { limit: 60 }),
           socialApi.getFollowing(),
           socialApi.getSavedPosts(),
+          socialApi.getUserById(m.id).catch(() => null),
         ]);
         setProfile({
           ...m,
           postCount: feed.length,
           followingCount: follows.length,
-          followersCount: 0, // not displayed for self in this view
+          followersCount: selfMeta?.followersCount || 0,
+          createdAt: selfMeta?.createdAt || m.createdAt,
           followedByMe: false,
           isMe: true,
         });
@@ -2107,10 +2159,27 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
           )}
           <div style={{ display: "flex", gap: 14, marginTop: 10, fontFamily: FONT.mono, fontSize: 12, flexWrap: "wrap" }}>
             <span style={{ color: T.text }}><b>{profile.postCount || 0}</b> <span style={{ color: T.textMute }}>posts</span></span>
-            {!isSelf && (
-              <span style={{ color: T.text }}><b>{profile.followersCount || 0}</b> <span style={{ color: T.textMute }}>seguidores</span></span>
-            )}
-            <span style={{ color: T.text }}><b>{profile.followingCount || 0}</b> <span style={{ color: T.textMute }}>siguiendo</span></span>
+            {/* Followers count — always shown now that self path
+                fetches the real number. Tappable when there's at
+                least one follower; opens the FollowListView overlay. */}
+            <button
+              onClick={() => onOpenFollowList && (profile.followersCount || 0) > 0 && onOpenFollowList(profile.id, "followers")}
+              disabled={!onOpenFollowList || !(profile.followersCount > 0)}
+              style={{
+                padding: 0, background: "transparent", border: "none",
+                color: T.text, fontFamily: FONT.mono, fontSize: 12,
+                cursor: onOpenFollowList && profile.followersCount > 0 ? "pointer" : "default",
+              }}
+            ><b>{profile.followersCount || 0}</b> <span style={{ color: T.textMute }}>seguidores</span></button>
+            <button
+              onClick={() => onOpenFollowList && (profile.followingCount || 0) > 0 && onOpenFollowList(profile.id, "following")}
+              disabled={!onOpenFollowList || !(profile.followingCount > 0)}
+              style={{
+                padding: 0, background: "transparent", border: "none",
+                color: T.text, fontFamily: FONT.mono, fontSize: 12,
+                cursor: onOpenFollowList && profile.followingCount > 0 ? "pointer" : "default",
+              }}
+            ><b>{profile.followingCount || 0}</b> <span style={{ color: T.textMute }}>siguiendo</span></button>
             {isSelf && (
               <span style={{ color: T.text }}><b>{saved.length}</b> <span style={{ color: T.textMute }}>guardados</span></span>
             )}
@@ -2508,6 +2577,97 @@ function ReplyRow({ T, r, onOpenAuthor, onOpenTicker, onOpenMention, onOpenHasht
 // mention while you're viewing the ticker feed, it slides in at
 // the top within ~500ms.
 // ============================================================
+// ============================================================
+// FollowListView — drill-in list of followers / following
+// ============================================================
+// Opened from ProfileView when the user taps the followers /
+// siguiendo count. mode="followers" shows users that follow the
+// target; mode="following" shows users the target follows. Each
+// row is a UserRow with a Follow button — tapping that button
+// flips the relationship with optimistic UI.
+// ============================================================
+function FollowListView({ T, lang = "es", profileUserId, mode, onBack, onOpenProfile, onMessageUser }) {
+  const [users, setUsers] = useState(null); // null = loading
+  const refresh = useCallback(async () => {
+    try {
+      const fn = mode === "followers" ? socialApi.getFollowersOf : socialApi.getFollowingOf;
+      const list = await fn(profileUserId);
+      setUsers(list || []);
+    } catch (e) {
+      console.error("[follow-list] load:", e);
+      setUsers([]);
+    }
+  }, [profileUserId, mode]);
+  useEffect(() => { refresh(); }, [refresh]);
+  async function toggleFollow(u) {
+    // Optimistic flip — drop in / out of the list immediately,
+    // re-fetch on completion to lock in the truth.
+    setUsers((prev) => (prev || []).map((x) => x.id === u.id ? { ...x, followedByMe: !x.followedByMe } : x));
+    try {
+      if (u.followedByMe) await socialApi.unfollow(u.id);
+      else await socialApi.follow(u.id);
+    } catch (e) {
+      console.warn("[follow-list] toggle:", e);
+      await refresh();
+    }
+  }
+  const titleKey = mode === "followers"
+    ? "social.follow_list.followers"
+    : "social.follow_list.following";
+  const emptyKey = mode === "followers"
+    ? "social.follow_list.empty.followers"
+    : "social.follow_list.empty.following";
+  return (
+    <div style={{ paddingBottom: 110, height: "100%", display: "flex", flexDirection: "column" }}>
+      {/* Header — back + title. Same shape as ProfileView's overlay
+          header so the back-navigation feels consistent. */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 8,
+        padding: "calc(env(safe-area-inset-top) + 8px) 12px 10px",
+        borderBottom: `1px solid ${T.border}`,
+        background: T.bg, flexShrink: 0,
+      }}>
+        <button onClick={onBack} aria-label="Volver" style={{
+          width: 32, height: 32, borderRadius: 10,
+          background: T.surface, border: `1px solid ${T.border}`,
+          color: T.text, cursor: "pointer", padding: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
+        <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text }}>
+          {tr(titleKey, lang)}
+        </div>
+      </div>
+
+      <div style={{ flex: 1, overflowY: "auto", padding: "8px 16px" }}>
+        {users === null ? (
+          <div style={{ color: T.textMute, fontFamily: FONT.sans, fontSize: 13, textAlign: "center", padding: 30 }}>
+            Cargando…
+          </div>
+        ) : users.length === 0 ? (
+          <div style={{ color: T.textMute, fontFamily: FONT.sans, fontSize: 13, textAlign: "center", padding: 30 }}>
+            {tr(emptyKey, lang)}
+          </div>
+        ) : (
+          users.map((u) => (
+            <UserRow
+              key={u.id}
+              T={T}
+              user={u}
+              onToggleFollow={() => toggleFollow(u)}
+              onMessage={onMessageUser ? () => onMessageUser(u.id) : undefined}
+              onOpen={onOpenProfile ? () => onOpenProfile(u.id) : undefined}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TickerFeedView({ T, lang = "es", ticker, onBack, onOpenProfile, onOpenThread, onOpenTicker, onOpenMention, onOpenHashtag }) {
   const [posts, setPosts] = useState(null); // null = loading
   const [savedIds, setSavedIds] = useState([]);

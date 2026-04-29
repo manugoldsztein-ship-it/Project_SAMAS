@@ -126,6 +126,21 @@ const V2 = {
     "social.feed.empty.subtitle":          "Compartí un trade, una opinión o una pregunta. Tu post aparece en Trending si genera engagement.",
     "social.feed.empty.cta":               "Publicar mi primer post",
 
+    // Follower / Following list overlay
+    "social.follow_list.followers":        "Seguidores",
+    "social.follow_list.following":        "Siguiendo",
+    "social.follow_list.empty.followers":  "Todavía no tiene seguidores.",
+    "social.follow_list.empty.following":  "Todavía no sigue a nadie.",
+
+    // Settings — About section (Privacy / Terms)
+    "settings.section.about":              "Acerca de",
+    "settings.about.privacy":              "Política de privacidad",
+    "settings.about.privacy_sub":          "Cómo manejamos tus datos",
+    "settings.about.terms":                "Términos de uso",
+    "settings.about.terms_sub":            "Las reglas del juego",
+    "settings.about.version":              "Versión",
+    "settings.about.last_updated":         "Última actualización: {date}",
+
     // Post: delete (swipe-left action + confirm dialog)
     "social.post.delete":         "Borrar",
     "social.post.delete_confirm": "¿Querés borrar este post?",
@@ -407,6 +422,21 @@ const V2 = {
     "social.feed.empty.title":             "Be the first to break out",
     "social.feed.empty.subtitle":          "Share a trade, a take, or a question. Your post lands in Trending if it gets engagement.",
     "social.feed.empty.cta":               "Publish my first post",
+
+    // Follower / Following list overlay
+    "social.follow_list.followers":        "Followers",
+    "social.follow_list.following":        "Following",
+    "social.follow_list.empty.followers":  "No followers yet.",
+    "social.follow_list.empty.following":  "Not following anyone yet.",
+
+    // Settings — About section (Privacy / Terms)
+    "settings.section.about":              "About",
+    "settings.about.privacy":              "Privacy policy",
+    "settings.about.privacy_sub":          "How we handle your data",
+    "settings.about.terms":                "Terms of use",
+    "settings.about.terms_sub":            "The rules of the game",
+    "settings.about.version":              "Version",
+    "settings.about.last_updated":         "Last updated: {date}",
 
     // Post: delete (swipe-left action + confirm dialog)
     "social.post.delete":         "Delete",

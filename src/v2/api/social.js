@@ -792,6 +792,76 @@ export async function getFollowing() {
     .map(profileRowToUser);
 }
 
+/**
+ * getFollowersOf(targetUserId) — users who follow `targetUserId`.
+ * Each row carries followedByMe so the caller can render a Follow
+ * / Siguiendo button without a second round-trip.
+ *
+ * Used by the FollowListView overlay when the user taps the
+ * followers count on a profile.
+ */
+export async function getFollowersOf(targetUserId) {
+  const me = await currentUserId();
+  if (!targetUserId) return [];
+  const { data, error } = await supabase
+    .from("follows")
+    .select(`
+      follower_id,
+      profile:profiles_social!follower_id (
+        user_id, handle, display_name, avatar_color, bio, verified, university, university_verified, cnv_idoneo
+      )
+    `)
+    .eq("following_id", targetUserId);
+  if (error) throw new Error(error.message);
+  const profiles = (data || []).map((r) => r.profile).filter(Boolean);
+  if (profiles.length === 0) return [];
+  // Pull "do I follow each of these people?" in one query.
+  const ids = profiles.map((p) => p.user_id);
+  const { data: mine } = await supabase
+    .from("follows")
+    .select("following_id")
+    .eq("follower_id", me)
+    .in("following_id", ids);
+  const followed = new Set((mine || []).map((r) => r.following_id));
+  return profiles.map((p) => ({
+    ...profileRowToUser(p),
+    followedByMe: followed.has(p.user_id),
+  }));
+}
+
+/**
+ * getFollowingOf(targetUserId) — users that `targetUserId` follows.
+ * Symmetric counterpart to getFollowersOf. Same followedByMe
+ * computation so the overlay can render Follow buttons inline.
+ */
+export async function getFollowingOf(targetUserId) {
+  const me = await currentUserId();
+  if (!targetUserId) return [];
+  const { data, error } = await supabase
+    .from("follows")
+    .select(`
+      following_id,
+      profile:profiles_social!following_id (
+        user_id, handle, display_name, avatar_color, bio, verified, university, university_verified, cnv_idoneo
+      )
+    `)
+    .eq("follower_id", targetUserId);
+  if (error) throw new Error(error.message);
+  const profiles = (data || []).map((r) => r.profile).filter(Boolean);
+  if (profiles.length === 0) return [];
+  const ids = profiles.map((p) => p.user_id);
+  const { data: mine } = await supabase
+    .from("follows")
+    .select("following_id")
+    .eq("follower_id", me)
+    .in("following_id", ids);
+  const followed = new Set((mine || []).map((r) => r.following_id));
+  return profiles.map((p) => ({
+    ...profileRowToUser(p),
+    followedByMe: followed.has(p.user_id),
+  }));
+}
+
 // ----------------------------------------------------------
 // SAVED POSTS (private bookmarks)
 // ----------------------------------------------------------

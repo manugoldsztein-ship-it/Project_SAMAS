@@ -236,6 +236,11 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
   const [show2FA, setShow2FA] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
+  // Privacy / Terms sub-sheets — App Store submission requires both
+  // policies to be reachable from the app. We render them inline as
+  // modals (same pattern as 2FA / EditProfile) instead of opening the
+  // system browser so the content stays inside the app shell.
+  const [showLegal, setShowLegal] = useState(null); // null | "privacy" | "terms"
   // Language picker is collapsed by default; tapping the row expands it
   // inline so we don't open another modal layer on top of this one.
   const [showLang, setShowLang] = useState(false);
@@ -677,6 +682,62 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
           </svg>
         </button>
 
+        {/* ---------- About section ----------
+            Legal rows required for App Store submission. Both screens
+            are rendered inside the app via the LegalSheet component
+            below — keeps the policy review inside our shell instead
+            of bouncing the user out to Safari. */}
+        <div style={{
+          marginTop: 6, marginBottom: 6,
+          fontFamily: FONT.sans, fontSize: 11, fontWeight: 600,
+          color: T.textMute, letterSpacing: 0.4, textTransform: "uppercase",
+          padding: "0 4px",
+        }}>
+          {tr("settings.section.about", lang)}
+        </div>
+        <button
+          onClick={() => setShowLegal("privacy")}
+          style={{
+            width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 8,
+            background: T.surface, border: `1px solid ${T.border}`,
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            cursor: "pointer", textAlign: "left",
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text }}>
+              {tr("settings.about.privacy", lang)}
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+              {tr("settings.about.privacy_sub", lang)}
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
+        <button
+          onClick={() => setShowLegal("terms")}
+          style={{
+            width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 14,
+            background: T.surface, border: `1px solid ${T.border}`,
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            cursor: "pointer", textAlign: "left",
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text }}>
+              {tr("settings.about.terms", lang)}
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+              {tr("settings.about.terms_sub", lang)}
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
+
         {/* Logout row — destructive style, two-step confirm. */}
         {onLogout && (
           <button
@@ -714,6 +775,16 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
           T={T}
           lang={lang}
           onClose={() => setShowEditProfile(false)}
+        />
+      )}
+
+      {/* Privacy / Terms sub-sheet — same modal pattern as 2FA below. */}
+      {showLegal && (
+        <LegalSheet
+          T={T}
+          lang={lang}
+          kind={showLegal}
+          onClose={() => setShowLegal(null)}
         />
       )}
 
@@ -1089,6 +1160,163 @@ function inputStyle(T) {
     outline: "none",
   };
 }
+
+// ============================================================
+// LegalSheet — Privacy / Terms modal
+// ============================================================
+// Single component renders both screens, switched via the `kind`
+// prop. Content is hardcoded prose (no CMS, no remote fetch) — the
+// scope of the document fits inline and not loading network keeps
+// the screen reachable even when offline.
+//
+// Both documents are scoped to the current state of the prototype
+// (no real broker integration yet, no payments) and explicitly
+// flag SAMAS as a not-yet-licensed financial product. When we
+// onboard with Cohen and become a real ALyC-registered platform
+// these docs need a legal review pass — for now they cover the
+// bases we'd want a tester to see.
+// ============================================================
+function LegalSheet({ T, lang = "es", kind, onClose }) {
+  // Prefer es content; en falls back if missing. Both legalText
+  // versions are kept identical for the prototype since we don't
+  // yet have a translated legal review.
+  const isPrivacy = kind === "privacy";
+  const title = tr(
+    isPrivacy ? "settings.about.privacy" : "settings.about.terms",
+    lang,
+  );
+  const lastUpdatedDate = "29 de abril de 2026";
+  const lastUpdated = tr("settings.about.last_updated", lang, { date: lastUpdatedDate });
+  const body = isPrivacy ? PRIVACY_TEXT_ES : TERMS_TEXT_ES;
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 110,
+        background: "rgba(0,0,0,0.7)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 16,
+      }}
+    >
+      <div style={{
+        width: "100%", maxWidth: 540, maxHeight: "92dvh",
+        background: T.bgElev || T.bg, color: T.text,
+        borderRadius: 22, border: `1px solid ${T.border}`,
+        overflow: "hidden", display: "flex", flexDirection: "column",
+      }}>
+        <div style={{
+          padding: "18px 20px",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          borderBottom: `1px solid ${T.border}`, flexShrink: 0,
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: T.text }}>
+              {title}
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+              {lastUpdated}
+            </div>
+          </div>
+          <button onClick={onClose} aria-label="Cerrar" style={{
+            width: 30, height: 30, borderRadius: 8,
+            background: T.surface, border: `1px solid ${T.border}`,
+            color: T.text, cursor: "pointer", padding: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div style={{
+          padding: "16px 20px 20px",
+          overflowY: "auto",
+          fontFamily: FONT.sans, fontSize: 13, color: T.text,
+          lineHeight: 1.6, whiteSpace: "pre-wrap",
+        }}>
+          {body}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Static prose. Pulled from a one-pager template scoped to a
+// pre-launch fintech prototype — placeholder until legal review.
+// Argentine jurisdiction (CABA) for the SAMAS team's home base.
+const PRIVACY_TEXT_ES = `Última actualización: 29 de abril de 2026.
+
+SAMAS ("nosotros", "la app") es un prototipo de plataforma de inversión desarrollado en Buenos Aires, Argentina. Esta política describe qué datos recopilamos, cómo los usamos, y los derechos que tenés sobre ellos.
+
+1. QUÉ DATOS RECOPILAMOS
+Cuando creás una cuenta nos das tu nombre, apellido, email y opcionalmente tu teléfono y la universidad a la que asistís o asististe. Cuando interactuás con la app generamos datos sobre tus posts, mensajes, seguidores y operaciones simuladas. Si tu dispositivo lo permite y vos lo autorizás, recibimos un token de notificaciones push para mandarte alertas.
+
+2. PARA QUÉ LOS USAMOS
+Los datos sirven para que la app funcione: mostrarte tu perfil, ordenar tu feed, entregar tus mensajes, validar tu identidad y prevenir fraude. No vendemos tus datos a terceros. Si en el futuro habilitamos publicidad o recomendaciones personalizadas, te lo vamos a avisar antes y te vamos a dar la opción de desactivarlas.
+
+3. DÓNDE SE GUARDAN
+Tus datos viven en infraestructura de Supabase (PostgreSQL gestionado), con backups cifrados. Las imágenes que subís se guardan en Supabase Storage. Las operaciones bursátiles, cuando integremos con un broker, se encriptan en tránsito y en reposo.
+
+4. CUÁNTO TIEMPO LOS GUARDAMOS
+Mientras tu cuenta esté activa. Si la borrás, removemos tu información personal en un plazo de 30 días, salvo que la ley nos exija conservar registros adicionales (por ejemplo, transacciones financieras durante 10 años, según la Ley 25.246 de prevención de lavado de activos).
+
+5. TUS DERECHOS
+Como titular de los datos podés acceder, rectificar, actualizar y solicitar la supresión de tu información personal. Podés ejercer estos derechos escribiendo a privacidad@samas.app. La autoridad de aplicación en Argentina es la Agencia de Acceso a la Información Pública (AAIP).
+
+6. SEGURIDAD
+Usamos contraseñas hasheadas, autenticación de dos factores opcional, y RLS (Row Level Security) para que ningún usuario pueda ver datos de otro sin permiso. Ningún sistema es 100% seguro; te recomendamos activar 2FA y usar una contraseña única.
+
+7. MENORES DE EDAD
+SAMAS no está destinado a menores de 18 años. Si descubrimos que un menor abrió una cuenta, la cerramos.
+
+8. CAMBIOS
+Si actualizamos esta política, vas a ver un aviso en la app y podemos pedirte que aceptes los nuevos términos.
+
+Contacto: privacidad@samas.app`;
+
+const TERMS_TEXT_ES = `Última actualización: 29 de abril de 2026.
+
+Bienvenido a SAMAS. Estos términos rigen el uso de la app durante su etapa de prototipo. Al usar SAMAS aceptás lo siguiente.
+
+1. QUÉ ES SAMAS HOY
+SAMAS es un prototipo. La sección "Invertir" simula operaciones bursátiles con datos de mercado en tiempo real, pero no ejecuta órdenes reales. Cuando integremos con un ALyC (Agente de Liquidación y Compensación) registrado en CNV, vamos a actualizar estos términos y te vamos a pedir que aceptes los nuevos.
+
+2. LO QUE PODÉS HACER
+Crear una cuenta, publicar posts, seguir a otros usuarios, mandar mensajes directos, simular operaciones y compartirlas en tu feed. Esperamos que uses la app de buena fe — sin spam, sin acoso, sin contenido ilegal y sin intentar romper la infraestructura.
+
+3. LO QUE NO PODÉS HACER
+- Hacerte pasar por otro usuario o por SAMAS.
+- Postear contenido que sea ilegal, falso o que viole derechos de terceros (incluyendo derechos de propiedad intelectual).
+- Recolectar datos de otros usuarios sin su permiso (scraping, harvesting).
+- Manipular el feed con prácticas de "pump and dump" u otras formas de manipulación de mercado.
+- Vincular SAMAS con esquemas piramidales, criptos no listadas o estafas.
+- Intentar acceder a partes de la app o de la infraestructura para las que no estás autorizado.
+
+4. CONTENIDO QUE PUBLICÁS
+Vos seguís siendo el dueño de lo que publicás. Al subir contenido nos otorgás una licencia mundial, no exclusiva, gratuita, para mostrarlo dentro de la app. Si borrás el contenido, terminamos de mostrarlo. Nos reservamos el derecho de remover contenido que viole estos términos.
+
+5. INSIGNIAS DE VERIFICACIÓN
+La insignia "Universidad" se asigna automáticamente cuando tu email de registro coincide con un dominio universitario reconocido. La insignia "Idóneo CNV" la asigna el equipo de SAMAS después de verificar que estás en el registro público de la CNV. Mantener falsamente una insignia (por ejemplo, declarando una universidad a la que no asistís) puede resultar en suspensión de tu cuenta.
+
+6. SIN ASESORAMIENTO FINANCIERO
+Nada de lo que veas en SAMAS — feed, trades compartidos, opiniones de otros usuarios — constituye asesoramiento financiero. Las decisiones de inversión son tuyas y tu responsabilidad. Cuando integremos con un broker real, vas a ver advertencias específicas antes de cada orden.
+
+7. LIMITACIÓN DE RESPONSABILIDAD
+SAMAS se ofrece "tal cual", sin garantías. No respondemos por pérdidas indirectas, lucro cesante, ni por contenido publicado por otros usuarios. Nuestra responsabilidad total nunca va a exceder el monto que nos hayas pagado en los últimos 12 meses (que durante el prototipo es cero).
+
+8. SUSPENSIÓN
+Podemos suspender o cerrar tu cuenta si rompés estos términos, si la ley nos obliga, o si detectamos actividad fraudulenta. Vas a recibir un aviso por email salvo casos urgentes.
+
+9. JURISDICCIÓN
+Estos términos se rigen por las leyes de la República Argentina. Cualquier disputa se resuelve en los Tribunales Ordinarios de la Ciudad Autónoma de Buenos Aires.
+
+10. CAMBIOS
+Si cambiamos estos términos te avisamos por la app o por email. Si seguís usando SAMAS después del aviso, considerás aceptados los nuevos términos.
+
+Contacto: legal@samas.app`;
 
 function SettingsToggle({ T, title, subtitle, value, onChange }) {
   return (
