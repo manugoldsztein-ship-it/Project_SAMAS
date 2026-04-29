@@ -77,6 +77,14 @@ const V2 = {
     "pro.asset.fund.vol":         "Volumen 24h",
     "pro.asset.fund.range":       "Rango 52 sem",
 
+    // Pro Mercado (samas-0.0.44)
+    "pro.market.view.list":       "Lista",
+    "pro.market.view.heatmap":    "Heatmap",
+    "pro.market.earnings.title":  "Próximos earnings",
+    "pro.market.earnings.in_days":"En {n} días",
+    "pro.market.earnings.tomorrow":"Mañana",
+    "pro.market.earnings.today":  "Hoy",
+
     "settings.light_mode":        "Modo claro",
     "settings.dark_mode":         "Modo oscuro",
     "settings.theme_to_light":    "Pasar a tema claro",
@@ -413,6 +421,14 @@ const V2 = {
     "pro.asset.fund.div":         "Dividend yield",
     "pro.asset.fund.vol":         "24h volume",
     "pro.asset.fund.range":       "52w range",
+
+    // Pro Mercado (samas-0.0.44)
+    "pro.market.view.list":       "List",
+    "pro.market.view.heatmap":    "Heatmap",
+    "pro.market.earnings.title":  "Upcoming earnings",
+    "pro.market.earnings.in_days":"In {n} days",
+    "pro.market.earnings.tomorrow":"Tomorrow",
+    "pro.market.earnings.today":  "Today",
 
     "settings.light_mode":        "Light mode",
     "settings.dark_mode":         "Dark mode",

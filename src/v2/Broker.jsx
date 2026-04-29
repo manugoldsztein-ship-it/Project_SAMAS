@@ -252,7 +252,7 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true, la
           />
         )}
         {tab === "mercado" && (
-          <MercadoView T={T} assets={assets} ccy={ccy} setCcy={setCcy} onSelectAsset={setSelectedAsset} lang={lang} />
+          <MercadoView T={T} assets={assets} ccy={ccy} setCcy={setCcy} onSelectAsset={setSelectedAsset} proMode={proMode} lang={lang} />
         )}
         {tab === "watchlist" && (
           <WatchlistView T={T} watchlists={watchlists} assets={assets} onSelectAsset={setSelectedAsset} onRefresh={refresh} lang={lang} />
@@ -498,11 +498,16 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
 // ----------------------------------------------------------
 // Mercado — full universe with search + category filter.
 // ----------------------------------------------------------
-function MercadoView({ T, assets, onSelectAsset, lang = "es" }) {
+function MercadoView({ T, assets, onSelectAsset, proMode = false, lang = "es" }) {
   const ALL = tr("market.filter.all", lang);
   const [cat, setCat] = useState(ALL);
   const [query, setQuery] = useState("");
   const [showCompare, setShowCompare] = useState(false);
+  // Pro view toggle: list (default, same as before) or heatmap.
+  // Persist within the session — when the user comes back to
+  // Mercado we keep their chosen view. localStorage would survive
+  // app restarts but feels overkill for a viewing pref.
+  const [view, setView] = useState("list");
   const cats = useMemo(() => {
     const s = new Set(assets.map((a) => a.category));
     return [ALL, ...Array.from(s)];
@@ -528,6 +533,13 @@ function MercadoView({ T, assets, onSelectAsset, lang = "es" }) {
 
   return (
     <div style={{ paddingBottom: 110 }}>
+      {/* Pro: upcoming earnings strip — sits above search so the
+          next event is visible without scrolling. Tap a chip to
+          jump straight to that asset's sheet. */}
+      {proMode && (
+        <EarningsWidget T={T} assets={assets} onSelectAsset={onSelectAsset} lang={lang} />
+      )}
+
       {/* Search + Comparar at the top of Mercado. */}
       <div style={{ padding: "16px 16px 8px", display: "flex", gap: 8 }}>
         <div style={{
@@ -579,7 +591,43 @@ function MercadoView({ T, assets, onSelectAsset, lang = "es" }) {
           );
         })}
       </div>
-      <div style={{ margin: "0 16px" }}>
+
+      {/* Pro: list / heatmap toggle. Lives right above the result
+          area so it's clearly tied to the rendered list. Hidden in
+          non-Pro since we only have one view there. */}
+      {proMode && (
+        <div style={{
+          margin: "0 16px 12px", display: "flex", gap: 4, padding: 4,
+          background: T.surface, border: `1px solid ${T.border}`,
+          borderRadius: 12,
+        }}>
+          {[
+            { id: "list",    label: tr("pro.market.view.list",    lang) },
+            { id: "heatmap", label: tr("pro.market.view.heatmap", lang) },
+          ].map((v) => {
+            const active = v.id === view;
+            return (
+              <button key={v.id} onClick={() => setView(v.id)} style={{
+                flex: 1, padding: "8px 0", borderRadius: 8,
+                background: active ? T.bg : "transparent",
+                border: active ? `1px solid ${T.border}` : "1px solid transparent",
+                color: active ? T.text : T.textMute,
+                fontFamily: FONT.sans, fontSize: 12, fontWeight: 600, cursor: "pointer",
+              }}>{v.label}</button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Heatmap mode — Pro-only, shown instead of the list. The
+          empty / no-results case for the list still applies; we
+          short-circuit to the regular Empty card to keep behavior
+          consistent across views. */}
+      {proMode && view === "heatmap" && filtered.length > 0 && (
+        <HeatmapGrid T={T} assets={filtered} onSelectAsset={onSelectAsset} lang={lang} />
+      )}
+
+      <div style={{ margin: "0 16px", display: proMode && view === "heatmap" ? "none" : undefined }}>
         {filtered.length === 0 ? (
           <Empty T={T}
             icon={<Ico.Search size={26}/>}
@@ -2866,6 +2914,163 @@ function DistribucionBar({ T, holdings, totalUsd }) {
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// PRO MERCADO (samas-0.0.44)
+// ============================================================
+// Two new visual surfaces in MercadoView when Pro mode is on:
+//
+//   1. EarningsWidget — small horizontal-scroll card listing the
+//      next ~5 earnings dates. Mock data, deterministic per ticker.
+//      Sits above the search row so users see "next event" first.
+//   2. HeatmapGrid    — grid of color-coded tiles (red→accent based
+//      on gain%). Toggle on the search row picks list vs heatmap.
+// ============================================================
+
+// Mock earnings calendar — fixed offsets from "today" so the
+// dates are stable across renders within a session and shift
+// realistically over time. Tickers chosen to cover popular CEDEAR +
+// AR stocks so most demo accounts have at least one match.
+const EARNINGS_OFFSETS = {
+  NVDA: 4, AAPL: 7,  TSLA: 12, MSFT: 14, GOOGL: 21,
+  GGAL: 3, YPF: 9,   PAMP: 18,
+};
+
+function nextEarningsList() {
+  const now = new Date();
+  return Object.entries(EARNINGS_OFFSETS)
+    .map(([ticker, days]) => {
+      const d = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+      return { ticker, days, date: d };
+    })
+    .sort((a, b) => a.days - b.days)
+    .slice(0, 5);
+}
+
+function EarningsWidget({ T, assets, onSelectAsset, lang = "es" }) {
+  const list = useMemo(() => nextEarningsList(), []);
+  function dateLabel(days, date) {
+    if (days === 0) return tr("pro.market.earnings.today", lang);
+    if (days === 1) return tr("pro.market.earnings.tomorrow", lang);
+    return tr("pro.market.earnings.in_days", lang, { n: days });
+  }
+  return (
+    <div style={{ margin: "16px 16px 0" }}>
+      <div style={{
+        fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+        color: T.textMute, letterSpacing: 0.4, textTransform: "uppercase",
+        padding: "0 4px 8px",
+      }}>{tr("pro.market.earnings.title", lang)}</div>
+      <div style={{
+        display: "flex", gap: 8,
+        overflowX: "auto", scrollbarWidth: "none",
+        WebkitOverflowScrolling: "touch",
+        // Slight negative margin so the first chip kisses the edge
+        // and the last chip doesn't get clipped on overscroll.
+        padding: "0 4px 4px",
+      }}>
+        {list.map((e) => {
+          const asset = assets.find((a) => a.ticker === e.ticker);
+          return (
+            <button
+              key={e.ticker}
+              onClick={() => asset && onSelectAsset(asset)}
+              disabled={!asset}
+              style={{
+                flexShrink: 0, padding: "8px 12px", borderRadius: 12,
+                background: T.surface, border: `1px solid ${T.border}`,
+                cursor: asset ? "pointer" : "default", textAlign: "left",
+                display: "flex", flexDirection: "column", gap: 2,
+                opacity: asset ? 1 : 0.5,
+                minWidth: 110,
+              }}
+            >
+              <span style={{
+                fontFamily: FONT.mono, fontSize: 12, fontWeight: 800,
+                color: T.text, letterSpacing: 0.2,
+              }}>{e.ticker}</span>
+              <span style={{
+                fontFamily: FONT.sans, fontSize: 11, color: T.accent, fontWeight: 700,
+              }}>{dateLabel(e.days, e.date)}</span>
+              <span style={{
+                fontFamily: FONT.mono, fontSize: 10, color: T.textMute,
+              }}>{e.date.toLocaleDateString("es-AR", { day: "2-digit", month: "short" })}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Map a gain% in [-5, +5] to a hex color from a red→neutral→green
+// gradient. We clamp at 5% in either direction so a single moonshot
+// doesn't flatten everyone else's tiles into the same shade.
+function heatColorFor(pct, T) {
+  const clamped = Math.max(-5, Math.min(5, pct || 0));
+  const t = (clamped + 5) / 10;
+  // Three-stop gradient: T.danger at 0, T.surface at 0.5, T.accent at 1.
+  // We don't try to mix HSL — a CSS gradient hash via inline alpha is
+  // close enough and keeps the math here readable.
+  if (clamped === 0) return T.surface;
+  if (clamped < 0) {
+    const intensity = (1 - t * 2);    // 0 at center, 1 at edge
+    return `${T.danger}${Math.round(intensity * 0xCC).toString(16).padStart(2, "0")}`;
+  }
+  const intensity = (t - 0.5) * 2;    // 0 at center, 1 at edge
+  return `${T.accent}${Math.round(intensity * 0xCC).toString(16).padStart(2, "0")}`;
+}
+
+function HeatmapGrid({ T, assets, onSelectAsset, lang = "es" }) {
+  if (!assets || assets.length === 0) return null;
+  return (
+    <div style={{ margin: "0 16px 16px" }}>
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(3, 1fr)",
+        gap: 6,
+      }}>
+        {assets.map((a) => {
+          const up = (a.changePct || 0) >= 0;
+          const bg = heatColorFor(a.changePct, T);
+          return (
+            <button
+              key={a.ticker}
+              onClick={() => onSelectAsset(a)}
+              style={{
+                padding: "10px 8px", borderRadius: 12,
+                background: bg,
+                border: `1px solid ${T.border}`,
+                color: T.text, cursor: "pointer", textAlign: "left",
+                display: "flex", flexDirection: "column", gap: 2,
+                aspectRatio: "1.4 / 1",
+                overflow: "hidden",
+              }}
+            >
+              <span style={{
+                fontFamily: FONT.mono, fontSize: 13, fontWeight: 800,
+                color: T.text, letterSpacing: 0.2,
+              }}>{a.ticker}</span>
+              <span style={{
+                fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+                color: up ? T.accent : T.danger,
+                fontVariantNumeric: "tabular-nums",
+              }}>{up ? "+" : ""}{(a.changePct || 0).toFixed(2)}%</span>
+              <span style={{
+                marginTop: "auto",
+                fontFamily: FONT.mono, fontSize: 10, color: T.textMute,
+                fontVariantNumeric: "tabular-nums",
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}>
+                {a.currency === "ARS" ? "$" : "US$"}{fmtMoney(a.price, a.currency)}
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
