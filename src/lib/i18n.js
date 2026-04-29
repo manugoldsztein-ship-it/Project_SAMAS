@@ -132,12 +132,14 @@ const V2 = {
     "social.follow_list.empty.followers":  "Todavía no tiene seguidores.",
     "social.follow_list.empty.following":  "Todavía no sigue a nadie.",
 
-    // Settings — About section (Privacy / Terms)
+    // Settings — About section (Privacy / Terms / Changelog)
     "settings.section.about":              "Acerca de",
     "settings.about.privacy":              "Política de privacidad",
     "settings.about.privacy_sub":          "Cómo manejamos tus datos",
     "settings.about.terms":                "Términos de uso",
     "settings.about.terms_sub":            "Las reglas del juego",
+    "settings.about.changelog":            "Novedades",
+    "settings.about.changelog_sub":        "Qué cambió en cada versión",
     "settings.about.version":              "Versión",
     "settings.about.last_updated":         "Última actualización: {date}",
 
@@ -429,12 +431,14 @@ const V2 = {
     "social.follow_list.empty.followers":  "No followers yet.",
     "social.follow_list.empty.following":  "Not following anyone yet.",
 
-    // Settings — About section (Privacy / Terms)
+    // Settings — About section (Privacy / Terms / Changelog)
     "settings.section.about":              "About",
     "settings.about.privacy":              "Privacy policy",
     "settings.about.privacy_sub":          "How we handle your data",
     "settings.about.terms":                "Terms of use",
     "settings.about.terms_sub":            "The rules of the game",
+    "settings.about.changelog":            "What's new",
+    "settings.about.changelog_sub":        "What changed in each version",
     "settings.about.version":              "Version",
     "settings.about.last_updated":         "Last updated: {date}",
 

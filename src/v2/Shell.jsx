@@ -241,6 +241,7 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
   // modals (same pattern as 2FA / EditProfile) instead of opening the
   // system browser so the content stays inside the app shell.
   const [showLegal, setShowLegal] = useState(null); // null | "privacy" | "terms"
+  const [showChangelog, setShowChangelog] = useState(false);
   // Language picker is collapsed by default; tapping the row expands it
   // inline so we don't open another modal layer on top of this one.
   const [showLang, setShowLang] = useState(false);
@@ -719,7 +720,7 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
         <button
           onClick={() => setShowLegal("terms")}
           style={{
-            width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 14,
+            width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 8,
             background: T.surface, border: `1px solid ${T.border}`,
             display: "flex", alignItems: "center", justifyContent: "space-between",
             cursor: "pointer", textAlign: "left",
@@ -731,6 +732,27 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
             </div>
             <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
               {tr("settings.about.terms_sub", lang)}
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
+        <button
+          onClick={() => setShowChangelog(true)}
+          style={{
+            width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 14,
+            background: T.surface, border: `1px solid ${T.border}`,
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            cursor: "pointer", textAlign: "left",
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text }}>
+              {tr("settings.about.changelog", lang)}
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+              {tr("settings.about.changelog_sub", lang)}
             </div>
           </div>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -785,6 +807,15 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
           lang={lang}
           kind={showLegal}
           onClose={() => setShowLegal(null)}
+        />
+      )}
+
+      {/* Changelog sub-sheet — list of recent patch notes. */}
+      {showChangelog && (
+        <ChangelogSheet
+          T={T}
+          lang={lang}
+          onClose={() => setShowChangelog(false)}
         />
       )}
 
@@ -1317,6 +1348,194 @@ Estos términos se rigen por las leyes de la República Argentina. Cualquier dis
 Si cambiamos estos términos te avisamos por la app o por email. Si seguís usando SAMAS después del aviso, considerás aceptados los nuevos términos.
 
 Contacto: legal@samas.app`;
+
+// ============================================================
+// ChangelogSheet — Novedades (what's new) modal
+// ============================================================
+// Static list of recent patches, newest first. Same modal shape as
+// LegalSheet so the two screens read as a coherent "About" cluster.
+// Each entry has a version label, a one-line title, and a few
+// bullet points describing what changed. Designed to read at a
+// glance — investors / users / Cohen reviewers should be able to
+// skim the iteration cadence without reading commit messages.
+//
+// Updating this list: add a new entry at the top of CHANGELOG.
+// Versions older than ~10 patches drop off the visible list; we
+// don't paginate because the prototype's history is short.
+// ============================================================
+function ChangelogSheet({ T, lang = "es", onClose }) {
+  const title = tr("settings.about.changelog", lang);
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 110,
+        background: "rgba(0,0,0,0.7)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 16,
+      }}
+    >
+      <div style={{
+        width: "100%", maxWidth: 540, maxHeight: "92dvh",
+        background: T.bgElev || T.bg, color: T.text,
+        borderRadius: 22, border: `1px solid ${T.border}`,
+        overflow: "hidden", display: "flex", flexDirection: "column",
+      }}>
+        <div style={{
+          padding: "18px 20px",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          borderBottom: `1px solid ${T.border}`, flexShrink: 0,
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: T.text }}>
+              {title}
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+              SAMAS prototype · feature/samas-rebrand
+            </div>
+          </div>
+          <button onClick={onClose} aria-label="Cerrar" style={{
+            width: 30, height: 30, borderRadius: 8,
+            background: T.surface, border: `1px solid ${T.border}`,
+            color: T.text, cursor: "pointer", padding: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div style={{ overflowY: "auto", padding: "8px 20px 20px" }}>
+          {CHANGELOG.map((entry) => (
+            <div key={entry.version} style={{
+              padding: "16px 0",
+              borderBottom: `1px solid ${T.border}`,
+            }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
+                <span style={{
+                  fontFamily: FONT.mono, fontSize: 11, fontWeight: 800,
+                  color: T.accent, letterSpacing: 0.5,
+                  background: T.accentSoft, padding: "2px 8px", borderRadius: 6,
+                }}>
+                  samas-{entry.version}
+                </span>
+                <span style={{
+                  fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, color: T.text,
+                }}>{entry.title}</span>
+              </div>
+              <ul style={{
+                margin: "6px 0 0", paddingLeft: 18,
+                fontFamily: FONT.sans, fontSize: 13, color: T.textMute,
+                lineHeight: 1.5,
+              }}>
+                {entry.bullets.map((b, i) => (
+                  <li key={i} style={{ marginBottom: 3 }}>{b}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+          <div style={{
+            padding: "16px 0 4px",
+            fontFamily: FONT.sans, fontSize: 11, color: T.textMute,
+            textAlign: "center", lineHeight: 1.5,
+          }}>
+            Más viejas que esto las podés mirar en GitHub.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// CHANGELOG — newest first. Keep entries terse (3 bullets max,
+// 12 words per bullet). The point of this screen is iteration
+// velocity at a glance, not exhaustive release notes.
+const CHANGELOG = [
+  {
+    version: "0.0.41",
+    title: "Pantalla de Novedades",
+    bullets: [
+      "Nueva sección Acerca de → Novedades con el changelog.",
+      "Lista todas las versiones recientes con un resumen por release.",
+    ],
+  },
+  {
+    version: "0.0.40",
+    title: "Seguidores y privacidad",
+    bullets: [
+      "Tap en el contador de seguidores / siguiendo abre la lista.",
+      "Política de privacidad y Términos de uso integrados en Settings.",
+    ],
+  },
+  {
+    version: "0.0.39",
+    title: "Pegar OTP, portafolio y hashtags",
+    bullets: [
+      "Pegar código en el SMS de WhatsApp — cero alt-tab.",
+      "Botón Pegar mi portafolio: snapshot de tus holdings al compose.",
+      "#hashtags clicables y lightbox de imágenes a fullscreen.",
+    ],
+  },
+  {
+    version: "0.0.38",
+    title: "Fotos en posts",
+    bullets: [
+      "Adjuntá fotos a tus posts (cámara o galería iOS).",
+      "Storage bucket público con RLS por usuario, 8 MB max.",
+    ],
+  },
+  {
+    version: "0.0.37",
+    title: "Defensas en News y @menciones",
+    bullets: [
+      "News no se queda colgado: timeouts en cada paso + retry.",
+      "@menciones clicables abren el perfil; \"Se unió en abril 2026\".",
+    ],
+  },
+  {
+    version: "0.0.36",
+    title: "CNV idóneo, Trending y swipe-to-delete",
+    bullets: [
+      "Nueva insignia azul CNV idóneo además de la verde de universidad.",
+      "Pestaña Trending: posts ranqueados por likes + reposts + comments.",
+      "Swipe a la izquierda para borrar tus propios posts.",
+    ],
+  },
+  {
+    version: "0.0.35",
+    title: "Verificación de universidad argentina",
+    bullets: [
+      "Dropdown de universidades en signup con 13 unis AR.",
+      "Email institucional → insignia verde verificada al instante.",
+    ],
+  },
+  {
+    version: "0.0.34",
+    title: "Polish del thread view",
+    bullets: [
+      "Nav inferior se oculta sobre overlays.",
+      "Linkify y autoscroll en DMs y respuestas.",
+    ],
+  },
+  {
+    version: "0.0.33",
+    title: "Editar perfil",
+    bullets: [
+      "Sheet de edición desde Settings: handle, nombre, bio, color.",
+      "Validación de handle disponible en tiempo real.",
+    ],
+  },
+  {
+    version: "0.0.32",
+    title: "Tap-anywhere-on-post",
+    bullets: [
+      "Cualquier parte del post abre el thread, sin pelear con los botones.",
+    ],
+  },
+];
 
 function SettingsToggle({ T, title, subtitle, value, onChange }) {
   return (
