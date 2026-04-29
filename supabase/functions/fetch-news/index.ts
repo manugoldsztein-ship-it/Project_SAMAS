@@ -123,6 +123,48 @@ const ARG_RSS_FEEDS = [
   { source: "La Nación",      url: "https://servicios.lanacion.com.ar/herramientas/rss/categoria-id=347" },
 ];
 
+// Global RSS feeds — used for non-AR tickers (CEDEARs, ETFs, crypto,
+// commodities). CNBC and MarketWatch are the workhorses for US-listed
+// brand coverage; Bloomberg Línea is the LATAM Spanish arm of
+// Bloomberg and the only legitimately accessible Bloomberg-branded
+// feed (the main bloomberg.com feeds are licensed/paywalled and
+// cannot be redistributed). Reuters intentionally not included —
+// they retired their public RSS in 2020.
+const GLOBAL_RSS_FEEDS = [
+  { source: "CNBC",             url: "https://www.cnbc.com/id/100003114/device/rss/rss.html" }, // Top news
+  { source: "CNBC Markets",     url: "https://www.cnbc.com/id/15839135/device/rss/rss.html" },
+  { source: "MarketWatch",      url: "https://feeds.marketwatch.com/marketwatch/topstories/" },
+  { source: "Bloomberg Línea",  url: "https://www.bloomberglinea.com/arc/outboundfeeds/rss/?outputType=xml" },
+];
+
+// Keyword map for tickers we cover in the global market. Mirrors
+// ARG_KEYWORDS in shape but for the rest of the world. Each ticker
+// gets the company's brand name + a couple of contextual keywords so
+// a CNBC headline like "Apple rolls out iPhone 17" matches AAPL even
+// when the ticker symbol itself isn't in the title. Add new tickers
+// here as they get added to the ASSETS table in src/App.jsx.
+const GLOBAL_KEYWORDS: Record<string, string[]> = {
+  // CEDEARs — US-listed names. The brand keyword almost always wins;
+  // we add product/exec keywords for cases where the brand alone is
+  // ambiguous ("Tesla" → only when paired with "Musk" or "stock").
+  AAPL:   ["Apple", "iPhone", "AAPL"],
+  MSFT:   ["Microsoft", "Azure", "MSFT"],
+  GOOGL:  ["Alphabet", "Google", "GOOGL"],
+  NVDA:   ["NVIDIA", "Nvidia", "GPU", "NVDA"],
+  AMZN:   ["Amazon", "AWS", "AMZN"],
+  TSLA:   ["Tesla", "Elon Musk", "TSLA"],
+  // ETFs — broad keywords match macro / index coverage from CNBC.
+  SPY:    ["S&P 500", "S&P", "SPY"],
+  QQQ:    ["Nasdaq", "Nasdaq 100", "QQQ"],
+  GLD:    ["gold prices", "gold", "GLD"],
+  // Commodities — markets sources rarely use the ticker, so we lean
+  // on commodity-name keywords.
+  OIL:    ["WTI", "crude oil", "oil prices"],
+  COPPER: ["copper prices", "copper", "industrial metals"],
+  // Crypto.
+  BTC:    ["Bitcoin", "BTC", "crypto"],
+};
+
 // ------------------------------------------------------------
 // RSS parser — minimal, no external dependency. RSS 2.0 + Atom.
 // We only need title, link, description, pubDate, image (if any).
@@ -302,7 +344,18 @@ function looksLikeBadThumbnail(url: string | null): boolean {
   return false;
 }
 
-async function fetchArgRss(ticker: string, keywords: string[]): Promise<NormalizedArticle[]> {
+// Generic RSS fan-out. Same shape used for AR and global feeds — the
+// only thing that changes is the feed list passed in. Each feed
+// fetched in parallel with a per-source 3s timeout so a slow source
+// doesn't drag down the whole response.
+type RssFeed = { source: string; url: string };
+
+async function fetchRssFeeds(
+  feeds: readonly RssFeed[],
+  ticker: string,
+  keywords: string[],
+  scope: string,
+): Promise<NormalizedArticle[]> {
   const lowers = keywords.map((k) => k.toLowerCase());
   const matchesKeywords = (s: string) => {
     if (!s) return false;
@@ -310,7 +363,7 @@ async function fetchArgRss(ticker: string, keywords: string[]): Promise<Normaliz
     return lowers.some((k) => lc.includes(k));
   };
 
-  const fetchOne = async (feed: typeof ARG_RSS_FEEDS[number]): Promise<NormalizedArticle[]> => {
+  const fetchOne = async (feed: RssFeed): Promise<NormalizedArticle[]> => {
     try {
       const r = await fetchTimeout(feed.url, {
         headers: {
@@ -320,8 +373,6 @@ async function fetchArgRss(ticker: string, keywords: string[]): Promise<Normaliz
           "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:120.0) Gecko/20100101 Firefox/120.0",
           "Accept": "application/rss+xml, application/xml, text/xml, */*",
         },
-        // Short per-source timeout: a slow feed shouldn't drag down
-        // the whole response. 3s is enough for any healthy RSS host.
       }, 3000);
       if (!r.ok) {
         console.log(`[fetch-news] rss ${feed.source} ${feed.url} → ${r.status}`);
@@ -348,10 +399,18 @@ async function fetchArgRss(ticker: string, keywords: string[]): Promise<Normaliz
     }
   };
 
-  const results = await Promise.all(ARG_RSS_FEEDS.map(fetchOne));
+  const results = await Promise.all(feeds.map(fetchOne));
   const flat = results.flat();
-  console.log(`[fetch-news] ARG total for ${ticker}: ${flat.length} articles`);
+  console.log(`[fetch-news] ${scope} total for ${ticker}: ${flat.length} articles`);
   return flat;
+}
+
+async function fetchArgRss(ticker: string, keywords: string[]): Promise<NormalizedArticle[]> {
+  return fetchRssFeeds(ARG_RSS_FEEDS, ticker, keywords, "ARG");
+}
+
+async function fetchGlobalRss(ticker: string, keywords: string[]): Promise<NormalizedArticle[]> {
+  return fetchRssFeeds(GLOBAL_RSS_FEEDS, ticker, keywords, "GLOBAL");
 }
 
 // ------------------------------------------------------------
@@ -667,7 +726,11 @@ serve(async (req: Request) => {
     //     fall back to Finnhub with a `.BA` suffix variant if no
     //     RSS hits (Finnhub does cover some Argentine securities under
     //     "TICKER.BA"). Last resort: bare ticker on Finnhub.
-    //   - Global ticker: Finnhub directly.
+    //   - GLOBAL ticker (CEDEARs, ETFs, crypto): pull CNBC / MarketWatch
+    //     / Bloomberg Línea AND Finnhub in parallel — both contribute,
+    //     RSS gives the brand-name coverage Manuel asked for, Finnhub
+    //     guarantees a baseline result. Dedup by URL afterwards.
+    //   - Unknown ticker: Finnhub only.
     // This means even tickers our RSS keyword list misses still
     // typically return *something* rather than empty.
     let articles: NormalizedArticle[] = [];
@@ -681,6 +744,12 @@ serve(async (req: Request) => {
         console.log(`[fetch-news] Finnhub .BA empty for ${ticker}, trying bare`);
         articles = await fetchFinnhub(ticker);
       }
+    } else if (GLOBAL_KEYWORDS[ticker]) {
+      const [rss, fh] = await Promise.all([
+        fetchGlobalRss(ticker, GLOBAL_KEYWORDS[ticker]),
+        fetchFinnhub(ticker),
+      ]);
+      articles = [...rss, ...fh];
     } else {
       articles = await fetchFinnhub(ticker);
     }

@@ -1702,6 +1702,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.53",
+    title: "Swipe arreglado, news global y colores por categoría",
+    bullets: [
+      "Swipe-to-delete en posts: el panel rojo ahora calza exacto sobre la card (sin offset abajo, esquinas izquierdas cuadradas).",
+      "News desde CNBC, MarketWatch y Bloomberg Línea para CEDEARs, ETFs, oro y BTC — antes eran solo Finnhub.",
+      "Tiles de fallback en Mercado ahora codifican categoría: CEDEAR=azul, Acciones=verde, Crypto=naranja, ETF=violeta, Commodity=oro, Bono=cielo.",
+    ],
+  },
+  {
     version: "0.0.52",
     title: "Consistencia visual en el broker",
     bullets: [

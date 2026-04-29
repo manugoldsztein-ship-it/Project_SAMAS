@@ -63,11 +63,44 @@ export const SAMAS_SPARKS = {
 // Stable color palette for the initials fallback. We hash the ticker
 // to pick one — that way GGAL is always the same blue, AAPL is always
 // the same orange, etc. A user opening Portafolio + Mercado side by
-// side sees matching tiles for the same row.
+// side sees matching tiles for the same row. Used only when the asset
+// has no category set; assets with a known category use
+// CATEGORY_PALETTES below so the fallback color encodes the kind of
+// asset (Acciones=green, CEDEAR=blue, Crypto=orange, etc.) instead of
+// being arbitrary.
 const FALLBACK_PALETTE = [
   "#3B82F6", "#16C784", "#F59E0B", "#EF4444",
   "#8B5CF6", "#EC4899", "#06B6D4", "#84CC16",
 ];
+
+// Per-category palettes for the fallback tile. Each category gets a
+// small spread of hues in the same family so two CEDEARs sit next to
+// each other in different shades of blue, making them distinguishable
+// without breaking the "this kind of asset is blue" mental model.
+//
+// Keys cover both the source-data shape (raw `cat`: "Acciones",
+// "CEDEAR", "Crypto", "ETF", "Commodity") and the legacy uppercase
+// keys ("ACCION", "CEDEAR", "CRYPTO", "ETF", "COMMOD", "BONO") so
+// the function lands on a palette regardless of which name the
+// caller passed.
+const CATEGORY_PALETTES = {
+  // Acciones argentinas — green family.
+  "Acciones":  ["#16C784", "#10B981", "#059669"],
+  "ACCION":    ["#16C784", "#10B981", "#059669"],
+  // CEDEARs — blue family.
+  "CEDEAR":    ["#2563EB", "#3B82F6", "#1D4ED8"],
+  // Crypto — bitcoin-orange family.
+  "Crypto":    ["#F7931A", "#F59E0B", "#D97706"],
+  "CRYPTO":    ["#F7931A", "#F59E0B", "#D97706"],
+  // ETFs — violet family.
+  "ETF":       ["#7C3AED", "#8B5CF6", "#6D28D9"],
+  // Commodities — gold family.
+  "Commodity": ["#C9A84C", "#D4AF37", "#B45309"],
+  "COMMOD":    ["#C9A84C", "#D4AF37", "#B45309"],
+  // Bonds — sky family.
+  "Bono":      ["#0EA5E9", "#06B6D4", "#0284C7"],
+  "BONO":      ["#0EA5E9", "#06B6D4", "#0284C7"],
+};
 
 // FNV-1a 32-bit. Cheap, deterministic, no deps. Used for both the
 // fallback color picker and the sparkline RNG seed.
@@ -179,8 +212,15 @@ export function AssetLogo({ asset, size = 40, T }) {
     );
   }
 
-  // Deterministic fallback — same ticker, same color, every render.
-  const bg = FALLBACK_PALETTE[hashTicker(ticker) % FALLBACK_PALETTE.length];
+  // Deterministic fallback. If the asset has a category, pick from
+  // that family's palette so the color encodes the kind of asset
+  // (CEDEAR=blue, Acciones=green, Crypto=orange, …) — same mental
+  // model as the deleted CATEGORY_TILES dict but actually wired up
+  // this time and using a richer palette. If the category is
+  // unknown, fall back to the legacy ticker-hash palette.
+  const cat = asset?.category ?? asset?.cat;
+  const palette = CATEGORY_PALETTES[cat] || FALLBACK_PALETTE;
+  const bg = palette[hashTicker(ticker) % palette.length];
   const initials = ticker.slice(0, Math.min(3, ticker.length));
   return (
     <div style={{

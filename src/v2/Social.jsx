@@ -3072,10 +3072,16 @@ function PostCard({ T, p, lang = "es", saved, meId, onLike, onRepost, onSave, on
 
   // Inner card content — used both as the standalone return for
   // posts the user doesn't own AND as the foreground layer of the
-  // swipe-wrapper for posts they do.
+  // swipe-wrapper for posts they do. NOTE: marginBottom is owned by
+  // the wrapper, NOT the card itself, so owned + non-owned posts
+  // have the same vertical rhythm. Before 0.0.53 the card had its
+  // own marginBottom: 8 which stacked with the swipe wrapper's
+  // marginBottom: 8 for owned posts → 16px gap on owned, 8px on
+  // non-owned, plus the red action panel anchored to the wrapper
+  // height extended past the visible card edge.
   const cardInner = (
     <div style={{
-      padding: 14, marginBottom: 8, borderRadius: 18,
+      padding: 14, borderRadius: 18,
       background: T.surface, border: `1px solid ${T.border}`,
       // When swiping, suppress text selection callouts that iOS
       // pops up on long-press — they fight with the gesture.
@@ -3243,19 +3249,33 @@ function PostCard({ T, p, lang = "es", saved, meId, onLike, onRepost, onSave, on
   );
 
   // No swipe wrapper for posts the user doesn't own — render the
-  // raw card and bail. Saves a layer + keeps non-owners' interaction
-  // surface unchanged. The lightbox is appended unconditionally so
-  // image taps work on every PostCard regardless of ownership.
-  if (!ownPost) return <>{cardInner}{lightboxJsx}</>;
+  // raw card with the standard 8px gap below. The lightbox is
+  // appended unconditionally so image taps work on every PostCard
+  // regardless of ownership.
+  if (!ownPost) {
+    return (
+      <>
+        <div style={{ marginBottom: 8 }}>{cardInner}</div>
+        {lightboxJsx}
+      </>
+    );
+  }
 
   // Owned post → wrap in a position:relative container with a red
   // delete panel pinned to the right and the card translated by dx.
+  // The wrapper owns the 8px gap so owned + non-owned posts match.
   return (
     <div style={{ position: "relative", marginBottom: 8 }}>
-      {/* Red delete action panel — sits behind, revealed by swipe */}
+      {/* Red delete action panel — sits behind, revealed by swipe.
+          Only the right corners are rounded so the panel reads as
+          "tucked behind the card" instead of as a floating standalone
+          button. Top/bottom span the wrapper exactly (no inset)
+          because the card no longer adds its own marginBottom. */}
       <div style={{
-        position: "absolute", top: 0, right: 0, bottom: 8,
-        width: ACTION_WIDTH, borderRadius: 18,
+        position: "absolute", top: 0, right: 0, bottom: 0,
+        width: ACTION_WIDTH,
+        borderTopRightRadius: 18, borderBottomRightRadius: 18,
+        borderTopLeftRadius: 0, borderBottomLeftRadius: 0,
         background: T.danger,
         display: "flex", alignItems: "center", justifyContent: "center",
         // Hide the panel entirely when at rest so its rounded corner
@@ -3284,8 +3304,9 @@ function PostCard({ T, p, lang = "es", saved, meId, onLike, onRepost, onSave, on
         </button>
       </div>
 
-      {/* Foreground card — translated by swipe dx. Unset marginBottom
-          on cardInner since the wrapper owns the gap now. */}
+      {/* Foreground card — translated by swipe dx. cardInner no longer
+          carries its own marginBottom (the wrapper owns it), so this
+          div is just the touch + transform layer. */}
       <div
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
@@ -3299,10 +3320,7 @@ function PostCard({ T, p, lang = "es", saved, meId, onLike, onRepost, onSave, on
           touchAction: "pan-y",
         }}
       >
-        {/* Re-render cardInner without the wrapper's mb. Easier than
-            mutating cardInner: we render it directly and clear the
-            duplicated bottom margin via a wrapping div with marginBottom: 0. */}
-        <div style={{ marginBottom: 0 }}>{cardInner}</div>
+        {cardInner}
       </div>
 
       {/* Confirm modal — small inline overlay, dismissable by tap on
