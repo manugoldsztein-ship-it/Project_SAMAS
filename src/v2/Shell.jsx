@@ -270,9 +270,16 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
         .samas-tab-content {
           animation: samas-tab-fade 160ms ease-out;
         }
+        /* Opacity-only — no transform. Earlier we used translate3d(0,4px,0)
+           for a subtle slide, but on iOS WebKit that promotes the
+           wrapper to a compositing layer which behaves like a persistent
+           stacking context. Children with position:fixed couldn't
+           escape past the bottom nav (zIndex 40) because their zIndex
+           only applied within that trapped layer. Pure opacity has no
+           such side-effect. samas-0.0.83 fix. */
         @keyframes samas-tab-fade {
-          0%   { opacity: 0; transform: translate3d(0, 4px, 0); }
-          100% { opacity: 1; transform: translate3d(0, 0, 0); }
+          0%   { opacity: 0; }
+          100% { opacity: 1; }
         }
         @keyframes samas-action-bump {
           0%   { transform: scale(1); }
@@ -2405,6 +2412,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.0.84",
+    title: "Bottom-nav stacking-context fix + AI demo fallback",
+    bullets: [
+      "Root-cause fix for the recurring \"bottom nav covers content / sheets\" bug. The samas-tab-fade animation (added in 0.0.81) used translate3d(0,4px,0) for a subtle slide; on iOS WebKit that promotes the wrapper to a persistent compositing layer that behaves like a stacking context, so children with position:fixed couldn't escape past the floating nav at zIndex 40. Switched to opacity-only animation — no transform, no trap. Fixes the AI sheet covering issue Manuel hit, plus any other in-page modal that was subtly being layered wrong.",
+      "Belt-and-braces: AI analysis sheet is now portaled to document.body via React.createPortal. Even if some descendant adds a transform later, the sheet renders against the document root and z-index 100 wins.",
+      "AI portfolio analysis works without an Anthropic key. The Edge Function detects the missing ANTHROPIC_API_KEY and falls back to a templated analysis built from the caller's actual portfolio data (concentration / win-loss split / sector mix). Shape-identical to the LLM response so the UI doesn't branch. Once you set the secret post-Cohen, real Claude responses replace the templates with zero code change.",
+    ],
+  },
   {
     version: "0.0.83",
     title: "AI portfolio analysis + compose layout fix",

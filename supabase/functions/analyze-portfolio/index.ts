@@ -207,12 +207,60 @@ serve(async (req) => {
       JSON.stringify(portfolioJson, null, 2),
     ].join("\n");
 
-    // --- Claude call ---
+    // --- Claude call (with templated fallback) ---
+    // If ANTHROPIC_API_KEY isn't set, build the response from a
+    // template populated with the caller's real portfolio numbers.
+    // Same shape as the LLM response, so the UI doesn't need to
+    // branch. Useful during the pre-Cohen demo phase when we don't
+    // want to spend on API calls yet — flip the env on later and
+    // real Claude responses replace these without code changes.
     if (!ANTHROPIC_API_KEY) {
-      console.warn("[analyze-portfolio] ANTHROPIC_API_KEY not set");
+      console.log("[analyze-portfolio] no API key — returning templated analysis");
+      const top = ranked[0];
+      const topPct = totalUsd > 0 ? (top.valueUsd / totalUsd) * 100 : 0;
+      // Sector mix (CEDEAR / ACCION / CRYPTO / etc.)
+      const sectorMap: Record<string, number> = {};
+      for (const r of ranked) {
+        sectorMap[r.category] = (sectorMap[r.category] || 0) + r.valueUsd;
+      }
+      const topSector = Object.entries(sectorMap).sort((a, b) => b[1] - a[1])[0];
+      const sectorPct = totalUsd > 0 ? (topSector[1] / totalUsd) * 100 : 0;
+      const sectorLabel: Record<string, string> = {
+        CEDEAR: "CEDEARs", ACCION: "acciones argentinas", CRYPTO: "cripto",
+        BONO: "bonos", ETF: "ETFs", COMMOD: "commodities",
+      };
+      const sectorName = sectorLabel[topSector[0]] || topSector[0].toLowerCase();
+      const nGains = ranked.filter((r) => r.gainPct > 0).length;
+      const nLosses = ranked.filter((r) => r.gainPct < 0).length;
+      const avgGain = ranked.reduce((acc, r) => acc + r.gainPct * r.valueUsd, 0) /
+        Math.max(totalUsd, 1);
+      const headline = topPct > 40
+        ? `Tu cartera de US$${Math.round(totalUsd).toLocaleString("en-US")} está muy concentrada en ${top.ticker}.`
+        : `Cartera diversificada de US$${Math.round(totalUsd).toLocaleString("en-US")} con peso en ${sectorName}.`;
+      const bullets: string[] = [];
+      if (topPct > 40) {
+        bullets.push(`${top.ticker} representa ${topPct.toFixed(0)}% de tu book — alta concentración.`);
+      } else {
+        bullets.push(`${top.ticker} es tu mayor posición (${topPct.toFixed(0)}%), pero la cartera está repartida.`);
+      }
+      bullets.push(`${ranked.length} posiciones activas con un retorno promedio ponderado de ${avgGain >= 0 ? "+" : ""}${avgGain.toFixed(1)}%.`);
+      if (nGains > nLosses) {
+        bullets.push(`${nGains} de ${ranked.length} posiciones en verde — momento favorable para revisar tomas de ganancia.`);
+      } else if (nLosses > nGains) {
+        bullets.push(`${nLosses} de ${ranked.length} posiciones en rojo — momento de revisar tesis y stop-losses.`);
+      } else {
+        bullets.push(`Cartera mixta: ${nGains} en verde y ${nLosses} en rojo. Sin sesgo claro.`);
+      }
+      const suggestion = topPct > 40
+        ? `Considerá reducir ${top.ticker} a menos del 30% del book para bajar riesgo de concentración.`
+        : `Mantené revisando earnings y eventos macro de ${sectorName} para defender la asignación actual.`;
       return new Response(JSON.stringify({
-        error: "ANTHROPIC_API_KEY no configurado en el servidor.",
-      }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        headline:      headline.slice(0, 200),
+        bullets:       bullets.map((b) => b.slice(0, 200)),
+        suggestion:    suggestion.slice(0, 240),
+        concentration: `${top.ticker} (${topPct.toFixed(0)}%)`,
+        generatedAt:   new Date().toISOString(),
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const r = await fetchTimeout("https://api.anthropic.com/v1/messages", {

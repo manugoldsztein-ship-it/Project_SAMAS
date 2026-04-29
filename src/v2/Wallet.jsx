@@ -19,6 +19,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import ReactDOM from "react-dom";
 import { FONT, fmtMoney, fmtPct } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import {
@@ -1007,12 +1008,17 @@ function AIAnalysisCard({ T, lang = "es" }) {
         </button>
       </div>
 
-      {/* Result sheet */}
-      {open && (
+      {/* Result sheet — portaled to document.body so it escapes the
+          Wallet scroll container's stacking context. Otherwise the
+          floating bottom nav (rendered at the Shell root) sits ON
+          TOP of the sheet because it's in a sibling layer the inner
+          stacking context can't elevate above. samas-0.0.83 fix
+          (was filed as bug after 0.0.83 first ship). */}
+      {open && ReactDOM.createPortal(
         <div
           onClick={() => setOpen(false)}
           style={{
-            position: "fixed", inset: 0, zIndex: 60,
+            position: "fixed", inset: 0, zIndex: 100,
             background: "rgba(0,0,0,0.55)",
             display: "flex", alignItems: "flex-end",
             animation: "samas-fade-in 160ms ease-out",
@@ -1162,7 +1168,8 @@ function AIAnalysisCard({ T, lang = "es" }) {
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
