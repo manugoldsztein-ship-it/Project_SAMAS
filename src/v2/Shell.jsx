@@ -2319,6 +2319,14 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.69",
+    title: "Revert dashed reference line on sparklines",
+    bullets: [
+      "Pulled the dashed open-price reference line added in 0.0.68 — looked too busy on small thumbnails per Manuel's review.",
+      "Sparklines back to clean stroke + area gradient. The other 0.0.68 changes (Wallet hero pill, empty-state copy, News audit) stay.",
+    ],
+  },
+  {
     version: "0.0.68",
     title: "Polish pass: dashed reference, Wallet hero, empty-state copy",
     bullets: [

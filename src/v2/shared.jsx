@@ -20,7 +20,7 @@ import { hapticNative } from "../lib/native.js";
 // space — that's why a flat-trending series still looks like a
 // proper line, not a hair against the bottom edge.
 // ----------------------------------------------------------
-export function Sparkline({ data, color, w = 60, h = 22, sw = 1.5, showReference = true }) {
+export function Sparkline({ data, color, w = 60, h = 22, sw = 1.5 }) {
   if (!data || data.length < 2) return <div style={{ width: w, height: h }}/>;
   const min = Math.min(...data);
   const max = Math.max(...data);
@@ -40,11 +40,8 @@ export function Sparkline({ data, color, w = 60, h = 22, sw = 1.5, showReference
   // across re-renders. SVG <defs> with the same id are harmless
   // duplicates as long as the gradient definition matches.
   const gradId = `samas-spark-${color.replace(/[^a-zA-Z0-9]/g, "")}`;
-  // Open-price reference line (samas-0.0.68) — Apple Stocks signature.
-  // Dashed horizontal line at the y-level of data[0] so the user can
-  // see at a glance how far the asset has moved from its starting
-  // point. Drawn UNDER the area fill so it shows through the fade.
-  const refY = h - ((data[0] - min) / range) * h;
+  // Note: a dashed open-price reference line was added in 0.0.68 and
+  // pulled in 0.0.69 — looked too busy on small thumbnails.
   return (
     <svg width={w} height={h} style={{ overflow: "visible" }}>
       <defs>
@@ -53,13 +50,6 @@ export function Sparkline({ data, color, w = 60, h = 22, sw = 1.5, showReference
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
       </defs>
-      {showReference && (
-        <line
-          x1="0" y1={refY.toFixed(1)} x2={w} y2={refY.toFixed(1)}
-          stroke={color} strokeOpacity="0.45"
-          strokeWidth="0.8" strokeDasharray="2,2"
-        />
-      )}
       <polygon points={areaPts} fill={`url(#${gradId})`} />
       <polyline points={pts} fill="none" stroke={color} strokeWidth={sw}
         strokeLinecap="round" strokeLinejoin="round" />
