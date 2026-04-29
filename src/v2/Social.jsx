@@ -170,7 +170,7 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
         {ptrIndicator}
         {tab === "feed"     && <FeedView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} />}
         {tab === "search"   && <SearchView T={T} lang={lang} user={user} onMessageUser={openDmWith} onOpenProfile={openProfile} />}
-        {tab === "messages" && <MessagesView T={T} lang={lang} user={user} onOpenProfile={openProfile} />}
+        {tab === "messages" && <MessagesView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenTicker={openTicker} />}
         {tab === "profile"  && <ProfileView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} />}
       </div>
 
@@ -258,8 +258,14 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
         </div>
       )}
 
-      {/* Bottom nav */}
-      <SocialNav T={T} tab={tab} setTab={(t) => { setProfileUserId(null); setThreadPost(null); setTickerFilter(null); setTab(t); }} bottomInset={navBottom} lang={lang} />
+      {/* Bottom nav — hidden when ANY drill-in overlay is active.
+          Each overlay has its own back arrow header for navigation,
+          and the compose bars in ThreadView / ConversationView would
+          otherwise fight for the same vertical real estate as the
+          tab bar. iOS native pattern: tab bar hides on detail push. */}
+      {!profileUserId && !threadPost && !tickerFilter && (
+        <SocialNav T={T} tab={tab} setTab={setTab} bottomInset={navBottom} lang={lang} />
+      )}
     </div>
   );
 }
@@ -920,7 +926,7 @@ function UserRow({ T, user, onToggleFollow, onMessage, onOpen }) {
 // Schema + RLS: supabase/social_messages.sql.
 // API:           src/v2/api/messages.js.
 // ============================================================
-function MessagesView({ T, lang = "es", user = null, onOpenProfile }) {
+function MessagesView({ T, lang = "es", user = null, onOpenProfile, onOpenTicker }) {
   const [threads, setThreads] = useState(null); // null = loading
   const [active, setActive] = useState(null);   // active thread or null
 
@@ -999,6 +1005,7 @@ function MessagesView({ T, lang = "es", user = null, onOpenProfile }) {
         thread={active}
         onBack={() => { setActive(null); refresh(); }}
         onOpenProfile={onOpenProfile}
+        onOpenTicker={onOpenTicker}
       />
     );
   }
@@ -1092,7 +1099,7 @@ function ThreadRow({ T, thread, onOpen }) {
 // Conversation view — message list scrolled to bottom + compose bar.
 // Subscribes to INSERTs on dm_messages for THIS thread so peer
 // replies stream in live. Marks unread-as-read on open.
-function ConversationView({ T, lang = "es", thread, onBack, onOpenProfile }) {
+function ConversationView({ T, lang = "es", thread, onBack, onOpenProfile, onOpenTicker }) {
   const [messages, setMessages] = useState(null); // null=loading
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1246,20 +1253,27 @@ function ConversationView({ T, lang = "es", thread, onBack, onOpenProfile }) {
             Empezá la conversación.
           </div>
         ) : (
-          messages.map((m) => (
-            <div key={m.id} style={{
-              alignSelf: m.fromMe ? "flex-end" : "flex-start",
-              maxWidth: "78%",
-              padding: "8px 12px", borderRadius: 14,
-              background: m.fromMe ? T.accent : T.surface,
-              color: m.fromMe ? T.accentInk : T.text,
-              border: m.fromMe ? "none" : `1px solid ${T.border}`,
-              fontFamily: FONT.sans, fontSize: 14, lineHeight: 1.4,
-              whiteSpace: "pre-wrap", wordBreak: "break-word",
-            }}>
-              {m.body}
-            </div>
-          ))
+          messages.map((m) => {
+            // Own bubbles are green (T.accent) — render $TICKER
+            // links in T.accentInk so they're readable on the
+            // accent fill. Peer bubbles use the surface color, so
+            // keep the regular accent for links.
+            const linkT = m.fromMe ? { ...T, accent: T.accentInk } : T;
+            return (
+              <div key={m.id} style={{
+                alignSelf: m.fromMe ? "flex-end" : "flex-start",
+                maxWidth: "78%",
+                padding: "8px 12px", borderRadius: 14,
+                background: m.fromMe ? T.accent : T.surface,
+                color: m.fromMe ? T.accentInk : T.text,
+                border: m.fromMe ? "none" : `1px solid ${T.border}`,
+                fontFamily: FONT.sans, fontSize: 14, lineHeight: 1.4,
+                whiteSpace: "pre-wrap", wordBreak: "break-word",
+              }}>
+                {linkifyTickers(m.body, linkT, onOpenTicker)}
+              </div>
+            );
+          })
         )}
       </div>
 
@@ -1557,6 +1571,12 @@ function ThreadView({ T, lang = "es", post, onBack, onOpenProfile, onOpenTicker 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [me, setMe] = useState(null);
+  // Scrollable container ref — used to auto-scroll to the bottom
+  // (most recent reply) on open and on every new arriving reply.
+  // Without this, opening a thread with 30 replies dumps the user
+  // at the parent post and forces them to scroll down to the
+  // current conversation.
+  const scrollRef = React.useRef(null);
 
   // Initial load.
   useEffect(() => {
@@ -1616,6 +1636,21 @@ function ThreadView({ T, lang = "es", post, onBack, onOpenProfile, onOpenTicker 
     };
   }, [post.id]);
 
+  // Auto-scroll to bottom when replies change. On first load this
+  // jumps the user to the most recent reply (the active part of
+  // the conversation). On subsequent inserts (own send + peer
+  // realtime echo) it keeps the latest reply pinned in view.
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    if (!replies || replies.length === 0) return;
+    // requestAnimationFrame so the DOM has the new ReplyRow laid
+    // out before we measure scrollHeight.
+    requestAnimationFrame(() => {
+      const el = scrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    });
+  }, [replies?.length]);
+
   async function send() {
     setErr(null);
     if (!body.trim()) return;
@@ -1671,7 +1706,7 @@ function ThreadView({ T, lang = "es", post, onBack, onOpenProfile, onOpenTicker 
       </div>
 
       {/* Scrollable: parent post + replies */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px 16px" }}>
+      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "14px 16px 16px" }}>
         {/* Parent post — same PostCard the feed uses, readonly so
             we don't re-render the action row twice. Tapping the
             author still opens their profile via onOpenAuthor. */}
