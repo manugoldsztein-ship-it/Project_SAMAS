@@ -250,12 +250,29 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
                keyframes tag works for any element that wants the
                "you tapped me" pop. */}
       <style>{`
-        button:active:not(:disabled) {
+        button:active:not(:disabled),
+        [role="button"]:active:not([aria-disabled="true"]),
+        .samas-pressable:active {
           transform: scale(0.97);
           transition: transform 80ms ease-out;
         }
-        button:not(:active):not(:disabled) {
+        button:not(:active):not(:disabled),
+        [role="button"]:not(:active):not([aria-disabled="true"]),
+        .samas-pressable:not(:active) {
           transition: transform 140ms ease-out;
+        }
+        /* Tab content cross-fade (samas-0.0.81). The wrapper is keyed
+           on the active tab id, so React re-mounts when the user
+           switches and the keyframe fires fresh each time. Subtle —
+           opacity 0→1 with a 4px translate so it reads as "the new
+           page eased in" instead of "snap". 160ms is fast enough to
+           not feel laggy on rapid taps but slow enough to be visible. */
+        .samas-tab-content {
+          animation: samas-tab-fade 160ms ease-out;
+        }
+        @keyframes samas-tab-fade {
+          0%   { opacity: 0; transform: translate3d(0, 4px, 0); }
+          100% { opacity: 1; transform: translate3d(0, 0, 0); }
         }
         @keyframes samas-action-bump {
           0%   { transform: scale(1); }
@@ -303,9 +320,14 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
         }
       `}</style>
 
-      {/* ---------- scrollable page content ---------- */}
+      {/* ---------- scrollable page content ----------
+          The keyed inner div re-mounts on every base-tab switch so
+          the .samas-tab-content fade-in animation fires fresh — no
+          more hard snap between Wallet ↔ News. */}
       <ScrollWithPTR T={T} tab={baseTab}>
-        {renderTab()}
+        <div key={baseTab} className="samas-tab-content">
+          {renderTab()}
+        </div>
       </ScrollWithPTR>
 
       {/* ---------- floating tab bar ----------
@@ -2367,6 +2389,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.0.81",
+    title: "UI polish: smoother tab transitions + extended press feedback",
+    bullets: [
+      "Every tab change now cross-fades in instead of snapping. New global .samas-tab-content class + samas-tab-fade keyframe (160ms ease-out, 4px subtle slide). Wired on the top-level Wallet/News/Invertir/Social switch, the Broker sub-tabs (Portafolio/Mercado/Watchlist/Órdenes), the Social outer nav (Feed/Search/Messages/Profile), and the FeedView inner tabs (Trending/Siguiendo/Trades/Carteras).",
+      "Universal press-down feedback (already on <button>) now also fires for [role=\"button\"] elements and any element with the .samas-pressable class. Lets us add tactile press response to non-button list rows without re-tagging every site as <button>.",
+      "Net effect: switching tabs feels iOS-native instead of \"web app snap\". Same React tree, just a wrapper div keyed on the active tab so re-mount triggers the keyframe each time.",
+    ],
+  },
   {
     version: "0.0.80",
     title: "Wallet moves to Supabase — balance + ledger fully durable",

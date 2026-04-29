@@ -244,10 +244,14 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
         WebkitOverflowScrolling: "touch",
       }}>
         {ptrIndicator}
-        {tab === "feed"     && <FeedView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} onOpenMention={openMention} onOpenHashtag={openHashtag} />}
-        {tab === "search"   && <SearchView T={T} lang={lang} user={user} onMessageUser={openDmWith} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} onOpenMention={openMention} onOpenHashtag={openHashtag} />}
-        {tab === "messages" && <MessagesView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenTicker={openTicker} onOpenMention={openMention} onOpenHashtag={openHashtag} />}
-        {tab === "profile"  && <ProfileView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} onOpenMention={openMention} onOpenHashtag={openHashtag} onOpenFollowList={openFollowList} />}
+        {/* Keyed wrapper → cross-fade between Feed / Search / Messages
+            / Profile when the user taps the bottom nav (samas-0.0.81). */}
+        <div key={tab} className="samas-tab-content">
+          {tab === "feed"     && <FeedView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} onOpenMention={openMention} onOpenHashtag={openHashtag} />}
+          {tab === "search"   && <SearchView T={T} lang={lang} user={user} onMessageUser={openDmWith} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} onOpenMention={openMention} onOpenHashtag={openHashtag} />}
+          {tab === "messages" && <MessagesView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenTicker={openTicker} onOpenMention={openMention} onOpenHashtag={openHashtag} />}
+          {tab === "profile"  && <ProfileView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} onOpenMention={openMention} onOpenHashtag={openHashtag} onOpenFollowList={openFollowList} />}
+        </div>
       </div>
 
       {/* Drill-in peer profile overlay. Sits above the current
@@ -1271,8 +1275,10 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
         </div>
       </div>
 
-      {/* Feed */}
-      <div style={{ margin: "0 16px" }}>
+      {/* Feed — keyed on the active sub-tab (Trending/Following/Trades/
+          Carteras) so the feed cross-fades when the user switches
+          (samas-0.0.81). */}
+      <div key={tab} className="samas-tab-content" style={{ margin: "0 16px" }}>
         {posts.length === 0 ? (
           tab === "for_you" ? (
             // Trending empty state — invite the user to publish.

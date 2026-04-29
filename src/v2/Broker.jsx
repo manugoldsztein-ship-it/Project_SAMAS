@@ -237,46 +237,52 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true, la
         WebkitOverflowScrolling: "touch",
       }}>
         {ptrIndicator}
-        {tab === "portafolio" && (
-          <PortafolioView
-            T={T}
-            portfolio={portfolio}
-            assets={assets}
-            fx={fx}
-            ccy={ccy}
-            setCcy={setCcy}
-            proMode={proMode}
-            savedPlan={savedPlan}
-            onSelectAsset={setSelectedAsset}
-            onOpenAIPlan={() => setShowAIWizard(true)}
-            onGoToMercado={() => setTab("mercado")}
-            lang={lang}
-          />
-        )}
-        {tab === "mercado" && (
-          <MercadoView T={T} assets={assets} ccy={ccy} setCcy={setCcy} onSelectAsset={setSelectedAsset} proMode={proMode} lang={lang} />
-        )}
-        {tab === "watchlist" && (
-          <WatchlistView
-            T={T}
-            watchlists={watchlists}
-            assets={assets}
-            onSelectAsset={setSelectedAsset}
-            onRefresh={refresh}
-            proMode={proMode}
-            lang={lang}
-          />
-        )}
-        {tab === "ordenes" && (
-          <OrdenesView
-            T={T}
-            orders={orders}
-            alerts={alerts}
-            stops={stops}
-            holdings={portfolio?.holdings || []}
-            onRefresh={refresh}
-          />
-        )}
+        {/* Keyed wrapper so each sub-tab change re-mounts and triggers
+            the .samas-tab-content fade-in animation defined globally
+            in Shell.jsx (samas-0.0.81). Inner short-circuits stay the
+            same — only one sub-view renders at a time. */}
+        <div key={tab} className="samas-tab-content">
+          {tab === "portafolio" && (
+            <PortafolioView
+              T={T}
+              portfolio={portfolio}
+              assets={assets}
+              fx={fx}
+              ccy={ccy}
+              setCcy={setCcy}
+              proMode={proMode}
+              savedPlan={savedPlan}
+              onSelectAsset={setSelectedAsset}
+              onOpenAIPlan={() => setShowAIWizard(true)}
+              onGoToMercado={() => setTab("mercado")}
+              lang={lang}
+            />
+          )}
+          {tab === "mercado" && (
+            <MercadoView T={T} assets={assets} ccy={ccy} setCcy={setCcy} onSelectAsset={setSelectedAsset} proMode={proMode} lang={lang} />
+          )}
+          {tab === "watchlist" && (
+            <WatchlistView
+              T={T}
+              watchlists={watchlists}
+              assets={assets}
+              onSelectAsset={setSelectedAsset}
+              onRefresh={refresh}
+              proMode={proMode}
+              lang={lang}
+            />
+          )}
+          {tab === "ordenes" && (
+            <OrdenesView
+              T={T}
+              orders={orders}
+              alerts={alerts}
+              stops={stops}
+              holdings={portfolio?.holdings || []}
+              onRefresh={refresh}
+            />
+          )}
+        </div>
       </div>
 
       {/* ---------- sub-nav bottom bar ----------
