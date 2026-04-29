@@ -141,6 +141,7 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
             isDark={isDark}
             onToggleDark={onToggleDark}
             onOpenSettings={() => setShowSettings(true)}
+            proMode={proMode}
             lang={lang}
           />
         );

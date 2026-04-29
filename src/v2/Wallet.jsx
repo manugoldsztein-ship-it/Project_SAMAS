@@ -31,7 +31,7 @@ import { toast } from "./toast.jsx";
 import { setRefreshHandler } from "./refreshRegistry.js";
 import { t as tr } from "../lib/i18n.js";
 
-export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark, onOpenSettings, lang = "es" }) {
+export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark, onOpenSettings, proMode = false, lang = "es" }) {
   // ----------- data state -----------
   const [balance, setBalance] = useState(null);
   const [fx, setFx] = useState(null);
@@ -300,6 +300,23 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
         </div>
       )}
 
+      {/* ---------- Pro Wallet dashboard (samas-0.0.46) ----------
+          Cash flow chart + month/dividend/tax cards. Only when Pro
+          mode is on AND the user has a portfolio (otherwise the
+          numbers would all be zero or empty). The 2-card row
+          (month P&L · dividend) sits flush, then the tax-year
+          card spans full width below. */}
+      {proMode && portfolio && portfolio.totalUsd > 0 && (
+        <>
+          <CashFlowBars T={T} portfolio={portfolio} lang={lang} />
+          <div style={{ display: "flex", gap: 8, margin: "12px 16px 0" }}>
+            <MonthPnLCard T={T} portfolio={portfolio} lang={lang} />
+            <DividendCard T={T} portfolio={portfolio} lang={lang} />
+          </div>
+          <TaxYearCard T={T} portfolio={portfolio} lang={lang} />
+        </>
+      )}
+
       {/* ---------- aporte mensual ---------- */}
       <div style={{ margin: "28px 16px 0" }}>
         <SectionHead T={T} title={tr("wallet.section.aporte", lang)} />
@@ -459,6 +476,284 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
 // When the table doesn't exist yet, getNotifications returns [] and we
 // show the empty state — same gracefulfallback as alerts.js.
 // ----------------------------------------------------------
+// ============================================================
+// PRO WALLET (samas-0.0.46)
+// ============================================================
+// Four new cards rendered in WalletPage when proMode is true.
+// All values are derived from holdings + a deterministic seed so
+// they're stable across renders within a session and shift with
+// the user's actual portfolio. When we onboard with Cohen and get
+// real tx data + dividend feeds + tax events, swap each helper's
+// body for an API call — the prop shapes don't need to change.
+//
+//   1. CashFlowBars     — 6-month deposits/withdrawals bar chart.
+//   2. MonthPnLCard     — this-month return vs last month.
+//   3. DividendCard     — next upcoming dividend payment.
+//   4. TaxYearCard      — YTD realized + unrealized P&L.
+// ============================================================
+
+// Stable per-portfolio seeded RNG. Keyed off a hash of the
+// holdings + total so two different portfolios get different
+// numbers but the same one stays consistent.
+function portfolioSeed(portfolio, salt = 0) {
+  const tickers = (portfolio?.holdings || []).map((h) => h.ticker).join("|");
+  let h = 0;
+  for (let i = 0; i < tickers.length; i++) {
+    h = ((h << 5) - h + tickers.charCodeAt(i)) | 0;
+  }
+  h = ((h ^ Math.round(portfolio?.totalUsd || 0)) ^ salt) >>> 0;
+  return () => {
+    h = (h + 0x6D2B79F5) >>> 0;
+    let t = h;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function CashFlowBars({ T, portfolio, lang = "es" }) {
+  // 6 months of deposits + withdrawals, scaled to the size of
+  // the portfolio so a $10K cartera doesn't show $50K bars.
+  const data = useMemo(() => {
+    const rng = portfolioSeed(portfolio, 11);
+    const baseUsd = Math.max(500, (portfolio?.totalUsd || 0) * 0.08);
+    const months = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const inAmt = baseUsd * (0.5 + rng() * 1.4);
+      // Withdrawals happen ~40% of months and are smaller than deposits.
+      const out = rng() < 0.4 ? baseUsd * (0.2 + rng() * 0.5) : 0;
+      months.push({
+        label: d.toLocaleDateString("es-AR", { month: "short" }),
+        in: inAmt,
+        out,
+      });
+    }
+    return months;
+  }, [portfolio]);
+  const totalIn = data.reduce((s, m) => s + m.in, 0);
+  const totalOut = data.reduce((s, m) => s + m.out, 0);
+  const net = totalIn - totalOut;
+  const max = Math.max(...data.map((m) => Math.max(m.in, m.out))) || 1;
+  return (
+    <div style={{ margin: "28px 16px 0" }}>
+      <SectionHead T={T} title={tr("pro.wallet.cashflow.title", lang)} />
+      <div style={{
+        marginTop: 12, padding: 16, borderRadius: 22,
+        background: T.surface, border: `1px solid ${T.border}`,
+      }}>
+        <div style={{
+          display: "flex", justifyContent: "space-between",
+          marginBottom: 14,
+        }}>
+          <Stat3 T={T} label={tr("pro.wallet.cashflow.in", lang)}
+            value={`+US$${fmtMoney(totalIn, "USD")}`} color={T.accent} />
+          <Stat3 T={T} label={tr("pro.wallet.cashflow.out", lang)}
+            value={`-US$${fmtMoney(totalOut, "USD")}`} color={T.danger} />
+          <Stat3 T={T} label={tr("pro.wallet.cashflow.net", lang)}
+            value={`${net >= 0 ? "+" : "-"}US$${fmtMoney(Math.abs(net), "USD")}`}
+            color={net >= 0 ? T.accent : T.danger} />
+        </div>
+        {/* Paired bars per month — green up for deposits, red down
+            for withdrawals on a center axis so the visual reads
+            as "money in vs money out" rather than two separate
+            stacked series. */}
+        <div style={{
+          display: "flex", alignItems: "stretch",
+          gap: 6, height: 100,
+        }}>
+          {data.map((m, i) => {
+            const inH = (m.in / max) * 44;
+            const outH = (m.out / max) * 44;
+            return (
+              <div key={i} style={{
+                flex: 1, display: "flex", flexDirection: "column",
+                alignItems: "center", gap: 2,
+              }}>
+                <div style={{
+                  width: "70%", height: 44,
+                  display: "flex", flexDirection: "column", justifyContent: "flex-end",
+                }}>
+                  <div style={{
+                    width: "100%", height: inH, background: T.accent,
+                    borderRadius: "4px 4px 0 0",
+                  }}/>
+                </div>
+                <div style={{
+                  width: "70%", height: 44,
+                  display: "flex", flexDirection: "column", justifyContent: "flex-start",
+                }}>
+                  <div style={{
+                    width: "100%", height: outH, background: T.danger,
+                    borderRadius: "0 0 4px 4px", opacity: outH > 0 ? 1 : 0,
+                  }}/>
+                </div>
+                <div style={{
+                  fontFamily: FONT.mono, fontSize: 9, color: T.textMute,
+                  fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase",
+                }}>{m.label}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Stat3({ T, label, value, color }) {
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{
+        fontFamily: FONT.sans, fontSize: 10, fontWeight: 700,
+        color: T.textMute, letterSpacing: 0.4, textTransform: "uppercase",
+      }}>{label}</div>
+      <div style={{
+        fontFamily: FONT.mono, fontSize: 13, fontWeight: 700,
+        color: color || T.text, marginTop: 2,
+        fontVariantNumeric: "tabular-nums",
+        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+      }}>{value}</div>
+    </div>
+  );
+}
+
+function MonthPnLCard({ T, portfolio, lang = "es" }) {
+  const { thisMonth, lastMonth, delta } = useMemo(() => {
+    const rng = portfolioSeed(portfolio, 23);
+    // Sythesize: this month's return = ±0–6% scaled by portfolio size.
+    const tot = portfolio?.totalUsd || 1000;
+    const tm = (rng() - 0.4) * 0.08 * tot; // skewed slightly positive
+    const lm = (rng() - 0.5) * 0.08 * tot;
+    return { thisMonth: tm, lastMonth: lm, delta: tm - lm };
+  }, [portfolio]);
+  const up = thisMonth >= 0;
+  return (
+    <div style={{
+      flex: 1, padding: 14, borderRadius: 18,
+      background: T.surface, border: `1px solid ${T.border}`,
+      display: "flex", flexDirection: "column", gap: 6, minWidth: 0,
+    }}>
+      <div style={{
+        fontFamily: FONT.sans, fontSize: 10, fontWeight: 700,
+        color: T.textMute, letterSpacing: 0.4, textTransform: "uppercase",
+      }}>{tr("pro.wallet.month_pnl.title", lang)}</div>
+      <div style={{
+        fontFamily: FONT.display, fontSize: 20, fontWeight: 700,
+        color: up ? T.accent : T.danger, letterSpacing: -0.4,
+        fontVariantNumeric: "tabular-nums",
+      }}>{up ? "+" : "-"}US${fmtMoney(Math.abs(thisMonth), "USD")}</div>
+      <div style={{
+        fontFamily: FONT.mono, fontSize: 11, color: T.textMute,
+        fontVariantNumeric: "tabular-nums",
+      }}>
+        {delta >= 0 ? "▲" : "▼"} US${fmtMoney(Math.abs(delta), "USD")} {tr("pro.wallet.month_pnl.vs", lang)}
+      </div>
+    </div>
+  );
+}
+
+function DividendCard({ T, portfolio, lang = "es" }) {
+  // Pick the first dividend-paying holding; if none, show empty.
+  const div = useMemo(() => {
+    const rng = portfolioSeed(portfolio, 47);
+    const dividendPayers = (portfolio?.holdings || []).filter((h) =>
+      ["AAPL", "MSFT", "KO", "PG", "GGAL", "YPF"].includes(h.ticker) ||
+      h.category === "ETF" || h.category === "BONO"
+    );
+    if (dividendPayers.length === 0) return null;
+    const idx = Math.floor(rng() * dividendPayers.length);
+    const h = dividendPayers[idx];
+    const yieldRate = 0.005 + rng() * 0.025; // 0.5%–3% per quarter
+    const amount = h.value * yieldRate;
+    const days = 5 + Math.floor(rng() * 25);
+    const date = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    return { ticker: h.ticker, currency: h.currency, amount, date, days };
+  }, [portfolio]);
+  return (
+    <div style={{
+      flex: 1, padding: 14, borderRadius: 18,
+      background: T.surface, border: `1px solid ${T.border}`,
+      display: "flex", flexDirection: "column", gap: 6, minWidth: 0,
+    }}>
+      <div style={{
+        fontFamily: FONT.sans, fontSize: 10, fontWeight: 700,
+        color: T.textMute, letterSpacing: 0.4, textTransform: "uppercase",
+      }}>{tr("pro.wallet.dividends.title", lang)}</div>
+      {div ? (
+        <>
+          <div style={{
+            fontFamily: FONT.display, fontSize: 20, fontWeight: 700,
+            color: T.text, letterSpacing: -0.4,
+            fontVariantNumeric: "tabular-nums",
+          }}>
+            {div.currency === "ARS" ? "$" : "US$"}{fmtMoney(div.amount, div.currency)}
+          </div>
+          <div style={{
+            fontFamily: FONT.mono, fontSize: 11, color: T.textMute,
+            display: "flex", gap: 6, flexWrap: "wrap",
+          }}>
+            <span style={{ color: T.accent, fontWeight: 700 }}>{div.ticker}</span>
+            <span>· {div.date.toLocaleDateString("es-AR", { day: "2-digit", month: "short" })}</span>
+          </div>
+        </>
+      ) : (
+        <div style={{
+          fontFamily: FONT.sans, fontSize: 12, color: T.textMute,
+          marginTop: 6, lineHeight: 1.4,
+        }}>{tr("pro.wallet.dividends.empty", lang)}</div>
+      )}
+    </div>
+  );
+}
+
+function TaxYearCard({ T, portfolio, lang = "es" }) {
+  const { realized, unrealized, year } = useMemo(() => {
+    const rng = portfolioSeed(portfolio, 71);
+    const tot = portfolio?.totalUsd || 0;
+    return {
+      realized: (rng() - 0.4) * 0.04 * tot,
+      // Sum of unrealized comes from holdings.gainAbs converted to USD.
+      unrealized: (portfolio?.holdings || []).reduce((s, h) => {
+        const gainUsd = h.currency === "ARS" ? (h.gainAbs / 1248) : h.gainAbs;
+        return s + (gainUsd || 0);
+      }, 0),
+      year: new Date().getFullYear(),
+    };
+  }, [portfolio]);
+  return (
+    <div style={{ margin: "12px 16px 0" }}>
+      <div style={{
+        padding: 14, borderRadius: 18,
+        background: T.surface, border: `1px solid ${T.border}`,
+      }}>
+        <div style={{
+          fontFamily: FONT.sans, fontSize: 10, fontWeight: 700,
+          color: T.textMute, letterSpacing: 0.4, textTransform: "uppercase",
+          marginBottom: 10,
+        }}>{tr("pro.wallet.tax.title", lang, { year })}</div>
+        <div style={{ display: "flex", gap: 12, marginBottom: 8 }}>
+          <Stat3 T={T}
+            label={tr("pro.wallet.tax.realized", lang)}
+            value={`${realized >= 0 ? "+" : "-"}US$${fmtMoney(Math.abs(realized), "USD")}`}
+            color={realized >= 0 ? T.accent : T.danger}
+          />
+          <Stat3 T={T}
+            label={tr("pro.wallet.tax.unrealized", lang)}
+            value={`${unrealized >= 0 ? "+" : "-"}US$${fmtMoney(Math.abs(unrealized), "USD")}`}
+            color={unrealized >= 0 ? T.accent : T.danger}
+          />
+        </div>
+        <div style={{
+          fontFamily: FONT.sans, fontSize: 10, color: T.textMute,
+          lineHeight: 1.4, fontStyle: "italic",
+        }}>{tr("pro.wallet.tax.note", lang)}</div>
+      </div>
+    </div>
+  );
+}
+
 function NotificationsInbox({ T, lang = "es", onClose }) {
   const [items, setItems] = useState(null); // null=loading, [] = empty
   const [busy, setBusy] = useState(false);

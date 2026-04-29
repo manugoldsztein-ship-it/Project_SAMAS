@@ -85,6 +85,20 @@ const V2 = {
     "pro.market.earnings.tomorrow":"Mañana",
     "pro.market.earnings.today":  "Hoy",
 
+    // Pro Wallet (samas-0.0.46)
+    "pro.wallet.cashflow.title":  "Flujo de fondos · 6 meses",
+    "pro.wallet.cashflow.in":     "Ingresos",
+    "pro.wallet.cashflow.out":    "Egresos",
+    "pro.wallet.cashflow.net":    "Neto",
+    "pro.wallet.month_pnl.title": "Performance del mes",
+    "pro.wallet.month_pnl.vs":    "vs. mes anterior",
+    "pro.wallet.dividends.title": "Próximo dividendo",
+    "pro.wallet.dividends.empty": "No hay pagos cargados.",
+    "pro.wallet.tax.title":       "Resultado fiscal {year}",
+    "pro.wallet.tax.realized":    "Realizado",
+    "pro.wallet.tax.unrealized":  "No realizado",
+    "pro.wallet.tax.note":        "Solo a fines informativos. Verificá con tu contador.",
+
     "settings.light_mode":        "Modo claro",
     "settings.dark_mode":         "Modo oscuro",
     "settings.theme_to_light":    "Pasar a tema claro",
@@ -429,6 +443,20 @@ const V2 = {
     "pro.market.earnings.in_days":"In {n} days",
     "pro.market.earnings.tomorrow":"Tomorrow",
     "pro.market.earnings.today":  "Today",
+
+    // Pro Wallet (samas-0.0.46)
+    "pro.wallet.cashflow.title":  "Cash flow · 6 months",
+    "pro.wallet.cashflow.in":     "In",
+    "pro.wallet.cashflow.out":    "Out",
+    "pro.wallet.cashflow.net":    "Net",
+    "pro.wallet.month_pnl.title": "Month performance",
+    "pro.wallet.month_pnl.vs":    "vs. last month",
+    "pro.wallet.dividends.title": "Next dividend",
+    "pro.wallet.dividends.empty": "No upcoming payments.",
+    "pro.wallet.tax.title":       "{year} tax summary",
+    "pro.wallet.tax.realized":    "Realized",
+    "pro.wallet.tax.unrealized":  "Unrealized",
+    "pro.wallet.tax.note":        "For info only. Verify with your accountant.",
 
     "settings.light_mode":        "Light mode",
     "settings.dark_mode":         "Dark mode",
