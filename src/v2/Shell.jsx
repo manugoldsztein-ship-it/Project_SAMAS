@@ -252,6 +252,24 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
           0%   { background-position: 100% 0; }
           100% { background-position: -100% 0; }
         }
+        /* DoneScreen entry animations (samas-0.0.70). The success
+           checkmark scales in with overshoot, then the path strokes
+           itself in. Confetti pieces fall + rotate + fade — pure CSS,
+           no JS / canvas. */
+        @keyframes samas-done-circle-in {
+          0%   { transform: scale(0); opacity: 0; }
+          60%  { transform: scale(1.18); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes samas-done-check-draw {
+          0%   { stroke-dashoffset: 32; }
+          100% { stroke-dashoffset: 0; }
+        }
+        @keyframes samas-confetti-fall {
+          0%   { transform: translate3d(0, -8px, 0) rotate(0deg); opacity: 1; }
+          70%  { opacity: 1; }
+          100% { transform: translate3d(var(--cx, 0), var(--cy, 80px), 0) rotate(var(--cr, 360deg)); opacity: 0; }
+        }
       `}</style>
 
       {/* ---------- scrollable page content ---------- */}
@@ -2318,6 +2336,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.0.70",
+    title: "Trade Done screen — the moment of \"I just bought GGAL\"",
+    bullets: [
+      "Animated checkmark: circle scales in with overshoot, path strokes itself in, success haptic on the same beat. Filled orders also get a 14-piece confetti burst (pure CSS, no canvas).",
+      "Two-column receipt-style position card: total invertido / total recibido on the left, your new position on the right. Reads like a real broker confirmation, not just \"Listo.\"",
+      "Order ID footer in tabular mono: # ABC123XYZ — the touch that makes the screen feel transactional, not screenshotted.",
+    ],
+  },
   {
     version: "0.0.69",
     title: "Revert dashed reference line on sparklines",

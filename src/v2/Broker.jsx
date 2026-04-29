@@ -34,6 +34,7 @@ import { broker as brokerApi, wallet as walletApi } from "./api/index.js";
 import { ObjectivesWizard } from "../ai/ObjectivesWizard.jsx";
 // iOS-style swipe-from-left-edge back gesture.
 import { useEdgeSwipeBack } from "./useEdgeSwipeBack.js";
+import { hapticNative } from "../lib/native.js";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { toast } from "./toast.jsx";
 import { t as tr } from "../lib/i18n.js";
@@ -2039,7 +2040,15 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
           )}
 
           {done ? (
-            <DoneScreen T={T} done={done} side={side} qty={qty} ticker={asset.ticker} onClose={onDone} />
+            <DoneScreen
+              T={T}
+              done={done}
+              side={side}
+              qty={qty}
+              asset={asset}
+              holding={holding}
+              onClose={onDone}
+            />
           ) : confirm ? (
             <ConfirmOrderStep
               T={T}
@@ -2879,43 +2888,171 @@ function ConfirmOrderStep({ T, asset, confirm, busy, err, onCancel, onConfirm, l
   );
 }
 
-function DoneScreen({ T, done, side, qty, ticker, onClose }) {
-  // "Share this trade" hands off to the Social tab. We bridge across
-  // shells via a window CustomEvent (BrokerShell + SocialPage are
-  // sibling sub-shells under SamasShell, which listens for the event,
-  // stashes the trade in localStorage, and switches tab). Social.jsx
-  // picks it up on mount and prefills the compose box.
+// Confetti — 14 small particles falling from the checkmark center,
+// each with randomized direction + rotation + delay. Pure CSS,
+// runs once on mount and stays static (opacity → 0) afterward.
+// We pass --cx, --cy, --cr as CSS vars so the keyframe ends each
+// particle at a different position.
+function ConfettiBurst({ T }) {
+  const pieces = useMemo(() => {
+    const out = [];
+    const colors = [T.accent, T.danger, "#F59E0B", "#3B82F6", "#A855F7", T.accent];
+    for (let i = 0; i < 14; i++) {
+      const cx = (Math.random() - 0.5) * 220;     // ±110px horizontal spread
+      const cy = 80 + Math.random() * 40;          // 80-120px down
+      const cr = 180 + Math.random() * 360;        // 180-540 deg rotate
+      const delay = Math.random() * 120;           // 0-120ms stagger
+      const size = 6 + Math.random() * 4;          // 6-10px
+      out.push({ cx, cy, cr, delay, size, color: colors[i % colors.length] });
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+      {pieces.map((p, i) => (
+        <span key={i} style={{
+          position: "absolute", left: "50%", top: 16,
+          width: p.size, height: p.size, borderRadius: 2,
+          background: p.color,
+          "--cx": `${p.cx}px`,
+          "--cy": `${p.cy}px`,
+          "--cr": `${p.cr}deg`,
+          animation: `samas-confetti-fall 1100ms cubic-bezier(.2,.6,.4,1) ${p.delay}ms forwards`,
+        }}/>
+      ))}
+    </div>
+  );
+}
+
+function DoneScreen({ T, done, side, qty, asset, holding, onClose }) {
+  const ticker = asset?.ticker;
+  const filled = done.status === "filled";
+  const isBuy = side === "buy";
+
+  // Success haptic on mount — same pattern as the Pro Subscribe
+  // button. Notification-style double-tap on iOS for filled orders
+  // (a real outcome to celebrate); a lighter tap for queued limit
+  // orders that aren't filled yet.
+  useEffect(() => {
+    hapticNative(filled ? "success" : "tap").catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // "Share this trade" hands off to the Social tab via a window
+  // CustomEvent (BrokerShell + SocialPage are sibling sub-shells
+  // under SamasShell, which listens, stashes payload in localStorage,
+  // switches tab). Social.jsx prefills the compose box on mount.
   function shareTrade() {
-    if (!done) return;
-    const price = done.fillPrice;
-    if (!price) return; // limit order still pending — nothing to share yet
+    if (!filled || !done.fillPrice) return;
     try {
       window.dispatchEvent(new CustomEvent("samas:share-trade", {
-        detail: { side, qty, ticker, price },
+        detail: { side, qty, ticker, price: done.fillPrice },
       }));
     } catch {}
     onClose();
   }
-  const canShare = done.status === "filled" && !!done.fillPrice;
+
+  // Compute the new post-trade position to show in the position card.
+  // Available when we have a holding object + this is a market-fill
+  // (limit-pending orders haven't moved the position yet).
+  const oldQty = holding?.qty || 0;
+  const newQty = filled ? (isBuy ? oldQty + qty : oldQty - qty) : oldQty;
+  const cur = asset?.currency === "ARS" ? "$" : "US$";
+  const totalSpent = filled && done.fillPrice ? qty * done.fillPrice : 0;
+
   return (
-    <div style={{ textAlign: "center", padding: "24px 0 8px" }}>
+    <div style={{ textAlign: "center", padding: "20px 0 8px", position: "relative" }}>
+      {/* Confetti only on filled orders — limit-pending doesn't earn
+          a celebration yet. */}
+      {filled && <ConfettiBurst T={T} />}
+
+      {/* Animated success circle. Scales in with overshoot, then the
+          checkmark path strokes itself in. Both keyframes defined
+          globally in Shell.jsx. */}
       <div style={{
-        width: 64, height: 64, borderRadius: 32, background: T.accentSoft,
-        color: T.accent, margin: "0 auto 16px",
+        width: 72, height: 72, borderRadius: 36,
+        background: T.accentSoft, color: T.accent,
+        margin: "0 auto 16px",
         display: "flex", alignItems: "center", justifyContent: "center",
+        animation: "samas-done-circle-in 420ms cubic-bezier(.34,1.56,.64,1)",
       }}>
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M20 6L9 17l-5-5"/>
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="3"
+          strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 6L9 17l-5-5"
+            style={{
+              strokeDasharray: 32,
+              strokeDashoffset: 32,
+              animation: "samas-done-check-draw 380ms ease-out 220ms forwards",
+            }}
+          />
         </svg>
       </div>
-      <div style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text, marginBottom: 6 }}>
-        Orden {done.status === "filled" ? "ejecutada" : "enviada"}
+
+      <div style={{
+        fontFamily: FONT.display, fontSize: 22, fontWeight: 800,
+        color: T.text, letterSpacing: -0.4, marginBottom: 4,
+      }}>
+        {filled ? `Orden ejecutada` : `Orden enviada`}
       </div>
-      <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, marginBottom: 20 }}>
-        {side === "buy" ? "Compraste" : "Vendiste"} {qty} u de {ticker}
-        {done.fillPrice ? ` a $${fmtMoney(done.fillPrice)}` : ""}
+      <div style={{
+        fontFamily: FONT.sans, fontSize: 13, color: T.textMute, marginBottom: 16,
+      }}>
+        {isBuy ? "Compraste" : "Vendiste"} {qty} {ticker}
+        {done.fillPrice ? ` a ${cur}${fmtMoney(done.fillPrice, asset?.currency)}` : ""}
       </div>
-      {canShare && (
+
+      {/* Position card — shown only for filled orders where we know
+          the prior holding. Two columns: total spent/received on the
+          left, new position on the right. Reads like a receipt
+          summary, not just a confirmation. */}
+      {filled && holding != null && (
+        <div style={{
+          padding: "14px 16px", borderRadius: 14, marginBottom: 12,
+          background: T.surface, border: `1px solid ${T.border}`,
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          gap: 12, fontVariantNumeric: "tabular-nums",
+        }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 10, fontWeight: 700,
+              color: T.textMute, letterSpacing: 0.5, textTransform: "uppercase",
+              marginBottom: 4,
+            }}>{isBuy ? "Total invertido" : "Total recibido"}</div>
+            <div style={{
+              fontFamily: FONT.mono, fontSize: 14, fontWeight: 700, color: T.text,
+            }}>{cur}{fmtMoney(totalSpent, asset?.currency)}</div>
+          </div>
+          <div style={{
+            width: 1, alignSelf: "stretch", background: T.border,
+          }}/>
+          <div style={{ textAlign: "right" }}>
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 10, fontWeight: 700,
+              color: T.textMute, letterSpacing: 0.5, textTransform: "uppercase",
+              marginBottom: 4,
+            }}>Tu posición</div>
+            <div style={{
+              fontFamily: FONT.mono, fontSize: 14, fontWeight: 700, color: T.text,
+            }}>{newQty} {ticker}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Order ID line — small, muted, tabular-nums. Mimics what real
+          broker confirmations look like and gives the investor a
+          mental model of "this is a real transaction with a record". */}
+      {done.orderId && (
+        <div style={{
+          fontFamily: FONT.mono, fontSize: 10, color: T.textMute,
+          letterSpacing: 0.4, marginBottom: 16,
+        }}>
+          # {String(done.orderId).slice(0, 12).toUpperCase()}
+        </div>
+      )}
+
+      {filled && done.fillPrice && (
         <button onClick={shareTrade} style={{
           width: "100%", padding: 14, borderRadius: 14, marginBottom: 8,
           background: T.surface, color: T.accent,
@@ -2924,8 +3061,9 @@ function DoneScreen({ T, done, side, qty, ticker, onClose }) {
           cursor: "pointer",
           display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
         }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="18" cy="5" r="3"/>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="18" cy="5"  r="3"/>
             <circle cx="6"  cy="12" r="3"/>
             <circle cx="18" cy="19" r="3"/>
             <line x1="8.59"  y1="13.51" x2="15.42" y2="17.49"/>
