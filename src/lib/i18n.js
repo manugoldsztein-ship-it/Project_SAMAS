@@ -113,6 +113,19 @@ const V2 = {
     "social.compose.uploading":   "Subiendo foto…",
     "social.post.photo":          "Foto",
 
+    // Portfolio share — generates a text snapshot of the user's
+    // current holdings and inserts into the compose body.
+    "social.compose.share_portfolio":      "Pegar mi portafolio",
+    "social.compose.portfolio_header":     "Mi cartera SAMAS:",
+    "social.compose.portfolio_total":      "Total: {amount}",
+    "social.compose.portfolio_empty":      "Tu portafolio está vacío. Comprá algo desde Invertir y volvé.",
+    "social.compose.portfolio_err":        "No pudimos leer tu portafolio.",
+
+    // Empty-feed CTA — shown on Trending when there are 0 posts
+    "social.feed.empty.title":             "Sé el primero en romperla",
+    "social.feed.empty.subtitle":          "Compartí un trade, una opinión o una pregunta. Tu post aparece en Trending si genera engagement.",
+    "social.feed.empty.cta":               "Publicar mi primer post",
+
     // Post: delete (swipe-left action + confirm dialog)
     "social.post.delete":         "Borrar",
     "social.post.delete_confirm": "¿Querés borrar este post?",
@@ -381,6 +394,19 @@ const V2 = {
     "social.compose.remove_photo":"Remove photo",
     "social.compose.uploading":   "Uploading photo…",
     "social.post.photo":          "Photo",
+
+    // Portfolio share — generates a text snapshot of the user's
+    // current holdings and inserts into the compose body.
+    "social.compose.share_portfolio":      "Paste my portfolio",
+    "social.compose.portfolio_header":     "My SAMAS portfolio:",
+    "social.compose.portfolio_total":      "Total: {amount}",
+    "social.compose.portfolio_empty":      "Your portfolio is empty. Buy something from Invest and come back.",
+    "social.compose.portfolio_err":        "Couldn't read your portfolio.",
+
+    // Empty-feed CTA — shown on Trending when there are 0 posts
+    "social.feed.empty.title":             "Be the first to break out",
+    "social.feed.empty.subtitle":          "Share a trade, a take, or a question. Your post lands in Trending if it gets engagement.",
+    "social.feed.empty.cta":               "Publish my first post",
 
     // Post: delete (swipe-left action + confirm dialog)
     "social.post.delete":         "Delete",

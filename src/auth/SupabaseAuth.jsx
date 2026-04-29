@@ -688,13 +688,65 @@ function VerifyWhatsAppView({ C, onVerified }) {
           <input
             type="text"
             inputMode="numeric"
+            autoComplete="one-time-code"
             placeholder="123456"
             maxLength={8}
             value={code}
             onChange={(e) => { setCode(e.target.value.replace(/\D/g, "")); setErr(null); }}
+            onPaste={(e) => {
+              // Same sanitize as the keyboard path so a paste of
+              // "Tu código es 482719 — válido por 5 min" still ends
+              // up as 482719 in the input.
+              const text = (e.clipboardData || window.clipboardData)?.getData("text") || "";
+              const digits = text.replace(/\D/g, "").slice(0, 8);
+              if (digits) {
+                e.preventDefault();
+                setCode(digits);
+                setErr(null);
+              }
+            }}
             onKeyDown={(e) => { if (e.key === "Enter") verifyCode(); }}
             style={{ ...fieldStyle(C), marginBottom: 12, fontFamily: "monospace", letterSpacing: 8, textAlign: "center", fontSize: 20, fontWeight: 700 }}
           />
+          {/* Paste-from-clipboard button — saves the user from
+              alt-tabbing back to WhatsApp to read each digit. The
+              onPaste handler above covers the keyboard path; this
+              button is for users who don't know they can long-press
+              the input. */}
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const text = await navigator.clipboard.readText();
+                const digits = (text || "").replace(/\D/g, "").slice(0, 8);
+                if (digits) {
+                  setCode(digits);
+                  setErr(null);
+                }
+              } catch (_) {
+                // Clipboard read can be blocked on iOS WebView if no
+                // recent user gesture — the button click itself
+                // qualifies but be safe.
+              }
+            }}
+            disabled={busy}
+            style={{
+              padding: "8px 14px", borderRadius: 999,
+              background: "transparent", border: "1px solid " + C.border,
+              color: C.textMd, fontFamily: "inherit",
+              fontSize: 12, fontWeight: 600,
+              cursor: busy ? "default" : "pointer",
+              display: "inline-flex", alignItems: "center", gap: 6,
+              marginBottom: 12,
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+            Pegar código
+          </button>
           <button onClick={verifyCode} disabled={busy} style={primaryBtn(C, busy)}>
             {busy ? "Verificando…" : "Verificar"}
           </button>

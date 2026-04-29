@@ -685,6 +685,56 @@ export async function unfollow(targetUserId) {
 // ----------------------------------------------------------
 
 /**
+ * searchPostsByBody(query, { limit }) — posts whose body contains
+ * the given substring. Used by SearchView to support hashtag drill-in
+ * (#nftargentina taps land here). No dedicated hashtag index — we
+ * rely on a Postgres ilike on posts.body which is acceptable for the
+ * current corpus size; if traffic grows we'll add a GIN trigram
+ * index or a separate hashtags table.
+ */
+export async function searchPostsByBody(query, { limit = 20 } = {}) {
+  const q = String(query || "").trim();
+  if (!q) return [];
+  const me = await currentUserId();
+  // Escape ilike wildcards so a user typing "_foo%" doesn't match
+  // unrelated bodies. ilike treats _ as "any single char" and % as
+  // "any run of chars" — we want literal matches.
+  const safe = q.replace(/[%_]/g, (c) => `\\${c}`);
+  const { data: posts, error } = await supabase
+    .from("posts")
+    .select(`
+      id, author_id, body, ticker, trade, image_url,
+      likes_count, comments_count, reposts_count, created_at,
+      author:profiles_social!author_id (
+        user_id, handle, display_name, avatar_color, verified
+      )
+    `)
+    .is("deleted_at", null)
+    .ilike("body", `%${safe}%`)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  if (!posts || posts.length === 0) return [];
+  const ids = posts.map((p) => p.id);
+  const [likesRes, repostsRes, savesRes] = await Promise.all([
+    supabase.from("likes").select("post_id").eq("user_id", me).in("post_id", ids),
+    supabase.from("reposts").select("post_id").eq("user_id", me).in("post_id", ids),
+    supabase.from("saved_posts").select("post_id").eq("user_id", me).in("post_id", ids),
+  ]);
+  const liked = new Set((likesRes.data || []).map((r) => r.post_id));
+  const reposted = new Set((repostsRes.data || []).map((r) => r.post_id));
+  const saved = new Set((savesRes.data || []).map((r) => r.post_id));
+  return posts.map((p) =>
+    postRowToPost(p, {
+      likedByMe: liked.has(p.id),
+      repostedByMe: reposted.has(p.id),
+      savedByMe: saved.has(p.id),
+      author: p.author ? profileRowToUser(p.author) : null,
+    })
+  );
+}
+
+/**
  * getUsers({ query }) — accounts other than me, optional handle/name
  * substring filter, with `followedByMe` flag computed via a second
  * lightweight query.

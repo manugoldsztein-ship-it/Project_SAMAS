@@ -120,6 +120,23 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
     }
   }
 
+  // openHashtag(tag) — drop the user into the Search tab with the
+  // query pre-filled to "#tag". SearchView detects the # prefix and
+  // runs a body-substring query (searchPostsByBody) instead of the
+  // user/ticker mode. Briefcase pattern keeps SearchView's local
+  // query state authoritative — we don't pass a controlled prop.
+  function openHashtag(tag) {
+    if (!tag) return;
+    try {
+      localStorage.setItem("samas_pending_search", `#${tag}`);
+    } catch {}
+    // Dismiss any drilled-in overlays so the search view is on top.
+    setProfileUserId(null);
+    setThreadPost(null);
+    setTickerFilter(null);
+    setTab("search");
+  }
+
   // iOS-style swipe-from-left-edge back to the wallet shell.
   const { bind: swipeBind, style: swipeStyle } = useEdgeSwipeBack(onBack);
   // Pull-to-refresh — calls the active sub-tab's registered handler.
@@ -185,10 +202,10 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
         WebkitOverflowScrolling: "touch",
       }}>
         {ptrIndicator}
-        {tab === "feed"     && <FeedView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} onOpenMention={openMention} />}
-        {tab === "search"   && <SearchView T={T} lang={lang} user={user} onMessageUser={openDmWith} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} onOpenMention={openMention} />}
-        {tab === "messages" && <MessagesView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenTicker={openTicker} onOpenMention={openMention} />}
-        {tab === "profile"  && <ProfileView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} onOpenMention={openMention} />}
+        {tab === "feed"     && <FeedView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} onOpenMention={openMention} onOpenHashtag={openHashtag} />}
+        {tab === "search"   && <SearchView T={T} lang={lang} user={user} onMessageUser={openDmWith} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} onOpenMention={openMention} onOpenHashtag={openHashtag} />}
+        {tab === "messages" && <MessagesView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenTicker={openTicker} onOpenMention={openMention} onOpenHashtag={openHashtag} />}
+        {tab === "profile"  && <ProfileView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} onOpenMention={openMention} onOpenHashtag={openHashtag} />}
       </div>
 
       {/* Drill-in peer profile overlay. Sits above the current
@@ -221,7 +238,7 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
               onMessage={openDmWith}
               onOpenThread={openThread}
               onOpenTicker={openTicker}
-              onOpenMention={openMention}
+              onOpenMention={openMention} onOpenHashtag={openHashtag}
             />
           </div>
         </div>
@@ -247,7 +264,7 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
             onBack={closeThread}
             onOpenProfile={openProfile}
             onOpenTicker={openTicker}
-            onOpenMention={openMention}
+            onOpenMention={openMention} onOpenHashtag={openHashtag}
           />
         </div>
       )}
@@ -273,7 +290,7 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
             onOpenProfile={openProfile}
             onOpenThread={openThread}
             onOpenTicker={openTicker}
-            onOpenMention={openMention}
+            onOpenMention={openMention} onOpenHashtag={openHashtag}
           />
         </div>
       )}
@@ -345,7 +362,7 @@ const FEED_TABS = [
   { id: "trades",    key: "social.tab.trades"    },
 ];
 
-function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, onOpenTicker, onOpenMention }) {
+function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, onOpenTicker, onOpenMention, onOpenHashtag }) {
   const [tab, setTab] = useState("for_you");
   const [posts, setPosts] = useState([]);
   const [me, setMe] = useState(null);
@@ -623,6 +640,54 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
     if (pendingImagePreview) URL.revokeObjectURL(pendingImagePreview);
     setPendingImage(null);
     setPendingImagePreview(null);
+  }
+
+  // Share-portfolio: pull holdings from the broker mock, format as
+  // a compact text snapshot, and insert into the compose body. Each
+  // line is one ticker with qty + gain%; the bottom line is the
+  // total. We cap at top 6 holdings so the post stays under 280
+  // chars even on a heavy portfolio. Tickers are kept as $XXX so
+  // the linkifyTickers helper renders them as taps later.
+  async function sharePortfolio() {
+    setErr(null);
+    try {
+      const p = await brokerApi.getPortfolio();
+      const holdings = (p?.holdings || []).filter((h) => h && h.qty > 0);
+      if (holdings.length === 0) {
+        setErr(tr("social.compose.portfolio_empty", lang));
+        return;
+      }
+      // Sort by absolute value descending so the top contributors
+      // surface first (a 0.01-NVDA position shouldn't outrank a
+      // 100-share GGAL just by alphabetical order).
+      const ranked = [...holdings].sort((a, b) => (b.value || 0) - (a.value || 0)).slice(0, 6);
+      const fmtPct = (n) => `${n >= 0 ? "+" : ""}${(n || 0).toFixed(1)}%`;
+      const lines = ranked.map((h) => {
+        // qty: integer when whole, else 2 decimals (BTC 0.25 etc).
+        const qty = Number.isInteger(h.qty) ? h.qty : Number(h.qty).toFixed(2);
+        return `$${h.ticker} · ${qty} (${fmtPct(h.gainPct)})`;
+      });
+      const totalUsd = Math.round(p.totalUsd || 0).toLocaleString("es-AR");
+      const header = tr("social.compose.portfolio_header", lang);
+      const totalLine = tr("social.compose.portfolio_total", lang, {
+        amount: `US$${totalUsd}`,
+      });
+      const text = [header, ...lines, "", totalLine].join("\n").slice(0, 280);
+      setBody(text);
+      // Move the cursor to the end and focus so the user can edit
+      // before publishing.
+      setTimeout(() => {
+        const el = composeRef.current;
+        if (!el) return;
+        try {
+          el.focus();
+          el.setSelectionRange(text.length, text.length);
+        } catch {}
+      }, 0);
+    } catch (e) {
+      console.warn("[social] share portfolio failed:", e);
+      setErr(tr("social.compose.portfolio_err", lang));
+    }
   }
 
   // Paste from the system clipboard. We use the Clipboard API (works
@@ -960,6 +1025,26 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
                   </svg>
                 </button>
                 <button
+                  onClick={sharePortfolio}
+                  disabled={busy}
+                  aria-label={tr("social.compose.share_portfolio", lang)}
+                  title={tr("social.compose.share_portfolio", lang)}
+                  style={{
+                    width: 36, height: 32, borderRadius: 999,
+                    background: T.surface, border: `1px solid ${T.border}`,
+                    color: T.text, cursor: busy ? "default" : "pointer",
+                    padding: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                    opacity: busy ? 0.6 : 1,
+                  }}
+                >
+                  {/* Pie chart icon — represents portfolio composition */}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21.21 15.89A10 10 0 1 1 8 2.83"/>
+                    <path d="M22 12A10 10 0 0 0 12 2v10z"/>
+                  </svg>
+                </button>
+                <button
                   onClick={publish}
                   disabled={busy || !body.trim()}
                   style={{
@@ -992,14 +1077,47 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
       {/* Feed */}
       <div style={{ margin: "0 16px" }}>
         {posts.length === 0 ? (
-          <div style={{
-            padding: 30, textAlign: "center",
-            color: T.textMute, fontFamily: FONT.sans, fontSize: 13,
-          }}>
-            {tab === "following"
-              ? "Seguí gente para ver sus posts acá."
-              : "Nada por acá todavía."}
-          </div>
+          tab === "for_you" ? (
+            // Trending empty state — invite the user to publish.
+            // The CTA focuses the compose textarea so they can start
+            // typing immediately without scrolling. Bigger card +
+            // gradient backdrop than other empty states because
+            // Trending is the default tab and this is what a fresh
+            // user sees on first open.
+            <div style={{
+              marginTop: 8, padding: "24px 20px", borderRadius: 18,
+              background: `linear-gradient(180deg, ${T.accentSoft} 0%, ${T.surface} 100%)`,
+              border: `1px solid ${T.border}`,
+              textAlign: "center",
+            }}>
+              <div style={{
+                fontFamily: FONT.display, fontSize: 18, fontWeight: 700,
+                color: T.text, marginBottom: 6, letterSpacing: -0.3,
+              }}>{tr("social.feed.empty.title", lang)}</div>
+              <div style={{
+                fontFamily: FONT.sans, fontSize: 13, color: T.textMute,
+                lineHeight: 1.5, marginBottom: 16,
+              }}>{tr("social.feed.empty.subtitle", lang)}</div>
+              <button
+                onClick={() => composeRef.current?.focus()}
+                style={{
+                  padding: "10px 20px", borderRadius: 999,
+                  background: T.accent, color: T.accentInk,
+                  border: "none", cursor: "pointer",
+                  fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+                }}
+              >{tr("social.feed.empty.cta", lang)}</button>
+            </div>
+          ) : (
+            <div style={{
+              padding: 30, textAlign: "center",
+              color: T.textMute, fontFamily: FONT.sans, fontSize: 13,
+            }}>
+              {tab === "following"
+                ? "Seguí gente para ver sus posts acá."
+                : "Nada por acá todavía."}
+            </div>
+          )
         ) : (
           posts.map((p) => (
             <PostCard
@@ -1014,7 +1132,7 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
               onOpenAuthor={onOpenProfile}
               onOpenThread={onOpenThread}
               onOpenTicker={onOpenTicker}
-              onOpenMention={onOpenMention}
+              onOpenMention={onOpenMention} onOpenHashtag={onOpenHashtag}
             />
           ))
         )}
@@ -1046,37 +1164,66 @@ function tickerFromQuery(q) {
   return null;
 }
 
-function SearchView({ T, lang = "es", user = null, onMessageUser, onOpenProfile, onOpenThread, onOpenTicker, onOpenMention }) {
+function SearchView({ T, lang = "es", user = null, onMessageUser, onOpenProfile, onOpenThread, onOpenTicker, onOpenMention, onOpenHashtag }) {
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState([]);
   const [tickerPosts, setTickerPosts] = useState(null); // null = no ticker query yet, [] = empty
+  // hashtagPosts: result of body-substring search when query starts
+  // with #. null = inactive, [] = active but empty.
+  const [hashtagPosts, setHashtagPosts] = useState(null);
   const [savedIds, setSavedIds] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Drain the hashtag-search briefcase that openHashtag() in SocialPage
+  // sets when the user taps a #foo span on a post body. Runs once on
+  // mount so subsequent visits to the search tab don't keep
+  // re-prefilling.
+  useEffect(() => {
+    let pending;
+    try { pending = localStorage.getItem("samas_pending_search"); } catch {}
+    if (!pending) return;
+    try { localStorage.removeItem("samas_pending_search"); } catch {}
+    setQuery(pending);
+  }, []);
 
   // The active ticker query, derived from the input. Memoized so
   // we don't fetch on every keystroke if the shape doesn't change.
   const activeTicker = useMemo(() => tickerFromQuery(query), [query]);
+  // Active hashtag query (literal "#tag"). Triggers searchPostsByBody
+  // instead of the ticker / users fetch.
+  const activeHashtag = useMemo(() => {
+    const t = (query || "").trim();
+    if (!t.startsWith("#")) return null;
+    const tag = t.slice(1);
+    return tag.length >= 1 ? `#${tag}` : null;
+  }, [query]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       // Always fetch matching users (handle / display name search).
-      // The ticker fetch only fires when the input shape matches.
-      const userPromise = socialApi.getUsers({ query });
+      // The ticker / hashtag fetches only fire when shapes match.
+      const userPromise = !activeHashtag
+        ? socialApi.getUsers({ query })
+        : Promise.resolve([]);
       const tickerPromise = activeTicker
         ? socialApi.getFeed({ ticker: activeTicker, limit: 30 })
         : Promise.resolve(null);
+      const hashtagPromise = activeHashtag
+        ? socialApi.searchPostsByBody(activeHashtag, { limit: 30 })
+        : Promise.resolve(null);
       const savedPromise = socialApi.getSavedPosts().catch(() => []);
-      const [u, t, s] = await Promise.all([userPromise, tickerPromise, savedPromise]);
+      const [u, t, h, s] = await Promise.all([userPromise, tickerPromise, hashtagPromise, savedPromise]);
       setUsers(u || []);
       setTickerPosts(t);
+      setHashtagPosts(h);
       setSavedIds((s || []).map((x) => x.id));
     } catch (e) {
       console.warn("[social-search] refresh:", e);
     } finally {
       setLoading(false);
     }
-  }, [query, activeTicker]);
+  }, [query, activeTicker, activeHashtag]);
 
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => setRefreshHandler("social-search", refresh), [refresh]);
@@ -1167,7 +1314,45 @@ function SearchView({ T, lang = "es", user = null, onMessageUser, onOpenProfile,
                 onOpenAuthor={onOpenProfile}
                 onOpenThread={onOpenThread}
                 onOpenTicker={onOpenTicker}
-                onOpenMention={onOpenMention}
+                onOpenMention={onOpenMention} onOpenHashtag={onOpenHashtag}
+              />
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Hashtag results — only when the query starts with #. Same
+          card shape as ticker results above; renders below the (empty)
+          ticker section because hashtag and ticker are mutually
+          exclusive in practice (a query can't be both shapes). */}
+      {activeHashtag && (
+        <div style={{ margin: "0 16px 16px" }}>
+          <div style={{
+            fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+            color: T.textMute, letterSpacing: 0.5, textTransform: "uppercase",
+            padding: "0 4px 8px",
+          }}>
+            {`Posts con ${activeHashtag}`}
+          </div>
+          {loading ? null : !hashtagPosts || hashtagPosts.length === 0 ? (
+            <div style={{
+              padding: "20px 16px", borderRadius: 14, textAlign: "center",
+              background: T.surface, border: `1px solid ${T.border}`,
+              color: T.textMute, fontFamily: FONT.sans, fontSize: 12,
+            }}>{`No hay posts con ${activeHashtag} todavía.`}</div>
+          ) : (
+            hashtagPosts.map((p) => (
+              <PostCard
+                key={p.id}
+                T={T} p={p} lang={lang}
+                saved={savedIds.includes(p.id)}
+                onLike={() => toggleLike(p)}
+                onRepost={() => repost(p)}
+                onSave={() => toggleSave(p)}
+                onOpenAuthor={onOpenProfile}
+                onOpenThread={onOpenThread}
+                onOpenTicker={onOpenTicker}
+                onOpenMention={onOpenMention} onOpenHashtag={onOpenHashtag}
               />
             ))
           )}
@@ -1175,7 +1360,7 @@ function SearchView({ T, lang = "es", user = null, onMessageUser, onOpenProfile,
       )}
 
       <div style={{ margin: "0 16px" }}>
-        {loading ? null : users.length === 0 && !activeTicker ? (
+        {loading ? null : users.length === 0 && !activeTicker && !activeHashtag ? (
           <div style={{
             padding: 30, textAlign: "center",
             color: T.textMute, fontFamily: FONT.sans, fontSize: 13,
@@ -1270,7 +1455,7 @@ function UserRow({ T, user, onToggleFollow, onMessage, onOpen }) {
 // Schema + RLS: supabase/social_messages.sql.
 // API:           src/v2/api/messages.js.
 // ============================================================
-function MessagesView({ T, lang = "es", user = null, onOpenProfile, onOpenTicker, onOpenMention }) {
+function MessagesView({ T, lang = "es", user = null, onOpenProfile, onOpenTicker, onOpenMention, onOpenHashtag }) {
   const [threads, setThreads] = useState(null); // null = loading
   const [active, setActive] = useState(null);   // active thread or null
 
@@ -1350,7 +1535,7 @@ function MessagesView({ T, lang = "es", user = null, onOpenProfile, onOpenTicker
         onBack={() => { setActive(null); refresh(); }}
         onOpenProfile={onOpenProfile}
         onOpenTicker={onOpenTicker}
-        onOpenMention={onOpenMention}
+        onOpenMention={onOpenMention} onOpenHashtag={onOpenHashtag}
       />
     );
   }
@@ -1444,7 +1629,7 @@ function ThreadRow({ T, thread, onOpen }) {
 // Conversation view — message list scrolled to bottom + compose bar.
 // Subscribes to INSERTs on dm_messages for THIS thread so peer
 // replies stream in live. Marks unread-as-read on open.
-function ConversationView({ T, lang = "es", thread, onBack, onOpenProfile, onOpenTicker, onOpenMention }) {
+function ConversationView({ T, lang = "es", thread, onBack, onOpenProfile, onOpenTicker, onOpenMention, onOpenHashtag }) {
   const [messages, setMessages] = useState(null); // null=loading
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1615,7 +1800,7 @@ function ConversationView({ T, lang = "es", thread, onBack, onOpenProfile, onOpe
                 fontFamily: FONT.sans, fontSize: 14, lineHeight: 1.4,
                 whiteSpace: "pre-wrap", wordBreak: "break-word",
               }}>
-                {linkifyTickers(m.body, linkT, onOpenTicker, onOpenMention)}
+                {linkifyTickers(m.body, linkT, onOpenTicker, onOpenMention, onOpenHashtag)}
               </div>
             );
           })
@@ -1680,7 +1865,7 @@ function ConversationView({ T, lang = "es", thread, onBack, onOpenProfile, onOpe
 //      Follow/Unfollow + DM buttons, only their post list (no
 //      saved tab). Followers + Following + Posts counts.
 // ============================================================
-function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack, onOpenProfile, onMessage, onOpenThread, onOpenTicker, onOpenMention }) {
+function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack, onOpenProfile, onMessage, onOpenThread, onOpenTicker, onOpenMention, onOpenHashtag }) {
   const [me, setMe] = useState(null);          // logged-in user (for fallback color, isSelf check)
   const [profile, setProfile] = useState(null); // person being viewed (me or peer)
   const [posts, setPosts] = useState([]);
@@ -2013,7 +2198,7 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
               onOpenAuthor={onOpenProfile}
               onOpenThread={onOpenThread}
               onOpenTicker={onOpenTicker}
-              onOpenMention={onOpenMention}
+              onOpenMention={onOpenMention} onOpenHashtag={onOpenHashtag}
             />
           ))
         )}
@@ -2034,7 +2219,7 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
 // Tap any reply author's avatar/handle → drills into their profile
 // (recursive navigation, supported by the SocialPage overlay stack).
 // ============================================================
-function ThreadView({ T, lang = "es", post, onBack, onOpenProfile, onOpenTicker, onOpenMention }) {
+function ThreadView({ T, lang = "es", post, onBack, onOpenProfile, onOpenTicker, onOpenMention, onOpenHashtag }) {
   const [replies, setReplies] = useState(null); // null = loading
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
@@ -2179,7 +2364,7 @@ function ThreadView({ T, lang = "es", post, onBack, onOpenProfile, onOpenTicker,
         {/* Parent post — same PostCard the feed uses, readonly so
             we don't re-render the action row twice. Tapping the
             author still opens their profile via onOpenAuthor. */}
-        <PostCard T={T} p={post} lang={lang} readonly onOpenAuthor={onOpenProfile} onOpenTicker={onOpenTicker} onOpenMention={onOpenMention} />
+        <PostCard T={T} p={post} lang={lang} readonly onOpenAuthor={onOpenProfile} onOpenTicker={onOpenTicker} onOpenMention={onOpenMention} onOpenHashtag={onOpenHashtag} />
 
         {/* Section divider */}
         <div style={{
@@ -2202,7 +2387,7 @@ function ThreadView({ T, lang = "es", post, onBack, onOpenProfile, onOpenTicker,
             r={r}
             onOpenAuthor={onOpenProfile}
             onOpenTicker={onOpenTicker}
-            onOpenMention={onOpenMention}
+            onOpenMention={onOpenMention} onOpenHashtag={onOpenHashtag}
           />
         ))}
       </div>
@@ -2268,7 +2453,7 @@ function ThreadView({ T, lang = "es", post, onBack, onOpenProfile, onOpenTicker,
 // Mirrors PostCard's author header but no action row (replies
 // can't be liked / reposted in this MVP).
 // ----------------------------------------------------------
-function ReplyRow({ T, r, onOpenAuthor, onOpenTicker, onOpenMention }) {
+function ReplyRow({ T, r, onOpenAuthor, onOpenTicker, onOpenMention, onOpenHashtag }) {
   const handle = (r.author?.handle || "@user").replace(/^@/, "");
   const { initials, color } = avatarPropsFor(r.author, T.accent);
   const displayName = r.author?.displayName || "Usuario";
@@ -2304,7 +2489,7 @@ function ReplyRow({ T, r, onOpenAuthor, onOpenTicker, onOpenMention }) {
       <div style={{
         fontFamily: FONT.sans, fontSize: 13, color: T.text,
         lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word",
-      }}>{linkifyTickers(r.body, T, onOpenTicker, onOpenMention)}</div>
+      }}>{linkifyTickers(r.body, T, onOpenTicker, onOpenMention, onOpenHashtag)}</div>
     </div>
   );
 }
@@ -2323,7 +2508,7 @@ function ReplyRow({ T, r, onOpenAuthor, onOpenTicker, onOpenMention }) {
 // mention while you're viewing the ticker feed, it slides in at
 // the top within ~500ms.
 // ============================================================
-function TickerFeedView({ T, lang = "es", ticker, onBack, onOpenProfile, onOpenThread, onOpenTicker, onOpenMention }) {
+function TickerFeedView({ T, lang = "es", ticker, onBack, onOpenProfile, onOpenThread, onOpenTicker, onOpenMention, onOpenHashtag }) {
   const [posts, setPosts] = useState(null); // null = loading
   const [savedIds, setSavedIds] = useState([]);
   const symbol = String(ticker || "").toUpperCase();
@@ -2459,7 +2644,7 @@ function TickerFeedView({ T, lang = "es", ticker, onBack, onOpenProfile, onOpenT
               onOpenAuthor={onOpenProfile}
               onOpenThread={onOpenThread}
               onOpenTicker={onOpenTicker}
-              onOpenMention={onOpenMention}
+              onOpenMention={onOpenMention} onOpenHashtag={onOpenHashtag}
             />
           ))
         )}
@@ -2481,14 +2666,16 @@ function TickerFeedView({ T, lang = "es", ticker, onBack, onOpenProfile, onOpenT
 //   a mention → look up the user_id by handle and call
 //   onOpenAuthor; this is async but we don't block render — if the
 //   handle doesn't resolve we just no-op.
-function linkifyTickers(body, T, onOpenTicker, onOpenMention) {
+function linkifyTickers(body, T, onOpenTicker, onOpenMention, onOpenHashtag) {
   if (!body) return body;
-  // Combined regex: ticker OR mention. Each match exposes one of
-  // the two capture groups (m[1] = ticker, m[2] = handle without @).
-  // Tickers: $ then 1–6 [A-Z][A-Z0-9] at a word boundary.
-  // Mentions: @ then 1–24 [a-zA-Z0-9_], case-insensitive (handles
-  // are lowercase in the DB but users will type any case).
-  const re = /\$([A-Z][A-Z0-9]{0,5})\b|@([a-zA-Z0-9_]{1,24})\b/g;
+  // Combined regex: ticker OR mention OR hashtag. Each match exposes
+  // exactly one of three capture groups:
+  //   m[1] = $TICKER          (1–6 uppercase alphanumerics)
+  //   m[2] = @handle          (1–24 [a-zA-Z0-9_])
+  //   m[3] = #hashtag         (1–32 [a-zA-Z0-9_]; allows non-ASCII
+  //                            via the unicode flag below for things
+  //                            like #criptoargentina or accented tags)
+  const re = /\$([A-Z][A-Z0-9]{0,5})\b|@([a-zA-Z0-9_]{1,24})\b|#([\p{L}\p{N}_]{1,32})/gu;
   const out = [];
   let last = 0;
   let m;
@@ -2497,6 +2684,7 @@ function linkifyTickers(body, T, onOpenTicker, onOpenMention) {
     if (m.index > last) out.push(body.slice(last, m.index));
     const sym = m[1];
     const mention = m[2];
+    const hashtag = m[3];
     if (sym) {
       // $TICKER → drill into ticker feed (no-op if onOpenTicker absent)
       if (onOpenTicker) {
@@ -2537,6 +2725,28 @@ function linkifyTickers(body, T, onOpenTicker, onOpenMention) {
         );
       } else {
         out.push(`@${mention}`);
+      }
+    } else if (hashtag) {
+      // #hashtag → open search prefilled with #hashtag. We don't
+      // (yet) have a dedicated hashtag index in Postgres, so the
+      // search view runs a body-substring match. Free-text approach
+      // is deliberate — the v2 prototype optimizes for low schema
+      // commitment over query speed.
+      if (onOpenHashtag) {
+        out.push(
+          <button
+            key={`ht-${i++}-${m.index}`}
+            onClick={(e) => { e.stopPropagation(); onOpenHashtag(hashtag); }}
+            style={{
+              display: "inline", padding: 0, margin: 0,
+              background: "transparent", border: "none",
+              color: T.accent, cursor: "pointer",
+              font: "inherit", fontWeight: 700,
+            }}
+          >#{hashtag}</button>
+        );
+      } else {
+        out.push(`#${hashtag}`);
       }
     }
     last = m.index + m[0].length;
@@ -2592,7 +2802,7 @@ async function resolveHandleToUserId(handle) {
 const ACTION_WIDTH = 96;
 const SNAP_THRESHOLD = 44;
 
-function PostCard({ T, p, lang = "es", saved, meId, onLike, onRepost, onSave, onDelete, readonly, onOpenAuthor, onOpenThread, onOpenTicker, onOpenMention }) {
+function PostCard({ T, p, lang = "es", saved, meId, onLike, onRepost, onSave, onDelete, readonly, onOpenAuthor, onOpenThread, onOpenTicker, onOpenMention, onOpenHashtag }) {
   const handle = (p.author?.handle || "@user").replace(/^@/, "");
   // avatarPropsFor handles the displayName-missing case AND falls
   // back to a deterministic color so two posters in the same feed
@@ -2607,6 +2817,10 @@ function PostCard({ T, p, lang = "es", saved, meId, onLike, onRepost, onSave, on
   const [dx, setDx] = useState(0);
   const [confirming, setConfirming] = useState(false);
   const [animating, setAnimating] = useState(true);
+  // Image lightbox state — when set, a fullscreen overlay renders
+  // the image at native size inside this PostCard. Held local so a
+  // post-with-image elsewhere doesn't fight for the same overlay.
+  const [lightbox, setLightbox] = useState(null);
   const startRef = React.useRef(null);   // {x, y}
   const movedRef = React.useRef(false);  // moved past click threshold
   const dirRef   = React.useRef(null);   // 'h' | 'v' — locked after first 6px
@@ -2715,18 +2929,22 @@ function PostCard({ T, p, lang = "es", saved, meId, onLike, onRepost, onSave, on
         <div style={{
           fontFamily: FONT.sans, fontSize: 14, color: T.text,
           lineHeight: 1.5, whiteSpace: "pre-wrap", marginBottom: 10,
-        }}>{linkifyTickers(p.body, T, onOpenTicker, onOpenMention)}</div>
+        }}>{linkifyTickers(p.body, T, onOpenTicker, onOpenMention, onOpenHashtag)}</div>
 
         {/* Image attachment — rendered between body and trade card.
             object-fit: cover keeps tall portraits and wide screenshots
-            both readable inside the same max-height card. Tap goes
-            through the wrapper's onOpenThread (no separate handler). */}
+            both readable inside the same max-height card. Tap on the
+            image opens the lightbox (handler stops propagation so it
+            doesn't bubble up to the parent's onOpenThread). */}
         {p.imageUrl && (
-          <div style={{
-            marginBottom: 10, borderRadius: 14, overflow: "hidden",
-            border: `1px solid ${T.border}`, background: T.bg,
-            maxHeight: 360,
-          }}>
+          <div
+            onClick={(e) => { e.stopPropagation(); setLightbox(p.imageUrl); }}
+            style={{
+              marginBottom: 10, borderRadius: 14, overflow: "hidden",
+              border: `1px solid ${T.border}`, background: T.bg,
+              maxHeight: 360, cursor: "zoom-in",
+            }}
+          >
             <img
               src={p.imageUrl}
               alt={tr("social.post.photo", lang)}
@@ -2790,10 +3008,65 @@ function PostCard({ T, p, lang = "es", saved, meId, onLike, onRepost, onSave, on
     </div>
   );
 
+  // Lightbox overlay — fixed position covers the whole screen.
+  // Defined once so both the non-owner and owner branches can render
+  // it. A null lightbox renders nothing (no DOM node, no z-index war).
+  const lightboxJsx = lightbox && (
+    <div
+      onClick={() => setLightbox(null)}
+      style={{
+        position: "fixed", inset: 0, zIndex: 300,
+        background: "rgba(0,0,0,0.92)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 16, cursor: "zoom-out",
+        // Animate in — quick fade so the transition feels
+        // "tap → fullscreen" instead of "tap → nothing → fullscreen".
+        animation: "samas-lightbox-in 140ms ease",
+      }}
+    >
+      <style>{`
+        @keyframes samas-lightbox-in {
+          from { opacity: 0; }
+          to   { opacity: 1; }
+        }
+      `}</style>
+      {/* Close X — top-right, larger touch target than visual size. */}
+      <button
+        onClick={(e) => { e.stopPropagation(); setLightbox(null); }}
+        aria-label="Cerrar"
+        style={{
+          position: "absolute",
+          top: "calc(env(safe-area-inset-top) + 14px)", right: 14,
+          width: 38, height: 38, borderRadius: 999,
+          background: "rgba(255,255,255,0.16)", color: "#fff",
+          border: "none", cursor: "pointer", padding: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+      <img
+        src={lightbox}
+        alt={tr("social.post.photo", lang)}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          maxWidth: "100%", maxHeight: "100%",
+          objectFit: "contain", borderRadius: 8,
+          boxShadow: "0 30px 60px rgba(0,0,0,0.6)",
+        }}
+      />
+    </div>
+  );
+
   // No swipe wrapper for posts the user doesn't own — render the
   // raw card and bail. Saves a layer + keeps non-owners' interaction
-  // surface unchanged.
-  if (!ownPost) return cardInner;
+  // surface unchanged. The lightbox is appended unconditionally so
+  // image taps work on every PostCard regardless of ownership.
+  if (!ownPost) return <>{cardInner}{lightboxJsx}</>;
 
   // Owned post → wrap in a position:relative container with a red
   // delete panel pinned to the right and the card translated by dx.
@@ -2901,6 +3174,7 @@ function PostCard({ T, p, lang = "es", saved, meId, onLike, onRepost, onSave, on
           </div>
         </div>
       )}
+      {lightboxJsx}
     </div>
   );
 }
