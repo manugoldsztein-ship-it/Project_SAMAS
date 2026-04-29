@@ -1242,7 +1242,7 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
             }}>
               {tab === "following"
                 ? "Seguí gente para ver sus posts acá."
-                : "Nada por acá todavía."}
+                : "Nada por acá todavía. Compartí un trade desde el Broker para empezar."}
             </div>
           )
         ) : (

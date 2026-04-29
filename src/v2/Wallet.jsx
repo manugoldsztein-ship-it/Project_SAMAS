@@ -381,10 +381,32 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
                   ? `≈ US$${fmtMoney(portfolio.totalUsd * liveRatio.ratio, "USD")}`
                   : `≈ $${fmtMoney(portfolio.totalArs * liveRatio.ratio, "ARS")}`}
               </div>
-              <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                <Pill T={T} color={T.accent} bg={T.accentSoft}>+2.34%</Pill>
-                <Pill T={T}>{tr("wallet.last_30d", lang)}</Pill>
-              </div>
+              {/* Return chip — was a static "+2.34%" before 0.0.68;
+                  now derived from a fake 30-day baseline + the live
+                  session drift so it stays in sync with the ticking
+                  total above (no jarring "+2.34%" green while the
+                  total just ticked down). Solid-fill pill matches
+                  the AssetRow aesthetic from 0.0.66. */}
+              {(() => {
+                const baseline = 2.34;
+                const sessionPct = (liveRatio.ratio - 1) * 100;
+                const totalPct = baseline + sessionPct;
+                const positive = totalPct >= 0;
+                const sign = positive ? "+" : "";
+                return (
+                  <div style={{ display: "flex", gap: 6, marginTop: 8, alignItems: "center" }}>
+                    <span style={{
+                      fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+                      padding: "3px 9px", borderRadius: 6,
+                      color: "#ffffff",
+                      background: positive ? T.accent : T.danger,
+                      letterSpacing: 0.2,
+                      fontVariantNumeric: "tabular-nums",
+                    }}>{sign}{totalPct.toFixed(2)}%</span>
+                    <Pill T={T}>{tr("wallet.last_30d", lang)}</Pill>
+                  </div>
+                );
+              })()}
             </div>
             {/* Live-growing portfolio sparkline. Each tick appends a
                 point and the line slides left after 30 ticks (~75s

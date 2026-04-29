@@ -2319,6 +2319,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.68",
+    title: "Polish pass: dashed reference, Wallet hero, empty-state copy",
+    bullets: [
+      "Sparklines now have an Apple-Stocks-style dashed open-price reference line at the y-level of the first data point — see-at-a-glance how far the asset has moved from its starting point.",
+      "Wallet hero return-chip restyled as a solid-fill pill matching the AssetRow aesthetic AND now derived from live drift (no more jarring static \"+2.34%\" green while the total just ticked down).",
+      "Trades empty-state copy nudges toward the Broker share-trade flow. News tab audited, pipeline confirmed healthy (94 cached articles, defensive timeouts + mock fallback already in place from prior patches).",
+    ],
+  },
+  {
     version: "0.0.67",
     title: "Apple Stocks aesthetic now consistent everywhere",
     bullets: [
