@@ -52,7 +52,12 @@ const MAX_PCT_PER_TICK = 0.003;
 const CLAMP_LO = 0.7;
 const CLAMP_HI = 1.5;
 
-const LivePricesContext = createContext(null);
+// Exported so consumers that need to inspect ALL ticked assets at
+// once (e.g. TopMovers re-sorting on every tick) can read the
+// underlying state directly via useContext, rather than calling
+// useLivePrice in a loop (hooks-in-loops would break the rules of
+// hooks if the array length changed between renders).
+export const LivePricesContext = createContext(null);
 
 export function LivePricesProvider({ children }) {
   // Ref-backed Map so writes don't re-render. We trigger re-renders

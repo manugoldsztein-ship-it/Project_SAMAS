@@ -2021,6 +2021,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.59",
+    title: "Top movers re-rank live during the demo",
+    bullets: [
+      "TopMovers (Pro tile in Portafolio) now re-sorts every tick — winners and losers shuffle as session drift compounds with each asset's daily change.",
+      "Each row's price flashes green/red on update with the same keyframes used in Mercado, so the eye sees \"this market is moving right now\".",
+      "Composite delta = day's changePct + session drift since launch. Manageable demo movement: most ticks keep the rank, occasional swaps make it feel real.",
+    ],
+  },
+  {
     version: "0.0.58",
     title: "Real brand logos in Mercado (finally)",
     bullets: [

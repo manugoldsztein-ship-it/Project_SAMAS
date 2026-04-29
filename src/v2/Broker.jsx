@@ -22,11 +22,11 @@
 // calls broker.placeOrder() and refreshes the affected sub-page.
 // ============================================================
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useContext } from "react";
 import { FONT, fmtMoney, fmtPct } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import { Pill, SectionHead, AssetLogo, AssetSparkline } from "./shared.jsx";
-import { useLivePrice } from "./livePrices.jsx";
+import { useLivePrice, LivePricesContext } from "./livePrices.jsx";
 import { broker as brokerApi, wallet as walletApi } from "./api/index.js";
 // The Objetivos wizard is shared with the legacy MobileApp UI. It
 // expects a legacy-shape theme `C`, so we pass an adapter built from
@@ -4027,15 +4027,46 @@ function BenchmarkLine({ T, holdings, totalUsd, lang = "es" }) {
 
 // ----------------------------------------------------------
 // TopMovers — top 3 winners + top 3 losers across the asset universe.
+// LIVE-SORTED: re-orders every tick using each asset's session
+// drift on top of its baseline daily change. Ranks shuffle visibly
+// during a Cohen demo when one asset breaks out of its band, which
+// is exactly the "alive market" feel we want.
 // Tapping a row opens the AssetSheet for that ticker.
 // ----------------------------------------------------------
 function TopMovers({ T, assets, onSelectAsset }) {
-  const sorted = useMemo(
-    () => [...assets].sort((a, b) => b.changePct - a.changePct),
-    [assets]
-  );
-  const winners = sorted.slice(0, 3);
-  const losers = sorted.slice(-3).reverse();
+  const ctx = useContext(LivePricesContext);
+
+  // Make sure every asset is registered so it ticks even if the
+  // Mercado list isn't currently mounted (TopMovers can render in
+  // PortafolioView without Mercado below it).
+  useEffect(() => {
+    if (!ctx) return;
+    for (const a of assets) {
+      if (a?.ticker && typeof a.price === "number" && a.price > 0) {
+        ctx.register(a.ticker, a.price);
+      }
+    }
+  }, [ctx, assets]);
+
+  const tickCount = ctx?.tickCount ?? 0;
+
+  // Compose each asset's display delta from its baseline daily
+  // change + the session-drift since launch. Recomputes every tick
+  // because tickCount is in the deps, which makes the sort move.
+  const ranked = useMemo(() => {
+    const enriched = assets.map((a) => {
+      const live = ctx?.get(a.ticker);
+      const livePrice = live?.price ?? a.price;
+      const sessionPct = a.price > 0 ? ((livePrice - a.price) / a.price) * 100 : 0;
+      const compositeDelta = (a.changePct || 0) + sessionPct;
+      return { ...a, livePrice, compositeDelta, tickSign: live?.sign ?? "flat" };
+    });
+    return enriched.sort((a, b) => b.compositeDelta - a.compositeDelta);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assets, ctx, tickCount]);
+
+  const winners = ranked.slice(0, 3);
+  const losers = ranked.slice(-3).reverse();
 
   return (
     <div style={{ margin: "8px 16px 0" }}>
@@ -4044,45 +4075,60 @@ function TopMovers({ T, assets, onSelectAsset }) {
         marginTop: 12, padding: 4, borderRadius: 18,
         background: T.surface, border: `1px solid ${T.border}`,
       }}>
-        <MoverGroup T={T} label="Ganadores" rows={winners} positive onSelectAsset={onSelectAsset} />
+        <MoverGroup T={T} label="Ganadores" rows={winners} positive tickCount={tickCount} onSelectAsset={onSelectAsset} />
         <div style={{ height: 1, background: T.border, margin: "0 12px" }}/>
-        <MoverGroup T={T} label="Perdedores" rows={losers} positive={false} onSelectAsset={onSelectAsset} />
+        <MoverGroup T={T} label="Perdedores" rows={losers} positive={false} tickCount={tickCount} onSelectAsset={onSelectAsset} />
       </div>
     </div>
   );
 }
 
-function MoverGroup({ T, label, rows, positive, onSelectAsset }) {
+function MoverGroup({ T, label, rows, positive, tickCount, onSelectAsset }) {
   return (
     <div style={{ padding: "10px 12px" }}>
       <div style={{
         fontFamily: FONT.sans, fontSize: 11, color: T.textMute, fontWeight: 600,
         letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 8,
       }}>{label}</div>
-      {rows.map((a) => (
-        <button key={a.ticker} onClick={() => onSelectAsset(a)} style={{
-          width: "100%", padding: "8px 4px", background: "transparent",
-          border: "none", cursor: "pointer", display: "flex",
-          alignItems: "center", justifyContent: "space-between", gap: 10,
-        }}>
-          <div style={{ textAlign: "left", minWidth: 0, flex: 1 }}>
-            <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text }}>{a.ticker}</div>
-            <div style={{
-              fontFamily: FONT.sans, fontSize: 11, color: T.textMute,
-              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-            }}>{a.name}</div>
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{
-              fontFamily: FONT.mono, fontSize: 12, fontWeight: 700, color: T.text,
-            }}>{a.currency === "ARS" ? "$" : "US$"}{fmtMoney(a.price, a.currency)}</div>
-            <div style={{
-              fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
-              color: positive ? T.accent : T.danger,
-            }}>{fmtPct(a.changePct)}</div>
-          </div>
-        </button>
-      ))}
+      {rows.map((a) => {
+        const cur = a.currency === "ARS" ? "$" : "US$";
+        // Sign for the flash animation — derived from this row's
+        // last tick direction, scoped per row so different assets
+        // can flash green/red simultaneously without crosstalk.
+        const flashSign = a.tickSign && a.tickSign !== "flat" ? a.tickSign : null;
+        return (
+          <button key={a.ticker} onClick={() => onSelectAsset(a)} style={{
+            width: "100%", padding: "8px 4px", background: "transparent",
+            border: "none", cursor: "pointer", display: "flex",
+            alignItems: "center", justifyContent: "space-between", gap: 10,
+          }}>
+            <div style={{ textAlign: "left", minWidth: 0, flex: 1 }}>
+              <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text }}>{a.ticker}</div>
+              <div style={{
+                fontFamily: FONT.sans, fontSize: 11, color: T.textMute,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}>{a.name}</div>
+            </div>
+            <div style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+              <div
+                key={`p-${tickCount}`}
+                style={{
+                  fontFamily: FONT.mono, fontSize: 12, fontWeight: 700, color: T.text,
+                  display: "inline-block",
+                  borderRadius: 4, padding: "0 4px", margin: "0 -4px",
+                  ...(flashSign
+                    ? { animation: `samas-tick-${flashSign} 600ms ease-out` }
+                    : {}),
+                }}
+              >{cur}{fmtMoney(a.livePrice, a.currency)}</div>
+              <div style={{
+                fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+                color: positive ? T.accent : T.danger,
+              }}>{fmtPct(a.compositeDelta)}</div>
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }
