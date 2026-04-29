@@ -26,6 +26,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { FONT, fmtMoney, fmtPct } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import { Pill, SectionHead, AssetLogo, AssetSparkline } from "./shared.jsx";
+import { useLivePrice } from "./livePrices.jsx";
 import { broker as brokerApi, wallet as walletApi } from "./api/index.js";
 // The Objetivos wizard is shared with the legacy MobileApp UI. It
 // expects a legacy-shape theme `C`, so we pass an adapter built from
@@ -496,7 +497,7 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
                 T={T}
                 asset={enriched}
                 subline={`${name} · ${h.qty} u`}
-                rightTop={`${h.currency === "ARS" ? "$" : "US$"}${fmtMoney(h.value, h.currency)}`}
+                liveMultiplier={h.qty}
                 rightBottom={fmtPct(h.gainPct)}
                 rightBottomColor={h.gainPct >= 0 ? T.accent : T.danger}
                 isLast={i === portfolio.holdings.length - 1}
@@ -1682,18 +1683,37 @@ function OrderRow({ T, order, isLast, busy, onCancel }) {
 // every list across the broker (Mercado, Portafolio, Watchlist) so
 // the same asset shows up identically everywhere. Key invariants:
 //   - Logo column: 40x40 AssetLogo. Real brand logo from
-//     asset.logo when present (Clearbit URLs in ASSETS), with a
-//     deterministic initials fallback hashed by ticker so a 404
-//     produces the same fallback color on every surface.
+//     asset.logo when present, with a deterministic ticker-hashed
+//     initials fallback when not. Same fallback color on every
+//     surface for the same ticker.
 //   - Name column: ticker bold + caller-decided subline.
 //   - Sparkline: per-ticker deterministic series whose endpoint
-//     matches the asset's changePct sign. Same asset always draws
-//     the same chart — no shimmer between re-renders, no "every
-//     bull row looks the same" anymore.
+//     matches the asset's changePct sign.
 //   - Right column: FIXED 92px so sparklines line up vertically
-//     across rows even when prices have very different lengths
-//     ("$8,342,000" vs "$452"). tabular-nums for digit alignment.
-function AssetRow({ T, asset, subline, rightTop, rightBottom, rightBottomColor, isLast, onClick }) {
+//     across rows even when prices have wildly different lengths.
+//
+// LIVE PRICE TICKING (samas-0.0.57)
+//   The right-column top number is now driven by useLivePrice, so
+//   every row in Mercado / Portafolio / Watchlist ticks every 2.5s
+//   and flashes green or red on each update. Pass `liveMultiplier`
+//   for Portfolio rows so the holding's value (qty × price) ticks
+//   together with the underlying price. Default is 1 — works for
+//   Mercado / Watchlist where the row already shows per-unit price.
+//   The `rightTop` prop still exists as a fallback for callers that
+//   want to render a literal string (not currently used).
+function AssetRow({ T, asset, subline, liveMultiplier = 1, rightTop, rightBottom, rightBottomColor, isLast, onClick }) {
+  const live = useLivePrice(asset?.ticker, asset?.price);
+  // Compute the displayed value. liveMultiplier defaults to 1 for
+  // per-unit rows; Portfolio passes h.qty so the column shows the
+  // holding's full value live-ticking.
+  const value = live.price * liveMultiplier;
+  const cur = asset?.currency === "ARS" ? "$" : "US$";
+  // Prefer the live-formatted price; fall back to the legacy
+  // rightTop string only when ticker info is missing.
+  const displayedTop = asset?.ticker
+    ? `${cur}${fmtMoney(value, asset.currency)}`
+    : rightTop;
+
   return (
     <button onClick={onClick} style={{
       width: "100%", padding: "12px 0",
@@ -1719,13 +1739,53 @@ function AssetRow({ T, asset, subline, rightTop, rightBottom, rightBottomColor, 
         fontVariantNumeric: "tabular-nums",
         flexShrink: 0,
       }}>
-        <div style={{
-          fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: T.text,
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-        }}>{rightTop}</div>
+        {/* key={live.tickCount} re-mounts the inline-block on every
+            tick so the samas-tick-up / samas-tick-down keyframe
+            re-runs from the start. The keyframe paints a soft
+            green or red wash that fades to transparent over 600ms. */}
+        <div
+          key={live.tickCount}
+          style={{
+            fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: T.text,
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            display: "inline-block",
+            borderRadius: 4,
+            padding: "0 4px",
+            margin: "0 -4px",
+            ...(live.sign !== "flat"
+              ? { animation: `samas-tick-${live.sign} 600ms ease-out` }
+              : {}),
+          }}
+        >{displayedTop}</div>
         <div style={{ fontFamily: FONT.mono, fontSize: 11, fontWeight: 600, color: rightBottomColor }}>{rightBottom}</div>
       </div>
     </button>
+  );
+}
+
+// AssetSheetHeroPrice — the big number at the top of AssetSheet,
+// live-ticked via useLivePrice and flashed green/red on each tick.
+// Lifted into its own component so AssetSheet itself stays stable
+// (its multi-step flow renders different sub-trees, and adding a
+// hook to the parent body would risk hook-count mismatches between
+// renders).
+function AssetSheetHeroPrice({ T, asset, ccySym }) {
+  const live = useLivePrice(asset?.ticker, asset?.price);
+  return (
+    <span
+      key={live.tickCount}
+      style={{
+        fontFamily: FONT.display, fontSize: 28, fontWeight: 700, color: T.text,
+        fontVariantNumeric: "tabular-nums",
+        display: "inline-block",
+        borderRadius: 6,
+        padding: "0 6px",
+        margin: "0 -6px",
+        ...(live.sign !== "flat"
+          ? { animation: `samas-tick-${live.sign} 600ms ease-out` }
+          : {}),
+      }}
+    >{ccySym}{fmtMoney(live.price, asset.currency)}</span>
   );
 }
 
@@ -1915,11 +1975,15 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
           padding: "8px 20px",
           paddingBottom: "calc(env(safe-area-inset-bottom) + 24px)",
         }}>
+          {/* Live-ticking hero price + sticky % Pill. The price gets
+              the same tick-up / tick-down flash treatment as the
+              AssetRow right column. The % Pill represents the day's
+              cumulative change and stays sticky — only the live
+              price wiggles. AssetSheetHeroPrice wraps the live hook
+              so the AssetSheet body's hook count stays stable
+              regardless of which sub-flow is rendered. */}
           <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 16 }}>
-            <span style={{
-              fontFamily: FONT.display, fontSize: 28, fontWeight: 700, color: T.text,
-              fontVariantNumeric: "tabular-nums",
-            }}>{ccySym}{fmtMoney(asset.price, asset.currency)}</span>
+            <AssetSheetHeroPrice T={T} asset={asset} ccySym={ccySym} />
             <Pill T={T}
               color={asset.changePct >= 0 ? T.accent : T.danger}
               bg={asset.changePct >= 0 ? T.accentSoft : T.dangerSoft}>

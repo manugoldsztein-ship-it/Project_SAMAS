@@ -30,6 +30,7 @@ import { supabase } from "../lib/supabase.js";
 import { toast } from "./toast.jsx";
 import { setRefreshHandler } from "./refreshRegistry.js";
 import { t as tr } from "../lib/i18n.js";
+import { useLivePortfolioRatio } from "./livePrices.jsx";
 
 export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark, onOpenSettings, proMode = false, onOpenProUpsell, lang = "es" }) {
   // ----------- data state -----------
@@ -39,6 +40,14 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
   const [txns, setTxns] = useState([]);
   const [portfolio, setPortfolio] = useState(null);
   const [aporte, setAporte] = useState(null);
+
+  // Live drift on the portfolio total — proportional ratio derived
+  // from the underlying assets ticking. Multiply portfolio.totalArs
+  // / totalUsd by liveRatio.ratio to get the live-ticked totals.
+  // Currency-agnostic: the same ratio applies to ARS and USD alike
+  // since each holding's base price is in its own currency and the
+  // hook computes the ratio as live/base, which cancels currency.
+  const liveRatio = useLivePortfolioRatio(portfolio?.holdings);
 
   // ----------- UI state -----------
   const [ccy, setCcy] = useState("ARS");
@@ -313,25 +322,37 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
               <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute, marginBottom: 4 }}>
                 {tr("wallet.value_invested", lang)}
               </div>
-              {/* Show whichever currency the user picked in the
-                  balance card pill, so cartera and balance feel
-                  consistent. The other currency is shown small
-                  below as reference. */}
-              <div style={{
-                fontFamily: FONT.display, fontSize: 22, fontWeight: 700, color: T.text,
-                letterSpacing: -0.6, fontVariantNumeric: "tabular-nums",
-              }}>
+              {/* Live-ticked portfolio total. We multiply the static
+                  pre-computed totalArs/totalUsd by liveRatio.ratio
+                  so both currencies move proportionally as the
+                  underlying assets tick. The key={liveRatio.tickCount}
+                  re-mounts the cell each tick so the green/red
+                  flash keyframe re-runs from the start. */}
+              <div
+                key={liveRatio.tickCount}
+                style={{
+                  fontFamily: FONT.display, fontSize: 22, fontWeight: 700, color: T.text,
+                  letterSpacing: -0.6, fontVariantNumeric: "tabular-nums",
+                  display: "inline-block",
+                  borderRadius: 6,
+                  padding: "0 6px",
+                  margin: "0 -6px",
+                  ...(liveRatio.sign !== "flat"
+                    ? { animation: `samas-tick-${liveRatio.sign} 600ms ease-out` }
+                    : {}),
+                }}
+              >
                 {ccy === "ARS"
-                  ? `$${fmtMoney(portfolio.totalArs, "ARS")}`
-                  : `US$${fmtMoney(portfolio.totalUsd, "USD")}`}
+                  ? `$${fmtMoney(portfolio.totalArs * liveRatio.ratio, "ARS")}`
+                  : `US$${fmtMoney(portfolio.totalUsd * liveRatio.ratio, "USD")}`}
               </div>
               <div style={{
                 fontFamily: FONT.mono, fontSize: 12, color: T.textMute, marginTop: 2,
                 fontVariantNumeric: "tabular-nums",
               }}>
                 {ccy === "ARS"
-                  ? `≈ US$${fmtMoney(portfolio.totalUsd, "USD")}`
-                  : `≈ $${fmtMoney(portfolio.totalArs, "ARS")}`}
+                  ? `≈ US$${fmtMoney(portfolio.totalUsd * liveRatio.ratio, "USD")}`
+                  : `≈ $${fmtMoney(portfolio.totalArs * liveRatio.ratio, "ARS")}`}
               </div>
               <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                 <Pill T={T} color={T.accent} bg={T.accentSoft}>+2.34%</Pill>

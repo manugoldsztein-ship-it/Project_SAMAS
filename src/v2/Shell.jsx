@@ -44,6 +44,7 @@ import { toast } from "./toast.jsx";
 import { seedDemoAccount, resetDemoAccount } from "../lib/demoSeed.js";
 import { seedSocialDemo } from "../lib/seedSocial.js";
 import { hapticNative } from "../lib/native.js";
+import { LivePricesProvider } from "./livePrices.jsx";
 
 // localStorage flag for the Pro mode toggle. Default ON — power users
 // see the full broker surface (ticker banner, distribución, top movers)
@@ -192,6 +193,7 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
   };
 
   return (
+    <LivePricesProvider>
     <div style={{
       // Fill the parent #root padding box (which is inside the iOS
       // safe-area inset). This div is the page-level scroll container.
@@ -227,6 +229,19 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
           30%  { transform: scale(1.4); }
           60%  { transform: scale(0.92); }
           100% { transform: scale(1); }
+        }
+        /* Live-price tick flashes — applied to a price cell whose
+           key changes each tick so the animation re-runs. The tint
+           is loud at the start and fades to transparent over 600ms,
+           which reads as "something just changed" without lingering
+           in the user's peripheral vision. */
+        @keyframes samas-tick-up {
+          0%   { background-color: rgba(22, 199, 132, 0.30); }
+          100% { background-color: transparent; }
+        }
+        @keyframes samas-tick-down {
+          0%   { background-color: rgba(239, 68, 68, 0.30); }
+          100% { background-color: transparent; }
         }
       `}</style>
 
@@ -319,6 +334,7 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
         />
       )}
     </div>
+    </LivePricesProvider>
   );
 }
 
@@ -2004,6 +2020,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.0.57",
+    title: "Live price ticks across the broker",
+    bullets: [
+      "Every price in Mercado / Watchlist / Portafolio / AssetSheet ticks every 2.5s with a small random walk biased toward the asset's base price.",
+      "Each tick flashes the cell green (up) or red (down) for 600ms — soft tint, fades to transparent, never lingers.",
+      "Wallet hero total now ticks proportionally with the underlying holdings — both ARS and USD move in step with the asset drift.",
+    ],
+  },
   {
     version: "0.0.56",
     title: "Hotfix: \"Can't find variable: lang\" al agregar a watchlist",
