@@ -23,6 +23,7 @@ import { FONT, fmtMoney, fmtPct } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import {
   Avatar, ChromeBtn, Pill, SectionHead, Sparkline, SAMAS_SPARKS, Skeleton,
+  avatarPropsFor,
 } from "./shared.jsx";
 import { wallet as walletApi, card as cardApi, broker as brokerApi, notifications as notifApi } from "./api/index.js";
 import { rowToNotif } from "./api/notifications.js";
@@ -1124,11 +1125,94 @@ function navigateFromNotif(n) {
   }
 }
 
+// Pull the actor's display name out of the title for social kinds.
+// social_notifications.sql formats titles as "{display} <verb>...",
+// so we strip the known suffix per kind. Returns null when the
+// notification isn't social-actor-shaped.
+function actorNameFromNotif(n) {
+  if (!n?.title) return null;
+  const suffixes = {
+    social_like:   " dio like a tu post",
+    social_repost: " reposteó tu post",
+    social_reply:  " respondió a tu post",
+    social_follow: " empezó a seguirte",
+  };
+  const suf = suffixes[n.kind];
+  if (suf && n.title.endsWith(suf)) {
+    return n.title.slice(0, -suf.length).trim();
+  }
+  return null;
+}
+
+// Small SVG kind-badge that overlays the avatar's bottom-right
+// corner. Crisp at any size, doesn't suffer from iOS emoji's
+// generic-silhouette rendering for the 👤 glyph.
+function KindBadge({ kind, T }) {
+  const cfg = (() => {
+    switch (kind) {
+      case "social_like":
+        return { bg: T.danger, glyph: (
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" fill="#fff" stroke="none"/>
+        )};
+      case "social_repost":
+        return { bg: T.accent, glyph: (
+          <g stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" fill="none">
+            <polyline points="17 1 21 5 17 9"/>
+            <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+            <polyline points="7 23 3 19 7 15"/>
+            <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+          </g>
+        )};
+      case "social_reply":
+        return { bg: T.accent, glyph: (
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" fill="#fff" stroke="none"/>
+        )};
+      case "social_follow":
+        return { bg: T.accent, glyph: (
+          <g stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" fill="none">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <line x1="19" y1="8" x2="19" y2="14"/>
+            <line x1="22" y1="11" x2="16" y2="11"/>
+          </g>
+        )};
+      default:
+        return null;
+    }
+  })();
+  if (!cfg) return null;
+  return (
+    <div style={{
+      position: "absolute", bottom: -2, right: -2,
+      width: 18, height: 18, borderRadius: 9,
+      background: cfg.bg, border: `2px solid ${T.surface}`,
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+        {cfg.glyph}
+      </svg>
+    </div>
+  );
+}
+
 function NotifRow({ T, n, isLast, onTap }) {
-  // Per-kind glyph + tint. New kinds fall through to a neutral system bell.
-  // Social kinds (social_like / social_repost / social_reply /
-  // social_follow) are written by triggers in supabase/social_notifications.sql
-  // when someone interacts with the user's posts or follows them.
+  // Social kinds get a real-looking user avatar (initials + per-actor
+  // color) with a small kind-badge in the corner — a major upgrade
+  // from the iOS-rendered 👤 emoji which looked like a generic
+  // contact silhouette in 0.0.73. Non-social kinds keep the simple
+  // emoji-on-tile look since they don't have an actor.
+  const actorName = actorNameFromNotif(n);
+  const isSocialActor = !!actorName;
+  const avatarProps = isSocialActor
+    ? avatarPropsFor({
+        displayName: actorName,
+        // Use actor_handle as the avatar-color seed so the same
+        // user gets the same color in the inbox as on their
+        // profile page.
+        id: n?.data?.actor_handle || n?.data?.actor_id || actorName,
+      }, T.accent)
+    : null;
   const meta = (() => {
     switch (n.kind) {
       case "price_alert":   return { emoji: "📈", tint: T.accent };
@@ -1173,12 +1257,27 @@ function NotifRow({ T, n, isLast, onTap }) {
         fontFamily: "inherit",
       }}
     >
-      <div style={{
-        width: 32, height: 32, borderRadius: 10, flexShrink: 0,
-        background: T.bgElev, color: meta.tint,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: 16,
-      }}>{meta.emoji}</div>
+      {isSocialActor ? (
+        // Avatar + kind-badge for social-actor notifications.
+        // KindBadge sits absolute in the bottom-right corner with
+        // a 2px surface-colored border so it reads as "notch
+        // overlaid on avatar" rather than two separate elements.
+        <div style={{ position: "relative", flexShrink: 0 }}>
+          <Avatar T={T}
+            initials={avatarProps.initials}
+            color={avatarProps.color}
+            size={36}
+          />
+          <KindBadge kind={n.kind} T={T} />
+        </div>
+      ) : (
+        <div style={{
+          width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+          background: T.bgElev, color: meta.tint,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 16,
+        }}>{meta.emoji}</div>
+      )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           fontFamily: FONT.sans, fontSize: 13,

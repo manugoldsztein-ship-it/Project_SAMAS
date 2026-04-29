@@ -2368,6 +2368,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.74",
+    title: "Inbox rows: real user avatars instead of generic emojis",
+    bullets: [
+      "0.0.73 used the 👤 emoji as the icon for social_follow rows. iOS rendered it as a dim generic contact silhouette and 8 rows in a row looked like placeholder data.",
+      "Social-actor notifications (like / repost / reply / follow) now show a real avatar tile: initials parsed from the title + per-actor deterministic color, matching how the same user shows up in their profile page.",
+      "Small kind-badge SVG (heart / plus / repost / reply) overlays the avatar's bottom-right corner, with a surface-colored border so it reads as a notch rather than two separate elements.",
+    ],
+  },
+  {
     version: "0.0.73",
     title: "Bell drill-down: notifications are now tappable",
     bullets: [
