@@ -134,6 +134,26 @@ const V2 = {
     "pro.upsell.feat.wl":         "Watchlists con color",
     "pro.upsell.feat.wl_d":       "Etiquetas de color, reordenar y compartir al feed.",
 
+    // Pro pricing sheet — second step of the activation flow,
+    // opened when the user taps the upsell modal's CTA. Two plans,
+    // annual recommended. The "Suscribirme" button is faked for the
+    // prototype (no real IAP yet) — the legal blurb at the bottom
+    // surfaces this.
+    "pro.pricing.title":          "Activá Pro",
+    "pro.pricing.subtitle":       "Elegí el plan que te quede mejor. Cancelá cuando quieras.",
+    "pro.pricing.monthly":        "Mensual",
+    "pro.pricing.annual":         "Anual",
+    "pro.pricing.per_month":      "/mes",
+    "pro.pricing.per_year":       "/año",
+    "pro.pricing.annual_hint":    "≈ USD 4 /mes facturado anual",
+    "pro.pricing.save":           "Ahorrá 20%",
+    "pro.pricing.includes":       "Incluye",
+    "pro.pricing.cta_subscribe":  "Suscribirme",
+    "pro.pricing.cta_busy":       "Procesando…",
+    "pro.pricing.cta_later":      "Más tarde",
+    "pro.pricing.success":        "¡Bienvenido a Pro! Disfrutá de todas las herramientas.",
+    "pro.pricing.legal":          "Renovación automática. Cancelá cuando quieras desde Settings. (Demo: la suscripción real con App Store IAP se activa antes del lanzamiento.)",
+
     "settings.light_mode":        "Modo claro",
     "settings.dark_mode":         "Modo oscuro",
     "settings.theme_to_light":    "Pasar a tema claro",
@@ -533,6 +553,22 @@ const V2 = {
     "pro.upsell.feat.tax_d":      "Realized and unrealized P&L for the year.",
     "pro.upsell.feat.wl":         "Watchlists with color",
     "pro.upsell.feat.wl_d":       "Color tags, reorder and share to the feed.",
+
+    // Pro pricing sheet
+    "pro.pricing.title":          "Activate Pro",
+    "pro.pricing.subtitle":       "Pick the plan that suits you. Cancel anytime.",
+    "pro.pricing.monthly":        "Monthly",
+    "pro.pricing.annual":         "Annual",
+    "pro.pricing.per_month":      "/mo",
+    "pro.pricing.per_year":       "/yr",
+    "pro.pricing.annual_hint":    "≈ USD 4 /mo billed annually",
+    "pro.pricing.save":           "Save 20%",
+    "pro.pricing.includes":       "Includes",
+    "pro.pricing.cta_subscribe":  "Subscribe",
+    "pro.pricing.cta_busy":       "Processing…",
+    "pro.pricing.cta_later":      "Later",
+    "pro.pricing.success":        "Welcome to Pro! Enjoy every tool.",
+    "pro.pricing.legal":          "Auto-renews. Cancel anytime from Settings. (Demo: real App Store IAP subscription wires up before commercial launch.)",
 
     "settings.light_mode":        "Light mode",
     "settings.dark_mode":         "Dark mode",

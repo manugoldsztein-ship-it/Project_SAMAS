@@ -77,6 +77,10 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
   // to be able to open it. Listens for "samas:open-pro-upsell" so
   // any view can pop it without having to thread a prop through.
   const [showProUpsell, setShowProUpsell] = useState(false);
+  // ProPricingSheet — second step of the activation flow, opened
+  // from the upsell modal's CTA. Lives at the shell level so it can
+  // outlive the upsell modal's own dismissal.
+  const [showProPricing, setShowProPricing] = useState(false);
   useEffect(() => {
     function open() { setShowProUpsell(true); }
     window.addEventListener("samas:open-pro-upsell", open);
@@ -255,14 +259,34 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
       )}
 
       {/* Pro upsell modal — global so any view can dispatch
-          "samas:open-pro-upsell" or pass onOpenProUpsell down. */}
+          "samas:open-pro-upsell" or pass onOpenProUpsell down. The
+          CTA opens the pricing sheet rather than flipping proMode
+          directly so the user (and a Cohen pitch attendee) actually
+          sees what Pro costs and how the activation flow looks. */}
       {showProUpsell && (
         <ProUpsellModal
           T={T}
           lang={lang}
           isPro={proMode}
-          onActivate={() => { setProMode(true); setShowProUpsell(false); }}
+          onActivate={() => { setShowProUpsell(false); setShowProPricing(true); }}
           onClose={() => setShowProUpsell(false)}
+        />
+      )}
+
+      {/* Pro pricing sheet — second step of the activation flow.
+          Suscribirme is currently faked (no real billing yet), but
+          flipping proMode + showing the success toast is enough for
+          the pitch demo and for users to see the Pro screens. */}
+      {showProPricing && (
+        <ProPricingSheet
+          T={T}
+          lang={lang}
+          onSubscribe={() => {
+            setProMode(true);
+            setShowProPricing(false);
+            toast.success(tr("pro.pricing.success", lang));
+          }}
+          onClose={() => setShowProPricing(false)}
         />
       )}
     </div>
@@ -1440,6 +1464,248 @@ function ProUpsellModal({ T, lang = "es", isPro, onActivate, onClose }) {
 }
 
 // ============================================================
+// ProPricingSheet — "Suscribirme a Pro" plan selector
+// ============================================================
+// Reachable from the ProUpsellModal CTA. Two plans (monthly and
+// annual), annual highlighted as the recommended pick because it's
+// cheaper per month — same trick every consumer SaaS uses.
+//
+// The "Suscribirme" button does NOT yet hit App Store IAP — that's
+// a separate cert + StoreKit wiring task. For the Cohen pitch and
+// the prototype it fakes a ~700ms processing delay (so the user
+// feels something happening), then activates Pro mode locally and
+// shows a success toast. The legal blurb at the bottom flags this
+// honestly so a tester reading carefully understands no money
+// changed hands.
+//
+// Prices are in USD on purpose — Cohen will want to see a global
+// monetization story, and CEDEAR/crypto users in AR think in dólares
+// for subscription pricing anyway.
+// ============================================================
+function ProPricingSheet({ T, lang = "es", onSubscribe, onClose }) {
+  const [plan, setPlan] = useState("annual"); // "monthly" | "annual"
+  const [busy, setBusy] = useState(false);
+
+  async function handleSubscribe() {
+    if (busy) return;
+    setBusy(true);
+    // Fake processing delay so the demo feels real. ~700ms is the
+    // sweet spot — long enough to read as "doing something",
+    // short enough that the investor doesn't think we hung.
+    await new Promise((r) => setTimeout(r, 700));
+    onSubscribe(plan);
+    setBusy(false);
+  }
+
+  // Plan card — selectable button styled like a radio. When picked,
+  // accent border + accent-soft tint background. The annual card
+  // also shows a "Ahorrá 20%" chip and a star icon.
+  function PlanCard({ id, label, price, period, hint, recommended }) {
+    const active = plan === id;
+    return (
+      <button
+        onClick={() => setPlan(id)}
+        style={{
+          width: "100%", padding: "14px 16px", borderRadius: 16,
+          background: active ? T.accentSoft : T.surface,
+          border: `1.5px solid ${active ? T.accent : T.border}`,
+          display: "flex", alignItems: "center", gap: 12,
+          cursor: "pointer", textAlign: "left", position: "relative",
+        }}
+      >
+        {/* Radio dot — filled accent when active. */}
+        <div style={{
+          width: 20, height: 20, borderRadius: 10,
+          border: `2px solid ${active ? T.accent : T.border}`,
+          background: "transparent",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          flexShrink: 0,
+        }}>
+          {active && (
+            <div style={{
+              width: 10, height: 10, borderRadius: 5, background: T.accent,
+            }}/>
+          )}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 6,
+            fontFamily: FONT.sans, fontSize: 14, fontWeight: 700,
+            color: T.text, marginBottom: 2,
+          }}>
+            {label}
+            {recommended && (
+              <span style={{
+                fontFamily: FONT.mono, fontSize: 9, fontWeight: 800,
+                padding: "2px 6px", borderRadius: 999,
+                background: T.accent, color: T.accentInk,
+                letterSpacing: 0.6, textTransform: "uppercase",
+              }}>★ {tr("pro.pricing.save", lang)}</span>
+            )}
+          </div>
+          {hint && (
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 11, color: T.textMute,
+            }}>{hint}</div>
+          )}
+        </div>
+        <div style={{
+          textAlign: "right",
+          fontFamily: FONT.display,
+          fontVariantNumeric: "tabular-nums",
+        }}>
+          <div style={{ fontSize: 22, fontWeight: 800, color: T.text, lineHeight: 1.1 }}>
+            {price}
+          </div>
+          <div style={{ fontFamily: FONT.sans, fontSize: 11, fontWeight: 600, color: T.textMute }}>
+            {period}
+          </div>
+        </div>
+      </button>
+    );
+  }
+
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 130,
+        background: "rgba(0,0,0,0.7)",
+        display: "flex", alignItems: "flex-end", justifyContent: "center",
+      }}
+    >
+      <div style={{
+        width: "100%", maxWidth: 540, maxHeight: "92dvh",
+        background: T.bgElev || T.bg, color: T.text,
+        borderTopLeftRadius: 28, borderTopRightRadius: 28,
+        border: `1px solid ${T.border}`, borderBottom: "none",
+        display: "flex", flexDirection: "column", overflow: "hidden",
+      }}>
+        {/* Drag handle */}
+        <div style={{ display: "flex", justifyContent: "center", paddingTop: 12 }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: T.border }}/>
+        </div>
+
+        {/* Header */}
+        <div style={{
+          padding: "16px 22px 14px",
+          background: `linear-gradient(180deg, ${T.accentSoft} 0%, transparent 100%)`,
+        }}>
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            padding: "4px 10px", borderRadius: 999,
+            background: T.accent, color: T.accentInk,
+            fontFamily: FONT.mono, fontSize: 10, fontWeight: 800,
+            letterSpacing: 0.6, textTransform: "uppercase",
+            marginBottom: 10,
+          }}>★ PRO</div>
+          <div style={{
+            fontFamily: FONT.display, fontSize: 24, fontWeight: 700,
+            color: T.text, letterSpacing: -0.6, marginBottom: 6,
+          }}>{tr("pro.pricing.title", lang)}</div>
+          <div style={{
+            fontFamily: FONT.sans, fontSize: 13, color: T.textMute,
+            lineHeight: 1.45,
+          }}>{tr("pro.pricing.subtitle", lang)}</div>
+        </div>
+
+        {/* Plans */}
+        <div style={{
+          flex: 1, overflowY: "auto",
+          padding: "8px 18px 12px",
+          display: "flex", flexDirection: "column", gap: 10,
+        }}>
+          <PlanCard
+            id="monthly"
+            label={tr("pro.pricing.monthly", lang)}
+            price="USD 5"
+            period={tr("pro.pricing.per_month", lang)}
+            hint={null}
+          />
+          <PlanCard
+            id="annual"
+            label={tr("pro.pricing.annual", lang)}
+            price="USD 48"
+            period={tr("pro.pricing.per_year", lang)}
+            hint={tr("pro.pricing.annual_hint", lang)}
+            recommended
+          />
+
+          {/* What's included — compact reminder of the 9 Pro features
+              the user already saw on the upsell modal. We re-render
+              them here as a tight checklist so the pricing screen
+              answers "what am I paying for?" without making the user
+              go back. Reuses existing pro.upsell.feat.* keys. */}
+          <div style={{
+            marginTop: 14, padding: "12px 14px", borderRadius: 14,
+            background: T.surface, border: `1px solid ${T.border}`,
+          }}>
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+              color: T.textMute, letterSpacing: 0.5, textTransform: "uppercase",
+              marginBottom: 8,
+            }}>{tr("pro.pricing.includes", lang)}</div>
+            {PRO_FEATURE_KEYS.map((f) => (
+              <div key={f.key} style={{
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "5px 0",
+                fontFamily: FONT.sans, fontSize: 13, color: T.text,
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                  stroke={T.accent} strokeWidth="3"
+                  strokeLinecap="round" strokeLinejoin="round"
+                  style={{ flexShrink: 0 }}>
+                  <polyline points="6 12 10 16 18 8"/>
+                </svg>
+                <span>{tr(`pro.upsell.feat.${f.key}`, lang)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Sticky CTA + legal blurb */}
+        <div style={{
+          padding: "12px 18px calc(env(safe-area-inset-bottom) + 16px)",
+          borderTop: `1px solid ${T.border}`,
+          background: T.bgElev || T.bg,
+        }}>
+          <button
+            onClick={handleSubscribe}
+            disabled={busy}
+            style={{
+              width: "100%", padding: "14px 16px", borderRadius: 14,
+              background: T.accent, border: "none",
+              color: T.accentInk, fontFamily: FONT.sans, fontSize: 15, fontWeight: 800,
+              cursor: busy ? "default" : "pointer",
+              opacity: busy ? 0.7 : 1,
+              letterSpacing: 0.2,
+              marginBottom: 8,
+            }}
+          >
+            {busy ? tr("pro.pricing.cta_busy", lang) : tr("pro.pricing.cta_subscribe", lang)}
+          </button>
+          <button
+            onClick={onClose}
+            disabled={busy}
+            style={{
+              width: "100%", padding: "10px", borderRadius: 12,
+              background: "transparent", border: "none",
+              color: T.textMute, fontFamily: FONT.sans, fontSize: 12, fontWeight: 600,
+              cursor: busy ? "default" : "pointer",
+              marginBottom: 6,
+            }}
+          >{tr("pro.pricing.cta_later", lang)}</button>
+          <div style={{
+            fontFamily: FONT.sans, fontSize: 10, color: T.textMute,
+            textAlign: "center", lineHeight: 1.45,
+          }}>{tr("pro.pricing.legal", lang)}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // LegalSheet — Privacy / Terms modal
 // ============================================================
 // Single component renders both screens, switched via the `kind`
@@ -1701,6 +1967,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.0.54",
+    title: "Pantalla de precios para Pro",
+    bullets: [
+      "El CTA del upsell modal ahora abre una pantalla de planes (USD 5/mes o USD 48/año, anual recomendado con -20%).",
+      "\"Suscribirme\" simula el procesamiento ~700ms y activa Pro localmente — billing real con App Store IAP queda para antes del lanzamiento.",
+      "Checklist de las 9 features Pro como recordatorio, copy honesto sobre el modo demo en el legal blurb.",
+    ],
+  },
   {
     version: "0.0.53",
     title: "Swipe arreglado, news global y colores por categoría",
