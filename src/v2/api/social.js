@@ -56,6 +56,10 @@ function profileRowToUser(r) {
     // when both are present (a claim alone isn't enough).
     university: r.university || null,
     universityVerified: !!r.university_verified,
+    // CNV idóneo flag. Service-role-only (RLS locked). Frontend
+    // shows a blue tick distinct from the university green tick.
+    // See supabase/social_cnv_idoneo.sql.
+    cnvIdoneo: !!r.cnv_idoneo,
   };
 }
 
@@ -227,6 +231,18 @@ export async function updateMe(patch) {
  * getFeed({ tab, ticker, limit }) — list of posts for a given tab.
  *
  * tab:    'for_you' | 'following' | 'trades'   (default 'for_you')
+ *           - 'for_you' is the Trending feed (post-0.0.36): the user
+ *             sees posts ranked by engagement, not chronologically.
+ *             Implementation pulls a wider candidate window of recent
+ *             posts (last ~7 days, capped at TRENDING_CANDIDATE_LIMIT)
+ *             then sorts client-side by likes+reposts+comments and
+ *             slices to `limit`. Sorting in JS instead of Postgres
+ *             keeps the query simple and lets us tweak the formula
+ *             without a migration.
+ *           - 'following' is strictly chronological — you're already
+ *             curating who shows up; no need to re-rank.
+ *           - 'trades' is also chronological because users mostly
+ *             want fresh trade calls.
  * ticker: optional uppercase symbol — when set, returns only posts
  *         where posts.ticker = upper(ticker). Backed by the
  *         posts_by_ticker partial index. Composes with `tab`, e.g.
@@ -236,6 +252,9 @@ export async function updateMe(patch) {
  * three more for "my likes / reposts / saves" to compute per-row
  * flags. All batched in parallel.
  */
+const TRENDING_CANDIDATE_LIMIT = 200;
+const TRENDING_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 export async function getFeed({ tab = "for_you", ticker = null, limit = 20 } = {}) {
   const userId = await currentUserId();
 
@@ -253,6 +272,12 @@ export async function getFeed({ tab = "for_you", ticker = null, limit = 20 } = {
     authorFilter = ids;
   }
 
+  // Trending-mode = pull a fatter recent window so the engagement
+  // sort has a meaningful candidate pool. Other tabs keep the
+  // requested limit since they don't re-sort.
+  const isTrending = tab === "for_you" && !authorFilter && !ticker;
+  const fetchLimit = isTrending ? TRENDING_CANDIDATE_LIMIT : limit;
+
   let q = supabase
     .from("posts")
     .select(`
@@ -264,7 +289,15 @@ export async function getFeed({ tab = "for_you", ticker = null, limit = 20 } = {
     `)
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .limit(fetchLimit);
+
+  if (isTrending) {
+    // Only consider posts from the last week. Older viral posts
+    // would otherwise sit at the top forever — engagement is
+    // sticky, recency is not.
+    const sinceIso = new Date(Date.now() - TRENDING_WINDOW_MS).toISOString();
+    q = q.gte("created_at", sinceIso);
+  }
 
   if (authorFilter) q = q.in("author_id", authorFilter);
   if (tab === "trades") q = q.not("trade", "is", null);
@@ -274,7 +307,26 @@ export async function getFeed({ tab = "for_you", ticker = null, limit = 20 } = {
   if (error) throw new Error(error.message);
   if (!posts || posts.length === 0) return [];
 
-  const postIds = posts.map((p) => p.id);
+  // Trending re-sort: engagement score = likes + reposts + comments.
+  // Equal-weight is a fine MVP — the brief said "based on likes
+  // reposts and comments". We tie-break on recency so two equally
+  // engaged posts surface the newer one.
+  let ordered = posts;
+  if (isTrending) {
+    ordered = [...posts].sort((a, b) => {
+      const sa = (a.likes_count || 0) + (a.reposts_count || 0) + (a.comments_count || 0);
+      const sb = (b.likes_count || 0) + (b.reposts_count || 0) + (b.comments_count || 0);
+      if (sa !== sb) return sb - sa;
+      const ta = a.created_at ? +new Date(a.created_at) : 0;
+      const tb = b.created_at ? +new Date(b.created_at) : 0;
+      return tb - ta;
+    }).slice(0, limit);
+  }
+  // Reassign so downstream uses the trimmed/sorted list.
+  // (We can't reassign `posts` directly since it's a const; use
+  // `ordered` from here on out.)
+
+  const postIds = ordered.map((p) => p.id);
 
   // Step 2 (parallel): my likes / reposts / saves on these posts.
   const [likesRes, repostsRes, savesRes] = await Promise.all([
@@ -286,7 +338,7 @@ export async function getFeed({ tab = "for_you", ticker = null, limit = 20 } = {
   const reposted = new Set((repostsRes.data || []).map((r) => r.post_id));
   const saved = new Set((savesRes.data || []).map((r) => r.post_id));
 
-  return posts.map((p) =>
+  return ordered.map((p) =>
     postRowToPost(p, {
       likedByMe: liked.has(p.id),
       repostedByMe: reposted.has(p.id),
@@ -434,7 +486,7 @@ export async function getUserById(userId) {
   const [profileRes, postsCountRes, followersCountRes, followingCountRes, iFollowRes] = await Promise.all([
     supabase
       .from("profiles_social")
-      .select("user_id, handle, display_name, avatar_color, bio, verified, is_admin, created_at, university, university_verified")
+      .select("user_id, handle, display_name, avatar_color, bio, verified, is_admin, created_at, university, university_verified, cnv_idoneo")
       .eq("user_id", userId)
       .maybeSingle(),
     supabase

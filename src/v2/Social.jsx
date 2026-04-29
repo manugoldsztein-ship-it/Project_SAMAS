@@ -169,7 +169,7 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
       }}>
         {ptrIndicator}
         {tab === "feed"     && <FeedView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} />}
-        {tab === "search"   && <SearchView T={T} lang={lang} user={user} onMessageUser={openDmWith} onOpenProfile={openProfile} />}
+        {tab === "search"   && <SearchView T={T} lang={lang} user={user} onMessageUser={openDmWith} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} />}
         {tab === "messages" && <MessagesView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenTicker={openTicker} />}
         {tab === "profile"  && <ProfileView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} />}
       </div>
@@ -313,9 +313,15 @@ function SocialNav({ T, tab, setTab, bottomInset, lang = "es" }) {
 // FEED — top tabs (Siguiendo / Para vos / Trades) + compose + cards
 // ============================================================
 // Keys looked up via tr(...) below so they re-translate live.
+// Order matters — first tab is the default selection on initial
+// mount (FeedView seeds tab state to "for_you" below). Trending
+// goes first now (samas-0.0.36): the ranked feed is the default
+// landing experience because it's where the most-engaged content
+// lives. Following is second (curated stream), Trades is the
+// always-trade-card filter.
 const FEED_TABS = [
-  { id: "following", key: "social.tab.following" },
   { id: "for_you",   key: "social.tab.for_you"  },
+  { id: "following", key: "social.tab.following" },
   { id: "trades",    key: "social.tab.trades"    },
 ];
 
@@ -555,6 +561,64 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
     setBusy(false);
   }
 
+  // Paste from the system clipboard. We use the Clipboard API (works
+  // on iOS Safari + WKWebView since iOS 13.4 with a user-gesture
+  // requirement, which a button tap satisfies). Capacitor's Clipboard
+  // plugin would also work but adds a native dependency we'd otherwise
+  // not need — the Web API is enough.
+  //
+  // Behavior: append (not replace) so paste composes with whatever
+  // the user already typed. Trim leading whitespace if the pasted
+  // text starts at the beginning of the body to avoid a stray space.
+  async function pasteFromClipboard() {
+    setErr(null);
+    try {
+      let text = "";
+      if (navigator?.clipboard?.readText) {
+        text = await navigator.clipboard.readText();
+      }
+      text = (text || "").trim();
+      if (!text) {
+        setErr(tr("social.compose.paste_empty", lang));
+        return;
+      }
+      // Insert at cursor if we can, else append.
+      const el = composeRef.current;
+      let next;
+      let nextCursor;
+      if (el && typeof el.selectionStart === "number") {
+        const start = el.selectionStart;
+        const end = el.selectionEnd ?? start;
+        const before = body.slice(0, start);
+        const after = body.slice(end);
+        // Put a space between if we're appending right after a
+        // non-space char and the pasted text doesn't start with one.
+        const sep = (before.length > 0 && !/\s$/.test(before) && !/^\s/.test(text)) ? " " : "";
+        next = (before + sep + text + after).slice(0, 280);
+        nextCursor = (before + sep + text).length;
+      } else {
+        const sep = (body.length > 0 && !/\s$/.test(body) && !/^\s/.test(text)) ? " " : "";
+        next = (body + sep + text).slice(0, 280);
+        nextCursor = next.length;
+      }
+      setBody(next);
+      // Restore focus + cursor on the next tick so the tap that
+      // triggered paste doesn't immediately steal focus back.
+      setTimeout(() => {
+        const node = composeRef.current;
+        if (!node) return;
+        try {
+          node.focus();
+          node.setSelectionRange(nextCursor, nextCursor);
+        } catch {}
+        recomputeTickerMatch(next, nextCursor);
+      }, 0);
+    } catch (e) {
+      console.warn("[social] clipboard read failed:", e);
+      setErr(tr("social.compose.paste_err", lang));
+    }
+  }
+
   async function toggleLike(p) {
     try {
       if (p.likedByMe) await socialApi.unlikePost(p.id);
@@ -572,6 +636,20 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
       const saved = await socialApi.getSavedPosts();
       setSavedIds(saved.map((x) => x.id));
     } catch {}
+  }
+  // Hard delete via swipe-left on a post the user owns. Optimistic:
+  // we drop the post from the local list immediately so the swipe
+  // feels snappy, then call the server. If the server fails (rare
+  // — it's an UPDATE on deleted_at gated by author_id) we re-fetch
+  // to put the post back.
+  async function deletePost(p) {
+    setPosts((prev) => prev.filter((x) => x.id !== p.id));
+    try {
+      await socialApi.deletePost(p.id);
+    } catch (e) {
+      console.error("[social] delete failed:", e);
+      await refresh();
+    }
   }
 
   return (
@@ -724,23 +802,51 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
                 >×</button>
               </div>
             )}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
-              <span style={{ fontFamily: FONT.mono, fontSize: 11, color: T.textMute }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6, gap: 8 }}>
+              {/* Counter — left edge */}
+              <span style={{ fontFamily: FONT.mono, fontSize: 11, color: T.textMute, flexShrink: 0 }}>
                 {body.length}/280
               </span>
-              <button
-                onClick={publish}
-                disabled={busy || !body.trim()}
-                style={{
-                  padding: "8px 16px", borderRadius: 999,
-                  background: !body.trim() ? T.surface : T.accent,
-                  color: !body.trim() ? T.textMute : T.accentInk,
-                  fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
-                  border: !body.trim() ? `1px solid ${T.border}` : "none",
-                  cursor: busy || !body.trim() ? "default" : "pointer",
-                  opacity: busy ? 0.6 : 1,
-                }}
-              >{busy ? "…" : tr("social.publish", lang)}</button>
+              {/* Action row — paste + publish. Paste sits to the
+                  left of publish so the publish button stays anchored
+                  in its usual spot. */}
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button
+                  onClick={pasteFromClipboard}
+                  disabled={busy}
+                  aria-label={tr("social.compose.paste", lang)}
+                  title={tr("social.compose.paste", lang)}
+                  style={{
+                    width: 36, height: 32, borderRadius: 999,
+                    background: T.surface, border: `1px solid ${T.border}`,
+                    color: T.text, cursor: busy ? "default" : "pointer",
+                    padding: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                    opacity: busy ? 0.6 : 1,
+                  }}
+                >
+                  {/* Inline clipboard icon — kept here instead of
+                      adding a new entry to icons.jsx since it's a
+                      one-off in this file. */}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+                    <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+                  </svg>
+                </button>
+                <button
+                  onClick={publish}
+                  disabled={busy || !body.trim()}
+                  style={{
+                    padding: "8px 16px", borderRadius: 999,
+                    background: !body.trim() ? T.surface : T.accent,
+                    color: !body.trim() ? T.textMute : T.accentInk,
+                    fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+                    border: !body.trim() ? `1px solid ${T.border}` : "none",
+                    cursor: busy || !body.trim() ? "default" : "pointer",
+                    opacity: busy ? 0.6 : 1,
+                  }}
+                >{busy ? "…" : tr("social.publish", lang)}</button>
+              </div>
             </div>
             {err && <div style={{ marginTop: 8, color: T.danger, fontFamily: FONT.sans, fontSize: 12 }}>{err}</div>}
           </div>
@@ -762,11 +868,13 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
           posts.map((p) => (
             <PostCard
               key={p.id}
-              T={T} p={p}
+              T={T} p={p} lang={lang}
               saved={savedIds.includes(p.id)}
+              meId={me?.id}
               onLike={() => toggleLike(p)}
               onRepost={() => repost(p)}
               onSave={() => toggleSave(p)}
+              onDelete={() => deletePost(p)}
               onOpenAuthor={onOpenProfile}
               onOpenThread={onOpenThread}
               onOpenTicker={onOpenTicker}
@@ -781,16 +889,57 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
 // ============================================================
 // SEARCH — find users by handle / name, follow inline
 // ============================================================
-function SearchView({ T, lang = "es", user = null, onMessageUser, onOpenProfile }) {
+// Detect a ticker-shaped query. We accept either an explicit
+// "$NVDA" prefix or a bare uppercase 1–6-char string (NVDA, BTC,
+// AL30…). If the user types lowercase ("nvda") we still treat it
+// as a ticker — many people will. The returned symbol is always
+// uppercased and stripped of the leading $.
+function tickerFromQuery(q) {
+  const trimmed = (q || "").trim();
+  if (!trimmed) return null;
+  // Explicit $ prefix: definitely a ticker.
+  if (trimmed.startsWith("$")) {
+    const sym = trimmed.slice(1).toUpperCase();
+    return /^[A-Z][A-Z0-9]{0,5}$/.test(sym) ? sym : null;
+  }
+  // No spaces, 1–6 alphanumerics, starts with a letter — looks
+  // like a ticker. Mixed-case allowed; we uppercase before lookup.
+  const sym = trimmed.toUpperCase();
+  if (/^[A-Z][A-Z0-9]{0,5}$/.test(sym) && !sym.includes(" ")) return sym;
+  return null;
+}
+
+function SearchView({ T, lang = "es", user = null, onMessageUser, onOpenProfile, onOpenThread, onOpenTicker }) {
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState([]);
+  const [tickerPosts, setTickerPosts] = useState(null); // null = no ticker query yet, [] = empty
+  const [savedIds, setSavedIds] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // The active ticker query, derived from the input. Memoized so
+  // we don't fetch on every keystroke if the shape doesn't change.
+  const activeTicker = useMemo(() => tickerFromQuery(query), [query]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    try { setUsers(await socialApi.getUsers({ query })); }
-    catch {} finally { setLoading(false); }
-  }, [query]);
+    try {
+      // Always fetch matching users (handle / display name search).
+      // The ticker fetch only fires when the input shape matches.
+      const userPromise = socialApi.getUsers({ query });
+      const tickerPromise = activeTicker
+        ? socialApi.getFeed({ ticker: activeTicker, limit: 30 })
+        : Promise.resolve(null);
+      const savedPromise = socialApi.getSavedPosts().catch(() => []);
+      const [u, t, s] = await Promise.all([userPromise, tickerPromise, savedPromise]);
+      setUsers(u || []);
+      setTickerPosts(t);
+      setSavedIds((s || []).map((x) => x.id));
+    } catch (e) {
+      console.warn("[social-search] refresh:", e);
+    } finally {
+      setLoading(false);
+    }
+  }, [query, activeTicker]);
 
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => setRefreshHandler("social-search", refresh), [refresh]);
@@ -800,6 +949,24 @@ function SearchView({ T, lang = "es", user = null, onMessageUser, onOpenProfile 
       if (u.followedByMe) await socialApi.unfollow(u.id);
       else await socialApi.follow(u.id);
       await refresh();
+    } catch {}
+  }
+  async function toggleLike(p) {
+    try {
+      if (p.likedByMe) await socialApi.unlikePost(p.id);
+      else await socialApi.likePost(p.id);
+      await refresh();
+    } catch {}
+  }
+  async function repost(p) {
+    try { await socialApi.repostPost(p.id); await refresh(); } catch {}
+  }
+  async function toggleSave(p) {
+    try {
+      if (savedIds.includes(p.id)) await socialApi.unsavePost(p.id);
+      else await socialApi.savePost(p.id);
+      const sav = await socialApi.getSavedPosts();
+      setSavedIds(sav.map((x) => x.id));
     } catch {}
   }
 
@@ -815,7 +982,10 @@ function SearchView({ T, lang = "es", user = null, onMessageUser, onOpenProfile 
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar por usuario o nombre"
+            placeholder={tr("social.search.ph", lang)}
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             style={{
               flex: 1, background: "transparent", border: "none", outline: "none",
               color: T.text, fontFamily: FONT.sans, fontSize: 14,
@@ -830,8 +1000,44 @@ function SearchView({ T, lang = "es", user = null, onMessageUser, onOpenProfile 
         </div>
       </div>
 
+      {/* Ticker results — only when the query shape matches a ticker.
+          Rendered ABOVE the user list so the user gets the symbol
+          context before they scroll past names. */}
+      {activeTicker && (
+        <div style={{ margin: "0 16px 16px" }}>
+          <div style={{
+            fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+            color: T.textMute, letterSpacing: 0.5, textTransform: "uppercase",
+            padding: "0 4px 8px",
+          }}>
+            {tr("social.search.posts_about", lang, { ticker: activeTicker })}
+          </div>
+          {loading ? null : !tickerPosts || tickerPosts.length === 0 ? (
+            <div style={{
+              padding: "20px 16px", borderRadius: 14, textAlign: "center",
+              background: T.surface, border: `1px solid ${T.border}`,
+              color: T.textMute, fontFamily: FONT.sans, fontSize: 12,
+            }}>{tr("social.search.no_posts", lang, { ticker: activeTicker })}</div>
+          ) : (
+            tickerPosts.map((p) => (
+              <PostCard
+                key={p.id}
+                T={T} p={p} lang={lang}
+                saved={savedIds.includes(p.id)}
+                onLike={() => toggleLike(p)}
+                onRepost={() => repost(p)}
+                onSave={() => toggleSave(p)}
+                onOpenAuthor={onOpenProfile}
+                onOpenThread={onOpenThread}
+                onOpenTicker={onOpenTicker}
+              />
+            ))
+          )}
+        </div>
+      )}
+
       <div style={{ margin: "0 16px" }}>
-        {loading ? null : users.length === 0 ? (
+        {loading ? null : users.length === 0 && !activeTicker ? (
           <div style={{
             padding: 30, textAlign: "center",
             color: T.textMute, fontFamily: FONT.sans, fontSize: 13,
@@ -1397,6 +1603,19 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
       setFollowBusy(false);
     }
   }
+  // Hard delete (swipe-left). Same optimistic pattern as FeedView.
+  // Only ever fires from the user's own profile because the swipe
+  // action only shows on posts where p.author.id === me.id.
+  async function deletePost(p) {
+    setPosts((prev) => prev.filter((x) => x.id !== p.id));
+    setSaved((prev) => prev.filter((x) => x.id !== p.id));
+    try {
+      await socialApi.deletePost(p.id);
+    } catch (e) {
+      console.error("[profile] delete failed:", e);
+      await loadProfile();
+    }
+  }
 
   if (!profile) return null;
 
@@ -1445,7 +1664,25 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
             <span style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text }}>
               {profile.displayName}
             </span>
-            {profile.verified && <span style={{ color: T.accent, fontFamily: FONT.mono, fontSize: 13, fontWeight: 800 }}>✓</span>}
+            {/* CNV idóneo inline check — blue circle, distinct from the
+                green uni check. The "verified" generic flag in
+                profiles_social is no longer rendered as a tick on its
+                own (kept in the schema for future flexibility) — the
+                two real-world credentials we surface are CNV idóneo
+                (blue) and university (green). */}
+            {profile.cnvIdoneo && (
+              <span aria-label="Idóneo CNV" title="Idóneo en mercado de capitales · CNV" style={{
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                width: 16, height: 16, borderRadius: 999,
+                background: "#3B82F6", color: "#fff",
+                fontSize: 10, fontWeight: 900, lineHeight: 1,
+              }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </span>
+            )}
             {/* University verification — small green check next to the
                 name. Only renders when both university and the
                 trigger-set verified flag are true (claim alone does
@@ -1486,6 +1723,31 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
               </svg>
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {tr("profile.uni_verified", lang, { name: socialApi.universityLabel(profile.university) })}
+              </span>
+            </div>
+          )}
+
+          {/* CNV idóneo chip — distinct visual (blue) from the
+              university check (green) so a viewer can tell at a
+              glance which credential a verified user holds. Both
+              can render simultaneously when the same user is both
+              uni-verified AND a registered idóneo. */}
+          {profile.cnvIdoneo && (
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              marginTop: 8, marginLeft: profile.universityVerified && profile.university ? 6 : 0,
+              padding: "4px 10px", borderRadius: 999,
+              background: "#3B82F622", color: "#3B82F6",
+              border: "1px solid #3B82F655",
+              fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+              maxWidth: "100%",
+            }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {tr("profile.cnv_idoneo", lang)}
               </span>
             </div>
           )}
@@ -1580,7 +1842,10 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
               key={p.id}
               T={T}
               p={p}
+              lang={lang}
               readonly
+              meId={me?.id}
+              onDelete={() => deletePost(p)}
               onOpenAuthor={onOpenProfile}
               onOpenThread={onOpenThread}
               onOpenTicker={onOpenTicker}
@@ -2073,13 +2338,96 @@ function linkifyTickers(body, T, onOpenTicker) {
 // ============================================================
 // PostCard — used by Feed + Profile
 // ============================================================
-function PostCard({ T, p, saved, onLike, onRepost, onSave, readonly, onOpenAuthor, onOpenThread, onOpenTicker }) {
+// SWIPE-LEFT-TO-DELETE (samas-0.0.36)
+//   When the post is owned by the caller (meId === p.author.id) and
+//   onDelete is provided, the card supports an iOS-style swipe-left
+//   gesture that reveals a red "Borrar" action. Tap → confirm modal
+//   → onDelete. Tap on the still-visible card slice (or swipe right)
+//   snaps it back. Implementation notes:
+//     - Direction lock on first move (>6px): horizontal vs vertical.
+//       Vertical wins → release the gesture so the page can scroll
+//       normally. Horizontal wins → we own the gesture; clamp dx to
+//       [-ACTION_WIDTH * 1.3, 0] so right-swipe is a no-op.
+//     - movedRef gates the click handlers below — if the user just
+//       swiped, the touchend-triggered click on the body region is
+//       suppressed so we don't accidentally open the thread.
+// ============================================================
+const ACTION_WIDTH = 96;
+const SNAP_THRESHOLD = 44;
+
+function PostCard({ T, p, lang = "es", saved, meId, onLike, onRepost, onSave, onDelete, readonly, onOpenAuthor, onOpenThread, onOpenTicker }) {
   const handle = (p.author?.handle || "@user").replace(/^@/, "");
   // avatarPropsFor handles the displayName-missing case AND falls
   // back to a deterministic color so two posters in the same feed
   // never share a tint by accident.
   const { initials, color } = avatarPropsFor(p.author, T.accent);
   const displayName = p.author?.displayName || "Usuario";
+
+  // Swipe-to-delete machinery. ownPost gates the whole feature; if
+  // the post isn't ours we render the same JSX without the wrapper
+  // listeners (no perf hit, no behavior change).
+  const ownPost = !!(meId && p.author?.id === meId && onDelete);
+  const [dx, setDx] = useState(0);
+  const [confirming, setConfirming] = useState(false);
+  const [animating, setAnimating] = useState(true);
+  const startRef = React.useRef(null);   // {x, y}
+  const movedRef = React.useRef(false);  // moved past click threshold
+  const dirRef   = React.useRef(null);   // 'h' | 'v' — locked after first 6px
+
+  function onTouchStart(e) {
+    if (!ownPost || confirming) return;
+    const t = e.touches[0];
+    startRef.current = { x: t.clientX, y: t.clientY };
+    movedRef.current = false;
+    dirRef.current = null;
+    setAnimating(false); // disable transition while finger drags
+  }
+  function onTouchMove(e) {
+    if (!ownPost || !startRef.current || confirming) return;
+    const t = e.touches[0];
+    const dxCur = t.clientX - startRef.current.x;
+    const dyCur = t.clientY - startRef.current.y;
+    if (!dirRef.current) {
+      if (Math.abs(dxCur) < 6 && Math.abs(dyCur) < 6) return;
+      dirRef.current = Math.abs(dxCur) > Math.abs(dyCur) ? "h" : "v";
+    }
+    if (dirRef.current === "v") return;            // page-scroll path
+    // Clamp to [-ACTION_WIDTH*1.3, 0] — no rightward overshoot from
+    // the rest position; some leftward overshoot for elasticity.
+    const clamped = Math.min(0, Math.max(dxCur, -ACTION_WIDTH * 1.3));
+    setDx(clamped);
+    movedRef.current = true;
+  }
+  function onTouchEnd() {
+    if (!ownPost) return;
+    setAnimating(true);
+    if (dirRef.current === "h") {
+      if (dx <= -SNAP_THRESHOLD) setDx(-ACTION_WIDTH);
+      else setDx(0);
+    }
+    startRef.current = null;
+  }
+  // Wrap the existing click handlers so a just-completed swipe
+  // doesn't fire a stray click (which would open the thread).
+  function withSwipeGuard(fn) {
+    if (!fn) return undefined;
+    return (e) => {
+      if (movedRef.current) {
+        movedRef.current = false;
+        e?.preventDefault?.();
+        e?.stopPropagation?.();
+        return;
+      }
+      fn(e);
+    };
+  }
+
+  async function confirmDelete() {
+    setConfirming(false);
+    setDx(0);
+    if (onDelete) await onDelete();
+  }
+
   // Tap-into-profile handler. We bind it to the avatar/name area
   // so taps on the body or action buttons aren't hijacked.
   const openAuthor = (e) => {
@@ -2088,12 +2436,20 @@ function PostCard({ T, p, saved, onLike, onRepost, onSave, readonly, onOpenAutho
     onOpenAuthor(p.author.id);
   };
   const authorRowProps = onOpenAuthor && p.author?.id
-    ? { onClick: openAuthor, style: { cursor: "pointer" } }
+    ? { onClick: withSwipeGuard(openAuthor), style: { cursor: "pointer" } }
     : {};
-  return (
+
+  // Inner card content — used both as the standalone return for
+  // posts the user doesn't own AND as the foreground layer of the
+  // swipe-wrapper for posts they do.
+  const cardInner = (
     <div style={{
       padding: 14, marginBottom: 8, borderRadius: 18,
       background: T.surface, border: `1px solid ${T.border}`,
+      // When swiping, suppress text selection callouts that iOS
+      // pops up on long-press — they fight with the gesture.
+      WebkitUserSelect: ownPost ? "none" : "auto",
+      WebkitTouchCallout: ownPost ? "none" : "default",
     }}>
       <div {...authorRowProps} style={{ display: "flex", gap: 10, marginBottom: 8, ...authorRowProps.style }}>
         <Avatar T={T} initials={initials} color={color} />
@@ -2116,7 +2472,7 @@ function PostCard({ T, p, saved, onLike, onRepost, onSave, readonly, onOpenAutho
           not descendants of this region — they don't trigger thread
           open. */}
       <div
-        onClick={onOpenThread ? () => onOpenThread(p) : undefined}
+        onClick={onOpenThread ? withSwipeGuard(() => onOpenThread(p)) : undefined}
         style={{ cursor: onOpenThread ? "pointer" : "default" }}
       >
         <div style={{
@@ -2170,6 +2526,120 @@ function PostCard({ T, p, saved, onLike, onRepost, onSave, readonly, onOpenAutho
           <ActionBtn T={T}
             icon={<Ico.Bookmark size={16} {...(saved ? { fill: "currentColor" } : {})}/>}
             active={saved} activeColor={T.accent} onClick={onSave} />
+        </div>
+      )}
+    </div>
+  );
+
+  // No swipe wrapper for posts the user doesn't own — render the
+  // raw card and bail. Saves a layer + keeps non-owners' interaction
+  // surface unchanged.
+  if (!ownPost) return cardInner;
+
+  // Owned post → wrap in a position:relative container with a red
+  // delete panel pinned to the right and the card translated by dx.
+  return (
+    <div style={{ position: "relative", marginBottom: 8 }}>
+      {/* Red delete action panel — sits behind, revealed by swipe */}
+      <div style={{
+        position: "absolute", top: 0, right: 0, bottom: 8,
+        width: ACTION_WIDTH, borderRadius: 18,
+        background: T.danger,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        // Hide the panel entirely when at rest so its rounded corner
+        // doesn't peek out from under the card border.
+        opacity: dx < -2 ? 1 : 0,
+        transition: animating ? "opacity 0.18s ease" : "none",
+      }}>
+        <button
+          onClick={() => setConfirming(true)}
+          aria-label={tr("social.post.delete", lang)}
+          style={{
+            background: "transparent", border: "none",
+            color: "#fff", fontFamily: FONT.sans, fontWeight: 800, fontSize: 13,
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+            padding: 8, cursor: "pointer",
+          }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            <path d="M10 11v6M14 11v6"/>
+            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+          </svg>
+          {tr("social.post.delete", lang)}
+        </button>
+      </div>
+
+      {/* Foreground card — translated by swipe dx. Unset marginBottom
+          on cardInner since the wrapper owns the gap now. */}
+      <div
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchEnd}
+        style={{
+          transform: `translateX(${dx}px)`,
+          transition: animating ? "transform 0.18s ease" : "none",
+          // Touch action: pan-y allows vertical scroll, blocks horizontal
+          // browser gestures (back-swipe, etc) so we get a clean signal.
+          touchAction: "pan-y",
+        }}
+      >
+        {/* Re-render cardInner without the wrapper's mb. Easier than
+            mutating cardInner: we render it directly and clear the
+            duplicated bottom margin via a wrapping div with marginBottom: 0. */}
+        <div style={{ marginBottom: 0 }}>{cardInner}</div>
+      </div>
+
+      {/* Confirm modal — small inline overlay, dismissable by tap on
+          backdrop or Cancel. We don't use window.confirm() because
+          native dialogs in WKWebView under Capacitor look out of
+          place and are slow to render. */}
+      {confirming && (
+        <div
+          onClick={() => setConfirming(false)}
+          style={{
+            position: "fixed", inset: 0, zIndex: 200,
+            background: "rgba(0,0,0,0.55)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 28,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: 320, width: "100%",
+              background: T.surface, border: `1px solid ${T.border}`,
+              borderRadius: 18, padding: "20px 18px",
+            }}
+          >
+            <div style={{
+              fontFamily: FONT.display, fontSize: 16, fontWeight: 700,
+              color: T.text, marginBottom: 14, textAlign: "center",
+            }}>{tr("social.post.delete_confirm", lang)}</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => setConfirming(false)}
+                style={{
+                  flex: 1, padding: "10px 14px", borderRadius: 12,
+                  background: "transparent", border: `1px solid ${T.border}`,
+                  color: T.text, fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >{tr("social.post.delete_no", lang)}</button>
+              <button
+                onClick={confirmDelete}
+                style={{
+                  flex: 1, padding: "10px 14px", borderRadius: 12,
+                  background: T.danger, border: "none",
+                  color: "#fff", fontFamily: FONT.sans, fontSize: 13, fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >{tr("social.post.delete_yes", lang)}</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -94,6 +94,25 @@ const V2 = {
     "profile.uni_verified":       "Verificado · {name}",
     "profile.uni_claimed":        "{name}",
 
+    // CNV idóneo (registered representative) badge
+    "profile.cnv_idoneo":         "Idóneo en mercado de capitales · CNV",
+
+    // Compose: paste from clipboard
+    "social.compose.paste":       "Pegar",
+    "social.compose.paste_empty": "El portapapeles está vacío.",
+    "social.compose.paste_err":   "No pudimos leer el portapapeles.",
+
+    // Post: delete (swipe-left action + confirm dialog)
+    "social.post.delete":         "Borrar",
+    "social.post.delete_confirm": "¿Querés borrar este post?",
+    "social.post.delete_yes":     "Borrar",
+    "social.post.delete_no":      "Cancelar",
+
+    // Search: ticker-search section header + placeholder
+    "social.search.ph":           "Buscar usuarios o $TICKER",
+    "social.search.posts_about":  "Posts sobre ${ticker}",
+    "social.search.no_posts":     "No hay posts sobre ${ticker} todavía.",
+
     "settings.done":              "Listo",
     "wallet.balance_total": "BALANCE TOTAL",
     "wallet.today": "hoy",
@@ -110,7 +129,7 @@ const V2 = {
     "wallet.filter": "Filtrar",
     "wallet.next_aporte": "PRÓXIMO APORTE",
     "wallet.swap_soon": "Cambio ARS↔USD próximamente.",
-    "social.tab.for_you": "Para vos",
+    "social.tab.for_you": "Trending",
     "social.tab.following": "Siguiendo",
     "social.tab.trades": "Trades",
     "social.subnav.feed": "Feed",
@@ -333,6 +352,25 @@ const V2 = {
     "profile.uni_verified":       "Verified · {name}",
     "profile.uni_claimed":        "{name}",
 
+    // CNV idóneo (registered representative) badge
+    "profile.cnv_idoneo":         "Capital markets registered · CNV",
+
+    // Compose: paste from clipboard
+    "social.compose.paste":       "Paste",
+    "social.compose.paste_empty": "Your clipboard is empty.",
+    "social.compose.paste_err":   "Couldn't read clipboard.",
+
+    // Post: delete (swipe-left action + confirm dialog)
+    "social.post.delete":         "Delete",
+    "social.post.delete_confirm": "Delete this post?",
+    "social.post.delete_yes":     "Delete",
+    "social.post.delete_no":      "Cancel",
+
+    // Search: ticker-search section header + placeholder
+    "social.search.ph":           "Search users or $TICKER",
+    "social.search.posts_about":  "Posts about ${ticker}",
+    "social.search.no_posts":     "No posts about ${ticker} yet.",
+
     "settings.done":              "Done",
     "wallet.balance_total": "TOTAL BALANCE",
     "wallet.today": "today",
@@ -349,7 +387,7 @@ const V2 = {
     "wallet.filter": "Filter",
     "wallet.next_aporte": "NEXT CONTRIBUTION",
     "wallet.swap_soon": "ARS↔USD swap coming soon.",
-    "social.tab.for_you": "For you",
+    "social.tab.for_you": "Trending",
     "social.tab.following": "Following",
     "social.tab.trades": "Trades",
     "social.subnav.feed": "Feed",
@@ -562,7 +600,7 @@ const V2 = {
     "wallet.filter": "Filtrar",
     "wallet.next_aporte": "PRÓXIMO APORTE",
     "wallet.swap_soon": "Troca ARS↔USD em breve.",
-    "social.tab.for_you": "Para você",
+    "social.tab.for_you": "Trending",
     "social.tab.following": "Seguindo",
     "social.tab.trades": "Trades",
     "social.subnav.feed": "Feed",
@@ -752,7 +790,7 @@ const V2 = {
     "wallet.filter": "Filtra",
     "wallet.next_aporte": "PROSSIMO CONTRIBUTO",
     "wallet.swap_soon": "Scambio ARS↔USD in arrivo.",
-    "social.tab.for_you": "Per te",
+    "social.tab.for_you": "Trending",
     "social.tab.following": "Seguendo",
     "social.tab.trades": "Trades",
     "social.subnav.feed": "Feed",
@@ -942,7 +980,7 @@ const V2 = {
     "wallet.filter": "Filtrer",
     "wallet.next_aporte": "PROCHAIN APPORT",
     "wallet.swap_soon": "Échange ARS↔USD bientôt.",
-    "social.tab.for_you": "Pour toi",
+    "social.tab.for_you": "Trending",
     "social.tab.following": "Suivis",
     "social.tab.trades": "Trades",
     "social.subnav.feed": "Fil",
@@ -1132,7 +1170,7 @@ const V2 = {
     "wallet.filter": "Filtern",
     "wallet.next_aporte": "NÄCHSTER BEITRAG",
     "wallet.swap_soon": "ARS↔USD-Tausch demnächst.",
-    "social.tab.for_you": "Für dich",
+    "social.tab.for_you": "Trending",
     "social.tab.following": "Folge ich",
     "social.tab.trades": "Trades",
     "social.subnav.feed": "Feed",
@@ -1322,7 +1360,7 @@ const V2 = {
     "wallet.filter": "筛选",
     "wallet.next_aporte": "下一次供款",
     "wallet.swap_soon": "ARS↔USD 兑换即将上线。",
-    "social.tab.for_you": "为你推荐",
+    "social.tab.for_you": "Trending",
     "social.tab.following": "关注",
     "social.tab.trades": "交易",
     "social.subnav.feed": "动态",
@@ -1512,7 +1550,7 @@ const V2 = {
     "wallet.filter": "Фильтр",
     "wallet.next_aporte": "СЛЕДУЮЩИЙ ВЗНОС",
     "wallet.swap_soon": "Обмен ARS↔USD скоро.",
-    "social.tab.for_you": "Для тебя",
+    "social.tab.for_you": "Trending",
     "social.tab.following": "Подписки",
     "social.tab.trades": "Сделки",
     "social.subnav.feed": "Лента",
@@ -1702,7 +1740,7 @@ const V2 = {
     "wallet.filter": "フィルター",
     "wallet.next_aporte": "次回の積立",
     "wallet.swap_soon": "ARS↔USD両替は近日公開。",
-    "social.tab.for_you": "おすすめ",
+    "social.tab.for_you": "Trending",
     "social.tab.following": "フォロー中",
     "social.tab.trades": "トレード",
     "social.subnav.feed": "フィード",
@@ -1892,7 +1930,7 @@ const V2 = {
     "wallet.filter": "סנן",
     "wallet.next_aporte": "ההפקדה הבאה",
     "wallet.swap_soon": "החלפת ARS↔USD בקרוב.",
-    "social.tab.for_you": "בשבילך",
+    "social.tab.for_you": "Trending",
     "social.tab.following": "עוקב",
     "social.tab.trades": "טריידים",
     "social.subnav.feed": "פיד",
@@ -2082,7 +2120,7 @@ const V2 = {
     "wallet.filter": "تصفية",
     "wallet.next_aporte": "المساهمة القادمة",
     "wallet.swap_soon": "تبديل ARS↔USD قريبًا.",
-    "social.tab.for_you": "لك",
+    "social.tab.for_you": "Trending",
     "social.tab.following": "أتابع",
     "social.tab.trades": "الصفقات",
     "social.subnav.feed": "الموجز",
@@ -2272,7 +2310,7 @@ const V2 = {
     "wallet.filter": "필터",
     "wallet.next_aporte": "다음 적립",
     "wallet.swap_soon": "ARS↔USD 환전 곧 출시.",
-    "social.tab.for_you": "추천",
+    "social.tab.for_you": "Trending",
     "social.tab.following": "팔로잉",
     "social.tab.trades": "거래",
     "social.subnav.feed": "피드",
