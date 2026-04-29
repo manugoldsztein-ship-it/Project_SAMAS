@@ -2034,41 +2034,53 @@ function PostCard({ T, p, saved, onLike, onRepost, onSave, readonly, onOpenAutho
           </div>
         </div>
       </div>
-      <div style={{
-        fontFamily: FONT.sans, fontSize: 14, color: T.text,
-        lineHeight: 1.5, whiteSpace: "pre-wrap", marginBottom: 10,
-      }}>{linkifyTickers(p.body, T, onOpenTicker)}</div>
-
-      {p.trade && (
+      {/* Body + trade card live inside one clickable region that
+          opens the thread when tapped. Interactive children inside
+          (the $TICKER linkified spans, the trade-card ticker chip)
+          stop propagation so they keep their own behaviors. The
+          author row above and the action row below are siblings,
+          not descendants of this region — they don't trigger thread
+          open. */}
+      <div
+        onClick={onOpenThread ? () => onOpenThread(p) : undefined}
+        style={{ cursor: onOpenThread ? "pointer" : "default" }}
+      >
         <div style={{
-          padding: "10px 12px", borderRadius: 12, marginBottom: 10,
-          background: T.bg, border: `1px solid ${T.border}`,
-          display: "flex", alignItems: "center", gap: 10,
-        }}>
+          fontFamily: FONT.sans, fontSize: 14, color: T.text,
+          lineHeight: 1.5, whiteSpace: "pre-wrap", marginBottom: 10,
+        }}>{linkifyTickers(p.body, T, onOpenTicker)}</div>
+
+        {p.trade && (
           <div style={{
-            padding: "3px 8px", borderRadius: 6,
-            background: p.trade.side === "buy" ? T.accentSoft : T.dangerSoft,
-            color: p.trade.side === "buy" ? T.accent : T.danger,
-            fontFamily: FONT.mono, fontSize: 10, fontWeight: 700, letterSpacing: 0.6,
-          }}>{p.trade.side === "buy" ? "COMPRA" : "VENTA"}</div>
-          {/* Ticker chip — clickable when onOpenTicker is provided.
-              Drills into the ticker feed for that symbol. */}
-          <button
-            onClick={(e) => { e.stopPropagation(); if (onOpenTicker) onOpenTicker(p.trade.ticker); }}
-            disabled={!onOpenTicker}
-            style={{
-              padding: 0, background: "transparent", border: "none",
-              fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text,
-              cursor: onOpenTicker ? "pointer" : "default",
-            }}
-          >
-            {p.trade.qty} {p.trade.ticker}
-          </button>
-          <div style={{ fontFamily: FONT.mono, fontSize: 12, color: T.textMute, marginLeft: "auto" }}>
-            US${p.trade.price?.toLocaleString("es-AR")}
+            padding: "10px 12px", borderRadius: 12, marginBottom: 10,
+            background: T.bg, border: `1px solid ${T.border}`,
+            display: "flex", alignItems: "center", gap: 10,
+          }}>
+            <div style={{
+              padding: "3px 8px", borderRadius: 6,
+              background: p.trade.side === "buy" ? T.accentSoft : T.dangerSoft,
+              color: p.trade.side === "buy" ? T.accent : T.danger,
+              fontFamily: FONT.mono, fontSize: 10, fontWeight: 700, letterSpacing: 0.6,
+            }}>{p.trade.side === "buy" ? "COMPRA" : "VENTA"}</div>
+            {/* Ticker chip — clickable when onOpenTicker is provided.
+                Drills into the ticker feed for that symbol. */}
+            <button
+              onClick={(e) => { e.stopPropagation(); if (onOpenTicker) onOpenTicker(p.trade.ticker); }}
+              disabled={!onOpenTicker}
+              style={{
+                padding: 0, background: "transparent", border: "none",
+                fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text,
+                cursor: onOpenTicker ? "pointer" : "default",
+              }}
+            >
+              {p.trade.qty} {p.trade.ticker}
+            </button>
+            <div style={{ fontFamily: FONT.mono, fontSize: 12, color: T.textMute, marginLeft: "auto" }}>
+              US${p.trade.price?.toLocaleString("es-AR")}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {!readonly && (
         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
