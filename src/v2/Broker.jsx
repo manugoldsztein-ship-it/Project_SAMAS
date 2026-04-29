@@ -286,6 +286,7 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true, la
           onDone={() => { setSelectedAsset(null); refresh(); }}
           watchlists={watchlists}
           onWatchlistsChange={refresh}
+          proMode={proMode}
           lang={lang}
         />
       )}
@@ -1488,7 +1489,7 @@ function AssetRow({ T, asset, subline, rightTop, rightBottom, rightBottomColor, 
   );
 }
 
-function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: rawOnDone, watchlists = [], onWatchlistsChange, lang = "es" }) {
+function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: rawOnDone, watchlists = [], onWatchlistsChange, proMode = false, lang = "es" }) {
   // Wrap close + done callbacks so we play a slide-down exit animation
   // before the parent unmounts the sheet. The CSS transition lives on
   // the inner sheet div (transform translateY).
@@ -1676,6 +1677,19 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
               {fmtPct(asset.changePct)}
             </Pill>
           </div>
+
+          {/* Pro AssetDetail (samas-0.0.43) — chart + 52w range +
+              fundamentals. Only shown when not in confirm/done sub-
+              steps so the buy-flow doesn't get cluttered. Pro-mode
+              gated; non-pro users see the existing compact header
+              and go straight to the trade form. */}
+          {proMode && !done && !confirm && (
+            <>
+              <ProAssetChart T={T} asset={asset} lang={lang} />
+              <RangeBar52w T={T} asset={asset} lang={lang} />
+              <FundamentalsCard T={T} asset={asset} lang={lang} />
+            </>
+          )}
 
           {done ? (
             <DoneScreen T={T} done={done} side={side} qty={qty} ticker={asset.ticker} onClose={onDone} />
@@ -2852,6 +2866,291 @@ function DistribucionBar({ T, holdings, totalUsd }) {
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// PRO ASSETDETAIL (samas-0.0.43)
+// ============================================================
+// Three new visual cards that render at the top of AssetSheet
+// when proMode is on. Like the portfolio dashboard, all data is
+// derived from the asset prop so it's stable and deterministic
+// per ticker — no live feed required for the prototype.
+//
+//   1. ProAssetChart   — multi-timeframe area chart with toggle.
+//   2. RangeBar52w     — visual marker between 52w low and high.
+//   3. FundamentalsCard — P/E · EPS · Mkt cap · Div yield · Vol.
+// ============================================================
+
+// Deterministic-but-different number generator seeded from the
+// ticker string, so AAPL always has the same fundamentals across
+// renders but they differ from NVDA / TSLA / etc.
+function tickerSeed(ticker, salt = 0) {
+  let h = 0;
+  for (let i = 0; i < (ticker || "").length; i++) {
+    h = ((h << 5) - h + ticker.charCodeAt(i)) | 0;
+  }
+  h = (h ^ salt) >>> 0;
+  return () => {
+    // mulberry32
+    h = (h + 0x6D2B79F5) >>> 0;
+    let t = h;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const TIMEFRAMES = [
+  { id: "1d",  key: "pro.asset.tf.1d",  points: 24,  vol: 0.006, drift: 0.001 },
+  { id: "1w",  key: "pro.asset.tf.1w",  points: 35,  vol: 0.012, drift: 0.004 },
+  { id: "1m",  key: "pro.asset.tf.1m",  points: 30,  vol: 0.018, drift: 0.012 },
+  { id: "1y",  key: "pro.asset.tf.1y",  points: 52,  vol: 0.030, drift: 0.060 },
+  { id: "all", key: "pro.asset.tf.all", points: 60,  vol: 0.040, drift: 0.180 },
+];
+
+function ProAssetChart({ T, asset, lang = "es" }) {
+  const [tf, setTf] = useState("1m");
+  const cfg = TIMEFRAMES.find((t) => t.id === tf) || TIMEFRAMES[2];
+  const series = useMemo(() => {
+    const rng = tickerSeed(asset.ticker, cfg.points);
+    const target = asset.price;
+    // Build a series ending at the current price by walking backward
+    // from `target` with random walk, then reverse so the latest
+    // point is on the right.
+    const out = [target];
+    for (let i = 1; i < cfg.points; i++) {
+      const noise = (rng() - 0.5) * cfg.vol;
+      const drift = cfg.drift / cfg.points;
+      const prev = out[i - 1] / (1 + drift + noise);
+      out.push(prev);
+    }
+    return out.reverse();
+  }, [asset.ticker, asset.price, cfg.points, cfg.vol, cfg.drift]);
+  const first = series[0];
+  const last = series[series.length - 1];
+  const periodPct = first ? ((last - first) / first) * 100 : 0;
+  const up = periodPct >= 0;
+  const ccySym = asset.currency === "ARS" ? "$" : "US$";
+
+  // Layout — 320×140 viewBox, full-width responsive. Path math:
+  // build a polyline + close it down to the bottom for the area
+  // fill. Y inverted because SVG origin is top-left.
+  const w = 320, h = 140;
+  const min = Math.min(...series), max = Math.max(...series);
+  const range = max - min || 1;
+  function ptX(i) { return (i / (series.length - 1)) * w; }
+  function ptY(v) { return h - ((v - min) / range) * h; }
+  const linePath = series.map((v, i) =>
+    `${i === 0 ? "M" : "L"} ${ptX(i).toFixed(1)} ${ptY(v).toFixed(1)}`
+  ).join(" ");
+  const fillPath = `${linePath} L ${w} ${h} L 0 ${h} Z`;
+
+  return (
+    <div style={{
+      margin: "0 0 18px",
+      padding: "14px 16px 16px", borderRadius: 18,
+      background: T.surface, border: `1px solid ${T.border}`,
+    }}>
+      <div style={{
+        display: "flex", justifyContent: "space-between", alignItems: "baseline",
+        marginBottom: 8,
+      }}>
+        <div style={{
+          fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+          color: T.textMute, letterSpacing: 0.4, textTransform: "uppercase",
+        }}>
+          {tr(cfg.key, lang)} · {up ? "+" : ""}{periodPct.toFixed(2)}%
+        </div>
+        <div style={{
+          fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+          color: up ? T.accent : T.danger,
+        }}>
+          {up ? "+" : ""}{ccySym}{fmtMoney(Math.abs(last - first), asset.currency)}
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} preserveAspectRatio="none">
+        <defs>
+          <linearGradient id={`grad-${asset.ticker}-${tf}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={up ? T.accent : T.danger} stopOpacity="0.32"/>
+            <stop offset="100%" stopColor={up ? T.accent : T.danger} stopOpacity="0"/>
+          </linearGradient>
+        </defs>
+        {/* Subtle horizontal gridlines at 25/50/75% — give the eye
+            an anchor without chrome heavy enough to compete with
+            the price line itself. */}
+        {[0.25, 0.5, 0.75].map((p) => (
+          <line key={p} x1={0} x2={w} y1={h * p} y2={h * p}
+            stroke={T.border} strokeDasharray="2 4" strokeWidth={0.5} opacity={0.6} />
+        ))}
+        <path d={fillPath} fill={`url(#grad-${asset.ticker}-${tf})`} />
+        <path d={linePath} fill="none" stroke={up ? T.accent : T.danger}
+          strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <div style={{
+        marginTop: 10, display: "flex", gap: 4,
+        background: T.bg, border: `1px solid ${T.border}`,
+        borderRadius: 999, padding: 3,
+      }}>
+        {TIMEFRAMES.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTf(t.id)}
+            style={{
+              flex: 1, padding: "5px 0", borderRadius: 999, border: "none", cursor: "pointer",
+              background: tf === t.id ? T.accent : "transparent",
+              color: tf === t.id ? T.accentInk : T.textMute,
+              fontFamily: FONT.mono, fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+            }}
+          >{tr(t.key, lang)}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------
+// RangeBar52w — visual where the current price sits between the
+// 52-week low and 52-week high. Mock low/high derived from price
+// with a deterministic seed so each ticker has its own range.
+// ----------------------------------------------------------
+function RangeBar52w({ T, asset, lang = "es" }) {
+  const { low, high, pos } = useMemo(() => {
+    const rng = tickerSeed(asset.ticker, 99);
+    // Low between -45% and -15% of current; high between +5% and +35%.
+    const lowMul  = 1 - (0.15 + rng() * 0.30);
+    const highMul = 1 + (0.05 + rng() * 0.30);
+    const lo = asset.price * lowMul;
+    const hi = asset.price * highMul;
+    const p = (asset.price - lo) / (hi - lo);
+    return { low: lo, high: hi, pos: Math.max(0, Math.min(1, p)) };
+  }, [asset.ticker, asset.price]);
+  const ccySym = asset.currency === "ARS" ? "$" : "US$";
+  return (
+    <div style={{
+      margin: "0 0 18px",
+      padding: "12px 16px 14px", borderRadius: 18,
+      background: T.surface, border: `1px solid ${T.border}`,
+    }}>
+      <div style={{
+        fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+        color: T.textMute, letterSpacing: 0.4, textTransform: "uppercase",
+        marginBottom: 12,
+      }}>{tr("pro.asset.range.title", lang)}</div>
+      {/* Bar — full width, 6px tall, gradient red→accent so the
+          color cue tracks low → high too. The marker is a white
+          pill at `pos` × bar width. */}
+      <div style={{ position: "relative", height: 6, borderRadius: 3, overflow: "visible" }}>
+        <div style={{
+          position: "absolute", inset: 0, borderRadius: 3,
+          background: `linear-gradient(90deg, ${T.danger}99 0%, ${T.textMute}55 50%, ${T.accent}99 100%)`,
+        }}/>
+        <div style={{
+          position: "absolute", top: -3, left: `calc(${(pos * 100).toFixed(1)}% - 6px)`,
+          width: 12, height: 12, borderRadius: 6,
+          background: T.text, border: `2px solid ${T.surface}`,
+          boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+        }}/>
+      </div>
+      <div style={{
+        marginTop: 10, display: "flex", justifyContent: "space-between",
+        fontFamily: FONT.mono, fontSize: 11,
+      }}>
+        <div>
+          <div style={{ color: T.textMute, fontSize: 9, letterSpacing: 0.4 }}>
+            {tr("pro.asset.range.low", lang)}
+          </div>
+          <div style={{ color: T.text, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+            {ccySym}{fmtMoney(low, asset.currency)}
+          </div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ color: T.textMute, fontSize: 9, letterSpacing: 0.4 }}>
+            {tr("pro.asset.range.high", lang)}
+          </div>
+          <div style={{ color: T.text, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+            {ccySym}{fmtMoney(high, asset.currency)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------
+// FundamentalsCard — 2-column key/value grid. Numbers are
+// deterministic per ticker so they don't shuffle across renders.
+// ETFs / bonds get tailored values (no P/E for an ETF, etc) so
+// the screen doesn't show nonsense.
+// ----------------------------------------------------------
+function fmtCompactNumber(n) {
+  if (n >= 1e12) return `${(n / 1e12).toFixed(2)}T`;
+  if (n >= 1e9)  return `${(n / 1e9).toFixed(2)}B`;
+  if (n >= 1e6)  return `${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3)  return `${(n / 1e3).toFixed(1)}K`;
+  return n.toFixed(0);
+}
+
+function FundamentalsCard({ T, asset, lang = "es" }) {
+  const data = useMemo(() => {
+    const rng = tickerSeed(asset.ticker, 7);
+    const isCedearOrAccion = asset.category === "CEDEAR" || asset.category === "ACCION";
+    const isCrypto = asset.category === "CRYPTO";
+    const isBono = asset.category === "BONO";
+    const pe = isCedearOrAccion ? (10 + rng() * 30).toFixed(1) : "—";
+    const eps = isCedearOrAccion
+      ? `${asset.currency === "ARS" ? "$" : "US$"}${(asset.price / (15 + rng() * 20)).toFixed(2)}`
+      : "—";
+    const sharesOut = isCrypto
+      ? 19_000_000 + rng() * 100_000_000  // crypto "supply" approximation
+      : 1e8 + rng() * 5e10;               // equity shares outstanding
+    const mcap = asset.price * sharesOut;
+    const divYield = isCedearOrAccion
+      ? `${(rng() * 4).toFixed(2)}%`
+      : isBono ? `${(8 + rng() * 6).toFixed(2)}%`
+      : "—";
+    const vol = isCrypto
+      ? rng() * 5e10
+      : (1e6 + rng() * 5e7);
+    const ccySym = asset.currency === "ARS" ? "$" : "US$";
+    return [
+      { label: tr("pro.asset.fund.pe",    lang), value: pe },
+      { label: tr("pro.asset.fund.eps",   lang), value: eps },
+      { label: tr("pro.asset.fund.mcap",  lang), value: `${ccySym}${fmtCompactNumber(mcap)}` },
+      { label: tr("pro.asset.fund.div",   lang), value: divYield },
+      { label: tr("pro.asset.fund.vol",   lang), value: `${ccySym}${fmtCompactNumber(vol)}` },
+      { label: "Sector",                          value: asset.category || "—" },
+    ];
+  }, [asset.ticker, asset.price, asset.currency, asset.category, lang]);
+  return (
+    <div style={{
+      margin: "0 0 18px",
+      padding: "14px 16px 12px", borderRadius: 18,
+      background: T.surface, border: `1px solid ${T.border}`,
+    }}>
+      <div style={{
+        fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+        color: T.textMute, letterSpacing: 0.4, textTransform: "uppercase",
+        marginBottom: 10,
+      }}>{tr("pro.asset.fund.title", lang)}</div>
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(2, 1fr)",
+        rowGap: 10, columnGap: 16,
+      }}>
+        {data.map((d) => (
+          <div key={d.label} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 11, color: T.textMute,
+            }}>{d.label}</div>
+            <div style={{
+              fontFamily: FONT.mono, fontSize: 14, fontWeight: 700, color: T.text,
+              fontVariantNumeric: "tabular-nums",
+            }}>{d.value}</div>
+          </div>
+        ))}
       </div>
     </div>
   );
