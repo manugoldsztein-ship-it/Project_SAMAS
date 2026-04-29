@@ -23,6 +23,21 @@ import { Skeleton } from "./shared.jsx";
 import { t as tr } from "../lib/i18n.js";
 import { setRefreshHandler } from "./refreshRegistry.js";
 
+// Hard outer timeout so the entire News tab can't get stuck on a
+// slow Promise.all. The api/news.js layer already has its own
+// timeouts (3s + 10s) but a UI-level safety net keeps things
+// graceful if any one step in the chain throws an unhandled
+// rejection that escapes Promise.all.
+const NEWS_PAGE_REFRESH_TIMEOUT_MS = 12000;
+
+function withPageTimeout(promise, ms) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error("news refresh timed out")), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 export function NewsPage({ T, lang = "es" }) {
   const [items, setItems] = useState([]);
   const [ticker, setTicker] = useState([]);
@@ -31,18 +46,23 @@ export function NewsPage({ T, lang = "es" }) {
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState(null); // null = not searching
   const [loading, setLoading] = useState(true);
+  // loadError surfaces a Retry button instead of a forever-stuck
+  // skeleton. Cleared on every successful refresh.
+  const [loadError, setLoadError] = useState(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
-      const [list, bar, categories] = await Promise.all([
+      const [list, bar, categories] = await withPageTimeout(Promise.all([
         newsApi.getCategorizedNews({ category: cat, limit: 40 }),
         newsApi.getMarketTicker(),
         newsApi.getCategories(),
-      ]);
+      ]), NEWS_PAGE_REFRESH_TIMEOUT_MS);
       setItems(list); setTicker(bar); setCats(categories);
     } catch (e) {
       console.error("[news] load:", e);
+      setLoadError(e?.message || "load failed");
     } finally {
       setLoading(false);
     }
@@ -217,6 +237,35 @@ export function NewsPage({ T, lang = "es" }) {
           );
         })}
       </div>
+
+      {/* Error banner — shown when refresh failed (timeout, throw, etc).
+          Gives the user a fast path back to a working state without
+          forcing a tab switch / pull-to-refresh. */}
+      {loadError && !loading && (
+        <div style={{
+          margin: "8px 16px 12px", padding: "12px 14px", borderRadius: 14,
+          background: T.dangerSoft, border: `1px solid ${T.danger}55`,
+          display: "flex", alignItems: "center", gap: 10,
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.danger }}>
+              {tr("news.empty_title", lang)}
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute, marginTop: 2 }}>
+              {loadError}
+            </div>
+          </div>
+          <button
+            onClick={refresh}
+            style={{
+              padding: "6px 14px", borderRadius: 999,
+              background: T.danger, border: "none", color: "#fff",
+              fontFamily: FONT.sans, fontSize: 12, fontWeight: 700,
+              cursor: "pointer", flexShrink: 0,
+            }}
+          >{tr("news.refresh", lang)}</button>
+        </div>
+      )}
 
       {/* Feed */}
       <div style={{ margin: "0 16px" }}>

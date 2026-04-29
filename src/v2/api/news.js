@@ -102,36 +102,73 @@ const TICKER_BAR = [
  * If the Edge Function fails (no session, network down, demo mode) we
  * silently fall back to the curated mock catalog so the tab still has
  * something to show.
+ *
+ * DEFENSIVE TIMEOUTS (samas-0.0.37)
+ *   The original implementation could hang indefinitely if either
+ *   the broker getPortfolio call or the Edge Function never resolved
+ *   (we observed this on iOS where the WebView's network stack can
+ *   stall after backgrounding). We now wrap each step in a hard
+ *   timeout so the worst case is N seconds → mockFeed → tab shows
+ *   the curated catalog. Two timeouts:
+ *     - tickerLookupRaceMs (3s): broker portfolio + watchlists. If
+ *       these hang we just use the macro basket.
+ *     - realFetchRaceMs (10s): the Edge Function call. Edge Function
+ *       internal timeout is 25s but we don't need to wait that long
+ *       on the user-facing path; on cache miss the user sees the
+ *       mock and the next pull-to-refresh gets the real result.
  */
+const NEWS_TICKER_LOOKUP_TIMEOUT_MS = 3000;
+const NEWS_REAL_FETCH_TIMEOUT_MS = 10000;
+
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label || "op"} timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 export async function getCategorizedNews({ category = "Todo", limit = 30 } = {}) {
   // Build the universe of "tickers I care about". Holdings come via
   // getPortfolio (which enriches each holding with live data) and
-  // watchlists are flat ticker arrays.
+  // watchlists are flat ticker arrays. Both are wrapped in a tight
+  // timeout so a stuck broker mock can't block the news tab.
   let tickers = [];
   try {
-    const [portfolio, watchlists] = await Promise.all([
-      brokerApi.getPortfolio ? brokerApi.getPortfolio() : Promise.resolve({ holdings: [] }),
-      brokerApi.getWatchlists ? brokerApi.getWatchlists() : Promise.resolve([]),
-    ]);
+    const [portfolio, watchlists] = await withTimeout(
+      Promise.all([
+        brokerApi.getPortfolio ? brokerApi.getPortfolio() : Promise.resolve({ holdings: [] }),
+        brokerApi.getWatchlists ? brokerApi.getWatchlists() : Promise.resolve([]),
+      ]),
+      NEWS_TICKER_LOOKUP_TIMEOUT_MS,
+      "broker ticker lookup",
+    );
     const set = new Set();
     (portfolio?.holdings || []).forEach((h) => h?.ticker && set.add(h.ticker));
     (watchlists || []).forEach((w) =>
       (w?.tickers || []).forEach((t) => t && set.add(t))
     );
     tickers = Array.from(set);
-  } catch { /* fall through */ }
+  } catch (e) {
+    // Hung or threw — fall through to the macro basket below.
+    console.warn("[news] ticker lookup failed:", e?.message);
+  }
 
-  // No tickers (fresh demo account) → use a default macro basket so
-  // the news feed is alive on first open. SPY / QQQ / BTC give a
-  // reasonable cross-section of US equities + crypto. The user's
-  // own holdings will replace this once they buy something.
+  // No tickers (fresh demo account or lookup failed) → use a default
+  // macro basket so the news feed is alive on first open. SPY / QQQ
+  // / BTC give a reasonable cross-section of US equities + crypto.
+  // The user's own holdings will replace this once they buy something.
   if (tickers.length === 0) {
     tickers = ["SPY", "QQQ", "BTC"];
   }
 
   let real = [];
   try {
-    real = await fetchNewsForTickers(tickers);
+    real = await withTimeout(
+      fetchNewsForTickers(tickers),
+      NEWS_REAL_FETCH_TIMEOUT_MS,
+      "fetch-news",
+    );
   } catch (e) {
     console.warn("[news] real fetch failed, using mock:", e?.message);
     return mockFeed({ category, limit });

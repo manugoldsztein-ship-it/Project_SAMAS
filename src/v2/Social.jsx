@@ -103,6 +103,23 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
   }
   function closeTicker() { setTickerFilter(null); }
 
+  // openMention(handle) — resolve an @handle to a user_id and drill
+  // into that profile. Handles are stored with the leading @ in the
+  // DB, but users type them without it, so we canonicalize via
+  // resolveHandleToUserId (cached). If the handle doesn't resolve
+  // we silently no-op rather than show a "user not found" toast —
+  // mentions of non-existent users (free-form text) shouldn't feel
+  // like an error to the reader.
+  async function openMention(handle) {
+    if (!handle) return;
+    try {
+      const userId = await resolveHandleToUserId(handle);
+      if (userId) openProfile(userId);
+    } catch (e) {
+      console.warn("[social] openMention failed:", e?.message);
+    }
+  }
+
   // iOS-style swipe-from-left-edge back to the wallet shell.
   const { bind: swipeBind, style: swipeStyle } = useEdgeSwipeBack(onBack);
   // Pull-to-refresh — calls the active sub-tab's registered handler.
@@ -168,10 +185,10 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
         WebkitOverflowScrolling: "touch",
       }}>
         {ptrIndicator}
-        {tab === "feed"     && <FeedView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} />}
-        {tab === "search"   && <SearchView T={T} lang={lang} user={user} onMessageUser={openDmWith} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} />}
-        {tab === "messages" && <MessagesView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenTicker={openTicker} />}
-        {tab === "profile"  && <ProfileView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} />}
+        {tab === "feed"     && <FeedView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} onOpenMention={openMention} />}
+        {tab === "search"   && <SearchView T={T} lang={lang} user={user} onMessageUser={openDmWith} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} onOpenMention={openMention} />}
+        {tab === "messages" && <MessagesView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenTicker={openTicker} onOpenMention={openMention} />}
+        {tab === "profile"  && <ProfileView T={T} lang={lang} user={user} onOpenProfile={openProfile} onOpenThread={openThread} onOpenTicker={openTicker} onOpenMention={openMention} />}
       </div>
 
       {/* Drill-in peer profile overlay. Sits above the current
@@ -204,6 +221,7 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
               onMessage={openDmWith}
               onOpenThread={openThread}
               onOpenTicker={openTicker}
+              onOpenMention={openMention}
             />
           </div>
         </div>
@@ -229,6 +247,7 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
             onBack={closeThread}
             onOpenProfile={openProfile}
             onOpenTicker={openTicker}
+            onOpenMention={openMention}
           />
         </div>
       )}
@@ -254,6 +273,7 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
             onOpenProfile={openProfile}
             onOpenThread={openThread}
             onOpenTicker={openTicker}
+            onOpenMention={openMention}
           />
         </div>
       )}
@@ -325,7 +345,7 @@ const FEED_TABS = [
   { id: "trades",    key: "social.tab.trades"    },
 ];
 
-function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, onOpenTicker }) {
+function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, onOpenTicker, onOpenMention }) {
   const [tab, setTab] = useState("for_you");
   const [posts, setPosts] = useState([]);
   const [me, setMe] = useState(null);
@@ -849,6 +869,15 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
               </div>
             </div>
             {err && <div style={{ marginTop: 8, color: T.danger, fontFamily: FONT.sans, fontSize: 12 }}>{err}</div>}
+            {/* Discoverability hint — only when the compose box is
+                empty. Disappears as soon as the user starts typing
+                so it doesn't compete with the character counter. */}
+            {!body && !pendingTrade && (
+              <div style={{
+                marginTop: 6, fontFamily: FONT.sans, fontSize: 11,
+                color: T.textMute, lineHeight: 1.4,
+              }}>{tr("social.compose.hint", lang)}</div>
+            )}
           </div>
         </div>
       </div>
@@ -878,6 +907,7 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
               onOpenAuthor={onOpenProfile}
               onOpenThread={onOpenThread}
               onOpenTicker={onOpenTicker}
+              onOpenMention={onOpenMention}
             />
           ))
         )}
@@ -909,7 +939,7 @@ function tickerFromQuery(q) {
   return null;
 }
 
-function SearchView({ T, lang = "es", user = null, onMessageUser, onOpenProfile, onOpenThread, onOpenTicker }) {
+function SearchView({ T, lang = "es", user = null, onMessageUser, onOpenProfile, onOpenThread, onOpenTicker, onOpenMention }) {
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState([]);
   const [tickerPosts, setTickerPosts] = useState(null); // null = no ticker query yet, [] = empty
@@ -1030,6 +1060,7 @@ function SearchView({ T, lang = "es", user = null, onMessageUser, onOpenProfile,
                 onOpenAuthor={onOpenProfile}
                 onOpenThread={onOpenThread}
                 onOpenTicker={onOpenTicker}
+                onOpenMention={onOpenMention}
               />
             ))
           )}
@@ -1132,7 +1163,7 @@ function UserRow({ T, user, onToggleFollow, onMessage, onOpen }) {
 // Schema + RLS: supabase/social_messages.sql.
 // API:           src/v2/api/messages.js.
 // ============================================================
-function MessagesView({ T, lang = "es", user = null, onOpenProfile, onOpenTicker }) {
+function MessagesView({ T, lang = "es", user = null, onOpenProfile, onOpenTicker, onOpenMention }) {
   const [threads, setThreads] = useState(null); // null = loading
   const [active, setActive] = useState(null);   // active thread or null
 
@@ -1212,6 +1243,7 @@ function MessagesView({ T, lang = "es", user = null, onOpenProfile, onOpenTicker
         onBack={() => { setActive(null); refresh(); }}
         onOpenProfile={onOpenProfile}
         onOpenTicker={onOpenTicker}
+        onOpenMention={onOpenMention}
       />
     );
   }
@@ -1305,7 +1337,7 @@ function ThreadRow({ T, thread, onOpen }) {
 // Conversation view — message list scrolled to bottom + compose bar.
 // Subscribes to INSERTs on dm_messages for THIS thread so peer
 // replies stream in live. Marks unread-as-read on open.
-function ConversationView({ T, lang = "es", thread, onBack, onOpenProfile, onOpenTicker }) {
+function ConversationView({ T, lang = "es", thread, onBack, onOpenProfile, onOpenTicker, onOpenMention }) {
   const [messages, setMessages] = useState(null); // null=loading
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1476,7 +1508,7 @@ function ConversationView({ T, lang = "es", thread, onBack, onOpenProfile, onOpe
                 fontFamily: FONT.sans, fontSize: 14, lineHeight: 1.4,
                 whiteSpace: "pre-wrap", wordBreak: "break-word",
               }}>
-                {linkifyTickers(m.body, linkT, onOpenTicker)}
+                {linkifyTickers(m.body, linkT, onOpenTicker, onOpenMention)}
               </div>
             );
           })
@@ -1541,7 +1573,7 @@ function ConversationView({ T, lang = "es", thread, onBack, onOpenProfile, onOpe
 //      Follow/Unfollow + DM buttons, only their post list (no
 //      saved tab). Followers + Following + Posts counts.
 // ============================================================
-function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack, onOpenProfile, onMessage, onOpenThread, onOpenTicker }) {
+function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack, onOpenProfile, onMessage, onOpenThread, onOpenTicker, onOpenMention }) {
   const [me, setMe] = useState(null);          // logged-in user (for fallback color, isSelf check)
   const [profile, setProfile] = useState(null); // person being viewed (me or peer)
   const [posts, setPosts] = useState([]);
@@ -1756,6 +1788,31 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
               {profile.bio}
             </div>
           )}
+          {/* Member-since — small grey line under the bio. createdAt
+              comes from getUserById; for the self path we have it on
+              `me` too via getMe (profiles_social.created_at). Format
+              is locale-aware: "abril 2026" in es-AR, "April 2026" in
+              en-US. */}
+          {profile.createdAt && (
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 11, color: T.textMute,
+              marginTop: 6, display: "flex", alignItems: "center", gap: 6,
+            }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              {tr("profile.joined", lang, {
+                date: new Date(profile.createdAt).toLocaleString(
+                  lang === "en" ? "en-US" : "es-AR",
+                  { month: "long", year: "numeric" },
+                ),
+              })}
+            </div>
+          )}
           <div style={{ display: "flex", gap: 14, marginTop: 10, fontFamily: FONT.mono, fontSize: 12, flexWrap: "wrap" }}>
             <span style={{ color: T.text }}><b>{profile.postCount || 0}</b> <span style={{ color: T.textMute }}>posts</span></span>
             {!isSelf && (
@@ -1849,6 +1906,7 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
               onOpenAuthor={onOpenProfile}
               onOpenThread={onOpenThread}
               onOpenTicker={onOpenTicker}
+              onOpenMention={onOpenMention}
             />
           ))
         )}
@@ -1869,7 +1927,7 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
 // Tap any reply author's avatar/handle → drills into their profile
 // (recursive navigation, supported by the SocialPage overlay stack).
 // ============================================================
-function ThreadView({ T, lang = "es", post, onBack, onOpenProfile, onOpenTicker }) {
+function ThreadView({ T, lang = "es", post, onBack, onOpenProfile, onOpenTicker, onOpenMention }) {
   const [replies, setReplies] = useState(null); // null = loading
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
@@ -2014,7 +2072,7 @@ function ThreadView({ T, lang = "es", post, onBack, onOpenProfile, onOpenTicker 
         {/* Parent post — same PostCard the feed uses, readonly so
             we don't re-render the action row twice. Tapping the
             author still opens their profile via onOpenAuthor. */}
-        <PostCard T={T} p={post} readonly onOpenAuthor={onOpenProfile} onOpenTicker={onOpenTicker} />
+        <PostCard T={T} p={post} lang={lang} readonly onOpenAuthor={onOpenProfile} onOpenTicker={onOpenTicker} onOpenMention={onOpenMention} />
 
         {/* Section divider */}
         <div style={{
@@ -2036,6 +2094,8 @@ function ThreadView({ T, lang = "es", post, onBack, onOpenProfile, onOpenTicker 
             T={T}
             r={r}
             onOpenAuthor={onOpenProfile}
+            onOpenTicker={onOpenTicker}
+            onOpenMention={onOpenMention}
           />
         ))}
       </div>
@@ -2101,7 +2161,7 @@ function ThreadView({ T, lang = "es", post, onBack, onOpenProfile, onOpenTicker 
 // Mirrors PostCard's author header but no action row (replies
 // can't be liked / reposted in this MVP).
 // ----------------------------------------------------------
-function ReplyRow({ T, r, onOpenAuthor }) {
+function ReplyRow({ T, r, onOpenAuthor, onOpenTicker, onOpenMention }) {
   const handle = (r.author?.handle || "@user").replace(/^@/, "");
   const { initials, color } = avatarPropsFor(r.author, T.accent);
   const displayName = r.author?.displayName || "Usuario";
@@ -2137,7 +2197,7 @@ function ReplyRow({ T, r, onOpenAuthor }) {
       <div style={{
         fontFamily: FONT.sans, fontSize: 13, color: T.text,
         lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word",
-      }}>{r.body}</div>
+      }}>{linkifyTickers(r.body, T, onOpenTicker, onOpenMention)}</div>
     </div>
   );
 }
@@ -2156,7 +2216,7 @@ function ReplyRow({ T, r, onOpenAuthor }) {
 // mention while you're viewing the ticker feed, it slides in at
 // the top within ~500ms.
 // ============================================================
-function TickerFeedView({ T, lang = "es", ticker, onBack, onOpenProfile, onOpenThread, onOpenTicker }) {
+function TickerFeedView({ T, lang = "es", ticker, onBack, onOpenProfile, onOpenThread, onOpenTicker, onOpenMention }) {
   const [posts, setPosts] = useState(null); // null = loading
   const [savedIds, setSavedIds] = useState([]);
   const symbol = String(ticker || "").toUpperCase();
@@ -2284,7 +2344,7 @@ function TickerFeedView({ T, lang = "es", ticker, onBack, onOpenProfile, onOpenT
           posts.map((p) => (
             <PostCard
               key={p.id}
-              T={T} p={p}
+              T={T} p={p} lang={lang}
               saved={savedIds.includes(p.id)}
               onLike={() => toggleLike(p)}
               onRepost={() => repost(p)}
@@ -2292,6 +2352,7 @@ function TickerFeedView({ T, lang = "es", ticker, onBack, onOpenProfile, onOpenT
               onOpenAuthor={onOpenProfile}
               onOpenThread={onOpenThread}
               onOpenTicker={onOpenTicker}
+              onOpenMention={onOpenMention}
             />
           ))
         )}
@@ -2305,11 +2366,22 @@ function TickerFeedView({ T, lang = "es", ticker, onBack, onOpenProfile, onOpenT
 // to 1–6 uppercase letters/digits so day-to-day "$5" prices and
 // random "$abc" don't trigger. Returns an array of React nodes
 // suitable for inlining inside <div>{...}</div>.
-function linkifyTickers(body, T, onOpenTicker) {
-  if (!body || !onOpenTicker) return body;
-  // \$([A-Z][A-Z0-9]{0,5})\b — start with uppercase letter, allow
-  // up to 6 alphanumerics, word boundary at end.
-  const re = /\$([A-Z][A-Z0-9]{0,5})\b/g;
+//
+// MENTIONS (samas-0.0.37)
+//   The same helper now also linkifies @handle. We do tickers AND
+//   mentions in a single regex so the order is preserved (a body
+//   like "$NVDA gracias @manugold" interleaves correctly). Tap on
+//   a mention → look up the user_id by handle and call
+//   onOpenAuthor; this is async but we don't block render — if the
+//   handle doesn't resolve we just no-op.
+function linkifyTickers(body, T, onOpenTicker, onOpenMention) {
+  if (!body) return body;
+  // Combined regex: ticker OR mention. Each match exposes one of
+  // the two capture groups (m[1] = ticker, m[2] = handle without @).
+  // Tickers: $ then 1–6 [A-Z][A-Z0-9] at a word boundary.
+  // Mentions: @ then 1–24 [a-zA-Z0-9_], case-insensitive (handles
+  // are lowercase in the DB but users will type any case).
+  const re = /\$([A-Z][A-Z0-9]{0,5})\b|@([a-zA-Z0-9_]{1,24})\b/g;
   const out = [];
   let last = 0;
   let m;
@@ -2317,22 +2389,80 @@ function linkifyTickers(body, T, onOpenTicker) {
   while ((m = re.exec(body))) {
     if (m.index > last) out.push(body.slice(last, m.index));
     const sym = m[1];
-    out.push(
-      <button
-        key={`tk-${i++}-${m.index}`}
-        onClick={(e) => { e.stopPropagation(); onOpenTicker(sym); }}
-        style={{
-          display: "inline", padding: 0, margin: 0,
-          background: "transparent", border: "none",
-          color: T.accent, cursor: "pointer",
-          font: "inherit", fontWeight: 700,
-        }}
-      >${sym}</button>
-    );
+    const mention = m[2];
+    if (sym) {
+      // $TICKER → drill into ticker feed (no-op if onOpenTicker absent)
+      if (onOpenTicker) {
+        out.push(
+          <button
+            key={`tk-${i++}-${m.index}`}
+            onClick={(e) => { e.stopPropagation(); onOpenTicker(sym); }}
+            style={{
+              display: "inline", padding: 0, margin: 0,
+              background: "transparent", border: "none",
+              color: T.accent, cursor: "pointer",
+              font: "inherit", fontWeight: 700,
+            }}
+          >${sym}</button>
+        );
+      } else {
+        // No-handler fallback: render the literal text so the post
+        // still reads naturally even on surfaces that don't wire up
+        // ticker drill-in.
+        out.push(`$${sym}`);
+      }
+    } else if (mention) {
+      // @handle → open the user's profile by handle. The lookup
+      // runs at click time, not at render time, so we don't pay
+      // a query for every post just to discover unresolved handles.
+      if (onOpenMention) {
+        out.push(
+          <button
+            key={`mn-${i++}-${m.index}`}
+            onClick={(e) => { e.stopPropagation(); onOpenMention(mention); }}
+            style={{
+              display: "inline", padding: 0, margin: 0,
+              background: "transparent", border: "none",
+              color: T.accent, cursor: "pointer",
+              font: "inherit", fontWeight: 700,
+            }}
+          >@{mention}</button>
+        );
+      } else {
+        out.push(`@${mention}`);
+      }
+    }
     last = m.index + m[0].length;
   }
   if (last < body.length) out.push(body.slice(last));
   return out;
+}
+
+// resolveHandleToUserId — look up a profiles_social row by handle
+// (case-insensitive), return its user_id or null. Cached in-memory
+// so repeated mentions of the same handle inside a single session
+// only hit the network once. This is a module-level cache because
+// every PostCard / DM-bubble that opens a mention should benefit.
+const HANDLE_CACHE = new Map();
+async function resolveHandleToUserId(handle) {
+  const key = String(handle || "").toLowerCase().replace(/^@/, "");
+  if (!key) return null;
+  if (HANDLE_CACHE.has(key)) return HANDLE_CACHE.get(key);
+  try {
+    // Try with and without leading @ — historical rows have either.
+    const { data } = await supabase
+      .from("profiles_social")
+      .select("user_id, handle")
+      .or(`handle.ilike.@${key},handle.ilike.${key}`)
+      .limit(1)
+      .maybeSingle();
+    const userId = data?.user_id || null;
+    HANDLE_CACHE.set(key, userId);
+    return userId;
+  } catch (e) {
+    console.warn("[social] handle lookup failed:", handle, e?.message);
+    return null;
+  }
 }
 
 // ============================================================
@@ -2355,7 +2485,7 @@ function linkifyTickers(body, T, onOpenTicker) {
 const ACTION_WIDTH = 96;
 const SNAP_THRESHOLD = 44;
 
-function PostCard({ T, p, lang = "es", saved, meId, onLike, onRepost, onSave, onDelete, readonly, onOpenAuthor, onOpenThread, onOpenTicker }) {
+function PostCard({ T, p, lang = "es", saved, meId, onLike, onRepost, onSave, onDelete, readonly, onOpenAuthor, onOpenThread, onOpenTicker, onOpenMention }) {
   const handle = (p.author?.handle || "@user").replace(/^@/, "");
   // avatarPropsFor handles the displayName-missing case AND falls
   // back to a deterministic color so two posters in the same feed
@@ -2478,7 +2608,7 @@ function PostCard({ T, p, lang = "es", saved, meId, onLike, onRepost, onSave, on
         <div style={{
           fontFamily: FONT.sans, fontSize: 14, color: T.text,
           lineHeight: 1.5, whiteSpace: "pre-wrap", marginBottom: 10,
-        }}>{linkifyTickers(p.body, T, onOpenTicker)}</div>
+        }}>{linkifyTickers(p.body, T, onOpenTicker, onOpenMention)}</div>
 
         {p.trade && (
           <div style={{

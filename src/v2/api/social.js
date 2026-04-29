@@ -60,6 +60,12 @@ function profileRowToUser(r) {
     // shows a blue tick distinct from the university green tick.
     // See supabase/social_cnv_idoneo.sql.
     cnvIdoneo: !!r.cnv_idoneo,
+    // created_at — passes through as ms epoch when present in the
+    // row. Most callers project this column already; for getMe() we
+    // get it for free via select("*"). The ProfileView "Se unió en
+    // …" line only renders when this is set, so callers that don't
+    // need it can keep their narrower projections.
+    createdAt: r.created_at ? new Date(r.created_at).getTime() : null,
   };
 }
 

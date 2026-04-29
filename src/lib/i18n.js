@@ -97,10 +97,15 @@ const V2 = {
     // CNV idóneo (registered representative) badge
     "profile.cnv_idoneo":         "Idóneo en mercado de capitales · CNV",
 
+    // Member-since timestamp (rendered under bio in ProfileView)
+    "profile.joined":             "Se unió en {date}",
+
     // Compose: paste from clipboard
     "social.compose.paste":       "Pegar",
     "social.compose.paste_empty": "El portapapeles está vacío.",
     "social.compose.paste_err":   "No pudimos leer el portapapeles.",
+    // Compose hint — discoverability nudge below an empty compose box
+    "social.compose.hint":        "Tip: usá $TICKER para destacar un activo o @usuario para mencionar.",
 
     // Post: delete (swipe-left action + confirm dialog)
     "social.post.delete":         "Borrar",
@@ -355,10 +360,15 @@ const V2 = {
     // CNV idóneo (registered representative) badge
     "profile.cnv_idoneo":         "Capital markets registered · CNV",
 
+    // Member-since timestamp (rendered under bio in ProfileView)
+    "profile.joined":             "Joined {date}",
+
     // Compose: paste from clipboard
     "social.compose.paste":       "Paste",
     "social.compose.paste_empty": "Your clipboard is empty.",
     "social.compose.paste_err":   "Couldn't read clipboard.",
+    // Compose hint — discoverability nudge below an empty compose box
+    "social.compose.hint":        "Tip: use $TICKER to highlight an asset or @username to tag someone.",
 
     // Post: delete (swipe-left action + confirm dialog)
     "social.post.delete":         "Delete",
