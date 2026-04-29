@@ -64,6 +64,34 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
     ? "calc(env(safe-area-inset-bottom) + 12px)"
     : 12;
 
+  // Notification-tap briefcase reader (samas-0.0.73). When the user
+  // taps a notification in the Wallet bell inbox, Wallet dispatches
+  // samas:open-profile or samas:open-thread, SamasShell stashes the
+  // target id in localStorage and switches to the Social tab. We
+  // drain the briefcase on mount and drill in. Thread navigation
+  // needs to fetch the full post first (setThreadPost expects the
+  // denormalized payload, not just an id).
+  useEffect(() => {
+    let alive = true;
+    try {
+      const pendingProfileId = localStorage.getItem("samas_pending_profile_id");
+      if (pendingProfileId) {
+        localStorage.removeItem("samas_pending_profile_id");
+        setProfileUserId(pendingProfileId);
+      }
+      const pendingThreadPostId = localStorage.getItem("samas_pending_thread_post_id");
+      if (pendingThreadPostId) {
+        localStorage.removeItem("samas_pending_thread_post_id");
+        socialApi.getPost(pendingThreadPostId)
+          .then((post) => { if (alive && post) setThreadPost(post); })
+          .catch((e) => console.warn("[social] open-thread fetch failed:", e?.message));
+      }
+    } catch (e) {
+      console.warn("[social] briefcase drain failed:", e?.message);
+    }
+    return () => { alive = false; };
+  }, []);
+
   // openDmWith(peerUserId) — called from SearchView's UserRow when
   // the user taps the DM button next to a search result. We stash
   // the peer id in a localStorage briefcase (same pattern as the

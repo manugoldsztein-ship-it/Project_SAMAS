@@ -128,6 +128,37 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
     return () => window.removeEventListener("samas:share-watchlist", onShareWatchlist);
   }, []);
 
+  // Notification → Social handoff (samas-0.0.73). Tapping a social
+  // notification in the Wallet bell inbox dispatches one of two
+  // events with the target id. We stash that id in localStorage and
+  // switch to the Social tab; SocialPage's mount-effect reads the
+  // briefcase and drills into ProfileView or ThreadView accordingly.
+  // Same pattern as share-trade / share-watchlist above.
+  useEffect(() => {
+    function onOpenProfile(e) {
+      try {
+        const userId = e?.detail?.userId;
+        if (!userId) return;
+        localStorage.setItem("samas_pending_profile_id", userId);
+      } catch {}
+      setTab("social");
+    }
+    function onOpenThread(e) {
+      try {
+        const postId = e?.detail?.postId;
+        if (!postId) return;
+        localStorage.setItem("samas_pending_thread_post_id", postId);
+      } catch {}
+      setTab("social");
+    }
+    window.addEventListener("samas:open-profile", onOpenProfile);
+    window.addEventListener("samas:open-thread", onOpenThread);
+    return () => {
+      window.removeEventListener("samas:open-profile", onOpenProfile);
+      window.removeEventListener("samas:open-thread", onOpenThread);
+    };
+  }, []);
+
   const T = isDark ? SAMAS_THEME.dark : SAMAS_THEME.light;
   // The chrome layout fix moved safe-area handling out of #root and
   // onto the chrome elements themselves. So inside the shell we now
@@ -2336,6 +2367,16 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.0.73",
+    title: "Bell drill-down: notifications are now tappable",
+    bullets: [
+      "Tap a social_like / social_repost / social_reply / mention notification → opens the post thread. Tap a social_follow → opens the follower's profile. Inbox auto-closes after the navigation.",
+      "Cross-shell handoff via samas:open-profile / samas:open-thread CustomEvents (same pattern as share-trade), drained from localStorage by SocialPage's mount-effect.",
+      "Inbox loading state replaced with shimmer skeleton rows that mirror the resolved row shape — no layout reflow when notifications arrive.",
+      "Each actionable row now has a chevron indicator on the right so the user sees at a glance which notifications drill in.",
+    ],
+  },
   {
     version: "0.0.72",
     title: "AI Plan: real \"thinking\" moment + haptics",

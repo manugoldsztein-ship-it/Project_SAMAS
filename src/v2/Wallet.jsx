@@ -22,7 +22,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { FONT, fmtMoney, fmtPct } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import {
-  Avatar, ChromeBtn, Pill, SectionHead, Sparkline, SAMAS_SPARKS,
+  Avatar, ChromeBtn, Pill, SectionHead, Sparkline, SAMAS_SPARKS, Skeleton,
 } from "./shared.jsx";
 import { wallet as walletApi, card as cardApi, broker as brokerApi, notifications as notifApi } from "./api/index.js";
 import { rowToNotif } from "./api/notifications.js";
@@ -1015,8 +1015,28 @@ function NotificationsInbox({ T, lang = "es", onClose }) {
           padding: "0 16px 24px",
         }}>
           {items === null ? (
-            <div style={{ padding: 40, textAlign: "center", color: T.textMute, fontFamily: FONT.sans, fontSize: 13 }}>
-              {tr("common.loading", lang)}
+            // Skeleton stack mirrors the resolved row layout so the
+            // sheet doesn't reflow when the data arrives. Three rows
+            // is enough to fill the visible area on most phones.
+            <div style={{ padding: "16px 0 0" }}>
+              <div style={{
+                background: T.surface, border: `1px solid ${T.border}`,
+                borderRadius: 14, overflow: "hidden",
+              }}>
+                {[0, 1, 2].map((i) => (
+                  <div key={i} style={{
+                    padding: "12px 14px",
+                    borderBottom: i === 2 ? "none" : `1px solid ${T.border}`,
+                    display: "flex", gap: 12, alignItems: "center",
+                  }}>
+                    <Skeleton T={T} width={32} height={32} borderRadius={10} />
+                    <div style={{ flex: 1 }}>
+                      <Skeleton T={T} height={13} width="65%" marginBottom={6} />
+                      <Skeleton T={T} height={11} width="40%" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : items.length === 0 ? (
             <div style={{
@@ -1034,10 +1054,10 @@ function NotificationsInbox({ T, lang = "es", onClose }) {
           ) : (
             <>
               {groups.today.length > 0 && (
-                <NotifGroup T={T} label={tr("wallet.today", lang).toUpperCase()} items={groups.today} />
+                <NotifGroup T={T} label={tr("wallet.today", lang).toUpperCase()} items={groups.today} onTap={onClose} />
               )}
               {groups.earlier.length > 0 && (
-                <NotifGroup T={T} label={tr("notif.earlier", lang).toUpperCase()} items={groups.earlier} />
+                <NotifGroup T={T} label={tr("notif.earlier", lang).toUpperCase()} items={groups.earlier} onTap={onClose} />
               )}
             </>
           )}
@@ -1047,7 +1067,7 @@ function NotificationsInbox({ T, lang = "es", onClose }) {
   );
 }
 
-function NotifGroup({ T, label, items }) {
+function NotifGroup({ T, label, items, onTap }) {
   return (
     <>
       <div style={{
@@ -1060,14 +1080,51 @@ function NotifGroup({ T, label, items }) {
         borderRadius: 14, overflow: "hidden",
       }}>
         {items.map((n, i) => (
-          <NotifRow key={n.id} T={T} n={n} isLast={i === items.length - 1} />
+          <NotifRow key={n.id} T={T} n={n} isLast={i === items.length - 1} onTap={onTap} />
         ))}
       </div>
     </>
   );
 }
 
-function NotifRow({ T, n, isLast }) {
+// Map a notification kind+data to a cross-shell navigation. Social
+// kinds dispatch a window CustomEvent that SamasShell listens for —
+// it stashes the target id in localStorage and switches to the
+// Social tab; SocialPage's mount-effect reads the briefcase and
+// drills into the right view (ProfileView or ThreadView). Same
+// pattern used by share-trade / share-watchlist.
+//
+// Returns true if the notification was actionable (caller closes
+// the inbox), false otherwise.
+function navigateFromNotif(n) {
+  const data = n?.data || {};
+  switch (n?.kind) {
+    case "social_follow":
+      // Open the follower's profile.
+      if (!data.actor_id) return false;
+      window.dispatchEvent(new CustomEvent("samas:open-profile", {
+        detail: { userId: data.actor_id },
+      }));
+      return true;
+    case "social_like":
+    case "social_repost":
+    case "social_reply":
+    case "mention":
+      // Open the post thread the engagement happened on.
+      if (!data.post_id) return false;
+      window.dispatchEvent(new CustomEvent("samas:open-thread", {
+        detail: { postId: data.post_id },
+      }));
+      return true;
+    // price_alert / aporte / news / system kinds don't have a
+    // social destination; future patches can wire them to the
+    // matching surface (asset detail / wallet / news article).
+    default:
+      return false;
+  }
+}
+
+function NotifRow({ T, n, isLast, onTap }) {
   // Per-kind glyph + tint. New kinds fall through to a neutral system bell.
   // Social kinds (social_like / social_repost / social_reply /
   // social_follow) are written by triggers in supabase/social_notifications.sql
@@ -1086,14 +1143,36 @@ function NotifRow({ T, n, isLast }) {
     }
   })();
   const when = relativeWhen(n.createdAt);
+  // Whether this notification has a destination to drill into.
+  // Social kinds (like/repost/reply/follow/mention) all do; price
+  // alert / aporte / news / system don't yet so the row stays
+  // non-interactive for those.
+  const actionable =
+    n?.kind === "social_follow" ||
+    n?.kind === "social_like" ||
+    n?.kind === "social_repost" ||
+    n?.kind === "social_reply" ||
+    n?.kind === "mention";
+  function handleTap() {
+    if (!actionable) return;
+    const navigated = navigateFromNotif(n);
+    if (navigated && onTap) onTap();
+  }
   return (
-    <div style={{
-      padding: "12px 14px",
-      borderBottom: isLast ? "none" : `1px solid ${T.border}`,
-      display: "flex", gap: 12, alignItems: "flex-start",
-      // Unread rows get a faint accent stripe + slightly bolder weight.
-      background: n.readAt ? "transparent" : `${T.accent}08`,
-    }}>
+    <button
+      onClick={handleTap}
+      disabled={!actionable}
+      style={{
+        width: "100%", padding: "12px 14px",
+        borderBottom: isLast ? "none" : `1px solid ${T.border}`,
+        display: "flex", gap: 12, alignItems: "flex-start",
+        // Unread rows get a faint accent stripe + slightly bolder weight.
+        background: n.readAt ? "transparent" : `${T.accent}08`,
+        border: "none", textAlign: "left",
+        cursor: actionable ? "pointer" : "default",
+        fontFamily: "inherit",
+      }}
+    >
       <div style={{
         width: 32, height: 32, borderRadius: 10, flexShrink: 0,
         background: T.bgElev, color: meta.tint,
@@ -1119,7 +1198,17 @@ function NotifRow({ T, n, isLast }) {
           marginTop: 4, opacity: 0.7,
         }}>{when}</div>
       </div>
-    </div>
+      {/* Chevron — only shown for actionable rows so the user
+          can see at a glance which notifications drill in. */}
+      {actionable && (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+          stroke={T.textMute} strokeWidth="2"
+          strokeLinecap="round" strokeLinejoin="round"
+          style={{ flexShrink: 0, marginTop: 4 }}>
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      )}
+    </button>
   );
 }
 
