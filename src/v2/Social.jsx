@@ -1066,7 +1066,11 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
                 setTimeout(() => setTickerMatch(null), 150);
               }}
               placeholder={tr("social.compose_ph", lang)}
-              rows={composeExpanded ? 7 : 3}
+              /* When an attachment (portfolio / trade / image) is on
+                 deck, the card IS the centerpiece — keep the textarea
+                 compact so the layout stays balanced instead of leaving
+                 a 600px void above the card (samas-0.0.83 fix). */
+              rows={(composeExpanded && !pendingPortfolio && !pendingTrade && !pendingImage) ? 6 : 3}
               style={{
                 width: "100%", boxSizing: "border-box",
                 background: "transparent", border: "none", outline: "none",

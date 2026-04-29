@@ -32,6 +32,8 @@ import { toast } from "./toast.jsx";
 import { setRefreshHandler } from "./refreshRegistry.js";
 import { t as tr } from "../lib/i18n.js";
 import { useLivePortfolioRatio } from "./livePrices.jsx";
+import { analyzePortfolio } from "../lib/ai.js";
+import { hapticNative } from "../lib/native.js";
 
 export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark, onOpenSettings, proMode = false, onOpenProUpsell, lang = "es" }) {
   // ----------- data state -----------
@@ -444,6 +446,15 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
           </div>
           <TaxYearCard T={T} portfolio={portfolio} lang={lang} />
         </>
+      )}
+
+      {/* ---------- AI portfolio analysis (samas-0.0.83) ----------
+          Only shown when there's a non-empty portfolio. Tap → calls
+          the analyze-portfolio Edge Function (Claude Haiku) and shows
+          the response in a sheet. Sits between portfolio peek and
+          aporte so it's reachable without scrolling on most screens. */}
+      {portfolio && portfolio.totalUsd > 0 && (
+        <AIAnalysisCard T={T} lang={lang} />
       )}
 
       {/* ---------- aporte mensual ---------- */}
@@ -896,6 +907,264 @@ function TaxYearCard({ T, portfolio, lang = "es" }) {
         }}>{tr("pro.wallet.tax.note", lang)}</div>
       </div>
     </div>
+  );
+}
+
+// ============================================================
+// AIAnalysisCard (samas-0.0.83) — entry point + result sheet for
+// the analyze-portfolio Edge Function (Claude Haiku).
+// ============================================================
+// Two states:
+//   - idle: a CTA card with the SAMAS logo + "Análisis IA" label.
+//     Tap → calls the function, shows a thinking spinner.
+//   - showing: a sheet slides up from the bottom with the result
+//     (headline / 3 bullets / suggestion / concentration chip).
+//
+// Caches the result for the session — re-tapping shows the same
+// analysis instead of burning another LLM call. The cache clears
+// on full app reload, which is the right cadence for "look at my
+// book again" semantics.
+function AIAnalysisCard({ T, lang = "es" }) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function run() {
+    if (busy) return;
+    setErr(null);
+    // If we have a cached result from this session, just open the
+    // sheet — no need to re-call.
+    if (result) {
+      setOpen(true);
+      hapticNative("tap").catch(() => {});
+      return;
+    }
+    setBusy(true);
+    setOpen(true);   // open immediately so the loader shows in the sheet
+    hapticNative("tap").catch(() => {});
+    try {
+      const data = await analyzePortfolio();
+      setResult(data);
+      hapticNative("success").catch(() => {});
+    } catch (e) {
+      setErr(e?.message || String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <div style={{ margin: "28px 16px 0" }}>
+        <SectionHead T={T} title={tr("wallet.section.ai", lang)} />
+        <button
+          onClick={run}
+          disabled={busy}
+          style={{
+            width: "100%", marginTop: 12, padding: 16, borderRadius: 22,
+            // Accent-tinted gradient — visually distinct from the
+            // other Wallet cards so the "AI" affordance reads
+            // immediately, even before the user reads the label.
+            background: `linear-gradient(135deg, ${T.accentSoft} 0%, ${T.surface} 70%)`,
+            border: `1px solid ${T.accent}55`,
+            display: "flex", alignItems: "center", gap: 14, cursor: busy ? "default" : "pointer",
+            textAlign: "left",
+            opacity: busy ? 0.7 : 1,
+          }}
+        >
+          {/* Sparkles glyph (Lucide-style) — universal "AI" signal. */}
+          <div style={{
+            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+            background: T.accent, color: "#06180c",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
+              <path d="M19 13l1 2 2 1-2 1-1 2-1-2-2-1 2-1z"/>
+              <path d="M5 14l1 2 2 1-2 1-1 2-1-2-2-1 2-1z"/>
+            </svg>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+              color: T.text, marginBottom: 2,
+            }}>
+              {tr("wallet.ai.cta_title", lang)}
+            </div>
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 12, color: T.textMute, lineHeight: 1.4,
+            }}>
+              {busy
+                ? tr("wallet.ai.thinking", lang)
+                : (result
+                  ? tr("wallet.ai.cta_subtitle_again", lang)
+                  : tr("wallet.ai.cta_subtitle", lang))}
+            </div>
+          </div>
+          <Pill T={T}>IA</Pill>
+        </button>
+      </div>
+
+      {/* Result sheet */}
+      {open && (
+        <div
+          onClick={() => setOpen(false)}
+          style={{
+            position: "fixed", inset: 0, zIndex: 60,
+            background: "rgba(0,0,0,0.55)",
+            display: "flex", alignItems: "flex-end",
+            animation: "samas-fade-in 160ms ease-out",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%", maxHeight: "82vh",
+              background: T.surface, color: T.text,
+              borderTopLeftRadius: 24, borderTopRightRadius: 24,
+              borderTop: `1px solid ${T.border}`,
+              padding: "18px 18px calc(env(safe-area-inset-bottom) + 24px)",
+              overflowY: "auto",
+              boxShadow: "0 -18px 50px rgba(0,0,0,0.5)",
+              animation: "samas-sheet-up 220ms ease-out",
+            }}
+          >
+            {/* Drag handle */}
+            <div style={{
+              width: 44, height: 4, borderRadius: 2,
+              background: T.border, margin: "0 auto 14px",
+            }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <div style={{
+                width: 32, height: 32, borderRadius: 10,
+                background: T.accent, color: "#06180c", flexShrink: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
+                </svg>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+                  color: T.accent, letterSpacing: 0.6, textTransform: "uppercase" }}>
+                  {tr("wallet.ai.sheet.kicker", lang)}
+                </div>
+                <div style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text, letterSpacing: -0.3 }}>
+                  {tr("wallet.ai.sheet.title", lang)}
+                </div>
+              </div>
+              <button
+                onClick={() => setOpen(false)}
+                aria-label="Cerrar"
+                style={{
+                  width: 32, height: 32, borderRadius: 16,
+                  background: T.bg, border: `1px solid ${T.border}`,
+                  color: T.textMute, fontFamily: FONT.sans, fontSize: 16,
+                  cursor: "pointer", padding: 0,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >×</button>
+            </div>
+
+            {busy && !result && (
+              <div style={{
+                padding: "32px 16px", textAlign: "center",
+                color: T.textMute, fontFamily: FONT.sans, fontSize: 13,
+              }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: 999,
+                  border: `2.5px solid ${T.border}`, borderTopColor: T.accent,
+                  margin: "0 auto 12px", animation: "samas-spin 800ms linear infinite",
+                }} />
+                {tr("wallet.ai.thinking", lang)}
+              </div>
+            )}
+
+            {err && (
+              <div style={{
+                padding: "16px", borderRadius: 14, background: T.dangerSoft,
+                color: T.danger, fontFamily: FONT.sans, fontSize: 13, lineHeight: 1.5,
+              }}>
+                {err}
+              </div>
+            )}
+
+            {result && !busy && (
+              <div>
+                {/* Headline */}
+                <div style={{
+                  fontFamily: FONT.display, fontSize: 17, fontWeight: 700,
+                  color: T.text, lineHeight: 1.35, marginBottom: 12,
+                }}>
+                  {result.headline}
+                </div>
+                {/* Concentration chip */}
+                {result.concentration && (
+                  <div style={{
+                    display: "inline-flex", alignItems: "center", gap: 6,
+                    padding: "5px 10px", borderRadius: 999,
+                    background: T.bg, border: `1px solid ${T.border}`,
+                    color: T.textMute, fontFamily: FONT.sans, fontSize: 11, fontWeight: 600,
+                    marginBottom: 16,
+                  }}>
+                    <span style={{ color: T.accent }}>●</span>
+                    {tr("wallet.ai.concentration", lang)}: {result.concentration}
+                  </div>
+                )}
+                {/* Bullets */}
+                {Array.isArray(result.bullets) && result.bullets.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    {result.bullets.map((b, i) => (
+                      <div key={i} style={{
+                        display: "flex", gap: 10, marginBottom: 10,
+                        padding: "10px 12px", borderRadius: 12,
+                        background: T.bg, border: `1px solid ${T.border}`,
+                      }}>
+                        <div style={{
+                          width: 20, height: 20, borderRadius: 10, flexShrink: 0,
+                          background: T.accent, color: "#06180c",
+                          fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                        }}>{i + 1}</div>
+                        <div style={{
+                          fontFamily: FONT.sans, fontSize: 13, color: T.text, lineHeight: 1.5,
+                        }}>{b}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* Suggestion */}
+                {result.suggestion && (
+                  <div style={{
+                    padding: "14px 14px", borderRadius: 14,
+                    background: `linear-gradient(135deg, ${T.accentSoft}, transparent 80%)`,
+                    border: `1.5px solid ${T.accent}`,
+                  }}>
+                    <div style={{
+                      fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+                      color: T.accent, letterSpacing: 0.6, textTransform: "uppercase",
+                      marginBottom: 6,
+                    }}>{tr("wallet.ai.suggestion", lang)}</div>
+                    <div style={{
+                      fontFamily: FONT.sans, fontSize: 14, color: T.text, lineHeight: 1.5,
+                    }}>{result.suggestion}</div>
+                  </div>
+                )}
+                <div style={{
+                  marginTop: 16, fontFamily: FONT.sans, fontSize: 10,
+                  color: T.textMute, textAlign: "center",
+                }}>
+                  {tr("wallet.ai.disclaimer", lang)}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

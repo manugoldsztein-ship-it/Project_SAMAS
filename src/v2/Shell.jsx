@@ -318,6 +318,22 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
           70%  { opacity: 1; }
           100% { transform: translate3d(var(--cx, 0), var(--cy, 80px), 0) rotate(var(--cr, 360deg)); opacity: 0; }
         }
+        /* Promoted to global (samas-0.0.83) — used by AIAnalysisCard's
+           result sheet + the existing inline modal spinners. Both were
+           previously defined in scoped style blocks (Shell SettingsSheet,
+           Broker InitialLoader) which only loaded when those components
+           mounted; promoting them here so any component can rely on them. */
+        @keyframes samas-sheet-up {
+          from { transform: translateY(100%); }
+          to   { transform: translateY(0); }
+        }
+        @keyframes samas-spin {
+          to { transform: rotate(360deg); }
+        }
+        @keyframes samas-fade-in {
+          from { opacity: 0; }
+          to   { opacity: 1; }
+        }
       `}</style>
 
       {/* ---------- scrollable page content ----------
@@ -2389,6 +2405,16 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.0.83",
+    title: "AI portfolio analysis + compose layout fix",
+    bullets: [
+      "First real AI feature lands on Wallet: \"Análisis IA\" card. Tap → calls a new analyze-portfolio Edge Function that reads your holdings (RLS-scoped via JWT), passes them to Claude Haiku, and returns a one-line headline + 3 observations + concrete suggestion + concentration callout. Sheet animates up from the bottom with a thinking spinner, then renders the structured response. Result is cached for the session — re-tapping reopens without burning another LLM call.",
+      "Edge Function: supabase/functions/analyze-portfolio/index.ts. Self-contained with the asset universe inline so it doesn't depend on the client bundle. Strict JSON-out prompt with hard length caps. ANTHROPIC_API_KEY env (already used by fetch-news) doubles as the auth here.",
+      "Compose layout fix (the \"too much space, not centered\" thing): when there's a portfolio / trade / image attached, the textarea no longer expands to 7 rows on focus — stays at 3 so the attachment card sits flush with the placeholder. The huge dead-space-above-the-card visual went away.",
+      "Promoted samas-sheet-up + samas-spin + samas-fade-in keyframes to the global Shell stylesheet so any sheet/spinner anywhere can rely on them (was previously scoped to specific component mount-times).",
+    ],
+  },
   {
     version: "0.0.82",
     title: "Bottom-nav clearance + compose-expand + Newest sort",
