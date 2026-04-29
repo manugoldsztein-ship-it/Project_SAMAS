@@ -44,6 +44,7 @@ import { toast } from "./toast.jsx";
 import { seedDemoAccount, resetDemoAccount } from "../lib/demoSeed.js";
 import { seedSocialDemo } from "../lib/seedSocial.js";
 import { hapticNative } from "../lib/native.js";
+import { deleteAccount, exportData } from "../lib/account.js";
 import { LivePricesProvider } from "./livePrices.jsx";
 
 // localStorage flag for the Pro mode toggle. Default ON — power users
@@ -354,6 +355,20 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
   // be re-tapped mid-flight. Idempotent on the server, but the UX is
   // cleaner if we don't fire two seeds at once.
   const [seedingSocial, setSeedingSocial] = useState(false);
+
+  // App Store self-service flows (Guideline 5.1.1(v)). Both call
+  // their respective Edge Functions; UI state mirrored locally.
+  // Export: showExport drives the modal visibility, exportPayload
+  // holds the JSON string once the function returns. Delete:
+  // showDelete drives the type-to-confirm modal, deleteTyped is
+  // the user's input (we enable the destructive button only when
+  // it matches the keyword).
+  const [exportingBusy, setExportingBusy] = useState(false);
+  const [exportPayload, setExportPayload] = useState(null);
+  const [exportCopied, setExportCopied]   = useState(false);
+  const [showDelete, setShowDelete]       = useState(false);
+  const [deleteTyped, setDeleteTyped]     = useState("");
+  const [deleting, setDeleting]           = useState(false);
   // Privacy / Terms sub-sheets — App Store submission requires both
   // policies to be reachable from the app. We render them inline as
   // modals (same pattern as 2FA / EditProfile) instead of opening the
@@ -851,6 +866,93 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
           </svg>
         </button>
 
+        {/* ---------- My account section ----------
+            App Store Guideline 5.1.1(v) requires apps that create
+            accounts to surface (1) a way for the user to delete
+            theirs, and (2) a way to download their data. Both are
+            backed by Edge Functions that use the service role to
+            do the heavy lifting (RLS-bypass + auth.admin.deleteUser).
+            See supabase/functions/delete-user-account/index.ts and
+            supabase/functions/export-user-data/index.ts. */}
+        <div style={{
+          marginTop: 6, marginBottom: 6,
+          fontFamily: FONT.sans, fontSize: 11, fontWeight: 600,
+          color: T.textMute, letterSpacing: 0.4, textTransform: "uppercase",
+          padding: "0 4px",
+        }}>
+          {tr("settings.section.legal_account", lang)}
+        </div>
+        {/* Descargar mis datos */}
+        <button
+          disabled={exportingBusy}
+          onClick={async () => {
+            if (exportingBusy) return;
+            setExportingBusy(true);
+            setExportCopied(false);
+            try {
+              const data = await exportData();
+              setExportPayload(JSON.stringify(data, null, 2));
+            } catch (e) {
+              toast.error(tr("settings.account.export_fail", lang, {
+                error: e?.message || String(e),
+              }));
+            } finally {
+              setExportingBusy(false);
+            }
+          }}
+          style={{
+            width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 8,
+            background: T.surface, border: `1px solid ${T.border}`,
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            cursor: exportingBusy ? "default" : "pointer", textAlign: "left",
+            opacity: exportingBusy ? 0.6 : 1,
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text }}>
+              {tr("settings.account.export", lang)}
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+              {exportingBusy
+                ? tr("settings.account.export_running", lang)
+                : tr("settings.account.export_sub", lang)}
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </button>
+        {/* Borrar mi cuenta — destructive border + danger color so the
+            user understands the gravity at a glance. The actual
+            confirm flow happens in the modal below; tapping this
+            row only opens that. */}
+        <button
+          onClick={() => { setDeleteTyped(""); setShowDelete(true); }}
+          style={{
+            width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 14,
+            background: T.surface, border: `1px solid ${T.danger}55`,
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            cursor: "pointer", textAlign: "left",
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.danger }}>
+              {tr("settings.account.delete", lang)}
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+              {tr("settings.account.delete_sub", lang)}
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.danger} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            <path d="M10 11v6M14 11v6"/>
+            <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
+          </svg>
+        </button>
+
         {/* ---------- About section ----------
             Legal rows required for App Store submission. Both screens
             are rendered inside the app via the LegalSheet component
@@ -985,6 +1087,194 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
           lang={lang}
           onClose={() => setShowChangelog(false)}
         />
+      )}
+
+      {/* Export-data sub-sheet — shows the JSON returned by the
+          export-user-data Edge Function in a scrollable code
+          block + a Copy button. We use clipboard.writeText
+          (works in WKWebView under Capacitor 8+) instead of
+          file save because no @capacitor/filesystem plugin is
+          installed yet; the user can paste the JSON anywhere
+          (Notes, Mail, Drive). Satisfies App Store data-export
+          requirement. */}
+      {exportPayload && (
+        <div
+          onClick={(e) => { if (e.target === e.currentTarget) { setExportPayload(null); setExportCopied(false); } }}
+          style={{
+            position: "fixed", inset: 0, zIndex: 130,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex", alignItems: "flex-end", justifyContent: "center",
+          }}
+        >
+          <div style={{
+            width: "100%", maxWidth: 540, maxHeight: "92dvh",
+            background: T.bgElev || T.bg, color: T.text,
+            borderTopLeftRadius: 28, borderTopRightRadius: 28,
+            border: `1px solid ${T.border}`, borderBottom: "none",
+            display: "flex", flexDirection: "column", overflow: "hidden",
+          }}>
+            <div style={{ display: "flex", justifyContent: "center", paddingTop: 12 }}>
+              <div style={{ width: 36, height: 4, borderRadius: 2, background: T.border }}/>
+            </div>
+            <div style={{ padding: "16px 22px 8px" }}>
+              <div style={{
+                fontFamily: FONT.display, fontSize: 20, fontWeight: 700,
+                color: T.text, marginBottom: 6,
+              }}>{tr("settings.account.export_ready", lang)}</div>
+              <div style={{
+                fontFamily: FONT.sans, fontSize: 13, color: T.textMute,
+                lineHeight: 1.45,
+              }}>{tr("settings.account.export_ready_sub", lang)}</div>
+            </div>
+            <div style={{
+              flex: 1, overflow: "auto",
+              margin: "0 18px 12px", padding: 14, borderRadius: 14,
+              background: T.surface, border: `1px solid ${T.border}`,
+              fontFamily: FONT.mono, fontSize: 11, lineHeight: 1.4,
+              color: T.textMute, whiteSpace: "pre-wrap", wordBreak: "break-word",
+            }}>{exportPayload}</div>
+            <div style={{
+              padding: "12px 18px calc(env(safe-area-inset-bottom) + 16px)",
+              borderTop: `1px solid ${T.border}`,
+              background: T.bgElev || T.bg,
+              display: "flex", gap: 10,
+            }}>
+              <button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(exportPayload);
+                    setExportCopied(true);
+                    hapticNative("success").catch(() => {});
+                    toast.success(tr("settings.account.export_copied", lang));
+                  } catch (e) {
+                    toast.error(`Clipboard: ${e?.message || String(e)}`);
+                  }
+                }}
+                style={{
+                  flex: 2, padding: "13px 16px", borderRadius: 14,
+                  background: exportCopied ? T.accentSoft : T.accent,
+                  border: "none",
+                  color: exportCopied ? T.accent : T.accentInk,
+                  fontFamily: FONT.sans, fontSize: 14, fontWeight: 800,
+                  cursor: "pointer", letterSpacing: 0.2,
+                }}
+              >
+                {exportCopied
+                  ? tr("settings.account.export_copied", lang)
+                  : tr("settings.account.export_copy", lang)}
+              </button>
+              <button
+                onClick={() => { setExportPayload(null); setExportCopied(false); }}
+                style={{
+                  flex: 1, padding: "13px 16px", borderRadius: 14,
+                  background: "transparent", border: `1px solid ${T.border}`,
+                  color: T.text, fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >{tr("settings.done", lang)}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete-account sub-sheet — type-to-confirm modal. We require
+          the user to type the literal keyword (BORRAR / DELETE based
+          on lang) so a stray tap can't take down their data, and
+          App Store reviewers see the affirmative-confirmation pattern
+          they expect. The destructive button is disabled until the
+          input matches exactly. */}
+      {showDelete && (
+        <div
+          onClick={(e) => { if (e.target === e.currentTarget && !deleting) setShowDelete(false); }}
+          style={{
+            position: "fixed", inset: 0, zIndex: 130,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 16,
+          }}
+        >
+          <div style={{
+            width: "100%", maxWidth: 420,
+            background: T.bgElev || T.bg, color: T.text,
+            borderRadius: 22, border: `1px solid ${T.border}`,
+            padding: 20,
+          }}>
+            <div style={{
+              fontFamily: FONT.display, fontSize: 18, fontWeight: 700,
+              color: T.danger, marginBottom: 8,
+            }}>{tr("settings.account.delete_title", lang)}</div>
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 13, color: T.textMute,
+              lineHeight: 1.5, marginBottom: 14,
+            }}>{tr("settings.account.delete_warning", lang)}</div>
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 12, color: T.text,
+              marginBottom: 8,
+            }}>{tr("settings.account.delete_type", lang)}</div>
+            <input
+              value={deleteTyped}
+              onChange={(e) => setDeleteTyped(e.target.value)}
+              disabled={deleting}
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              placeholder={tr("settings.account.delete_placeholder", lang)}
+              style={{
+                width: "100%", padding: "10px 14px", borderRadius: 12,
+                background: T.surface, border: `1px solid ${T.border}`,
+                color: T.text, fontFamily: FONT.mono, fontSize: 14, fontWeight: 700,
+                outline: "none", letterSpacing: 1.2, marginBottom: 16,
+                boxSizing: "border-box",
+              }}
+            />
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={() => { if (!deleting) setShowDelete(false); }}
+                disabled={deleting}
+                style={{
+                  flex: 1, padding: "12px 14px", borderRadius: 12,
+                  background: "transparent", border: `1px solid ${T.border}`,
+                  color: T.text, fontFamily: FONT.sans, fontSize: 13, fontWeight: 600,
+                  cursor: deleting ? "default" : "pointer",
+                }}
+              >{tr("settings.account.delete_cancel", lang)}</button>
+              <button
+                disabled={deleting || deleteTyped.trim().toUpperCase() !== tr("settings.account.delete_keyword", lang)}
+                onClick={async () => {
+                  if (deleting) return;
+                  setDeleting(true);
+                  try {
+                    await deleteAccount();
+                    toast.success(tr("settings.account.delete_done", lang));
+                    // Close everything; the auth-state-change in
+                    // App.jsx will route to the login screen now
+                    // that signOut() ran inside deleteAccount.
+                    setShowDelete(false);
+                    if (onClose) onClose();
+                  } catch (e) {
+                    toast.error(tr("settings.account.delete_fail", lang, {
+                      error: e?.message || String(e),
+                    }));
+                  } finally {
+                    setDeleting(false);
+                  }
+                }}
+                style={{
+                  flex: 2, padding: "12px 14px", borderRadius: 12,
+                  background: T.danger, border: "none",
+                  color: "#fff", fontFamily: FONT.sans, fontSize: 13, fontWeight: 800,
+                  cursor: (deleting || deleteTyped.trim().toUpperCase() !== tr("settings.account.delete_keyword", lang)) ? "default" : "pointer",
+                  opacity: (deleting || deleteTyped.trim().toUpperCase() !== tr("settings.account.delete_keyword", lang)) ? 0.5 : 1,
+                  letterSpacing: 0.2,
+                }}
+              >
+                {deleting
+                  ? tr("settings.account.delete_running", lang)
+                  : tr("settings.account.delete_confirm", lang)}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 2FA enrollment sub-sheet */}
@@ -2021,6 +2311,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.0.63",
+    title: "App Store gates: account deletion + data export",
+    bullets: [
+      "New \"Mi cuenta\" section in Settings with two flows required by App Store Guideline 5.1.1(v): \"Descargar mis datos\" (download all your data as JSON) and \"Borrar mi cuenta\" (permanent deletion with type-BORRAR confirm).",
+      "Both backed by service-role Edge Functions: delete-user-account walks 19 user-keyed tables + cleans the post-images bucket folder + calls auth.admin.deleteUser; export-user-data assembles 18 parallel queries into a structured JSON.",
+      "Type-to-confirm pattern on delete (the destructive button stays disabled until the user types BORRAR / DELETE in the input) — matches what App Store reviewers expect to see.",
+    ],
+  },
   {
     version: "0.0.62",
     title: "Onboarding polish — first impression for the pitch",
