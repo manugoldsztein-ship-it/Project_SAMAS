@@ -2021,6 +2021,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.61",
+    title: "Live like / repost / reply counts in the feed",
+    bullets: [
+      "Realtime on posts.INSERT was already wired (new posts slide in without refresh). Filling in the gap: like / repost / reply counts now also tick live when someone else interacts with a post you're viewing.",
+      "Subscriptions on likes / reposts / replies INSERT + DELETE; events authored by the current user are skipped so the local optimistic update (already there) doesn't double-count.",
+      "During the Cohen demo, a coworker tapping like on Manuel's seeded post will visibly bump the heart count on his iPhone screen.",
+    ],
+  },
+  {
     version: "0.0.60",
     title: "Wallet hero sparkline grows live",
     bullets: [

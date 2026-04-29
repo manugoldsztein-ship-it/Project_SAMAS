@@ -662,6 +662,64 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
             console.warn("[social] realtime getPost failed:", e);
           }
         })
+        // Live engagement counters (samas-0.0.61). When someone OTHER
+        // than the current user likes / reposts / replies to a post
+        // visible in the feed, tick the matching counter without
+        // re-fetching the post. We skip events authored by the
+        // current user because the local optimistic update in
+        // toggleLike / toggleRepost / createReply already handled
+        // them — counting twice would visibly double-tick.
+        //
+        // For DELETE events, we depend on Postgres returning the
+        // primary-key columns in payload.old (likes / reposts have
+        // composite PK on (post_id, user_id), which is enough). If
+        // the table ever moves to REPLICA IDENTITY FULL we get the
+        // whole row, also fine.
+        .on("postgres_changes", {
+          event: "INSERT", schema: "public", table: "likes",
+        }, (payload) => {
+          const row = payload.new;
+          if (!alive || !row || row.user_id === myUserId) return;
+          setPosts((prev) => prev.map((p) =>
+            p.id === row.post_id ? { ...p, likes: (p.likes || 0) + 1 } : p
+          ));
+        })
+        .on("postgres_changes", {
+          event: "DELETE", schema: "public", table: "likes",
+        }, (payload) => {
+          const row = payload.old;
+          if (!alive || !row || row.user_id === myUserId) return;
+          setPosts((prev) => prev.map((p) =>
+            p.id === row.post_id ? { ...p, likes: Math.max(0, (p.likes || 0) - 1) } : p
+          ));
+        })
+        .on("postgres_changes", {
+          event: "INSERT", schema: "public", table: "reposts",
+        }, (payload) => {
+          const row = payload.new;
+          if (!alive || !row || row.user_id === myUserId) return;
+          setPosts((prev) => prev.map((p) =>
+            p.id === row.post_id ? { ...p, reposts: (p.reposts || 0) + 1 } : p
+          ));
+        })
+        .on("postgres_changes", {
+          event: "DELETE", schema: "public", table: "reposts",
+        }, (payload) => {
+          const row = payload.old;
+          if (!alive || !row || row.user_id === myUserId) return;
+          setPosts((prev) => prev.map((p) =>
+            p.id === row.post_id ? { ...p, reposts: Math.max(0, (p.reposts || 0) - 1) } : p
+          ));
+        })
+        .on("postgres_changes", {
+          event: "INSERT", schema: "public", table: "replies",
+        }, (payload) => {
+          const row = payload.new;
+          if (!alive || !row || row.author_id === myUserId) return;
+          setPosts((prev) => prev.map((p) =>
+            p.id === row.post_id ? { ...p, comments: (p.comments || 0) + 1 } : p
+          ));
+        })
         .subscribe();
     })();
     return () => {
