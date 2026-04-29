@@ -3197,22 +3197,30 @@ function EarningsWidget({ T, assets, onSelectAsset, lang = "es" }) {
   );
 }
 
-// Map a gain% in [-5, +5] to a hex color from a red→neutral→green
+// Map a gain% in [-5, +5] to a CSS color from a red→neutral→green
 // gradient. We clamp at 5% in either direction so a single moonshot
 // doesn't flatten everyone else's tiles into the same shade.
+//
+// IMPORTANT: T.accent / T.danger are oklch() values in this build,
+// not hex strings — so the previous `${T.danger}cc` string-concat
+// approach produced literal invalid CSS like "oklch(...)cc" and the
+// heatmap silently rendered with no background. Using fixed hex
+// stops here keeps the gradient predictable across light/dark
+// themes and is a one-time tweak away if we ever theme-shift it.
+const HEAT_DANGER_RGB = "239, 68, 68";   // ~#EF4444 (red-500)
+const HEAT_ACCENT_RGB = "22, 199, 132";  // ~#16C784 (samas accent)
 function heatColorFor(pct, T) {
   const clamped = Math.max(-5, Math.min(5, pct || 0));
-  const t = (clamped + 5) / 10;
-  // Three-stop gradient: T.danger at 0, T.surface at 0.5, T.accent at 1.
-  // We don't try to mix HSL — a CSS gradient hash via inline alpha is
-  // close enough and keeps the math here readable.
   if (clamped === 0) return T.surface;
   if (clamped < 0) {
-    const intensity = (1 - t * 2);    // 0 at center, 1 at edge
-    return `${T.danger}${Math.round(intensity * 0xCC).toString(16).padStart(2, "0")}`;
+    // -5 → fully red, 0 → transparent. Layer on top of the surface
+    // by emitting rgba so the card still picks up the surrounding
+    // theme. alpha caps at 0.8 so the ticker text stays legible.
+    const alpha = Math.min(0.8, (Math.abs(clamped) / 5) * 0.8);
+    return `rgba(${HEAT_DANGER_RGB}, ${alpha.toFixed(2)})`;
   }
-  const intensity = (t - 0.5) * 2;    // 0 at center, 1 at edge
-  return `${T.accent}${Math.round(intensity * 0xCC).toString(16).padStart(2, "0")}`;
+  const alpha = Math.min(0.8, (clamped / 5) * 0.8);
+  return `rgba(${HEAT_ACCENT_RGB}, ${alpha.toFixed(2)})`;
 }
 
 function HeatmapGrid({ T, assets, onSelectAsset, lang = "es" }) {
@@ -3440,7 +3448,12 @@ function RangeBar52w({ T, asset, lang = "es" }) {
       <div style={{ position: "relative", height: 6, borderRadius: 3, overflow: "visible" }}>
         <div style={{
           position: "absolute", inset: 0, borderRadius: 3,
-          background: `linear-gradient(90deg, ${T.danger}99 0%, ${T.textMute}55 50%, ${T.accent}99 100%)`,
+          // Hardcoded rgba stops — same reason as heatColorFor above:
+          // T.danger / T.accent are oklch() values in this build, so
+          // `${T.danger}99` produces invalid CSS and the gradient
+          // would silently disappear. Static rgba keeps the bar
+          // visible regardless of theme.
+          background: "linear-gradient(90deg, rgba(239,68,68,0.6) 0%, rgba(120,120,120,0.25) 50%, rgba(22,199,132,0.6) 100%)",
         }}/>
         <div style={{
           position: "absolute", top: -3, left: `calc(${(pos * 100).toFixed(1)}% - 6px)`,
@@ -3916,8 +3929,18 @@ function BenchmarkLine({ T, holdings, totalUsd, lang = "es" }) {
             }}>{youReturn >= 0 ? "+" : ""}{(youReturn * 100).toFixed(2)}%</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ width: 16, height: 2, background: benchColor, opacity: 0.7,
-              borderTop: `2px dashed ${benchColor}`, height: 0 }}/>
+            {/* Dashed line legend marker — render as 4 small segments
+                of a 1px-tall span using a repeating linear-gradient,
+                which is the iOS-WebKit-friendly way to fake a dashed
+                inline rule without abusing borderTop on a 0-height
+                element (which the browser ignored, leaving the
+                legend without a visible marker). */}
+            <span style={{
+              width: 16, height: 0,
+              borderTop: `2px dashed ${benchColor}`,
+              opacity: 0.7,
+              flexShrink: 0,
+            }}/>
             <span style={{ color: T.textMute }}>
               {tr(benchKey === "merval" ? "pro.bench.merval" : "pro.bench.spx", lang)}
             </span>

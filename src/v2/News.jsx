@@ -41,8 +41,17 @@ function withPageTimeout(promise, ms) {
 export function NewsPage({ T, lang = "es" }) {
   const [items, setItems] = useState([]);
   const [ticker, setTicker] = useState([]);
-  const [cats, setCats] = useState([tr("news.cat.all", lang)]);
-  const [cat, setCat] = useState(tr("news.cat.all", lang));
+  // Category state uses the canonical Spanish keys ("Todo", "Mercados",
+  // "Argentina", "Cripto", "Tech", "Energía") because that's what the
+  // api/news.js layer expects (NEWS rows are bucketed by those exact
+  // strings). Display labels go through tr() at render time only —
+  // we don't translate the IDENTITY of the category.
+  //
+  // Pre-0.0.48 we wrapped `cat` in tr("news.cat.all", lang) which
+  // returns "All" in English, so the active pill never matched the
+  // pills returned by getCategories() and filtering broke silently.
+  const [cats, setCats] = useState(["Todo"]);
+  const [cat, setCat] = useState("Todo");
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState(null); // null = not searching
   const [loading, setLoading] = useState(true);
@@ -101,9 +110,22 @@ export function NewsPage({ T, lang = "es" }) {
   // too (so "NVDA" + "Tech" works as a sub-filter).
   const visible = useMemo(() => {
     const base = searchResults != null ? searchResults : items;
-    if (cat === tr("news.cat.all", lang)) return base;
+    // Compare against the canonical "Todo" key, not its translation —
+    // see the comment on the cat state declaration above.
+    if (cat === "Todo") return base;
     return base.filter((n) => n.category === cat);
   }, [items, searchResults, cat]);
+
+  // Render-only label translator for the category pills. Keeps the
+  // stored value (Spanish key) stable while showing the user-facing
+  // text in their locale. Argentina / Cripto / Tech are the same in
+  // both languages so we only translate the two that differ.
+  function catLabel(c) {
+    if (c === "Todo")     return tr("news.cat.all", lang);
+    if (c === "Mercados") return lang === "en" ? "Markets" : "Mercados";
+    if (c === "Energía")  return lang === "en" ? "Energy"  : "Energía";
+    return c;
+  }
 
   return (
     <div style={{ paddingBottom: 110 }}>
@@ -233,7 +255,7 @@ export function NewsPage({ T, lang = "es" }) {
               color: active ? T.accent : T.textMute,
               fontFamily: FONT.sans, fontSize: 12, fontWeight: 600,
               cursor: "pointer", whiteSpace: "nowrap",
-            }}>{c}</button>
+            }}>{catLabel(c)}</button>
           );
         })}
       </div>

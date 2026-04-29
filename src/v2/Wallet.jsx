@@ -495,13 +495,29 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
 // Stable per-portfolio seeded RNG. Keyed off a hash of the
 // holdings + total so two different portfolios get different
 // numbers but the same one stays consistent.
+//
+// Defensive: a missing/null portfolio falls back to a constant seed
+// so the consumers never crash. They render with stable but
+// arbitrary numbers in that case — though all the call sites are
+// gated on `portfolio && portfolio.totalUsd > 0` so this branch
+// is mostly belt-and-suspenders.
 function portfolioSeed(portfolio, salt = 0) {
-  const tickers = (portfolio?.holdings || []).map((h) => h.ticker).join("|");
+  if (!portfolio) {
+    let fallbackH = (1234567 ^ salt) >>> 0;
+    return () => {
+      fallbackH = (fallbackH + 0x6D2B79F5) >>> 0;
+      let t = fallbackH;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const tickers = (portfolio.holdings || []).map((h) => h.ticker).join("|");
   let h = 0;
   for (let i = 0; i < tickers.length; i++) {
     h = ((h << 5) - h + tickers.charCodeAt(i)) | 0;
   }
-  h = ((h ^ Math.round(portfolio?.totalUsd || 0)) ^ salt) >>> 0;
+  h = ((h ^ Math.round(portfolio.totalUsd || 0)) ^ salt) >>> 0;
   return () => {
     h = (h + 0x6D2B79F5) >>> 0;
     let t = h;
