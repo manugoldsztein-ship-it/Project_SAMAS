@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { callObjectives, fvAnnuity, pmtForGoal, hasAnthropicKey } from "./client.js";
 import { InfoBadge } from "./glossary.jsx";
+import { hapticNative } from "../lib/native.js";
 
 // ============================================================
 // OBJETIVOS WIZARD — spec v3 (simplified)
@@ -68,6 +69,11 @@ export function ObjectivesWizard({ onClose, onSave, savedPlan, C }) {
   const [plan, setPlan] = useState(savedPlan || null);
   const [busy, setBusy] = useState(false);
   const [err, setErr]   = useState(null);
+  // AI thinking stage — driven by onStage callback from callObjectives.
+  // Drives the rotating "Analizando..." header text in PlanSkeleton.
+  // 0.0.72: makes the demo path FEEL like the AI is running through
+  // genuine reasoning steps rather than instantly returning a fixture.
+  const [aiStage, setAiStage] = useState("analyzing");
 
   // Unmount tracking for late-arriving async results.
   const mountedRef = useRef(true);
@@ -90,18 +96,30 @@ export function ObjectivesWizard({ onClose, onSave, savedPlan, C }) {
     if (busy) return;
     if (horizonYears <= 0) { setErr("El horizonte debe ser mayor a 0"); return; }
     if (targetAmount <= 0) { setErr("El objetivo debe ser mayor a 0"); return; }
+    // Light haptic the moment the user commits — synchronous so iOS
+    // WebView fires it inside the gesture context. Same lesson as
+    // the trade-flow haptic fix (0.0.71).
+    hapticNative("tap").catch(() => {});
     setBusy(true);
     setErr(null);
     setPlan(null);
+    setAiStage("analyzing");
     setStep(2);
     try {
-      const p = await callObjectives({ targetAmount, horizonYears, currency });
+      const p = await callObjectives(
+        { targetAmount, horizonYears, currency },
+        { onStage: (s) => { if (mountedRef.current) setAiStage(s); } },
+      );
       if (!mountedRef.current) return;
+      // Success haptic right when the plan resolves — synchronous
+      // before setPlan schedules the new render.
+      hapticNative("success").catch(() => {});
       const stamped = { ...p, _savedAt: Date.now() };
       setPlan(stamped);
       if (onSave) onSave(stamped);
     } catch (e) {
       if (!mountedRef.current) return;
+      hapticNative("error").catch(() => {});
       setErr(e?.message || "Error al generar la clasificación");
       setStep(1);
     } finally {
@@ -182,7 +200,7 @@ export function ObjectivesWizard({ onClose, onSave, savedPlan, C }) {
             />
           )}
           {step === 2 && !plan && (
-            <PlanSkeleton C={C}/>
+            <PlanSkeleton C={C} stage={aiStage}/>
           )}
           {step === 2 && plan && (
             <PlanView plan={plan} target={targetAmount} horizon={horizonYears} currency={currency} C={C}/>
@@ -325,13 +343,29 @@ function StepObjective({ currency, targetAmount, setTargetAmount, horizonYears, 
 
 // ------- skeleton while AI is classifying -----------------------------------
 
-function PlanSkeleton({ C }) {
+// Stage-driven label so the user sees the AI "working through" the
+// problem instead of a single static "Clasificando…". Stages match
+// the keys fired by callObjectives' onStage callback in client.js.
+const STAGE_LABELS = {
+  analyzing:  "Analizando tu perfil de riesgo",
+  computing:  "Calculando el retorno típico",
+  allocating: "Construyendo la asignación AR",
+  finalizing: "Finalizando tu plan",
+};
+
+function PlanSkeleton({ C, stage = "analyzing" }) {
   const sk = (style = {}) => <div className="samas-skeleton" style={{ height:14, ...style }}/>;
+  const label = STAGE_LABELS[stage] || STAGE_LABELS.analyzing;
   return (
     <div className="samas-fade">
       <div style={{ background: C.accent + "18", border: "1px solid " + C.accent + "55", borderRadius: 14, padding: "14px" }}>
-        <div style={{ fontSize:11, fontWeight:700, color:C.accent, letterSpacing:1, textTransform:"uppercase", marginBottom:6, display:"flex", alignItems:"center", gap:8 }}>
-          <span>Clasificando tu objetivo</span>
+        {/* Stage label re-mounts each time stage changes (key={stage})
+            so the css-fade class re-runs the entrance animation —
+            visually you see "Analizando..." softly cross-fade into
+            "Calculando..." into "Construyendo..." instead of a
+            static label that never moves. */}
+        <div key={stage} className="samas-fade" style={{ fontSize:11, fontWeight:700, color:C.accent, letterSpacing:1, textTransform:"uppercase", marginBottom:6, display:"flex", alignItems:"center", gap:8 }}>
+          <span>{label}</span>
           <DotsSpinner C={C}/>
         </div>
         {sk({ width: "50%", height: 22, marginBottom: 10 })}

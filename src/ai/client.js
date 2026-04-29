@@ -204,7 +204,7 @@ export function pmtForGoal(target, years, annualRate) {
  * compound-interest projections are computed here and passed to Claude,
  * which picks the strategy and explains why.
  */
-export async function callObjectives(profile) {
+export async function callObjectives(profile, opts = {}) {
   const currency = profile.currency === "USD" ? "USD" : "ARS";
   const target   = Number(profile.targetAmount)  || 0;
   const horizon  = Math.max(0.5, Number(profile.horizonYears) || 0);
@@ -221,13 +221,46 @@ export async function callObjectives(profile) {
 
   const fallback = () => ({ ...mockObjectives({ target, horizon, currency }), _profile: profile });
 
-  if (!hasAnthropicKey()) return fallback();
+  // Optional stage callback the wizard wires up to drive the
+  // skeleton's rotating header text. Fired around the network call
+  // OR around the simulated delay below — same callback shape so
+  // the UI doesn't have to know which path ran. Stages:
+  //   "analyzing" → "computing" → "allocating" → "finalizing"
+  const onStage = typeof opts.onStage === "function" ? opts.onStage : () => {};
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  if (!hasAnthropicKey()) {
+    // Demo path: deliberate staged delay so the wizard FEELS like
+    // it's running an AI even when no key is configured. Without
+    // this, the skeleton flashes for one frame and the plan snaps
+    // in — investors watching the demo wouldn't perceive any AI
+    // moment. ~1.4s total split across 4 stages reads as
+    // "the model is thinking through this."
+    onStage("analyzing");
+    await sleep(380);
+    onStage("computing");
+    await sleep(380);
+    onStage("allocating");
+    await sleep(380);
+    onStage("finalizing");
+    await sleep(220);
+    return fallback();
+  }
+  // Real-API path. We fire the same stages around the actual
+  // network call so the wizard's "thinking" UX is consistent
+  // whether or not we're in demo mode. Real Claude calls take
+  // 1-3s anyway so the stage rotation lines up with reality.
+  onStage("analyzing");
+  await sleep(150);
+  onStage("computing");
   const raw = await callAnthropic({
     system: OBJECTIVES_SYSTEM,
     messages: [{ role: "user", content: userPrompt }],
     maxTokens: 700,
   });
+  onStage("allocating");
   const parsed = parseJson(raw);
+  onStage("finalizing");
   if (!parsed) return fallback();
   return { ...parsed, _profile: profile };
 }

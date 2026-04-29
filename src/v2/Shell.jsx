@@ -2337,6 +2337,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.72",
+    title: "AI Plan: real \"thinking\" moment + haptics",
+    bullets: [
+      "Without an Anthropic API key, the wizard's mock plan was returning instantly — skeleton flashed for one frame, plan snapped in. Felt fake. Added a deliberate 4-stage delay (~1.4s total) with rotating labels: Analizando → Calculando → Construyendo → Finalizando. Real-API path fires the same stages around the actual network call so the UX is consistent in either mode.",
+      "Light haptic on Generar (synchronous, inside gesture context) + success haptic on plan ready + error haptic on rejection. Same pattern as the trade flow.",
+      "PlanSkeleton header re-mounts via key={stage} so each stage label cross-fades in via the existing samas-fade class instead of snapping.",
+    ],
+  },
+  {
     version: "0.0.71",
     title: "Fix: trade success haptic now fires reliably",
     bullets: [
