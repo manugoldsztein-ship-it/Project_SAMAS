@@ -2368,6 +2368,16 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.75",
+    title: "DM conversation: timestamps, date dividers, read receipts",
+    bullets: [
+      "Every bubble now shows its time underneath in tabular-nums (HH:MM 24h). Long threads finally read like a real DM app instead of a stack of body text.",
+      "Date dividers (Hoy / Ayer / Lunes / 12 abr) appear between consecutive messages from different days — uppercase pill, surface bg, subtle.",
+      "Read receipt: the last own message that the peer has read shows \"· Leído\" in accent color next to its timestamp. Pulled from dm_messages.read_at via the existing schema.",
+      "Loading state replaced with 5 bubble-shaped shimmer skeletons (mixed left/right alignment, varied widths) so the silhouette of a real conversation is visible while messages load.",
+    ],
+  },
+  {
     version: "0.0.74",
     title: "Inbox rows: real user avatars instead of generic emojis",
     bullets: [

@@ -1787,6 +1787,50 @@ function ThreadRow({ T, thread, onOpen }) {
 }
 
 // Conversation view — message list scrolled to bottom + compose bar.
+// HH:MM in 24h locale-formatted. Used for the small timestamp
+// printed under each bubble.
+function fmtMsgTime(ts) {
+  if (!ts) return "";
+  return new Date(ts).toLocaleTimeString("es-AR", {
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  });
+}
+
+// Date divider label between consecutive messages from different
+// days. "Hoy" for today, "Ayer" for yesterday, day-of-week for the
+// last 6 days, full date otherwise. All in es-AR — peer DM threads
+// in SAMAS are AR-flavored by design.
+function fmtDateDivider(ts) {
+  if (!ts) return "";
+  const d = new Date(ts); d.setHours(0, 0, 0, 0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((today.getTime() - d.getTime()) / (24 * 60 * 60 * 1000));
+  if (diffDays === 0) return "Hoy";
+  if (diffDays === 1) return "Ayer";
+  if (diffDays < 7) {
+    return d.toLocaleDateString("es-AR", { weekday: "long" })
+      .replace(/^./, (c) => c.toUpperCase());
+  }
+  return d.toLocaleDateString("es-AR", { day: "numeric", month: "short" });
+}
+
+// Bubble-shaped shimmer placeholder for the conversation loading
+// state. Shape mirrors a real bubble (rounded 14, padded, colored
+// surface for incoming / accentSoft for outgoing) so the skeleton
+// reads as "messages loading" rather than "generic placeholder."
+function BubbleSkeleton({ T, fromMe = false, width = "60%" }) {
+  return (
+    <div style={{
+      alignSelf: fromMe ? "flex-end" : "flex-start",
+      width, height: 30, borderRadius: 14,
+      background: `linear-gradient(90deg, ${fromMe ? T.accentSoft : T.surface} 0%, ${T.bgElev} 50%, ${fromMe ? T.accentSoft : T.surface} 100%)`,
+      backgroundSize: "200% 100%",
+      animation: "samas-skel 1.4s ease-in-out infinite",
+      border: fromMe ? "none" : `1px solid ${T.border}`,
+    }}/>
+  );
+}
+
 // Subscribes to INSERTs on dm_messages for THIS thread so peer
 // replies stream in live. Marks unread-as-read on open.
 function ConversationView({ T, lang = "es", thread, onBack, onOpenProfile, onOpenTicker, onOpenMention, onOpenHashtag }) {
@@ -1937,33 +1981,96 @@ function ConversationView({ T, lang = "es", thread, onBack, onOpenProfile, onOpe
         display: "flex", flexDirection: "column", gap: 6,
       }}>
         {messages === null ? (
-          <div style={{ color: T.textMute, fontFamily: FONT.sans, fontSize: 12, textAlign: "center" }}>Cargando…</div>
+          // Bubble-shaped skeletons while messages load. Mix of left
+          // and right alignment + varying widths so the silhouette
+          // matches a real conversation. Wrap in flex column with
+          // gap so the skeleton list visually matches the resolved
+          // layout.
+          <>
+            <BubbleSkeleton T={T} fromMe={false} width="62%"/>
+            <BubbleSkeleton T={T} fromMe={true}  width="48%"/>
+            <BubbleSkeleton T={T} fromMe={false} width="74%"/>
+            <BubbleSkeleton T={T} fromMe={false} width="40%"/>
+            <BubbleSkeleton T={T} fromMe={true}  width="55%"/>
+          </>
         ) : messages.length === 0 ? (
           <div style={{ color: T.textMute, fontFamily: FONT.sans, fontSize: 13, textAlign: "center", padding: 30 }}>
             Empezá la conversación.
           </div>
         ) : (
-          messages.map((m) => {
-            // Own bubbles are green (T.accent) — render $TICKER
-            // links in T.accentInk so they're readable on the
-            // accent fill. Peer bubbles use the surface color, so
-            // keep the regular accent for links.
-            const linkT = m.fromMe ? { ...T, accent: T.accentInk } : T;
-            return (
-              <div key={m.id} style={{
-                alignSelf: m.fromMe ? "flex-end" : "flex-start",
-                maxWidth: "78%",
-                padding: "8px 12px", borderRadius: 14,
-                background: m.fromMe ? T.accent : T.surface,
-                color: m.fromMe ? T.accentInk : T.text,
-                border: m.fromMe ? "none" : `1px solid ${T.border}`,
-                fontFamily: FONT.sans, fontSize: 14, lineHeight: 1.4,
-                whiteSpace: "pre-wrap", wordBreak: "break-word",
-              }}>
-                {linkifyTickers(m.body, linkT, onOpenTicker, onOpenMention, onOpenHashtag)}
-              </div>
-            );
-          })
+          (() => {
+            // Find the last sent (own) message that the peer has
+            // read — used to render the "Leído" receipt only under
+            // that one bubble, the way every modern DM app does.
+            let lastOwnReadId = null;
+            for (let i = messages.length - 1; i >= 0; i--) {
+              const m = messages[i];
+              if (m.fromMe && m.readAt) { lastOwnReadId = m.id; break; }
+            }
+            // Walk messages once, emitting a date divider when the
+            // calendar day changes from the previous bubble. This
+            // keeps long threads visually parseable.
+            const out = [];
+            let prevDay = null;
+            for (let i = 0; i < messages.length; i++) {
+              const m = messages[i];
+              const day = m.at ? new Date(m.at).toDateString() : "";
+              if (day !== prevDay) {
+                out.push(
+                  <div key={`div-${day}-${i}`} style={{
+                    alignSelf: "center",
+                    margin: "10px 0 2px",
+                    padding: "2px 10px", borderRadius: 999,
+                    background: T.surface, border: `1px solid ${T.border}`,
+                    fontFamily: FONT.sans, fontSize: 10, fontWeight: 700,
+                    color: T.textMute, letterSpacing: 0.5, textTransform: "uppercase",
+                  }}>{fmtDateDivider(m.at)}</div>
+                );
+                prevDay = day;
+              }
+              // Own bubbles are green (T.accent) — render $TICKER
+              // links in T.accentInk so they're readable on the
+              // accent fill. Peer bubbles use the surface color, so
+              // keep the regular accent for links.
+              const linkT = m.fromMe ? { ...T, accent: T.accentInk } : T;
+              const showReceipt = m.id === lastOwnReadId;
+              out.push(
+                <div key={m.id} style={{
+                  alignSelf: m.fromMe ? "flex-end" : "flex-start",
+                  maxWidth: "78%",
+                  display: "flex", flexDirection: "column",
+                  alignItems: m.fromMe ? "flex-end" : "flex-start",
+                  gap: 2,
+                }}>
+                  <div style={{
+                    padding: "8px 12px", borderRadius: 14,
+                    background: m.fromMe ? T.accent : T.surface,
+                    color: m.fromMe ? T.accentInk : T.text,
+                    border: m.fromMe ? "none" : `1px solid ${T.border}`,
+                    fontFamily: FONT.sans, fontSize: 14, lineHeight: 1.4,
+                    whiteSpace: "pre-wrap", wordBreak: "break-word",
+                  }}>
+                    {linkifyTickers(m.body, linkT, onOpenTicker, onOpenMention, onOpenHashtag)}
+                  </div>
+                  {/* Per-bubble timestamp — small, muted, padded
+                      slightly so it doesn't crowd the bubble edge. */}
+                  <div style={{
+                    fontFamily: FONT.sans, fontSize: 10, color: T.textMute,
+                    padding: "0 4px",
+                    fontVariantNumeric: "tabular-nums",
+                  }}>
+                    {fmtMsgTime(m.at)}
+                    {showReceipt && (
+                      <span style={{ marginLeft: 5, color: T.accent, fontWeight: 700 }}>
+                        · Leído
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+            return out;
+          })()
         )}
       </div>
 
