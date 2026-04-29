@@ -49,6 +49,33 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
   // hook computes the ratio as live/base, which cancels currency.
   const liveRatio = useLivePortfolioRatio(portfolio?.holdings);
 
+  // Rolling 30-point buffer of live portfolio totals — drives the
+  // Wallet hero sparkline so the chart visibly grows as the underlying
+  // assets tick. We keep it on totalArs because the sparkline is
+  // a shape, not a value (ARS vs USD doesn't matter — the line
+  // looks the same either way), and ARS is always defined when
+  // portfolio is loaded.
+  const SPARK_BUFFER_LEN = 30;
+  const [sparkBuffer, setSparkBuffer] = useState([]);
+  useEffect(() => {
+    if (!portfolio) return;
+    // Seed the buffer the first time portfolio loads so the chart
+    // doesn't start as a single dot. Repeats the static total
+    // 8 times so the line has shape immediately; subsequent ticks
+    // append the live value and slide the seed out.
+    if (sparkBuffer.length === 0) {
+      setSparkBuffer(Array(8).fill(portfolio.totalArs));
+      return;
+    }
+    if (liveRatio.tickCount > 0) {
+      setSparkBuffer((prev) => {
+        const next = [...prev, portfolio.totalArs * liveRatio.ratio];
+        return next.length > SPARK_BUFFER_LEN ? next.slice(-SPARK_BUFFER_LEN) : next;
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveRatio.tickCount, portfolio?.totalArs]);
+
   // ----------- UI state -----------
   const [ccy, setCcy] = useState("ARS");
   const [activeModal, setActiveModal] = useState(null); // "deposit" | "withdraw" | "card" | "aporte" | "inbox" | null
@@ -359,7 +386,22 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
                 <Pill T={T}>{tr("wallet.last_30d", lang)}</Pill>
               </div>
             </div>
-            <Sparkline data={SAMAS_SPARKS.bull} color={T.accent} w={90} h={42} sw={2}/>
+            {/* Live-growing portfolio sparkline. Each tick appends a
+                point and the line slides left after 30 ticks (~75s
+                of session). Color tracks the recent direction:
+                accent green when the latest point is above the
+                first, danger red when below. Falls back to the
+                static SAMAS_SPARKS.bull only on the very first
+                render before the buffer seeds. */}
+            <Sparkline
+              data={sparkBuffer.length >= 2 ? sparkBuffer : SAMAS_SPARKS.bull}
+              color={
+                sparkBuffer.length >= 2 && sparkBuffer[sparkBuffer.length - 1] < sparkBuffer[0]
+                  ? T.danger
+                  : T.accent
+              }
+              w={90} h={42} sw={2}
+            />
           </div>
         </div>
       )}

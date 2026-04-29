@@ -2021,6 +2021,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.60",
+    title: "Wallet hero sparkline grows live",
+    bullets: [
+      "The 30-day chart on the Wallet hero used to be a fixed bull-curve squiggle, same shape every render. It now appends a point each tick from the live portfolio total — the line literally grows as you watch.",
+      "Color follows the trend: green when the recent direction is up, red when down. Buffer rolls at 30 points (~75s of session) so the chart slides forward instead of growing forever.",
+      "Seeds with 8 copies of the initial total so the chart has shape from the first render, then morphs into live data over the first half-minute.",
+    ],
+  },
+  {
     version: "0.0.59",
     title: "Top movers re-rank live during the demo",
     bullets: [
