@@ -3263,30 +3263,26 @@ function ConfirmOrderStep({ T, asset, confirm, busy, err, onCancel, onConfirm, l
 function TradeCoachCard({ T, lang = "es", ticker, side, qty, price }) {
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(true);
-  const [err, setErr] = useState(null);
+  const [hidden, setHidden] = useState(false);   // 0.1.1 — replaces err sentinel
 
   useEffect(() => {
     let alive = true;
-    setBusy(true); setErr(null); setData(null);
+    setBusy(true); setHidden(false); setData(null);
     tradeCoach({ ticker, side, qty, price })
       .then((res) => { if (alive) { setData(res); setBusy(false); } })
       .catch((e) => {
         if (!alive) return;
-        // Consent declined — silently bail. The TradeCoachCard already
-        // hides itself when err is set without data, so this just keeps
-        // the err message empty (no console spam, no flash of error UI).
-        if (e?.name === "AIConsentDeniedError") {
-          setErr("__consent_denied__");
-        } else {
-          setErr(e?.message || String(e));
-        }
+        // Hide the card on ANY error — AI being down should never
+        // block a trade confirmation. Consent declined gets the
+        // same silent treatment. (Pre-0.1.1 we set an err sentinel
+        // string here; cleaner to just track a hidden boolean.)
+        setHidden(true);
         setBusy(false);
       });
     return () => { alive = false; };
   }, [ticker, side, qty, price]);
 
-  // Hide silently on hard error (don't block the confirmation flow).
-  if (err && !data) return null;
+  if (hidden) return null;
 
   const meta = data ? (() => {
     if (data.verdict === "flag")

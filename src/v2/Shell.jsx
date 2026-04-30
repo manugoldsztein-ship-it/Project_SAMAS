@@ -46,7 +46,7 @@ import { seedDemoAccount, resetDemoAccount } from "../lib/demoSeed.js";
 import { seedSocialDemo } from "../lib/seedSocial.js";
 import { hapticNative } from "../lib/native.js";
 import { deleteAccount, exportData } from "../lib/account.js";
-import { grantAIConsent, denyAIConsent, hasAIConsent } from "../lib/aiConsent.js";
+import { grantAIConsent, denyAIConsent, hasAIConsent, revokeAIConsent } from "../lib/aiConsent.js";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { LivePricesProvider } from "./livePrices.jsx";
 
@@ -987,6 +987,46 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
             do the heavy lifting (RLS-bypass + auth.admin.deleteUser).
             See supabase/functions/delete-user-account/index.ts and
             supabase/functions/export-user-data/index.ts. */}
+        {/* AI consent revoke (samas-0.1.1). The first-tap consent
+            modal promises "podés desactivar las funciones IA desde
+            Ajustes" — this is that switch. Tapping it clears the
+            stored consent flag; the next AI tap re-prompts.
+            Always-rendered (regardless of current state) so the
+            user never has to hunt for it. */}
+        <div style={{
+          marginTop: 6, marginBottom: 6,
+          fontFamily: FONT.sans, fontSize: 11, fontWeight: 600,
+          color: T.textMute, letterSpacing: 0.4, textTransform: "uppercase",
+          padding: "0 4px",
+        }}>
+          {tr("settings.section.ai", lang)}
+        </div>
+        <button
+          onClick={() => {
+            revokeAIConsent();
+            toast.success(tr("settings.ai.revoke_done", lang));
+          }}
+          style={{
+            width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 14,
+            background: T.surface, border: `1px solid ${T.border}`,
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            cursor: "pointer", textAlign: "left",
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text }}>
+              {tr("settings.ai.revoke", lang)}
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+              {tr("settings.ai.revoke_sub", lang)}
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 12a9 9 0 1 0 9-9"/>
+            <polyline points="3 4 3 12 11 12"/>
+          </svg>
+        </button>
+
         <div style={{
           marginTop: 6, marginBottom: 6,
           fontFamily: FONT.sans, fontSize: 11, fontWeight: 600,
@@ -2584,6 +2624,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.1.1",
+    title: "Audit pass — sentinel cleanup + AI revoke toggle in Settings",
+    bullets: [
+      "Audited the codebase for regressions before they bite during the Cohen demo. Verified DB CHECK constraints (orders, transactions, posts, price_alerts, recurring_aportes, etc.) match what client-side code inserts. Verified all 16 Edge Functions deploy cleanly. npm audit is clean. No dependency vulnerabilities. The earlier orders_status_check / posts_kind / posts_body_check / transactions_kind fixes hold up.",
+      "Cleanup: TradeCoachCard's hide-on-error path used a setErr(\"__consent_denied__\") string sentinel. Replaced with a proper hidden boolean state — same UX, no magic string.",
+      "New Settings → Inteligencia section with a \"Desactivar funciones IA\" toggle. The 0.0.98 consent modal promised \"podés desactivar desde Ajustes\" — now that toggle actually exists. Tapping it clears the local consent flag; the next AI tap re-prompts. Closes a small App-Store-reviewer trust gap.",
+    ],
+  },
   {
     version: "0.1.0",
     title: "Milestone: AI Watchlist Creator + 7 AI surfaces total",

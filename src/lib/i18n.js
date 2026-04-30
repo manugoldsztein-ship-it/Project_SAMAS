@@ -194,6 +194,10 @@ const V2 = {
     "settings.demo.reset_confirm":"Esto va a borrar todos tus holdings, balance y plan. ¿Continuar?",
     // Account section — App Store Guideline 5.1.1(v) compliance
     "settings.section.legal_account": "Mi cuenta",
+    "settings.section.ai":         "Inteligencia",
+    "settings.ai.revoke":          "Desactivar funciones IA",
+    "settings.ai.revoke_sub":      "La próxima vez que toques una función IA, te volvemos a pedir consentimiento.",
+    "settings.ai.revoke_done":     "Listo. La próxima IA te pide consentimiento.",
     "settings.account.export":         "Descargar mis datos",
     "settings.account.export_sub":     "Bajá un JSON con todos tus datos (perfil, posts, mensajes, follows).",
     "settings.account.export_running": "Preparando tu exportación…",
@@ -724,6 +728,10 @@ const V2 = {
     "settings.demo.reset_confirm":"This will delete all your holdings, balance, and plan. Continue?",
     // Account section — App Store Guideline 5.1.1(v) compliance
     "settings.section.legal_account":  "My account",
+    "settings.section.ai":         "Intelligence",
+    "settings.ai.revoke":          "Turn off AI features",
+    "settings.ai.revoke_sub":      "Next time you tap an AI feature, we'll ask for consent again.",
+    "settings.ai.revoke_done":     "Done. The next AI tap will ask for consent.",
     "settings.account.export":         "Download my data",
     "settings.account.export_sub":     "Get a JSON with everything keyed to your account (profile, posts, messages, follows).",
     "settings.account.export_running": "Preparing your export…",
