@@ -3598,42 +3598,179 @@ const TIMEFRAMES = [
   { id: "all", key: "pro.asset.tf.all", points: 60,  vol: 0.040, drift: 0.180 },
 ];
 
+// ProAssetChart — TradingView Lightweight Charts (samas-0.0.90).
+// Replaced the hand-rolled SVG with TradingView's open-source charting
+// library (45KB, MIT license). Real candlesticks + area mode, scaled
+// axes, crosshair, the works. Same TIMEFRAMES + same deterministic
+// series generation; we just feed it as OHLC into Lightweight Charts
+// instead of drawing it ourselves.
 function ProAssetChart({ T, asset, lang = "es" }) {
   const [tf, setTf] = useState("1m");
+  const [chartType, setChartType] = useState("candles"); // "candles" | "area"
   const cfg = TIMEFRAMES.find((t) => t.id === tf) || TIMEFRAMES[2];
-  const series = useMemo(() => {
+
+  // Generate OHLC data from the existing deterministic random walk.
+  // Each point becomes a candle: open = previous close, close = current
+  // value, high/low ±small noise around the open/close range. Times are
+  // synthetic (sequential daily timestamps ending today) — Lightweight
+  // Charts requires a UTC time field.
+  const ohlc = useMemo(() => {
     const rng = tickerSeed(asset.ticker, cfg.points);
     const target = asset.price;
-    // Build a series ending at the current price by walking backward
-    // from `target` with random walk, then reverse so the latest
-    // point is on the right.
-    const out = [target];
+    // Walk backward from target → start of period, then reverse so
+    // the latest point is on the right.
+    const closes = [target];
     for (let i = 1; i < cfg.points; i++) {
       const noise = (rng() - 0.5) * cfg.vol;
       const drift = cfg.drift / cfg.points;
-      const prev = out[i - 1] / (1 + drift + noise);
-      out.push(prev);
+      const prev = closes[i - 1] / (1 + drift + noise);
+      closes.push(prev);
     }
-    return out.reverse();
-  }, [asset.ticker, asset.price, cfg.points, cfg.vol, cfg.drift]);
-  const first = series[0];
-  const last = series[series.length - 1];
+    closes.reverse();
+    // Spacing between candles in seconds — matches the timeframe so
+    // a "1y" chart has weekly bars, "1d" has hourly bars, etc.
+    const periodSec = (() => {
+      switch (tf) {
+        case "1d": return 60 * 60;          // 1h bars
+        case "1w": return 60 * 60 * 6;      // 6h bars
+        case "1m": return 60 * 60 * 24;     // daily
+        case "1y": return 60 * 60 * 24 * 7; // weekly
+        case "all": return 60 * 60 * 24 * 30; // monthly
+        default: return 60 * 60 * 24;
+      }
+    })();
+    const nowSec = Math.floor(Date.now() / 1000);
+    return closes.map((close, i) => {
+      const open = i === 0 ? close * (1 - cfg.vol * 0.3) : closes[i - 1];
+      const wickRng = tickerSeed(asset.ticker + i, 3);
+      const wickHigh = wickRng() * cfg.vol * 0.5;
+      const wickLow  = wickRng() * cfg.vol * 0.5;
+      const high = Math.max(open, close) * (1 + wickHigh);
+      const low  = Math.min(open, close) * (1 - wickLow);
+      // Lightweight Charts v5 expects Time as either string ('YYYY-MM-DD')
+      // or UTCTimestamp (Unix seconds). We use UTC seconds end-aligned
+      // so the rightmost candle is "now".
+      const time = nowSec - (cfg.points - 1 - i) * periodSec;
+      return { time, open, high, low, close };
+    });
+  }, [asset.ticker, asset.price, cfg.points, cfg.vol, cfg.drift, tf]);
+
+  const first = ohlc[0]?.close;
+  const last = ohlc[ohlc.length - 1]?.close;
   const periodPct = first ? ((last - first) / first) * 100 : 0;
   const up = periodPct >= 0;
   const ccySym = asset.currency === "ARS" ? "$" : "US$";
 
-  // Layout — 320×140 viewBox, full-width responsive. Path math:
-  // build a polyline + close it down to the bottom for the area
-  // fill. Y inverted because SVG origin is top-left.
-  const w = 320, h = 140;
-  const min = Math.min(...series), max = Math.max(...series);
-  const range = max - min || 1;
-  function ptX(i) { return (i / (series.length - 1)) * w; }
-  function ptY(v) { return h - ((v - min) / range) * h; }
-  const linePath = series.map((v, i) =>
-    `${i === 0 ? "M" : "L"} ${ptX(i).toFixed(1)} ${ptY(v).toFixed(1)}`
-  ).join(" ");
-  const fillPath = `${linePath} L ${w} ${h} L 0 ${h} Z`;
+  // Container ref + chart instance ref. The chart is created once
+  // on mount and torn down on unmount; data + series swaps happen
+  // in a separate effect so we don't re-create the chart each tab
+  // change (cheaper, smoother).
+  const containerRef = React.useRef(null);
+  const chartRef     = React.useRef(null);
+  const seriesRef    = React.useRef(null);
+
+  // Mount chart once. Theming pulls from T so dark/light mode swaps
+  // re-render the chart via the dependency on T.surface etc.
+  useEffect(() => {
+    if (!containerRef.current) return;
+    let mounted = true;
+    let chart = null;
+    let resizeObs = null;
+    (async () => {
+      const { createChart } = await import("lightweight-charts");
+      if (!mounted || !containerRef.current) return;
+      chart = createChart(containerRef.current, {
+        width: containerRef.current.clientWidth,
+        height: 220,
+        layout: {
+          background: { color: "transparent" },
+          textColor: T.textMute,
+          fontFamily: FONT.mono,
+          fontSize: 10,
+        },
+        grid: {
+          vertLines: { visible: false },
+          horzLines: { color: T.border, style: 1 }, // dashed
+        },
+        timeScale: {
+          borderVisible: false,
+          timeVisible: tf === "1d" || tf === "1w",
+          secondsVisible: false,
+          fixLeftEdge: true,
+          fixRightEdge: true,
+        },
+        rightPriceScale: {
+          borderVisible: false,
+        },
+        crosshair: {
+          mode: 1, // magnet
+          vertLine: { color: T.textMute, width: 1, style: 2, labelBackgroundColor: T.surface },
+          horzLine: { color: T.textMute, width: 1, style: 2, labelBackgroundColor: T.surface },
+        },
+        handleScale: false,
+        handleScroll: false,
+      });
+      chartRef.current = chart;
+      // Track container size — Lightweight Charts won't auto-resize.
+      resizeObs = new ResizeObserver((entries) => {
+        const w = entries[0]?.contentRect?.width;
+        if (w && chart) chart.resize(Math.floor(w), 220);
+      });
+      resizeObs.observe(containerRef.current);
+    })();
+    return () => {
+      mounted = false;
+      if (resizeObs) resizeObs.disconnect();
+      if (chartRef.current) {
+        try { chartRef.current.remove(); } catch (_) {}
+        chartRef.current = null;
+      }
+      seriesRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [T.surface, T.textMute, T.border, tf]);
+
+  // Swap series + data whenever chartType, ohlc, or theme accent
+  // colors change. Removes existing series then adds a fresh one
+  // with the right type so a candles→area toggle is instant.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const lib = await import("lightweight-charts");
+      const chart = chartRef.current;
+      if (!chart || !alive) return;
+      // Tear down previous series (if any).
+      if (seriesRef.current) {
+        try { chart.removeSeries(seriesRef.current); } catch (_) {}
+        seriesRef.current = null;
+      }
+      let s;
+      if (chartType === "candles") {
+        s = chart.addSeries(lib.CandlestickSeries, {
+          upColor: T.accent,
+          downColor: T.danger,
+          borderUpColor: T.accent,
+          borderDownColor: T.danger,
+          wickUpColor: T.accent,
+          wickDownColor: T.danger,
+        });
+        s.setData(ohlc);
+      } else {
+        s = chart.addSeries(lib.AreaSeries, {
+          lineColor: up ? T.accent : T.danger,
+          lineWidth: 2,
+          topColor: up ? `${T.accent}55` : `${T.danger}55`,
+          bottomColor: "transparent",
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
+        s.setData(ohlc.map((c) => ({ time: c.time, value: c.close })));
+      }
+      seriesRef.current = s;
+      chart.timeScale().fitContent();
+    })();
+    return () => { alive = false; };
+  }, [ohlc, chartType, T.accent, T.danger, up]);
 
   return (
     <div style={{
@@ -3658,24 +3795,39 @@ function ProAssetChart({ T, asset, lang = "es" }) {
           {up ? "+" : ""}{ccySym}{fmtMoney(Math.abs(last - first), asset.currency)}
         </div>
       </div>
-      <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} preserveAspectRatio="none">
-        <defs>
-          <linearGradient id={`grad-${asset.ticker}-${tf}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={up ? T.accent : T.danger} stopOpacity="0.32"/>
-            <stop offset="100%" stopColor={up ? T.accent : T.danger} stopOpacity="0"/>
-          </linearGradient>
-        </defs>
-        {/* Subtle horizontal gridlines at 25/50/75% — give the eye
-            an anchor without chrome heavy enough to compete with
-            the price line itself. */}
-        {[0.25, 0.5, 0.75].map((p) => (
-          <line key={p} x1={0} x2={w} y1={h * p} y2={h * p}
-            stroke={T.border} strokeDasharray="2 4" strokeWidth={0.5} opacity={0.6} />
-        ))}
-        <path d={fillPath} fill={`url(#grad-${asset.ticker}-${tf})`} />
-        <path d={linePath} fill="none" stroke={up ? T.accent : T.danger}
-          strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
+      {/* Chart container — Lightweight Charts mounts here. */}
+      <div ref={containerRef} style={{ width: "100%", height: 220 }} />
+      {/* Chart-type toggle — Velas (candles) vs Área. Pro-style. */}
+      <div style={{
+        marginTop: 10, display: "flex", gap: 6, alignItems: "center",
+      }}>
+        <button
+          onClick={() => setChartType("candles")}
+          style={{
+            padding: "5px 10px", borderRadius: 999,
+            background: chartType === "candles" ? T.accent : "transparent",
+            color: chartType === "candles" ? T.accentInk : T.textMute,
+            border: `1px solid ${chartType === "candles" ? T.accent : T.border}`,
+            fontFamily: FONT.mono, fontSize: 10, fontWeight: 700, letterSpacing: 0.4,
+            cursor: "pointer",
+          }}
+        >{tr("pro.asset.chart.candles", lang)}</button>
+        <button
+          onClick={() => setChartType("area")}
+          style={{
+            padding: "5px 10px", borderRadius: 999,
+            background: chartType === "area" ? T.accent : "transparent",
+            color: chartType === "area" ? T.accentInk : T.textMute,
+            border: `1px solid ${chartType === "area" ? T.accent : T.border}`,
+            fontFamily: FONT.mono, fontSize: 10, fontWeight: 700, letterSpacing: 0.4,
+            cursor: "pointer",
+          }}
+        >{tr("pro.asset.chart.area", lang)}</button>
+        <div style={{ flex: 1 }} />
+        <div style={{ fontFamily: FONT.mono, fontSize: 9, color: T.textMute, letterSpacing: 0.4 }}>
+          TRADINGVIEW
+        </div>
+      </div>
       <div style={{
         marginTop: 10, display: "flex", gap: 4,
         background: T.bg, border: `1px solid ${T.border}`,

@@ -2413,6 +2413,16 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.90",
+    title: "TradingView Lightweight Charts on every asset",
+    bullets: [
+      "ProAssetChart upgraded from a hand-rolled SVG line to TradingView's open-source Lightweight Charts library (45KB, MIT licensed). Real candlestick series with proper price + time scales, crosshair, magnet snapping, dashed grid — the visual upgrade is substantial.",
+      "Two modes via a Velas / Área toggle right under the chart: Velas shows OHLC candles (the TradingView signature look), Área shows the smooth area chart that matches Apple Stocks. Same data underneath; just two ways to visualize it.",
+      "Each timeframe maps to a sensible candle interval — 1D = hourly bars, 1W = 6-hour bars, 1M = daily, 1Y = weekly, Todo = monthly. The deterministic random-walk we already had now produces synthetic OHLC (open=prev close, close=new value, high/low ±small wick noise) so the candles look real.",
+      "Themed to SAMAS dark — accent green for up, danger red for down, transparent background, mono-stamp axes. Auto-resizes via ResizeObserver. Imported lazily so the 45KB doesn't bloat the initial bundle.",
+    ],
+  },
+  {
     version: "0.0.89",
     title: "Preguntale a SAMAS — multi-turn AI chat about your portfolio",
     bullets: [
