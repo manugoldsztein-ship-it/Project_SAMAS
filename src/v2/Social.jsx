@@ -23,6 +23,7 @@ import { useEdgeSwipeBack } from "./useEdgeSwipeBack.js";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { setRefreshHandler, callRefreshFor } from "./refreshRegistry.js";
 import { avatarPropsFor, PostCardSkeleton, DmThreadSkeleton, useShellEntryDone } from "./shared.jsx";
+import { draftPost } from "../lib/ai.js";
 import { supabase } from "../lib/supabase.js";
 import { t as tr } from "../lib/i18n.js";
 import { hapticNative } from "../lib/native.js";
@@ -825,6 +826,44 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
     setPendingImagePreview(null);
   }
 
+  // AI-drafted post (samas-0.0.88). Reads the caller's holdings +
+  // last few trade transactions on the server, asks Claude Haiku to
+  // produce a short social-style post draft, fills the textarea
+  // with the result. If textarea has user content already, we ask
+  // for confirmation before overwriting (cheap window.confirm — UI
+  // can pretty this up later if Manuel reports it feels too rough).
+  const [suggesting, setSuggesting] = useState(false);
+  async function suggestPost() {
+    if (suggesting) return;
+    setErr(null);
+    if (body.trim() && !window.confirm(tr("social.compose.suggest_overwrite", lang))) {
+      return;
+    }
+    setSuggesting(true);
+    try {
+      const { draft } = await draftPost();
+      if (draft) {
+        setBody(draft.slice(0, 280));
+        // Focus textarea + expand state so the user lands inside the
+        // draft and can edit before posting.
+        setComposeExpanded(true);
+        setTimeout(() => {
+          const el = composeRef.current;
+          if (!el) return;
+          try {
+            el.focus();
+            el.setSelectionRange(draft.length, draft.length);
+          } catch {}
+        }, 0);
+      }
+    } catch (e) {
+      console.warn("[social] suggest post failed:", e);
+      setErr(tr("social.compose.suggest_err", lang));
+    } finally {
+      setSuggesting(false);
+    }
+  }
+
   // Share-portfolio (samas-0.0.79 — restructured): snapshot the
   // user's holdings as a structured payload and attach it to the
   // compose. The card preview above the textarea is read-only —
@@ -1266,6 +1305,38 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
                     <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
                     <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
                   </svg>
+                </button>
+                {/* AI suggest button (samas-0.0.88) — drafts a post
+                    from the caller's recent activity. Compact icon-
+                    only (sparkles glyph) to keep the toolbar from
+                    getting crowded; tap fills the textarea with a
+                    Claude-generated draft. */}
+                <button
+                  onClick={suggestPost}
+                  disabled={busy || suggesting}
+                  aria-label={tr("social.compose.suggest_post", lang)}
+                  title={tr("social.compose.suggest_post", lang)}
+                  style={{
+                    width: 36, height: 32, borderRadius: 999,
+                    background: T.surface, border: `1px solid ${T.border}`,
+                    color: T.accent, cursor: (busy || suggesting) ? "default" : "pointer",
+                    padding: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                    opacity: (busy || suggesting) ? 0.6 : 1,
+                  }}
+                >
+                  {suggesting ? (
+                    <div style={{
+                      width: 14, height: 14, borderRadius: 999,
+                      border: `2px solid ${T.border}`, borderTopColor: T.accent,
+                      animation: "samas-spin 700ms linear infinite",
+                    }} />
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
+                      <path d="M19 13l1 2 2 1-2 1-1 2-1-2-2-1 2-1z"/>
+                    </svg>
+                  )}
                 </button>
                 {/* Portfolio-paste button — promoted in 0.0.77 from
                     an icon-only 36×32 circle to a labeled accent-

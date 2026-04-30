@@ -2413,6 +2413,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.88",
+    title: "AI compose helper — \"Sugerime un post\"",
+    bullets: [
+      "New ✦ button in the compose toolbar (left of Compartir cartera). Tap → server reads your holdings + last 3 trades via JWT-scoped RLS, asks Claude Haiku to draft a short social-style post (220 char cap) referencing one of your real positions, fills the textarea. Spinner inside the button while it thinks.",
+      "Edge Function: supabase/functions/draft-post/index.ts. Templated fallback when ANTHROPIC_API_KEY isn't set picks your most recent trade or top holding and fills one of several sentence templates with real numbers (gain%, % of book, ticker name) — sounds like a real person before we wire the LLM.",
+      "If you've already typed something in the textarea, we ask before overwriting. Otherwise the draft fills directly + focuses + auto-expands the compose so you can tweak before posting.",
+    ],
+  },
+  {
     version: "0.0.87",
     title: "Nav-covers-content fix — global, not per-sheet",
     bullets: [

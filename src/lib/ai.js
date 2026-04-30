@@ -45,6 +45,34 @@ export async function analyzePortfolio() {
 }
 
 /**
+ * draftPost() — POST /functions/v1/draft-post
+ *
+ * Server reads the caller's holdings + last few trade transactions
+ * via JWT-scoped RLS, asks Claude Haiku to draft a SHORT social post
+ * (max ~220 chars), returns:
+ *   { draft: string, ticker?: string }
+ *
+ * Falls back to a templated draft built from real portfolio data
+ * when the Anthropic key isn't set, so the demo always returns
+ * something usable.
+ */
+export async function draftPost() {
+  const { data, error } = await supabase.functions.invoke("draft-post", {
+    body: {},
+  });
+  if (error) {
+    let detail = "";
+    try {
+      const body = await error?.context?.json?.();
+      if (body?.error) detail = `: ${body.error}`;
+    } catch (_) { /* fall through */ }
+    throw new Error(`Sugerencia IA falló${detail || ": " + (error.message || "error desconocido")}`);
+  }
+  if (data?.error) throw new Error(`Sugerencia IA falló: ${data.error}`);
+  return data;
+}
+
+/**
  * analyzeAsset(ticker) — POST /functions/v1/analyze-asset
  *
  * Server reads asset metadata for the requested ticker, passes it
