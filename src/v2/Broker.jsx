@@ -40,6 +40,12 @@ import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { toast } from "./toast.jsx";
 import { t as tr } from "../lib/i18n.js";
 import { analyzeAsset } from "../lib/ai.js";
+// Static import for Lightweight Charts (samas-0.0.92) — dynamic
+// import() didn't reliably fire inside the vite-plugin-singlefile
+// Capacitor bundle, leaving the chart container empty. Inlining
+// the ~63KB gzipped lib costs nothing in singlefile mode anyway
+// since everything ends up in one HTML file.
+import { createChart, CandlestickSeries, AreaSeries } from "lightweight-charts";
 
 // Sub-tabs metadata — drives both the bottom nav and the content
 // switch in the top-level <BrokerShell/> render.
@@ -3662,13 +3668,12 @@ function ProAssetChart({ T, asset, lang = "es" }) {
   const ccySym = asset.currency === "ARS" ? "$" : "US$";
 
   // Container ref + chart instance ref. The chart is created once
-  // on mount and torn down on unmount; data + series swaps happen
-  // in a separate effect so we don't re-create the chart each tab
-  // change. chartReady state flips true once createChart resolves
-  // so the series effect waits for it instead of bailing on null.
-  // (samas-0.0.91 fix — without this the series-effect ran BEFORE
-  // the chart-effect's dynamic import resolved, then the chart was
-  // empty forever because the series effect never re-ran.)
+  // on mount + theme/tf change; series swaps happen in a separate
+  // effect so we don't re-create the chart on every chart-type
+  // toggle. chartReady state flips true after createChart so the
+  // series effect re-fires once the chart exists (the fix from
+  // 0.0.91 stays in place even though static imports made the
+  // race trivial).
   const containerRef = React.useRef(null);
   const chartRef     = React.useRef(null);
   const seriesRef    = React.useRef(null);
@@ -3676,15 +3681,22 @@ function ProAssetChart({ T, asset, lang = "es" }) {
 
   // Mount chart. Theming pulls from T so dark/light swaps re-create.
   useEffect(() => {
-    if (!containerRef.current) return;
-    let mounted = true;
-    let resizeObs = null;
-    (async () => {
-      const lib = await import("lightweight-charts");
-      if (!mounted || !containerRef.current) return;
-      const chart = lib.createChart(containerRef.current, {
-        width: containerRef.current.clientWidth,
+    const container = containerRef.current;
+    if (!container) return;
+    // Width fallback — if the container has 0 width at mount (which
+    // happens when the AssetSheet is mid-slide-up animation),
+    // Lightweight Charts renders nothing visible. Use the parent's
+    // width or a sensible default.
+    const initialWidth =
+      container.clientWidth ||
+      container.parentElement?.clientWidth ||
+      window.innerWidth - 64; // 32px AssetSheet padding × 2
+    let chart;
+    try {
+      chart = createChart(container, {
+        width: Math.max(280, Math.floor(initialWidth)),
         height: 220,
+        autoSize: true,  // v5: lib observes container size internally
         layout: {
           background: { color: "transparent" },
           textColor: T.textMute,
@@ -3717,18 +3729,13 @@ function ProAssetChart({ T, asset, lang = "es" }) {
         handleScroll: false,
       });
       chartRef.current = chart;
-      setChartReady(true);   // <-- signals the series effect to fire
-      // Track container size — Lightweight Charts won't auto-resize.
-      resizeObs = new ResizeObserver((entries) => {
-        const w = entries[0]?.contentRect?.width;
-        if (w && chartRef.current) chartRef.current.resize(Math.floor(w), 220);
-      });
-      resizeObs.observe(containerRef.current);
-    })();
+      setChartReady(true);
+    } catch (e) {
+      console.warn("[ProAssetChart] createChart failed:", e?.message || e);
+      return;
+    }
     return () => {
-      mounted = false;
       setChartReady(false);
-      if (resizeObs) resizeObs.disconnect();
       if (chartRef.current) {
         try { chartRef.current.remove(); } catch (_) {}
         chartRef.current = null;
@@ -3743,11 +3750,9 @@ function ProAssetChart({ T, asset, lang = "es" }) {
   // automatically once chartReady flips true (it's in the deps).
   useEffect(() => {
     if (!chartReady) return;
-    let alive = true;
-    (async () => {
-      const lib = await import("lightweight-charts");
-      const chart = chartRef.current;
-      if (!chart || !alive) return;
+    const chart = chartRef.current;
+    if (!chart) return;
+    try {
       // Tear down previous series (if any).
       if (seriesRef.current) {
         try { chart.removeSeries(seriesRef.current); } catch (_) {}
@@ -3755,7 +3760,7 @@ function ProAssetChart({ T, asset, lang = "es" }) {
       }
       let s;
       if (chartType === "candles") {
-        s = chart.addSeries(lib.CandlestickSeries, {
+        s = chart.addSeries(CandlestickSeries, {
           upColor: T.accent,
           downColor: T.danger,
           borderUpColor: T.accent,
@@ -3765,7 +3770,7 @@ function ProAssetChart({ T, asset, lang = "es" }) {
         });
         s.setData(ohlc);
       } else {
-        s = chart.addSeries(lib.AreaSeries, {
+        s = chart.addSeries(AreaSeries, {
           lineColor: up ? T.accent : T.danger,
           lineWidth: 2,
           topColor: up ? `${T.accent}55` : `${T.danger}55`,
@@ -3777,8 +3782,9 @@ function ProAssetChart({ T, asset, lang = "es" }) {
       }
       seriesRef.current = s;
       chart.timeScale().fitContent();
-    })();
-    return () => { alive = false; };
+    } catch (e) {
+      console.warn("[ProAssetChart] series add failed:", e?.message || e);
+    }
   }, [chartReady, ohlc, chartType, T.accent, T.danger, up]);
 
   return (

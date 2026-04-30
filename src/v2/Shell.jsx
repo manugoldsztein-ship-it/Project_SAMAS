@@ -2413,6 +2413,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.92",
+    title: "Fix again: chart still blank — singlefile + width=0 culprits",
+    bullets: [
+      "0.0.91 fixed the race but Manuel still saw a blank chart. Two more issues with the Capacitor build: (1) vite-plugin-singlefile inlines everything into one HTML; dynamic import() can be flaky in that mode. Switched to static import — Lightweight Charts ships in the main bundle now (~63KB gzipped, free in singlefile mode where everything's already inlined).",
+      "(2) Container clientWidth could be 0 at mount time when the AssetSheet was mid-slide-up. Added a fallback chain (container.clientWidth → parent's width → window-innerWidth - 64) plus minimum 280px floor so createChart always gets a positive width. Also enabled autoSize: true so the lib observes container size changes internally.",
+      "Added try/catch around createChart + addSeries with console.warn so any future failure shows up in iOS Safari Web Inspector instead of silent blank-chart. Static-import path means the race-condition guard from 0.0.91 isn't strictly needed but stays in place as belt-and-braces.",
+    ],
+  },
+  {
     version: "0.0.91",
     title: "Fix: empty chart in 0.0.90 — race condition + TV watermark",
     bullets: [
