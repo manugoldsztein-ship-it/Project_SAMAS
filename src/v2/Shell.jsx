@@ -2413,6 +2413,14 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.97",
+    title: "Compose toolbar fix: 2 rows so Post never clips",
+    bullets: [
+      "After 0.0.88's Sugerime button landed next to 0.0.77's labeled Share portfolio pill, the action row got too wide for narrow phones — Post button was clipping off the right edge. Split the toolbar into two rows: chips (photo / paste / sugerime / Compartir cartera) up top with flex-wrap so they breathe, then char counter + Post on a dedicated bottom row.",
+      "Bonus: Post button is now bigger (9×22 padding vs 8×16) since it has its own row's width to use. Also enabled-state now triggers when there's a pending portfolio attachment, even with empty body — matches the 0.0.79 behavior where portfolio posts can publish without commentary text.",
+    ],
+  },
+  {
     version: "0.0.96",
     title: "Fix: orders_status_check rejection on every trade",
     bullets: [

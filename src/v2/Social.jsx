@@ -1246,16 +1246,12 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
                 />
               </div>
             )}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6, gap: 8 }}>
-              {/* Counter — left edge */}
-              <span style={{ fontFamily: FONT.mono, fontSize: 11, color: T.textMute, flexShrink: 0 }}>
-                {body.length}/280
-              </span>
-              {/* Action row — photo + paste + publish. Photo sits
-                  on the far left so the most-used action (publish)
-                  stays anchored on the right. Hidden file input
-                  triggered by the photo button click. */}
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {/* Toolbar (samas-0.0.97) — split into two rows so the
+                action chips have room and Post never clips off-screen.
+                Row 1: action chips (photo / paste / suggest / share-
+                portfolio). Row 2: char counter + Post. */}
+            <div style={{ marginTop: 6 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -1368,16 +1364,28 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
                   </svg>
                   <span style={{ whiteSpace: "nowrap" }}>{tr("social.compose.portfolio_chip", lang)}</span>
                 </button>
+              </div>
+              {/* Row 2 — counter on left, Publish on right. Always
+                  fits because there are only 2 elements. */}
+              <div style={{
+                marginTop: 8,
+                display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8,
+              }}>
+                <span style={{
+                  fontFamily: FONT.mono, fontSize: 11, color: T.textMute, flexShrink: 0,
+                }}>
+                  {body.length}/280
+                </span>
                 <button
                   onClick={publish}
-                  disabled={busy || !body.trim()}
+                  disabled={busy || (!body.trim() && !pendingPortfolio)}
                   style={{
-                    padding: "8px 16px", borderRadius: 999,
-                    background: !body.trim() ? T.surface : T.accent,
-                    color: !body.trim() ? T.textMute : T.accentInk,
-                    fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
-                    border: !body.trim() ? `1px solid ${T.border}` : "none",
-                    cursor: busy || !body.trim() ? "default" : "pointer",
+                    padding: "9px 22px", borderRadius: 999,
+                    background: (!body.trim() && !pendingPortfolio) ? T.surface : T.accent,
+                    color:      (!body.trim() && !pendingPortfolio) ? T.textMute : T.accentInk,
+                    fontFamily: FONT.sans, fontSize: 14, fontWeight: 700,
+                    border: (!body.trim() && !pendingPortfolio) ? `1px solid ${T.border}` : "none",
+                    cursor: busy || (!body.trim() && !pendingPortfolio) ? "default" : "pointer",
                     opacity: busy ? 0.6 : 1,
                   }}
                 >{busy ? "…" : tr("social.publish", lang)}</button>
