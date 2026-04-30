@@ -3664,22 +3664,25 @@ function ProAssetChart({ T, asset, lang = "es" }) {
   // Container ref + chart instance ref. The chart is created once
   // on mount and torn down on unmount; data + series swaps happen
   // in a separate effect so we don't re-create the chart each tab
-  // change (cheaper, smoother).
+  // change. chartReady state flips true once createChart resolves
+  // so the series effect waits for it instead of bailing on null.
+  // (samas-0.0.91 fix — without this the series-effect ran BEFORE
+  // the chart-effect's dynamic import resolved, then the chart was
+  // empty forever because the series effect never re-ran.)
   const containerRef = React.useRef(null);
   const chartRef     = React.useRef(null);
   const seriesRef    = React.useRef(null);
+  const [chartReady, setChartReady] = useState(false);
 
-  // Mount chart once. Theming pulls from T so dark/light mode swaps
-  // re-render the chart via the dependency on T.surface etc.
+  // Mount chart. Theming pulls from T so dark/light swaps re-create.
   useEffect(() => {
     if (!containerRef.current) return;
     let mounted = true;
-    let chart = null;
     let resizeObs = null;
     (async () => {
-      const { createChart } = await import("lightweight-charts");
+      const lib = await import("lightweight-charts");
       if (!mounted || !containerRef.current) return;
-      chart = createChart(containerRef.current, {
+      const chart = lib.createChart(containerRef.current, {
         width: containerRef.current.clientWidth,
         height: 220,
         layout: {
@@ -3687,6 +3690,9 @@ function ProAssetChart({ T, asset, lang = "es" }) {
           textColor: T.textMute,
           fontFamily: FONT.mono,
           fontSize: 10,
+          // Hide the default TradingView attribution watermark — we
+          // render our own subtle "TRADINGVIEW" stamp below the chart.
+          attributionLogo: false,
         },
         grid: {
           vertLines: { visible: false },
@@ -3711,15 +3717,17 @@ function ProAssetChart({ T, asset, lang = "es" }) {
         handleScroll: false,
       });
       chartRef.current = chart;
+      setChartReady(true);   // <-- signals the series effect to fire
       // Track container size — Lightweight Charts won't auto-resize.
       resizeObs = new ResizeObserver((entries) => {
         const w = entries[0]?.contentRect?.width;
-        if (w && chart) chart.resize(Math.floor(w), 220);
+        if (w && chartRef.current) chartRef.current.resize(Math.floor(w), 220);
       });
       resizeObs.observe(containerRef.current);
     })();
     return () => {
       mounted = false;
+      setChartReady(false);
       if (resizeObs) resizeObs.disconnect();
       if (chartRef.current) {
         try { chartRef.current.remove(); } catch (_) {}
@@ -3731,9 +3739,10 @@ function ProAssetChart({ T, asset, lang = "es" }) {
   }, [T.surface, T.textMute, T.border, tf]);
 
   // Swap series + data whenever chartType, ohlc, or theme accent
-  // colors change. Removes existing series then adds a fresh one
-  // with the right type so a candles→area toggle is instant.
+  // colors change. Skips when the chart isn't ready yet — re-runs
+  // automatically once chartReady flips true (it's in the deps).
   useEffect(() => {
+    if (!chartReady) return;
     let alive = true;
     (async () => {
       const lib = await import("lightweight-charts");
@@ -3770,7 +3779,7 @@ function ProAssetChart({ T, asset, lang = "es" }) {
       chart.timeScale().fitContent();
     })();
     return () => { alive = false; };
-  }, [ohlc, chartType, T.accent, T.danger, up]);
+  }, [chartReady, ohlc, chartType, T.accent, T.danger, up]);
 
   return (
     <div style={{

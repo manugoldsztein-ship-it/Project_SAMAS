@@ -2413,6 +2413,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.91",
+    title: "Fix: empty chart in 0.0.90 — race condition + TV watermark",
+    bullets: [
+      "Manuel screenshotted GGAL with a blank chart area + a TV watermark in the corner. Two bugs in 0.0.90: (1) the series-add useEffect ran BEFORE the chart-create useEffect's dynamic import resolved, so it bailed on null chartRef and never re-ran. The chart was created but no candles/area got attached. (2) Lightweight Charts v5 ships with a TradingView attribution watermark that's on by default.",
+      "Fix 1: new chartReady state flips true after createChart resolves; the series effect lists chartReady in its deps so it re-fires once the chart exists. Series gets attached, data renders.",
+      "Fix 2: layout.attributionLogo: false on createChart — the TV watermark is gone. We keep our own subtle \"TRADINGVIEW\" mono-stamp below the chart for proper attribution.",
+    ],
+  },
+  {
     version: "0.0.90",
     title: "TradingView Lightweight Charts on every asset",
     bullets: [
