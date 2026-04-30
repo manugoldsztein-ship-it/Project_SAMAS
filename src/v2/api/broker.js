@@ -39,6 +39,28 @@ async function currentUserId() {
 }
 
 // ----------------------------------------------------------
+// Status vocabulary translation (samas-0.0.96 fix).
+// ----------------------------------------------------------
+// The DB's orders.status CHECK constraint allows the standard
+// broker terms: 'pending' | 'executed' | 'cancelled' | 'rejected'.
+// The legacy v2 UI was written against a mock vocab of 'open' /
+// 'filled' / 'cancelled', and rather than churning every consumer
+// in Broker.jsx, we translate at the API boundary:
+//   - On WRITE (placeOrder): UI 'filled' → DB 'executed', UI 'open' → DB 'pending'.
+//   - On READ  (getOrders, placeOrder return): DB 'executed' → UI 'filled', DB 'pending' → UI 'open'.
+// 'cancelled' / 'rejected' pass through unchanged.
+function dbToUiStatus(s) {
+  if (s === "executed") return "filled";
+  if (s === "pending")  return "open";
+  return s; // cancelled, rejected, or already in UI vocab
+}
+function uiToDbStatus(s) {
+  if (s === "filled") return "executed";
+  if (s === "open")   return "pending";
+  return s;
+}
+
+// ----------------------------------------------------------
 // Asset universe
 // ----------------------------------------------------------
 // Hardcoded for the demo. In production this comes from the broker
@@ -307,6 +329,9 @@ export async function placeOrder({ ticker, side, qty, type = "market", limitPric
 
   // Insert the order row first. RLS WITH CHECK enforces user_id =
   // auth.uid() so the caller can only insert orders as themselves.
+  // Status uses DB vocab ('executed' for filled, 'pending' for open)
+  // — the orders_status_check constraint rejects the legacy mock
+  // values ('filled' / 'open'). See dbToUiStatus / uiToDbStatus.
   const { data: orderRow, error: insErr } = await supabase
     .from("orders")
     .insert({
@@ -316,7 +341,7 @@ export async function placeOrder({ ticker, side, qty, type = "market", limitPric
       qty,
       price,
       currency: a.currency,
-      status: filled ? "filled" : "open",
+      status: filled ? "executed" : "pending",
       executed_at: filled ? new Date().toISOString() : null,
     })
     .select("id, status")
@@ -403,7 +428,9 @@ export async function placeOrder({ ticker, side, qty, type = "market", limitPric
 
   return {
     orderId: orderRow.id,
-    status: orderRow.status,
+    // Map DB status back to UI vocab so callers (Broker.jsx) keep
+    // their existing 'filled' / 'open' checks.
+    status: dbToUiStatus(orderRow.status),
     fillPrice: filled ? price : null,
   };
 }
@@ -421,11 +448,14 @@ export async function getOrders({ status = "all" } = {}) {
     .select("id, ticker, side, qty, price, currency, status, fees, created_at, executed_at")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
-  if (status !== "all") q = q.eq("status", status);
+  // Translate UI-vocab filter ('open'/'filled') to DB-vocab on the
+  // wire, then translate DB statuses back to UI vocab on the way out.
+  if (status !== "all") q = q.eq("status", uiToDbStatus(status));
   const { data, error } = await q;
   if (error) throw new Error(`Error al cargar órdenes: ${error.message}`);
   return (data || []).map((o) => {
     const at = o.created_at ? new Date(o.created_at).getTime() : Date.now();
+    const uiStatus = dbToUiStatus(o.status);
     return {
       id: o.id,
       ticker: o.ticker,
@@ -433,14 +463,14 @@ export async function getOrders({ status = "all" } = {}) {
       qty: Number(o.qty),
       price: Number(o.price),
       currency: o.currency,
-      status: o.status,
+      status: uiStatus,
       // type — derived from whether limitPrice would have been set.
       // We don't currently persist `type` separately; orders with
       // status="open" are limit orders, "filled" are market in our
       // model. Refine when real broker integration distinguishes.
-      type: o.status === "open" ? "limit" : "market",
-      limitPrice: o.status === "open" ? Number(o.price) : null,
-      fillPrice: o.status === "filled" ? Number(o.price) : null,
+      type: uiStatus === "open" ? "limit" : "market",
+      limitPrice: uiStatus === "open" ? Number(o.price) : null,
+      fillPrice: uiStatus === "filled" ? Number(o.price) : null,
       at,
       atLabel: relativeStamp(at),
     };

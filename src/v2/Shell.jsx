@@ -2413,6 +2413,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.96",
+    title: "Fix: orders_status_check rejection on every trade",
+    bullets: [
+      "Manuel screenshotted \"Error al colocar orden: new row for relation 'orders' violates check constraint 'orders_status_check'\" trying to sell GGAL. Bug since 0.0.76 — broker.js placeOrder was inserting status='filled' or 'open' (legacy mock vocabulary), but the DB CHECK constraint allows only 'pending' / 'executed' / 'cancelled' / 'rejected' (standard broker terms).",
+      "Fix: status translation at the API boundary. broker.js now uses dbToUiStatus + uiToDbStatus helpers — INSERT uses DB vocab ('executed' for fills, 'pending' for open limits), READ paths (getOrders + placeOrder return) map DB → UI vocab so the rest of Broker.jsx keeps its existing 'filled'/'open' filters, status chips, and labels unchanged.",
+      "Trades + sells should land cleanly now. Trade Coach card from 0.0.95 still fires beforehand with its sanity verdict.",
+    ],
+  },
+  {
     version: "0.0.95",
     title: "AI Trade Coach — sanity check before you confirm an order",
     bullets: [
