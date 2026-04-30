@@ -3617,14 +3617,12 @@ function ProAssetChart({ T, asset, lang = "es" }) {
 
   // Generate OHLC data from the existing deterministic random walk.
   // Each point becomes a candle: open = previous close, close = current
-  // value, high/low ±small noise around the open/close range. Times are
-  // synthetic (sequential daily timestamps ending today) — Lightweight
-  // Charts requires a UTC time field.
+  // value, high/low ±small noise. Time format is ISO date strings
+  // ('YYYY-MM-DD') — Lightweight Charts v5 accepts these directly and
+  // they're easier to debug than Unix-seconds (samas-0.0.93 fix).
   const ohlc = useMemo(() => {
     const rng = tickerSeed(asset.ticker, cfg.points);
     const target = asset.price;
-    // Walk backward from target → start of period, then reverse so
-    // the latest point is on the right.
     const closes = [target];
     for (let i = 1; i < cfg.points; i++) {
       const noise = (rng() - 0.5) * cfg.vol;
@@ -3633,19 +3631,27 @@ function ProAssetChart({ T, asset, lang = "es" }) {
       closes.push(prev);
     }
     closes.reverse();
-    // Spacing between candles in seconds — matches the timeframe so
-    // a "1y" chart has weekly bars, "1d" has hourly bars, etc.
-    const periodSec = (() => {
+    // Days-per-bar mapping — fractional values let us still pack
+    // 24-30 bars into a "1d" view by treating each as 1 hour, etc.
+    // We just need monotonically-increasing dates, not real ones.
+    const daysPerBar = (() => {
       switch (tf) {
-        case "1d": return 60 * 60;          // 1h bars
-        case "1w": return 60 * 60 * 6;      // 6h bars
-        case "1m": return 60 * 60 * 24;     // daily
-        case "1y": return 60 * 60 * 24 * 7; // weekly
-        case "all": return 60 * 60 * 24 * 30; // monthly
-        default: return 60 * 60 * 24;
+        case "1d": return 1;     // 24-30 bars × 1d → ~1 month — but the
+        case "1w": return 1;     // user reads them as intraday. Time
+        case "1m": return 1;     // axis just needs ascending dates;
+        case "1y": return 7;     // candles look right regardless.
+        case "all": return 30;
+        default: return 1;
       }
     })();
-    const nowSec = Math.floor(Date.now() / 1000);
+    const todayMs = Date.now();
+    function toIso(ms) {
+      const d = new Date(ms);
+      const y = d.getUTCFullYear();
+      const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+      const dd = String(d.getUTCDate()).padStart(2, "0");
+      return `${y}-${m}-${dd}`;
+    }
     return closes.map((close, i) => {
       const open = i === 0 ? close * (1 - cfg.vol * 0.3) : closes[i - 1];
       const wickRng = tickerSeed(asset.ticker + i, 3);
@@ -3653,11 +3659,8 @@ function ProAssetChart({ T, asset, lang = "es" }) {
       const wickLow  = wickRng() * cfg.vol * 0.5;
       const high = Math.max(open, close) * (1 + wickHigh);
       const low  = Math.min(open, close) * (1 - wickLow);
-      // Lightweight Charts v5 expects Time as either string ('YYYY-MM-DD')
-      // or UTCTimestamp (Unix seconds). We use UTC seconds end-aligned
-      // so the rightmost candle is "now".
-      const time = nowSec - (cfg.points - 1 - i) * periodSec;
-      return { time, open, high, low, close };
+      const ms = todayMs - (cfg.points - 1 - i) * daysPerBar * 86400000;
+      return { time: toIso(ms), open, high, low, close };
     });
   }, [asset.ticker, asset.price, cfg.points, cfg.vol, cfg.drift, tf]);
 
@@ -3667,61 +3670,50 @@ function ProAssetChart({ T, asset, lang = "es" }) {
   const up = periodPct >= 0;
   const ccySym = asset.currency === "ARS" ? "$" : "US$";
 
-  // Container ref + chart instance ref. The chart is created once
-  // on mount + theme/tf change; series swaps happen in a separate
-  // effect so we don't re-create the chart on every chart-type
-  // toggle. chartReady state flips true after createChart so the
-  // series effect re-fires once the chart exists (the fix from
-  // 0.0.91 stays in place even though static imports made the
-  // race trivial).
+  // Combined create + add-series effect (samas-0.0.93). Earlier we had
+  // two effects with a chartReady gate, but the series still wasn't
+  // showing — likely because the StrictMode double-mount + the two-
+  // effect dance created a state where the second mount's chart had
+  // no series attached. One effect = no race, no inter-effect state
+  // drift. Re-creates on chartType / data / tf / theme change. Slight
+  // perf cost (chart re-mounts on candle↔area toggle) but it's fast.
   const containerRef = React.useRef(null);
   const chartRef     = React.useRef(null);
-  const seriesRef    = React.useRef(null);
-  const [chartReady, setChartReady] = useState(false);
 
-  // Mount chart. Theming pulls from T so dark/light swaps re-create.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    // Width fallback — if the container has 0 width at mount (which
-    // happens when the AssetSheet is mid-slide-up animation),
-    // Lightweight Charts renders nothing visible. Use the parent's
-    // width or a sensible default.
     const initialWidth =
       container.clientWidth ||
       container.parentElement?.clientWidth ||
-      window.innerWidth - 64; // 32px AssetSheet padding × 2
+      window.innerWidth - 64;
     let chart;
     try {
       chart = createChart(container, {
         width: Math.max(280, Math.floor(initialWidth)),
         height: 220,
-        autoSize: true,  // v5: lib observes container size internally
+        autoSize: true,
         layout: {
           background: { color: "transparent" },
           textColor: T.textMute,
           fontFamily: FONT.mono,
           fontSize: 10,
-          // Hide the default TradingView attribution watermark — we
-          // render our own subtle "TRADINGVIEW" stamp below the chart.
           attributionLogo: false,
         },
         grid: {
           vertLines: { visible: false },
-          horzLines: { color: T.border, style: 1 }, // dashed
+          horzLines: { color: T.border, style: 1 },
         },
         timeScale: {
           borderVisible: false,
-          timeVisible: tf === "1d" || tf === "1w",
+          timeVisible: false,
           secondsVisible: false,
           fixLeftEdge: true,
           fixRightEdge: true,
         },
-        rightPriceScale: {
-          borderVisible: false,
-        },
+        rightPriceScale: { borderVisible: false },
         crosshair: {
-          mode: 1, // magnet
+          mode: 1,
           vertLine: { color: T.textMute, width: 1, style: 2, labelBackgroundColor: T.surface },
           horzLine: { color: T.textMute, width: 1, style: 2, labelBackgroundColor: T.surface },
         },
@@ -3729,38 +3721,11 @@ function ProAssetChart({ T, asset, lang = "es" }) {
         handleScroll: false,
       });
       chartRef.current = chart;
-      setChartReady(true);
-    } catch (e) {
-      console.warn("[ProAssetChart] createChart failed:", e?.message || e);
-      return;
-    }
-    return () => {
-      setChartReady(false);
-      if (chartRef.current) {
-        try { chartRef.current.remove(); } catch (_) {}
-        chartRef.current = null;
-      }
-      seriesRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [T.surface, T.textMute, T.border, tf]);
-
-  // Swap series + data whenever chartType, ohlc, or theme accent
-  // colors change. Skips when the chart isn't ready yet — re-runs
-  // automatically once chartReady flips true (it's in the deps).
-  useEffect(() => {
-    if (!chartReady) return;
-    const chart = chartRef.current;
-    if (!chart) return;
-    try {
-      // Tear down previous series (if any).
-      if (seriesRef.current) {
-        try { chart.removeSeries(seriesRef.current); } catch (_) {}
-        seriesRef.current = null;
-      }
-      let s;
+      // Attach series + data immediately so StrictMode double-mount
+      // doesn't end up with a chart that has no series.
+      let series;
       if (chartType === "candles") {
-        s = chart.addSeries(CandlestickSeries, {
+        series = chart.addSeries(CandlestickSeries, {
           upColor: T.accent,
           downColor: T.danger,
           borderUpColor: T.accent,
@@ -3768,9 +3733,9 @@ function ProAssetChart({ T, asset, lang = "es" }) {
           wickUpColor: T.accent,
           wickDownColor: T.danger,
         });
-        s.setData(ohlc);
+        series.setData(ohlc);
       } else {
-        s = chart.addSeries(AreaSeries, {
+        series = chart.addSeries(AreaSeries, {
           lineColor: up ? T.accent : T.danger,
           lineWidth: 2,
           topColor: up ? `${T.accent}55` : `${T.danger}55`,
@@ -3778,14 +3743,20 @@ function ProAssetChart({ T, asset, lang = "es" }) {
           priceLineVisible: false,
           lastValueVisible: false,
         });
-        s.setData(ohlc.map((c) => ({ time: c.time, value: c.close })));
+        series.setData(ohlc.map((c) => ({ time: c.time, value: c.close })));
       }
-      seriesRef.current = s;
       chart.timeScale().fitContent();
     } catch (e) {
-      console.warn("[ProAssetChart] series add failed:", e?.message || e);
+      console.warn("[ProAssetChart] chart setup failed:", e?.message || e);
     }
-  }, [chartReady, ohlc, chartType, T.accent, T.danger, up]);
+    return () => {
+      if (chartRef.current) {
+        try { chartRef.current.remove(); } catch (_) {}
+        chartRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [T.surface, T.textMute, T.border, T.accent, T.danger, ohlc, chartType, up]);
 
   return (
     <div style={{

@@ -2413,6 +2413,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.93",
+    title: "Chart third-time-fix: single effect + ISO date strings",
+    bullets: [
+      "0.0.92 still showed empty candles even though chart + crosshair rendered. Root cause was probably the two-useEffect dance combined with React 18 StrictMode double-mount: the chart re-created but the series effect didn't reliably re-fire on the second mount, leaving the chart with no series.",
+      "Fix: collapsed both effects into ONE. createChart + addSeries + setData all happen in the same effect body. No inter-effect state drift, no race. Re-runs on theme / chart-type / data / tf change. Slight perf cost (chart re-mounts on candles↔área toggle) but it's fast and reliable.",
+      "Time format: switched from Unix-seconds to ISO 'YYYY-MM-DD' strings. LWC accepts both but strings are more permissive about gaps and easier to debug. Each candle gets a unique ascending date.",
+    ],
+  },
+  {
     version: "0.0.92",
     title: "Fix again: chart still blank — singlefile + width=0 culprits",
     bullets: [
