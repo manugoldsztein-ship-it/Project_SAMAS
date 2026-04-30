@@ -2413,6 +2413,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.87",
+    title: "Nav-covers-content fix — global, not per-sheet",
+    bullets: [
+      "Real fix for the recurring \"floating bottom nav covers a sheet/menu\" bug. Root cause: BrokerShell + SocialPage + each drill-in overlay used a translateX-based slide-in entry animation; on iOS WebKit, translateX promotes the element to a persistent GPU compositing layer that behaves like a stacking context. Children with position:fixed got their z-index scoped to that trapped layer instead of the document root, so anything anchored at the bottom of the viewport (Comparar activos sheet, modals, AI sheets, etc.) lost the z-index race against the floating nav at zIndex 40.",
+      "Fix: new useShellEntryDone hook (in shared.jsx). 260ms after mount it flips the shell's animation property to \"none\", which lets WebKit drop the compositing layer. Now position:fixed inside the shell renders against document root again. Applied to: BrokerShell, SocialPage main, plus 4 drill-in overlays (profile / thread / ticker / follow-list) via a new DrillInOverlay wrapper.",
+      "Belt-and-braces: CompareSheet (the one Manuel screenshotted being covered) ALSO portaled to document.body — survives even if someone re-introduces a transform animation upstream.",
+    ],
+  },
+  {
     version: "0.0.86",
     title: "AssetSheet alignment sweep — AI Insight chrome matches siblings",
     bullets: [

@@ -6,11 +6,39 @@
 // one design-system layer — easier to grep and tweak together.
 // ============================================================
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { FONT } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import { t as tr } from "../lib/i18n.js";
 import { hapticNative } from "../lib/native.js";
+
+// ----------------------------------------------------------
+// useShellEntryDone — drops the GPU compositing layer after a
+// shell's entry animation completes (samas-0.0.87).
+// ----------------------------------------------------------
+// On iOS WebKit, `animation: ... translateX(...)` promotes the
+// element to a persistent compositing layer that behaves like a
+// stacking context — ANY position:fixed descendant gets trapped
+// inside it and can't escape past sibling z-index 40 chrome (like
+// the floating bottom nav). The fix: after the animation duration
+// elapses, swap `animation` to "none" so the browser drops the
+// compositing layer. After that, position:fixed children render
+// against the document root and cover the nav as expected.
+//
+// Usage:
+//   const entryDone = useShellEntryDone(260);
+//   <div style={{
+//     animation: entryDone ? "none" : "samas-shell-in 240ms ...",
+//   }}>
+// ----------------------------------------------------------
+export function useShellEntryDone(durationMs = 260) {
+  const [done, setDone] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setDone(true), durationMs);
+    return () => clearTimeout(t);
+  }, []);
+  return done;
+}
 
 // ----------------------------------------------------------
 // Sparkline — single polyline, no axes / labels.

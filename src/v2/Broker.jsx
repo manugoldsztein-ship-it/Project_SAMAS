@@ -23,9 +23,10 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback, useMemo, useContext } from "react";
+import ReactDOM from "react-dom";
 import { FONT, fmtMoney, fmtPct } from "./theme.js";
 import { Ico } from "./icons.jsx";
-import { Pill, SectionHead, AssetSparkline, AssetRowSkeletonList } from "./shared.jsx";
+import { Pill, SectionHead, AssetSparkline, AssetRowSkeletonList, useShellEntryDone } from "./shared.jsx";
 import { useLivePrice, LivePricesContext } from "./livePrices.jsx";
 import { broker as brokerApi, wallet as walletApi } from "./api/index.js";
 // The Objetivos wizard is shared with the legacy MobileApp UI. It
@@ -164,6 +165,11 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true, la
   // Pull-to-refresh for the inner scroll. Re-fetches portfolio +
   // assets + watchlists + orders + alerts + stops.
   const { bind: ptrBind, indicator: ptrIndicator } = usePullToRefresh(refresh);
+  // Drop the entry animation's GPU compositing layer after it
+  // completes — otherwise WebKit keeps the layer alive and any
+  // position:fixed descendant gets trapped inside the resulting
+  // stacking context (covered by sub-nav z-index 40). samas-0.0.87.
+  const entryDone = useShellEntryDone(260);
 
   return (
     <div {...swipeBind} style={{
@@ -175,7 +181,8 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true, la
       // iOS-style push-in animation when the user enters the
       // sub-shell. Combined with the swipe-back transform via
       // ...swipeStyle (which sets its own transition during drag).
-      animation: "samas-shell-in 240ms cubic-bezier(.2,.8,.2,1)",
+      // animation: "none" once entryDone — drops compositing layer.
+      animation: entryDone ? "none" : "samas-shell-in 240ms cubic-bezier(.2,.8,.2,1)",
       ...swipeStyle,
     }}>
       <style>{`
@@ -720,7 +727,14 @@ function CompareSheet({ T, assets, onClose }) {
     setPicked(picked.filter((x) => x !== tk));
   }
 
-  return (
+  // Portal to document.body — the BrokerShell root has a translateX
+  // entry animation that promotes it to a persistent GPU compositing
+  // layer on iOS WebKit, which behaves like a stacking context that
+  // traps position:fixed children. Without the portal, the shell's
+  // sub-nav (zIndex: 40) ends up rendered ON TOP of this sheet
+  // (zIndex: 100) because the sheet's zIndex is scoped to the trapped
+  // layer, not the document root. samas-0.0.87 fix.
+  return ReactDOM.createPortal(
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
       position: "fixed", inset: 0, zIndex: 100,
       background: "rgba(0,0,0,0.65)",
@@ -863,7 +877,8 @@ function CompareSheet({ T, assets, onClose }) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

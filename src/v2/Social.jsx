@@ -22,7 +22,7 @@ import { social as socialApi, messages as messagesApi, broker as brokerApi } fro
 import { useEdgeSwipeBack } from "./useEdgeSwipeBack.js";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { setRefreshHandler, callRefreshFor } from "./refreshRegistry.js";
-import { avatarPropsFor, PostCardSkeleton, DmThreadSkeleton } from "./shared.jsx";
+import { avatarPropsFor, PostCardSkeleton, DmThreadSkeleton, useShellEntryDone } from "./shared.jsx";
 import { supabase } from "../lib/supabase.js";
 import { t as tr } from "../lib/i18n.js";
 import { hapticNative } from "../lib/native.js";
@@ -185,6 +185,10 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
   const { bind: ptrBind, indicator: ptrIndicator } = usePullToRefresh(
     () => callRefreshFor(`social-${tab}`)
   );
+  // Drop entry animation's GPU compositing layer after 260ms so
+  // position:fixed descendants (compose modal, sheets, etc.) escape
+  // the trapped stacking context. samas-0.0.87.
+  const entryDone = useShellEntryDone(260);
 
   return (
     <div {...swipeBind} style={{
@@ -193,7 +197,7 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
       overflow: "hidden",
       display: "flex", flexDirection: "column",
       fontFamily: FONT.sans,
-      animation: "samas-shell-in 240ms cubic-bezier(.2,.8,.2,1)",
+      animation: entryDone ? "none" : "samas-shell-in 240ms cubic-bezier(.2,.8,.2,1)",
       ...swipeStyle,
     }}>
       <style>{`
@@ -259,15 +263,7 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
           came from. Bottom nav stays interactive — tapping a tab
           dismisses the overlay and routes there. */}
       {profileUserId && (
-        <div style={{
-          position: "absolute", inset: 0,
-          background: T.bg, color: T.text,
-          overflow: "hidden",
-          display: "flex", flexDirection: "column",
-          // Same slide-in animation the Social shell itself uses
-          // on entry; gives the drill a native iOS feel.
-          animation: "samas-shell-in 220ms cubic-bezier(.2,.8,.2,1)",
-        }}>
+        <DrillInOverlay T={T}>
           <div {...ptrBind} style={{
             flex: 1, overflowY: "auto",
             overscrollBehavior: "contain",
@@ -288,7 +284,7 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
               onOpenFollowList={openFollowList}
             />
           </div>
-        </div>
+        </DrillInOverlay>
       )}
 
       {/* Drill-in thread view. Rendered on top of the profile
@@ -296,14 +292,7 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
           profile → tap one of their posts → see replies → back out
           to profile → back out to feed. */}
       {threadPost && (
-        <div style={{
-          position: "absolute", inset: 0,
-          background: T.bg, color: T.text,
-          overflow: "hidden",
-          display: "flex", flexDirection: "column",
-          animation: "samas-shell-in 220ms cubic-bezier(.2,.8,.2,1)",
-          zIndex: 30,
-        }}>
+        <DrillInOverlay T={T} zIndex={30}>
           <ThreadView
             T={T}
             lang={lang}
@@ -313,7 +302,7 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
             onOpenTicker={openTicker}
             onOpenMention={openMention} onOpenHashtag={openHashtag}
           />
-        </div>
+        </DrillInOverlay>
       )}
 
       {/* Drill-in ticker feed. Same overlay pattern; stacks at
@@ -321,14 +310,7 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
           can be in a thread, tap a $TICKER chip on the parent
           post, and drill further into the ticker feed). */}
       {tickerFilter && (
-        <div style={{
-          position: "absolute", inset: 0,
-          background: T.bg, color: T.text,
-          overflow: "hidden",
-          display: "flex", flexDirection: "column",
-          animation: "samas-shell-in 220ms cubic-bezier(.2,.8,.2,1)",
-          zIndex: 35,
-        }}>
+        <DrillInOverlay T={T} zIndex={35}>
           <TickerFeedView
             T={T}
             lang={lang}
@@ -339,7 +321,7 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
             onOpenTicker={openTicker}
             onOpenMention={openMention} onOpenHashtag={openHashtag}
           />
-        </div>
+        </DrillInOverlay>
       )}
 
       {/* Followers / Following list overlay — z-index 32 so it sits
@@ -348,14 +330,7 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
           35). User flow: feed → profile → tap "30 seguidores" →
           this list → back to profile. */}
       {followList && (
-        <div style={{
-          position: "absolute", inset: 0,
-          background: T.bg, color: T.text,
-          overflow: "hidden",
-          display: "flex", flexDirection: "column",
-          animation: "samas-shell-in 220ms cubic-bezier(.2,.8,.2,1)",
-          zIndex: 32,
-        }}>
+        <DrillInOverlay T={T} zIndex={32}>
           <FollowListView
             T={T}
             lang={lang}
@@ -373,7 +348,7 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
             }}
             onMessageUser={openDmWith}
           />
-        </div>
+        </DrillInOverlay>
       )}
 
       {/* Bottom nav — hidden when ANY drill-in overlay is active.
@@ -384,6 +359,29 @@ export function SocialPage({ T, isNativeApp = false, onBack, lang = "es", user =
       {!profileUserId && !threadPost && !tickerFilter && !followList && (
         <SocialNav T={T} tab={tab} setTab={setTab} bottomInset={navBottom} lang={lang} />
       )}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------
+// DrillInOverlay — wraps a drill-in (profile / thread / ticker /
+// follow-list) with the slide-in entry animation, then drops the
+// animation after it completes (samas-0.0.87) so iOS WebKit's
+// compositing-layer-as-stacking-context doesn't trap any
+// position:fixed descendant inside this overlay.
+// ----------------------------------------------------------
+function DrillInOverlay({ T, zIndex, children }) {
+  const entryDone = useShellEntryDone(240);
+  return (
+    <div style={{
+      position: "absolute", inset: 0,
+      background: T.bg, color: T.text,
+      overflow: "hidden",
+      display: "flex", flexDirection: "column",
+      animation: entryDone ? "none" : "samas-shell-in 220ms cubic-bezier(.2,.8,.2,1)",
+      ...(zIndex != null ? { zIndex } : null),
+    }}>
+      {children}
     </div>
   );
 }
