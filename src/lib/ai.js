@@ -125,6 +125,41 @@ export async function tradeCoach({ ticker, side, qty, price }) {
 }
 
 /**
+ * explainNews({ title, summary, tickers }) — POST /functions/v1/explain-news
+ *
+ * Server reads the user's holdings, computes the intersection with
+ * the article's tickers, and asks Claude Haiku for a 2-3 sentence
+ * explanation of how the article relates to the user's portfolio.
+ *
+ * Returns:
+ *   {
+ *     relevant: boolean,        // true if any article ticker matches a holding
+ *     hits: string[],           // tickers user owns that this article references
+ *     explanation: string,      // 2-3 sentence Spanish explanation
+ *     generatedAt: string,
+ *   }
+ *
+ * Falls back to a templated explanation server-side when the
+ * Anthropic key isn't set, so the demo always returns something.
+ */
+export async function explainNews({ title, summary, tickers, source }) {
+  await gateOnConsent();
+  const { data, error } = await supabase.functions.invoke("explain-news", {
+    body: { title, summary, tickers, source },
+  });
+  if (error) {
+    let detail = "";
+    try {
+      const body = await error?.context?.json?.();
+      if (body?.error) detail = `: ${body.error}`;
+    } catch (_) { /* fall through */ }
+    throw new Error(`Explicación IA falló${detail || ": " + (error.message || "error desconocido")}`);
+  }
+  if (data?.error) throw new Error(`Explicación IA falló: ${data.error}`);
+  return data;
+}
+
+/**
  * draftPost() — POST /functions/v1/draft-post
  *
  * Server reads the caller's holdings + last few trade transactions

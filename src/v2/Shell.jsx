@@ -2585,6 +2585,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.99",
+    title: "AI on news — \"¿Por qué me importa?\" on every article",
+    bullets: [
+      "Sixth AI surface lands on the News tab. Every article now has a \"¿Por qué me importa?\" expand row at the bottom. Tap → calls a new explain-news Edge Function that takes the article + reads your holdings via JWT-scoped RLS, asks Claude Haiku for a 2-3 sentence explanation of how this story relates to YOUR specific portfolio.",
+      "When the article references a ticker you actually own, an accent-tinted hits chip ($NVDA · $AAPL etc.) appears and the AI explanation is direct: \"Tu posición en $NVDA podría verse afectada por X.\" When you don't own anything mentioned, the AI explains correlation/sector context honestly instead of forcing relevance.",
+      "Templated server-side fallback when ANTHROPIC_API_KEY isn't set — picks a sensible explanation based on whether any article tickers intersect held tickers. Rotates: direct match / related sector / no exposure.",
+      "NewsCard refactored from a button to a div+role=button so the AI tap-row can stop event propagation cleanly without nested-button HTML. Tapping anywhere else on the card still opens the article URL in Safari.",
+    ],
+  },
+  {
     version: "0.0.98",
     title: "Privacy + safety trio — AI consent, EXIF strip, withdraw re-auth",
     bullets: [

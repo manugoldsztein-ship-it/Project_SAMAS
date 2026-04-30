@@ -20,6 +20,8 @@ import { FONT } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import { news as newsApi } from "./api/index.js";
 import { Skeleton } from "./shared.jsx";
+import { explainNews } from "../lib/ai.js";
+import { hapticNative } from "../lib/native.js";
 import { t as tr } from "../lib/i18n.js";
 import { setRefreshHandler } from "./refreshRegistry.js";
 
@@ -349,6 +351,13 @@ export function NewsPage({ T, lang = "es" }) {
 // ----------------------------------------------------------
 function NewsCard({ T, item, lang = "es" }) {
   const [expanded, setExpanded] = useState(false);
+  // AI explainer state (samas-0.0.99). Independent of the article-
+  // expansion state so the explainer can stay open while the
+  // summary collapses, etc.
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiData, setAiData] = useState(null);
+  const [aiErr,  setAiErr]  = useState(null);
 
   // Open the real article URL (when item.url is present, i.e. came
   // from the fetch-news Edge Function). On Capacitor iOS, target=_blank
@@ -373,8 +382,39 @@ function NewsCard({ T, item, lang = "es" }) {
     else setExpanded((e) => !e);
   }
 
+  async function onExplainTap(e) {
+    // The AI button sits inside the card div but its tap shouldn't
+    // open the article — stop event propagation here, above any
+    // other handler we might attach later.
+    e.preventDefault();
+    e.stopPropagation();
+    if (aiBusy) return;
+    // If already have data, just toggle visibility instead of re-fetch.
+    if (aiData) { setAiOpen((o) => !o); return; }
+    setAiErr(null); setAiBusy(true); setAiOpen(true);
+    hapticNative("tap").catch(() => {});
+    try {
+      const data = await explainNews({
+        title: item.title,
+        summary: item.summary,
+        tickers: item.tickers || [],
+        source: item.source,
+      });
+      setAiData(data);
+      hapticNative("success").catch(() => {});
+    } catch (err) {
+      // Consent declined → silently close without surfacing error.
+      if (err?.name === "AIConsentDeniedError") setAiOpen(false);
+      else setAiErr(err?.message || String(err));
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onCardClick}
       style={{
         width: "100%", textAlign: "left",
@@ -452,6 +492,111 @@ function NewsCard({ T, item, lang = "es" }) {
           </span>
         )}
       </div>
-    </button>
+
+      {/* AI explainer (samas-0.0.99). "¿Por qué me importa?" sits
+          below the source/tickers row. Tap → calls explain-news,
+          inline expansion shows the AI explanation referencing the
+          user's actual holdings. */}
+      <div
+        onClick={onExplainTap}
+        role="button"
+        tabIndex={0}
+        style={{
+          marginTop: 10, paddingTop: 10,
+          borderTop: `1px dashed ${T.border}`,
+          display: "flex", alignItems: "center", gap: 8,
+          cursor: aiBusy ? "default" : "pointer",
+          opacity: aiBusy ? 0.7 : 1,
+        }}
+      >
+        <div style={{
+          width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+          background: T.accent, color: "#06180c",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          {aiBusy ? (
+            <div style={{
+              width: 12, height: 12, borderRadius: 999,
+              border: `2px solid rgba(0,0,0,0.2)`, borderTopColor: "#06180c",
+              animation: "samas-spin 700ms linear infinite",
+            }} />
+          ) : (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
+            </svg>
+          )}
+        </div>
+        <div style={{
+          flex: 1,
+          fontFamily: FONT.sans, fontSize: 12, fontWeight: 700,
+          color: aiOpen ? T.text : T.accent,
+          letterSpacing: 0.2,
+        }}>
+          {aiBusy
+            ? tr("news.ai.thinking", lang)
+            : (aiOpen
+              ? tr("news.ai.collapse", lang)
+              : tr("news.ai.cta", lang))}
+        </div>
+        {/* Caret toggles direction when open. */}
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+          stroke={T.textMute} strokeWidth="2.4"
+          strokeLinecap="round" strokeLinejoin="round"
+          style={{
+            transform: aiOpen ? "rotate(180deg)" : "rotate(0deg)",
+            transition: "transform 160ms ease-out",
+          }}>
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </div>
+
+      {/* Expanded AI body */}
+      {aiOpen && (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          style={{
+            marginTop: 10, padding: "12px 14px", borderRadius: 12,
+            background: aiData?.relevant
+              ? `linear-gradient(135deg, ${T.accentSoft}, transparent 80%)`
+              : T.bg,
+            border: `1px solid ${aiData?.relevant ? T.accent : T.border}`,
+          }}
+        >
+          {aiBusy && !aiData && (
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 12, color: T.textMute, lineHeight: 1.5,
+            }}>{tr("news.ai.thinking", lang)}</div>
+          )}
+          {aiErr && !aiData && (
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 12, color: T.danger, lineHeight: 1.5,
+            }}>{aiErr}</div>
+          )}
+          {aiData && (
+            <>
+              {/* Hits chip — visually separates "you own this" cases. */}
+              {aiData.hits && aiData.hits.length > 0 && (
+                <div style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  padding: "3px 8px", borderRadius: 999,
+                  background: T.accent, color: T.accentInk,
+                  fontFamily: FONT.mono, fontSize: 9, fontWeight: 800,
+                  letterSpacing: 0.5, textTransform: "uppercase",
+                  marginBottom: 8,
+                }}>★ {aiData.hits.map((t) => `$${t}`).join(" · ")}</div>
+              )}
+              <div style={{
+                fontFamily: FONT.sans, fontSize: 13, color: T.text, lineHeight: 1.55,
+              }}>{aiData.explanation}</div>
+              <div style={{
+                marginTop: 8, fontFamily: FONT.sans, fontSize: 9, color: T.textMute,
+                textAlign: "right", letterSpacing: 0.3,
+              }}>{tr("news.ai.disclaimer", lang)}</div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
