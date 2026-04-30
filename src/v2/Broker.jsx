@@ -39,7 +39,7 @@ import { hapticNative } from "../lib/native.js";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { toast } from "./toast.jsx";
 import { t as tr } from "../lib/i18n.js";
-import { analyzeAsset, tradeCoach, suggestWatchlist } from "../lib/ai.js";
+import { analyzeAsset, tradeCoach, suggestWatchlist, rebalancePortfolio } from "../lib/ai.js";
 
 // Sub-tabs metadata — drives both the bottom nav and the content
 // switch in the top-level <BrokerShell/> render.
@@ -462,6 +462,14 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
           When the user already has a saved plan, the card morphs into
           a summary of their strategy + target. */}
       <AIPlanCard T={T} onOpen={onOpenAIPlan} savedPlan={savedPlan} lang={lang} />
+
+      {/* AI Rebalance card (samas-0.1.4) — only when there's a
+          non-empty portfolio (rebalancing an empty book is moot).
+          Tap → opens the rebalance sheet with profile selector +
+          proposed buy/sell actions. */}
+      {portfolio.holdings.length > 0 && (
+        <RebalanceCard T={T} lang={lang} onRefresh={() => onSelectAsset && onSelectAsset(null)} />
+      )}
 
       {/* Distribución bar — % per holding of total cartera. Only in
           Pro mode (gated by the settings toggle). */}
@@ -3613,6 +3621,393 @@ function TickerBanner({ T, assets }) {
 }
 
 // ----------------------------------------------------------
+// ============================================================
+// RebalanceCard + RebalanceSheet (samas-0.1.4)
+// ============================================================
+// Card on the Portafolio view → tap → sheet with a 3-way profile
+// selector (Conservador / Equilibrado / Agresivo). Pick a profile
+// → AI generates concrete buy/sell actions to move the book toward
+// the target category mix → user reviews + (un)checks each action
+// → "Ejecutar" loops through brokerApi.placeOrder.
+// ============================================================
+function RebalanceCard({ T, lang = "es", onRefresh }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        onClick={() => { setOpen(true); hapticNative("tap").catch(() => {}); }}
+        style={{
+          width: "calc(100% - 32px)", margin: "0 16px 18px",
+          padding: 14, borderRadius: 18,
+          background: T.surface, border: `1.5px solid ${T.accent}55`,
+          display: "flex", alignItems: "center", gap: 12,
+          cursor: "pointer", textAlign: "left",
+        }}
+      >
+        <div style={{
+          width: 38, height: 38, borderRadius: 12, flexShrink: 0,
+          background: T.accent, color: "#06180c",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+            <polyline points="17 6 23 6 23 12"/>
+          </svg>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 2 }}>
+            {tr("rebalance.cta_title", lang)}
+          </div>
+          <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, lineHeight: 1.4 }}>
+            {tr("rebalance.cta_subtitle", lang)}
+          </div>
+        </div>
+        <Pill T={T}>IA</Pill>
+      </button>
+      {open && (
+        <RebalanceSheet
+          T={T}
+          lang={lang}
+          onClose={() => setOpen(false)}
+          onExecuted={() => {
+            setOpen(false);
+            if (onRefresh) onRefresh();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+const PROFILES = [
+  { id: "conservative", labelKey: "rebalance.profile.conservative", subKey: "rebalance.profile.conservative_sub" },
+  { id: "balanced",     labelKey: "rebalance.profile.balanced",     subKey: "rebalance.profile.balanced_sub" },
+  { id: "aggressive",   labelKey: "rebalance.profile.aggressive",   subKey: "rebalance.profile.aggressive_sub" },
+];
+
+function RebalanceSheet({ T, lang = "es", onClose, onExecuted }) {
+  const [profile, setProfile] = useState("balanced");
+  const [proposal, setProposal] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  // Per-action checkbox state — keyed by index. Defaults to "all
+  // checked" when the proposal arrives.
+  const [selected, setSelected] = useState({});
+  const [executing, setExecuting] = useState(false);
+  const [executionLog, setExecutionLog] = useState([]); // [{ index, ok, msg }]
+
+  async function generate(p) {
+    if (busy) return;
+    setBusy(true); setErr(null); setProposal(null); setSelected({});
+    hapticNative("tap").catch(() => {});
+    try {
+      const data = await rebalancePortfolio(p);
+      setProposal(data);
+      // Default: all actions checked.
+      const initialSel = {};
+      (data.actions || []).forEach((_, i) => { initialSel[i] = true; });
+      setSelected(initialSel);
+      hapticNative("success").catch(() => {});
+    } catch (e) {
+      if (e?.name === "AIConsentDeniedError") onClose();
+      else setErr(e?.message || String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function execute() {
+    if (!proposal || executing) return;
+    const toRun = (proposal.actions || []).map((a, i) => ({ ...a, _idx: i }))
+      .filter((a) => selected[a._idx]);
+    if (toRun.length === 0) return;
+    if (!window.confirm(tr("rebalance.confirm", lang, { n: toRun.length }))) return;
+    setExecuting(true); setExecutionLog([]); setErr(null);
+    let okCount = 0;
+    for (const a of toRun) {
+      try {
+        // Use market order for everything — simpler than handling
+        // limit prices. broker.placeOrder pre-checks holdings on
+        // sells, so a malformed sell rejects fast.
+        await brokerApi.placeOrder({
+          ticker: a.ticker,
+          side: a.side,
+          qty: a.qty,
+          type: "market",
+        });
+        setExecutionLog((log) => [...log, { index: a._idx, ok: true }]);
+        okCount++;
+      } catch (e) {
+        setExecutionLog((log) => [...log, {
+          index: a._idx, ok: false, msg: e?.message || String(e),
+        }]);
+      }
+    }
+    setExecuting(false);
+    hapticNative(okCount === toRun.length ? "success" : "tap").catch(() => {});
+    // If everything succeeded, close + signal refresh.
+    if (okCount === toRun.length) {
+      setTimeout(() => onExecuted(), 800);
+    }
+  }
+
+  function toggleAction(i) {
+    setSelected((s) => ({ ...s, [i]: !s[i] }));
+  }
+
+  return ReactDOM.createPortal(
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget && !executing) onClose(); }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 130,
+        background: "rgba(0,0,0,0.7)",
+        display: "flex", alignItems: "flex-end", justifyContent: "center",
+        animation: "samas-fade-in 160ms ease-out",
+      }}
+    >
+      <div style={{
+        width: "100%", maxWidth: 540, maxHeight: "92vh",
+        background: T.bgElev || T.bg, color: T.text,
+        borderTopLeftRadius: 24, borderTopRightRadius: 24,
+        border: `1px solid ${T.border}`, borderBottom: "none",
+        display: "flex", flexDirection: "column", overflow: "hidden",
+        animation: "samas-sheet-up 220ms ease-out",
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: "16px 20px 12px",
+          borderBottom: `1px solid ${T.border}`,
+          display: "flex", alignItems: "center", gap: 10,
+        }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: 10, flexShrink: 0,
+            background: T.accent, color: "#06180c",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
+            </svg>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+              color: T.accent, letterSpacing: 0.6, textTransform: "uppercase" }}>
+              IA · {tr("rebalance.kicker", lang)}
+            </div>
+            <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: T.text, letterSpacing: -0.3 }}>
+              {tr("rebalance.title", lang)}
+            </div>
+          </div>
+          <button onClick={onClose} disabled={executing} aria-label="Cerrar"
+            style={{
+              width: 32, height: 32, borderRadius: 16,
+              background: T.bg, border: `1px solid ${T.border}`,
+              color: T.textMute, fontFamily: FONT.sans, fontSize: 16,
+              cursor: executing ? "default" : "pointer", padding: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>×</button>
+        </div>
+
+        {/* Body — scrolls */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "14px 18px" }}>
+          <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, lineHeight: 1.5, marginBottom: 12 }}>
+            {tr("rebalance.intro", lang)}
+          </div>
+
+          {/* Profile selector */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+            {PROFILES.map((p) => {
+              const active = profile === p.id;
+              return (
+                <button key={p.id} onClick={() => setProfile(p.id)}
+                  disabled={busy || executing}
+                  style={{
+                    width: "100%", padding: "12px 14px", borderRadius: 14,
+                    background: active ? T.accentSoft : T.surface,
+                    border: `1.5px solid ${active ? T.accent : T.border}`,
+                    color: T.text, cursor: busy ? "default" : "pointer",
+                    textAlign: "left", display: "flex", alignItems: "center", gap: 12,
+                  }}>
+                  <div style={{
+                    width: 18, height: 18, borderRadius: 9, flexShrink: 0,
+                    border: `2px solid ${active ? T.accent : T.border}`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    {active && (<div style={{ width: 10, height: 10, borderRadius: 5, background: T.accent }}/>)}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, color: T.text }}>
+                      {tr(p.labelKey, lang)}
+                    </div>
+                    <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute, marginTop: 2 }}>
+                      {tr(p.subKey, lang)}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {!proposal && !busy && (
+            <button onClick={() => generate(profile)}
+              disabled={executing}
+              style={{
+                width: "100%", padding: "12px 14px", borderRadius: 12,
+                background: T.accent, color: T.accentInk,
+                fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, border: "none",
+                cursor: "pointer",
+              }}>
+              {tr("rebalance.generate", lang)}
+            </button>
+          )}
+
+          {busy && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 10, padding: "12px 0",
+              color: T.textMute, fontFamily: FONT.sans, fontSize: 13,
+            }}>
+              <div style={{
+                width: 18, height: 18, borderRadius: 999,
+                border: `2.4px solid ${T.border}`, borderTopColor: T.accent,
+                animation: "samas-spin 800ms linear infinite",
+              }} />
+              {tr("rebalance.thinking", lang)}
+            </div>
+          )}
+
+          {err && (
+            <div style={{
+              padding: "10px 12px", borderRadius: 12,
+              background: T.dangerSoft, color: T.danger,
+              fontFamily: FONT.sans, fontSize: 12, lineHeight: 1.5, marginTop: 8,
+            }}>{err}</div>
+          )}
+
+          {proposal && !busy && (
+            <>
+              {/* Summary */}
+              <div style={{
+                marginTop: 4, marginBottom: 14, padding: 12, borderRadius: 12,
+                background: T.surface, border: `1px solid ${T.border}`,
+                fontFamily: FONT.sans, fontSize: 13, color: T.text, lineHeight: 1.5,
+              }}>{proposal.summary}</div>
+
+              {/* Actions list */}
+              {(proposal.actions || []).length === 0 ? (
+                <div style={{
+                  padding: 18, borderRadius: 14,
+                  background: T.accentSoft, color: T.text,
+                  fontFamily: FONT.sans, fontSize: 13, textAlign: "center",
+                }}>
+                  {tr("rebalance.no_actions", lang)}
+                </div>
+              ) : (
+                <>
+                  <div style={{
+                    fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+                    color: T.textMute, letterSpacing: 0.5, textTransform: "uppercase",
+                    marginBottom: 8,
+                  }}>{tr("rebalance.actions_label", lang)}</div>
+                  {(proposal.actions || []).map((a, i) => {
+                    const isOn = !!selected[i];
+                    const log = executionLog.find((l) => l.index === i);
+                    return (
+                      <div key={i} style={{
+                        display: "flex", alignItems: "flex-start", gap: 10,
+                        padding: 12, marginBottom: 8, borderRadius: 12,
+                        background: T.surface, border: `1px solid ${log?.ok ? T.accent : (log?.ok === false ? T.danger : T.border)}`,
+                        opacity: isOn ? 1 : 0.55,
+                      }}>
+                        <button
+                          onClick={() => toggleAction(i)}
+                          disabled={executing}
+                          style={{
+                            width: 22, height: 22, borderRadius: 6, flexShrink: 0, marginTop: 1,
+                            background: isOn ? T.accent : "transparent",
+                            border: `2px solid ${isOn ? T.accent : T.border}`,
+                            color: T.accentInk, padding: 0, cursor: "pointer",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                          }}>
+                          {isOn && (
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                              strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="20 6 9 17 4 12"/>
+                            </svg>
+                          )}
+                        </button>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{
+                            display: "flex", alignItems: "center", gap: 8, marginBottom: 4,
+                          }}>
+                            <span style={{
+                              padding: "2px 8px", borderRadius: 6,
+                              background: a.side === "buy" ? T.accentSoft : T.dangerSoft,
+                              color: a.side === "buy" ? T.accent : T.danger,
+                              fontFamily: FONT.mono, fontSize: 10, fontWeight: 800, letterSpacing: 0.5,
+                            }}>{a.side === "buy" ? "COMPRA" : "VENTA"}</span>
+                            <span style={{
+                              fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: T.text,
+                            }}>{a.qty} {a.ticker}</span>
+                            {log && (
+                              <span style={{
+                                marginLeft: "auto",
+                                fontFamily: FONT.sans, fontSize: 10, fontWeight: 700,
+                                color: log.ok ? T.accent : T.danger,
+                              }}>{log.ok ? "✓" : "×"}</span>
+                            )}
+                          </div>
+                          <div style={{
+                            fontFamily: FONT.sans, fontSize: 12, color: T.textMute, lineHeight: 1.5,
+                          }}>{a.reason}</div>
+                          {log && !log.ok && log.msg && (
+                            <div style={{
+                              marginTop: 4, fontFamily: FONT.sans, fontSize: 11, color: T.danger,
+                            }}>{log.msg}</div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Sticky footer with Execute button */}
+        {proposal && (proposal.actions || []).length > 0 && (
+          <div style={{
+            padding: "12px 18px calc(env(safe-area-inset-bottom) + 14px)",
+            borderTop: `1px solid ${T.border}`,
+            background: T.bgElev || T.bg,
+          }}>
+            <button
+              onClick={execute}
+              disabled={executing || Object.values(selected).every((v) => !v)}
+              style={{
+                width: "100%", padding: "13px 16px", borderRadius: 14,
+                background: T.accent, color: T.accentInk,
+                fontFamily: FONT.sans, fontSize: 14, fontWeight: 800, border: "none",
+                cursor: executing ? "default" : "pointer",
+                opacity: executing ? 0.6 : 1,
+              }}>
+              {executing
+                ? tr("rebalance.executing", lang)
+                : tr("rebalance.execute", lang)}
+            </button>
+            <div style={{
+              marginTop: 6, fontFamily: FONT.sans, fontSize: 10, color: T.textMute,
+              textAlign: "center", lineHeight: 1.4,
+            }}>{tr("rebalance.disclaimer", lang)}</div>
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 // AIPlanCard — entry point for the goal-planning wizard. The wizard
 // itself lives in /src/ai/ObjectivesWizard.jsx but it depends on the
 // legacy theme and is heavy. For now this card opens a placeholder

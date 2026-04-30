@@ -2625,6 +2625,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.1.4",
+    title: "AI Rebalancing Assistant — concrete trades, one tap to execute",
+    bullets: [
+      "Eighth AI surface lands on the Portafolio view. New green-bordered \"Rebalancear cartera con IA\" card under the AI Plan card. Tap → sheet opens with a 3-way profile selector (Conservador / Equilibrado / Agresivo). Pick one → AI computes the gap between your current category mix and the target weights for that profile, returns concrete buy/sell actions with quantities + per-action rationale.",
+      "New rebalance-portfolio Edge Function. Always runs a deterministic algorithmic rebalance first (works without Anthropic key) — Claude refines the rationale on each action without changing tickers or quantities, so the demo can't hallucinate a trade we wouldn't safely place.",
+      "Each proposed action is a checkbox row — uncheck anything you don't want. \"Ejecutar operaciones seleccionadas\" loops through brokerApi.placeOrder. Per-action ✓ / × shows live as orders fire. On full success the sheet auto-closes and the portfolio refreshes.",
+      "8 AI surfaces total: portfolio analysis, chat, asset insight, trade coach, post helper, news explainer, watchlist creator, rebalance — plus consent gate, EXIF strip, re-auth, AI revoke toggle.",
+    ],
+  },
+  {
     version: "0.1.3",
     title: "Continuar con Google + Continuar con Apple",
     bullets: [

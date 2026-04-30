@@ -125,6 +125,47 @@ export async function tradeCoach({ ticker, side, qty, price }) {
 }
 
 /**
+ * rebalancePortfolio(profile) — POST /functions/v1/rebalance-portfolio
+ *
+ * Reads the user's holdings + their requested risk profile
+ * ('conservative' | 'balanced' | 'aggressive'), returns a list of
+ * concrete buy/sell actions to move the book toward the target
+ * category mix.
+ *
+ * Returns:
+ *   {
+ *     actions: [{ side, ticker, qty, currency, reason, estUsd }, ...],
+ *     summary: string,
+ *     targetMix: { CEDEAR: 30, ETF: 30, ... },     // % per category
+ *     currentMix: { ... },
+ *     generatedAt: string,
+ *   }
+ *
+ * Server runs a deterministic algorithmic rebalance; when the
+ * Anthropic key is set, Claude refines the rationale on each
+ * action without changing tickers or quantities.
+ */
+export async function rebalancePortfolio(profile = "balanced") {
+  if (!["conservative", "balanced", "aggressive"].includes(profile)) {
+    throw new Error("Perfil inválido.");
+  }
+  await gateOnConsent();
+  const { data, error } = await supabase.functions.invoke("rebalance-portfolio", {
+    body: { profile },
+  });
+  if (error) {
+    let detail = "";
+    try {
+      const body = await error?.context?.json?.();
+      if (body?.error) detail = `: ${body.error}`;
+    } catch (_) { /* fall through */ }
+    throw new Error(`Rebalanceo IA falló${detail || ": " + (error.message || "error desconocido")}`);
+  }
+  if (data?.error) throw new Error(`Rebalanceo IA falló: ${data.error}`);
+  return data;
+}
+
+/**
  * suggestWatchlist(theme) — POST /functions/v1/suggest-watchlist
  *
  * Asks Claude Haiku to build a watchlist around a user-supplied
