@@ -40,7 +40,7 @@ import { hashPin, PinLockScreen } from "./auth/PinLock.jsx";
 const MfaEnrollSection = lazy(() => import("./auth/Mfa.jsx").then((m) => ({ default: m.MfaEnrollSection })));
 const MfaChallengeView = lazy(() => import("./auth/Mfa.jsx").then((m) => ({ default: m.MfaChallengeView })));
 import { fetchNewsForTicker, fetchNewsForTickers, relativeTime } from "./lib/news.js";
-import { isNative as isNativeApp, hapticNative, updateNativeTheme, hideNativeSplash, onAppStateChange } from "./lib/native.js";
+import { isNative as isNativeApp, hapticNative, updateNativeTheme, hideNativeSplash, onAppStateChange, onAppUrlOpen } from "./lib/native.js";
 import { isPushEnabled, registerPush, setupPushListeners, clearPushLocal } from "./lib/push.js";
 import { LANGUAGES, RTL_LANGS } from "./lib/languages.js";
 // Welcome chooser: shown only on first session when profiles.ui_mode
@@ -6440,6 +6440,36 @@ export default function SAMASApp() {
     if (sbLoading) return;
     hideNativeSplash().catch(() => {});
   }, [sbLoading]);
+
+  // 0.1.5 — OAuth deep-link handler. When iOS routes a samas://
+  // URL back to the app (Apple/Google sign-in returning), we need
+  // to extract the auth code from the URL and call
+  // supabase.auth.exchangeCodeForSession to finish sign-in. After
+  // that the existing onAuthStateChange listener picks up the
+  // session and the auth gate unmounts.
+  useEffect(() => {
+    return onAppUrlOpen(async (rawUrl) => {
+      try {
+        const u = new URL(rawUrl);
+        // Supabase OAuth redirects with either ?code=... (PKCE)
+        // or #access_token=... (implicit). exchangeCodeForSession
+        // expects the FULL URL string, not just the code, so we
+        // pass it through wholesale.
+        const hasCode = u.searchParams.has("code");
+        const hasFragmentToken = (u.hash || "").includes("access_token=");
+        if (!hasCode && !hasFragmentToken) return; // not an auth URL
+        if (hasCode) {
+          await supabase.auth.exchangeCodeForSession(rawUrl);
+        }
+        // Implicit flow → supabase-js parses the hash automatically
+        // when we navigate. For Capacitor we'd manually parse but
+        // PKCE is the default since Supabase v2, so we typically
+        // hit the hasCode branch.
+      } catch (e) {
+        console.warn("[oauth] exchange failed:", e?.message || e);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (syncedUserIdRef.current !== userId || !userId) return;

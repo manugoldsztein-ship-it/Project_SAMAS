@@ -2625,6 +2625,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.1.5",
+    title: "Native OAuth deep-link wiring — samas:// scheme",
+    bullets: [
+      "Continuar con Apple / Google now works natively on iOS instead of getting trapped in the WebView. Wired three pieces: (1) @capacitor/browser plugin installed; (2) samas:// URL scheme registered in Info.plist; (3) appUrlOpen handler in App.jsx that catches the redirect and calls supabase.auth.exchangeCodeForSession to finish sign-in.",
+      "OAuthButtons detects Capacitor (window.Capacitor.isNativePlatform()) and switches to redirectTo: samas://auth/callback + skipBrowserRedirect: true. We then manually open the OAuth URL in system Safari via Browser.open(). Google's been blocking WebView OAuth since 2021, so this also makes Google sign-in actually work.",
+      "Web build untouched — same redirectTo: window.location.origin path it had. The native code path only kicks in when window.Capacitor.isNativePlatform() returns true.",
+      "OAUTH_SETUP.md updated. One thing left for Manuel: add samas://auth/callback to the Supabase project's Authentication → URL Configuration → Redirect URLs allow-list.",
+    ],
+  },
+  {
     version: "0.1.4",
     title: "AI Rebalancing Assistant — concrete trades, one tap to execute",
     bullets: [

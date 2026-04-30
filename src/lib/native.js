@@ -137,6 +137,37 @@ export async function updateNativeTheme(isDark) {
 // app is backgrounded — without this the WebView keeps fetching +
 // re-rendering for hours, eventually getting killed by iOS for
 // memory pressure.
+/**
+ * onAppUrlOpen(handler) — fires when iOS routes a deep link
+ * (e.g. samas://auth/callback?code=...) back to the app.
+ * Used by the OAuth flow (samas-0.1.5) to finish sign-in via
+ * supabase.auth.exchangeCodeForSession.
+ *
+ * Returns a cleanup function. No-ops on the web build.
+ */
+export function onAppUrlOpen(handler) {
+  if (typeof handler !== "function") return () => {};
+  if (!isNative) return () => {};
+  let canceled = false;
+  let listener = null;
+  (async () => {
+    try {
+      const { App } = await import("@capacitor/app");
+      if (canceled) return;
+      listener = await App.addListener("appUrlOpen", (event) => {
+        const url = event?.url || "";
+        if (url) handler(url);
+      });
+    } catch (e) {
+      console.warn("[native] appUrlOpen listener failed:", e);
+    }
+  })();
+  return () => {
+    canceled = true;
+    try { listener?.remove?.(); } catch {}
+  };
+}
+
 export function onAppStateChange(handler) {
   if (typeof handler !== "function") return () => {};
   let cleanup = () => {};

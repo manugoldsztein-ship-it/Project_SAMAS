@@ -96,35 +96,27 @@ see "Native iOS deep linking" below.
 
 ---
 
-## Native iOS deep linking (post-Cohen, when needed)
+## Native iOS deep linking (DONE in 0.1.5)
 
-Web OAuth via Capacitor's WKWebView technically works (Google/Apple
-load fine), but the polished native experience uses the system browser
-+ a deep link back to the app:
+The native flow is wired:
+- `@capacitor/browser` plugin installed.
+- `samas://` URL scheme registered in `ios/App/App/Info.plist`.
+- `OAuthButtons` detects Capacitor and switches to:
+  - `redirectTo: "samas://auth/callback"`
+  - `skipBrowserRedirect: true` so we manually open via `Browser.open()`
+    in the system Safari (Google blocks WebView OAuth flows since 2021).
+- `App.jsx` has an `onAppUrlOpen` listener that catches the redirect
+  and calls `supabase.auth.exchangeCodeForSession(url)` to finish
+  sign-in. After that the existing `onAuthStateChange` picks it up.
 
-1. Install `@capacitor/browser` (`npm i @capacitor/browser`).
-2. Add to `ios/App/App/Info.plist`:
-   ```xml
-   <key>CFBundleURLTypes</key>
-   <array>
-     <dict>
-       <key>CFBundleURLName</key>
-       <string>app.samas.broker</string>
-       <key>CFBundleURLSchemes</key>
-       <array><string>samas</string></array>
-     </dict>
-   </array>
-   ```
-3. In `OAuthButtons`, change `redirectTo` to `samas://auth/callback`.
-4. Add a Capacitor `App.addListener('appUrlOpen', ...)` handler at
-   the SamasShell root that calls
-   `supabase.auth.exchangeCodeForSession(code)` when the URL opens.
-5. Add `samas://auth/callback` to the Supabase project's
-   "Additional Redirect URLs" allow-list.
+**One thing you still need to do** — add `samas://auth/callback` to
+the Supabase project's "Additional Redirect URLs" allow-list:
 
-This gives you a native Sign-in-with-Apple sheet (the Apple credential
-manager) instead of the WebView form. Worth doing before App Store
-submission but not blocking the Cohen demo.
+  Supabase Dashboard → Authentication → URL Configuration →
+  Redirect URLs → add `samas://auth/callback`
+
+Without that, Supabase rejects the redirect target and the user is
+stranded after sign-in.
 
 ---
 

@@ -22,6 +22,18 @@
 import { useEffect, useState } from "react";
 import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "../lib/supabase";
 
+// 0.1.5 — Capacitor detection. When running inside the iOS WebView
+// we need to: (1) open OAuth in the system Safari (not the WebView,
+// which gets blocked by Google for "embedded user-agent"), (2) use
+// a samas:// custom URL scheme so the OAuth provider can deep-link
+// back to the app, (3) listen for the redirect via the @capacitor/app
+// appUrlOpen event and finish the session via exchangeCodeForSession.
+function isCapacitor() {
+  return typeof window !== "undefined" &&
+    !!(window.Capacitor && window.Capacitor.isNativePlatform &&
+       window.Capacitor.isNativePlatform());
+}
+
 // AR university list — keys MUST match the case branches in
 // public.is_university_email() (supabase/social_university.sql).
 // The label is what the dropdown shows; the key is what the trigger
@@ -273,16 +285,21 @@ function OAuthButtons({ C, busy, setBusy, onError }) {
     setBusy(true);
     onError(null);
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
+      const native = isCapacitor();
+      const redirectTo = native
+        ? "samas://auth/callback"
+        : (typeof window !== "undefined" ? window.location.origin : undefined);
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          // For native iOS we'd swap this to a custom scheme like
-          // "app.samas.broker://auth" — needs Info.plist URL scheme
-          // + @capacitor/browser plugin first. For the web preview
-          // and the Cohen demo, the Supabase site_url callback is
-          // sufficient; the app picks up the session via the
-          // onAuthStateChange listener.
-          redirectTo: typeof window !== "undefined" ? window.location.origin : undefined,
+          redirectTo,
+          // skipBrowserRedirect: when true, supabase-js returns the
+          // OAuth URL without auto-navigating. We need this on
+          // Capacitor so we can open the URL in the system Safari
+          // instead of the in-app WebView (Google blocks WebView
+          // OAuth flows since 2021). On the web build we let
+          // supabase-js navigate the current tab as usual.
+          skipBrowserRedirect: native,
         },
       });
       if (error) {
@@ -295,11 +312,23 @@ function OAuthButtons({ C, busy, setBusy, onError }) {
           onError(error.message);
         }
         setBusy(false);
+        return;
       }
-      // On success the browser navigates to the OAuth provider; we
-      // don't reach this point in the same JS context. When it comes
-      // back, onAuthStateChange handles the rest. Don't clear busy
-      // here — let the navigation happen.
+      // Native Capacitor — open the OAuth URL in system Safari.
+      // The provider redirects to samas://auth/callback, which iOS
+      // routes back to the app. The Shell's appUrlOpen handler
+      // (in src/v2/Shell.jsx) catches it and calls
+      // supabase.auth.exchangeCodeForSession.
+      if (native && data?.url) {
+        const { Browser } = await import("@capacitor/browser");
+        await Browser.open({ url: data.url, presentationStyle: "popover" });
+        // Don't clear busy — when the user comes back via the deep
+        // link, the appUrlOpen handler signals success and the
+        // auth gate unmounts this view.
+        return;
+      }
+      // On the web build, supabase-js already navigated the current
+      // tab; we don't reach this line in practice.
     } catch (e) {
       onError(e?.message || String(e));
       setBusy(false);

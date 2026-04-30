@@ -49,5 +49,16 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>app.samas.broker</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>samas</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
