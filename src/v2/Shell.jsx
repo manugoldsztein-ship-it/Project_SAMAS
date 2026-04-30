@@ -13,6 +13,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useMemo, Suspense, lazy } from "react";
+import ReactDOM from "react-dom";
 import { SAMAS_THEME, FONT } from "./theme.js";
 import { SamasTabBar, Avatar, avatarPropsFor, initialsOf, AVATAR_PALETTE } from "./shared.jsx";
 import { social as socialApi } from "./api/index.js";
@@ -45,6 +46,8 @@ import { seedDemoAccount, resetDemoAccount } from "../lib/demoSeed.js";
 import { seedSocialDemo } from "../lib/seedSocial.js";
 import { hapticNative } from "../lib/native.js";
 import { deleteAccount, exportData } from "../lib/account.js";
+import { grantAIConsent, denyAIConsent, hasAIConsent } from "../lib/aiConsent.js";
+import { reauthWithPassword } from "../lib/reauth.js";
 import { LivePricesProvider } from "./livePrices.jsx";
 
 // localStorage flag for the Pro mode toggle. Default ON — power users
@@ -436,6 +439,13 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
           onClose={() => setShowProPricing(false)}
         />
       )}
+
+      {/* AI consent gate (samas-0.0.98). Listens for the global
+          samas:ai-consent-request event fired by lib/aiConsent.js
+          on every AI call. Resolves the in-flight Promise when the
+          user taps Acepto / Rechazar so the calling code can proceed
+          (or get an AIConsentDeniedError). */}
+      <AIConsentGate T={T} lang={lang} />
     </div>
     </LivePricesProvider>
   );
@@ -469,6 +479,8 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
   const [exportCopied, setExportCopied]   = useState(false);
   const [showDelete, setShowDelete]       = useState(false);
   const [deleteTyped, setDeleteTyped]     = useState("");
+  const [deletePassword, setDeletePassword] = useState("");  // 0.0.98 reauth gate
+  const [deleteErr, setDeleteErr]         = useState(null);
   const [deleting, setDeleting]           = useState(false);
   // Privacy / Terms sub-sheets — App Store submission requires both
   // policies to be reachable from the app. We render them inline as
@@ -1030,7 +1042,12 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
             confirm flow happens in the modal below; tapping this
             row only opens that. */}
         <button
-          onClick={() => { setDeleteTyped(""); setShowDelete(true); }}
+          onClick={() => {
+            setDeleteTyped("");
+            setDeletePassword("");
+            setDeleteErr(null);
+            setShowDelete(true);
+          }}
           style={{
             width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 14,
             background: T.surface, border: `1px solid ${T.danger}55`,
@@ -1324,10 +1341,37 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
                 width: "100%", padding: "10px 14px", borderRadius: 12,
                 background: T.surface, border: `1px solid ${T.border}`,
                 color: T.text, fontFamily: FONT.mono, fontSize: 14, fontWeight: 700,
-                outline: "none", letterSpacing: 1.2, marginBottom: 16,
+                outline: "none", letterSpacing: 1.2, marginBottom: 12,
                 boxSizing: "border-box",
               }}
             />
+            {/* Re-auth gate (0.0.98). Type-to-confirm proved INTENT,
+                this proves IDENTITY. Even if the device is unlocked
+                and someone has access to a session, they need the
+                password to push delete through. */}
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 12, color: T.text, marginBottom: 8,
+            }}>{tr("settings.account.delete_pwd_label", lang)}</div>
+            <input
+              type="password"
+              value={deletePassword}
+              onChange={(e) => { setDeletePassword(e.target.value); setDeleteErr(null); }}
+              disabled={deleting}
+              autoComplete="current-password"
+              placeholder={tr("settings.account.delete_pwd_ph", lang)}
+              style={{
+                width: "100%", padding: "10px 14px", borderRadius: 12,
+                background: T.surface, border: `1px solid ${deleteErr ? T.danger : T.border}`,
+                color: T.text, fontFamily: FONT.sans, fontSize: 14,
+                outline: "none", marginBottom: deleteErr ? 6 : 16,
+                boxSizing: "border-box",
+              }}
+            />
+            {deleteErr && (
+              <div style={{
+                fontFamily: FONT.sans, fontSize: 12, color: T.danger, marginBottom: 12,
+              }}>{deleteErr}</div>
+            )}
             <div style={{ display: "flex", gap: 10 }}>
               <button
                 onClick={() => { if (!deleting) setShowDelete(false); }}
@@ -1340,22 +1384,33 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
                 }}
               >{tr("settings.account.delete_cancel", lang)}</button>
               <button
-                disabled={deleting || deleteTyped.trim().toUpperCase() !== tr("settings.account.delete_keyword", lang)}
+                disabled={
+                  deleting ||
+                  deleteTyped.trim().toUpperCase() !== tr("settings.account.delete_keyword", lang) ||
+                  deletePassword.length < 1
+                }
                 onClick={async () => {
                   if (deleting) return;
                   setDeleting(true);
+                  setDeleteErr(null);
                   try {
+                    // Step 1: re-auth. Throws on wrong password —
+                    // we surface the message inline + bail without
+                    // ever calling deleteAccount.
+                    await reauthWithPassword(deletePassword);
+                    // Step 2: actually delete. deleteAccount() also
+                    // signs out so App.jsx routes to login.
                     await deleteAccount();
                     toast.success(tr("settings.account.delete_done", lang));
-                    // Close everything; the auth-state-change in
-                    // App.jsx will route to the login screen now
-                    // that signOut() ran inside deleteAccount.
                     setShowDelete(false);
                     if (onClose) onClose();
                   } catch (e) {
-                    toast.error(tr("settings.account.delete_fail", lang, {
-                      error: e?.message || String(e),
-                    }));
+                    const msg = e?.message || String(e);
+                    if (msg === "Contraseña incorrecta.") {
+                      setDeleteErr(msg);
+                    } else {
+                      toast.error(tr("settings.account.delete_fail", lang, { error: msg }));
+                    }
                   } finally {
                     setDeleting(false);
                   }
@@ -1364,8 +1419,8 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
                   flex: 2, padding: "12px 14px", borderRadius: 12,
                   background: T.danger, border: "none",
                   color: "#fff", fontFamily: FONT.sans, fontSize: 13, fontWeight: 800,
-                  cursor: (deleting || deleteTyped.trim().toUpperCase() !== tr("settings.account.delete_keyword", lang)) ? "default" : "pointer",
-                  opacity: (deleting || deleteTyped.trim().toUpperCase() !== tr("settings.account.delete_keyword", lang)) ? 0.5 : 1,
+                  cursor: (deleting || deleteTyped.trim().toUpperCase() !== tr("settings.account.delete_keyword", lang) || deletePassword.length < 1) ? "default" : "pointer",
+                  opacity: (deleting || deleteTyped.trim().toUpperCase() !== tr("settings.account.delete_keyword", lang) || deletePassword.length < 1) ? 0.5 : 1,
                   letterSpacing: 0.2,
                 }}
               >
@@ -2408,10 +2463,136 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
   );
 }
 
+// ============================================================
+// AIConsentGate (samas-0.0.98)
+// ============================================================
+// Global listener for the samas:ai-consent-request event fired by
+// lib/aiConsent.js whenever an AI call is about to leave the app
+// without prior consent. Mounts a portal modal explaining what gets
+// sent (portfolio data → Anthropic Claude, no training, etc.) and
+// captures the user's accept / reject. Resolves the in-flight
+// Promise via grantAIConsent() or denyAIConsent().
+// ============================================================
+function AIConsentGate({ T, lang = "es" }) {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    function onRequest() {
+      // If consent landed via another path between the request and
+      // here (race), don't bother showing — just signal grant.
+      if (hasAIConsent()) { grantAIConsent(); return; }
+      setOpen(true);
+    }
+    window.addEventListener("samas:ai-consent-request", onRequest);
+    return () => window.removeEventListener("samas:ai-consent-request", onRequest);
+  }, []);
+
+  if (!open) return null;
+
+  function accept() { setOpen(false); grantAIConsent(); }
+  function decline() { setOpen(false); denyAIConsent(); }
+
+  return ReactDOM.createPortal(
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) decline(); }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 200,
+        background: "rgba(0,0,0,0.65)",
+        display: "flex", alignItems: "flex-end", justifyContent: "center",
+        animation: "samas-fade-in 160ms ease-out",
+      }}
+    >
+      <div style={{
+        width: "100%", maxWidth: 540,
+        background: T.surface, color: T.text,
+        borderTopLeftRadius: 24, borderTopRightRadius: 24,
+        borderTop: `1px solid ${T.border}`,
+        padding: "20px 22px calc(env(safe-area-inset-bottom) + 24px)",
+        boxShadow: "0 -18px 50px rgba(0,0,0,0.5)",
+        animation: "samas-sheet-up 220ms ease-out",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          <div style={{
+            width: 38, height: 38, borderRadius: 12,
+            background: T.accent, color: "#06180c", flexShrink: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
+            </svg>
+          </div>
+          <div style={{
+            flex: 1, fontFamily: FONT.display, fontSize: 18, fontWeight: 700,
+            color: T.text, letterSpacing: -0.3,
+          }}>
+            {tr("ai_consent.title", lang)}
+          </div>
+        </div>
+
+        <div style={{
+          fontFamily: FONT.sans, fontSize: 13, color: T.text, lineHeight: 1.6,
+          marginBottom: 12,
+        }}>
+          {tr("ai_consent.body", lang)}
+        </div>
+
+        {/* Bullet rows with check icons — concrete commitments. */}
+        <div style={{ marginBottom: 18 }}>
+          {["bullet_provider", "bullet_no_training", "bullet_revoke"].map((k) => (
+            <div key={k} style={{
+              display: "flex", alignItems: "flex-start", gap: 10, padding: "6px 0",
+            }}>
+              <div style={{
+                width: 18, height: 18, borderRadius: 9, marginTop: 2, flexShrink: 0,
+                background: T.accentSoft, color: T.accent,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+              <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.text, lineHeight: 1.5 }}>
+                {tr(`ai_consent.${k}`, lang)}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={decline} style={{
+            flex: 1, padding: "13px 16px", borderRadius: 14,
+            background: T.bg, border: `1px solid ${T.border}`,
+            color: T.text, fontFamily: FONT.sans, fontSize: 14, fontWeight: 600,
+            cursor: "pointer",
+          }}>{tr("ai_consent.decline", lang)}</button>
+          <button onClick={accept} style={{
+            flex: 1.4, padding: "13px 16px", borderRadius: 14,
+            background: T.accent, color: T.accentInk,
+            fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, border: "none",
+            cursor: "pointer",
+          }}>{tr("ai_consent.accept", lang)}</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 // CHANGELOG — newest first. Keep entries terse (3 bullets max,
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.0.98",
+    title: "Privacy + safety trio — AI consent, EXIF strip, withdraw re-auth",
+    bullets: [
+      "AI consent gate: first time you tap any AI feature (Análisis IA, Coach IA, Preguntale a SAMAS, Sugerime un post, asset insight, trade coach), a one-time disclosure modal explains your portfolio data goes to Anthropic Claude, no training, can be turned off in Settings. Acepto persists per-device. Rechazar lets you keep using the app non-AI.",
+      "EXIF stripping on uploaded post images: every photo gets re-encoded through a canvas (createImageBitmap with imageOrientation=from-image so iPhone portrait shots stay upright) before reaching Supabase Storage. Drops GPS coordinates, camera model, all metadata. Also clamps long side to 2048px so we don't store 12MP originals.",
+      "Re-auth gate before two destructive flows: outbound withdrawals (Wallet → Enviar) and account deletion (Settings → Borrar mi cuenta) now require your password again, even inside an authenticated session. Even if the device is unlocked or a session leaks, the attacker still needs the password to push these through. Wrong password shows inline error without ever calling the destructive endpoint.",
+    ],
+  },
   {
     version: "0.0.97",
     title: "Compose toolbar fix: 2 rows so Post never clips",

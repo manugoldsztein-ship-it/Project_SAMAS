@@ -857,8 +857,13 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
         }, 0);
       }
     } catch (e) {
-      console.warn("[social] suggest post failed:", e);
-      setErr(tr("social.compose.suggest_err", lang));
+      // Consent declined → silent no-op (the modal already explained).
+      if (e?.name === "AIConsentDeniedError") {
+        // intentionally no setErr
+      } else {
+        console.warn("[social] suggest post failed:", e);
+        setErr(tr("social.compose.suggest_err", lang));
+      }
     } finally {
       setSuggesting(false);
     }

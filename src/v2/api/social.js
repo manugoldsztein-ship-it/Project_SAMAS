@@ -420,6 +420,49 @@ export async function getPost(postId) {
 const POST_IMAGE_BUCKET = "post-images";
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8MB — generous for iPhone photos
 
+/**
+ * stripImageExif(file) — re-encodes the image through a canvas so
+ * any EXIF metadata (notably GPS coordinates from iPhone photos) is
+ * dropped. Also clamps the long side to 2048px so we don't ship 12MP
+ * originals through Supabase Storage. samas-0.0.98 privacy fix.
+ *
+ * Uses createImageBitmap with imageOrientation: 'from-image' so the
+ * EXIF rotation tag is applied to the pixels BEFORE we drop the EXIF —
+ * otherwise iPhone portrait shots end up sideways.
+ *
+ * Falls back to the original file if anything fails (canvas blocked,
+ * createImageBitmap unsupported, etc.) so a privacy enhancement
+ * never breaks the upload.
+ */
+async function stripImageExif(file) {
+  try {
+    if (typeof createImageBitmap !== "function") return file;
+    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+    const MAX_DIM = 2048;
+    let { width, height } = bitmap;
+    if (width > MAX_DIM || height > MAX_DIM) {
+      const scale = MAX_DIM / Math.max(width, height);
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close?.();
+    // JPEG @ 0.92 quality strikes a sane balance — visually lossless
+    // for screen viewing, ~30-40% size reduction vs originals.
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+    if (!blob) return file;
+    return new File([blob], "clean.jpg", { type: "image/jpeg", lastModified: Date.now() });
+  } catch (e) {
+    console.warn("[uploadPostImage] EXIF strip failed, using original:", e?.message || e);
+    return file;
+  }
+}
+
 export async function uploadPostImage(file) {
   if (!file) return null;
   if (file.size > MAX_IMAGE_BYTES) {
@@ -428,17 +471,21 @@ export async function uploadPostImage(file) {
   if (!String(file.type || "").startsWith("image/")) {
     throw new Error("Solo se aceptan imágenes.");
   }
+  // Strip EXIF (GPS, camera, etc.) + clamp dimensions before upload.
+  // Defense-in-depth: never ship a user's location with their post.
+  const cleaned = await stripImageExif(file);
   const userId = await currentUserId();
-  // Filename: random uuid + original extension. We never trust the
-  // user-supplied name (could collide / could carry weird characters).
-  const ext = (file.name || "").match(/\.([a-zA-Z0-9]+)$/)?.[1]?.toLowerCase() || "jpg";
+  // Filename: random uuid + .jpg (the cleaned blob is always jpeg).
+  // We never trust the user-supplied name.
+  const ext = cleaned.type === "image/jpeg" ? "jpg" :
+    ((file.name || "").match(/\.([a-zA-Z0-9]+)$/)?.[1]?.toLowerCase() || "jpg");
   const path = `${userId}/${crypto.randomUUID()}.${ext}`;
   const { error: upErr } = await supabase.storage
     .from(POST_IMAGE_BUCKET)
-    .upload(path, file, {
+    .upload(path, cleaned, {
       cacheControl: "31536000", // 1 year — image content is content-addressed by uuid
       upsert: false,
-      contentType: file.type || undefined,
+      contentType: cleaned.type || file.type || undefined,
     });
   if (upErr) throw new Error(`Subida fallida: ${upErr.message}`);
   const { data: pub } = supabase.storage.from(POST_IMAGE_BUCKET).getPublicUrl(path);

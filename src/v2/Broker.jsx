@@ -2961,7 +2961,18 @@ function TradeCoachCard({ T, lang = "es", ticker, side, qty, price }) {
     setBusy(true); setErr(null); setData(null);
     tradeCoach({ ticker, side, qty, price })
       .then((res) => { if (alive) { setData(res); setBusy(false); } })
-      .catch((e) => { if (alive) { setErr(e?.message || String(e)); setBusy(false); } });
+      .catch((e) => {
+        if (!alive) return;
+        // Consent declined — silently bail. The TradeCoachCard already
+        // hides itself when err is set without data, so this just keeps
+        // the err message empty (no console spam, no flash of error UI).
+        if (e?.name === "AIConsentDeniedError") {
+          setErr("__consent_denied__");
+        } else {
+          setErr(e?.message || String(e));
+        }
+        setBusy(false);
+      });
     return () => { alive = false; };
   }, [ticker, side, qty, price]);
 
@@ -3937,7 +3948,9 @@ function AssetAIInsight({ T, ticker, lang = "es" }) {
       setData(result);
       hapticNative("success").catch(() => {});
     } catch (e) {
-      setErr(e?.message || String(e));
+      // Consent declined — bail without surfacing as error.
+      if (e?.name === "AIConsentDeniedError") { /* no-op */ }
+      else setErr(e?.message || String(e));
     } finally {
       setBusy(false);
     }

@@ -9,6 +9,19 @@
 // ============================================================
 
 import { supabase } from "./supabase.js";
+import { ensureAIConsent } from "./aiConsent.js";
+
+// Sentinel error so callers can distinguish "user said no thanks"
+// from genuine API failures. UIs treat AIConsentDeniedError as
+// silent (no error toast) — the consent modal already explained.
+export class AIConsentDeniedError extends Error {
+  constructor() { super("AI consent denied"); this.name = "AIConsentDeniedError"; }
+}
+
+async function gateOnConsent() {
+  const ok = await ensureAIConsent();
+  if (!ok) throw new AIConsentDeniedError();
+}
 
 /**
  * analyzePortfolio() — POST /functions/v1/analyze-portfolio
@@ -27,6 +40,7 @@ import { supabase } from "./supabase.js";
  * UI should catch and surface a friendly fallback.
  */
 export async function analyzePortfolio() {
+  await gateOnConsent();
   const { data, error } = await supabase.functions.invoke("analyze-portfolio", {
     body: {},
   });
@@ -59,6 +73,7 @@ export async function chatPortfolio({ messages }) {
   if (!Array.isArray(messages) || messages.length === 0) {
     throw new Error("Mensajes requeridos.");
   }
+  await gateOnConsent();
   const { data, error } = await supabase.functions.invoke("chat-portfolio", {
     body: { messages },
   });
@@ -93,6 +108,7 @@ export async function tradeCoach({ ticker, side, qty, price }) {
   if (!ticker || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(price) || price <= 0) {
     throw new Error("Datos de operación inválidos.");
   }
+  await gateOnConsent();
   const { data, error } = await supabase.functions.invoke("trade-coach", {
     body: { ticker, side, qty, price },
   });
@@ -121,6 +137,7 @@ export async function tradeCoach({ ticker, side, qty, price }) {
  * something usable.
  */
 export async function draftPost() {
+  await gateOnConsent();
   const { data, error } = await supabase.functions.invoke("draft-post", {
     body: {},
   });
@@ -154,6 +171,7 @@ export async function draftPost() {
  */
 export async function analyzeAsset(ticker) {
   if (!ticker) throw new Error("Ticker requerido.");
+  await gateOnConsent();
   const { data, error } = await supabase.functions.invoke("analyze-asset", {
     body: { ticker: String(ticker).toUpperCase() },
   });

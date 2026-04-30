@@ -34,6 +34,7 @@ import { setRefreshHandler } from "./refreshRegistry.js";
 import { t as tr } from "../lib/i18n.js";
 import { useLivePortfolioRatio } from "./livePrices.jsx";
 import { analyzePortfolio, chatPortfolio } from "../lib/ai.js";
+import { reauthWithPassword } from "../lib/reauth.js";
 import { hapticNative } from "../lib/native.js";
 
 export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark, onOpenSettings, proMode = false, onOpenProUpsell, lang = "es" }) {
@@ -953,7 +954,9 @@ function AIAnalysisCard({ T, lang = "es" }) {
       setResult(data);
       hapticNative("success").catch(() => {});
     } catch (e) {
-      setErr(e?.message || String(e));
+      // User declined the consent dialog — close the sheet silently.
+      if (e?.name === "AIConsentDeniedError") { setOpen(false); }
+      else { setErr(e?.message || String(e)); }
     } finally {
       setBusy(false);
     }
@@ -1232,7 +1235,14 @@ function AIChatCard({ T, lang = "es" }) {
         hapticNative("success").catch(() => {});
       }
     } catch (e) {
-      setErr(e?.message || String(e));
+      // Consent declined → roll back the optimistic user message + close.
+      if (e?.name === "AIConsentDeniedError") {
+        setMessages((prev) => prev.slice(0, -1));
+        setInput(text);  // restore typed input so they don't lose it
+        setOpen(false);
+      } else {
+        setErr(e?.message || String(e));
+      }
     } finally {
       setBusy(false);
       setTimeout(() => inputRef.current?.focus(), 50);
@@ -2367,6 +2377,7 @@ function DepositModal({ T, lang = "es", balance, onClose, onDone }) {
 function WithdrawModal({ T, lang = "es", balance, onClose, onDone }) {
   const [amount, setAmount] = useState("");
   const [destination, setDestination] = useState("");
+  const [password, setPassword] = useState("");  // 0.0.98 reauth gate
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
@@ -2375,8 +2386,14 @@ function WithdrawModal({ T, lang = "es", balance, onClose, onDone }) {
     const n = parseFloat(amount);
     if (!n || n <= 0) { setErr("Monto inválido."); return; }
     if (!destination.trim()) { setErr("Indicá CBU o alias destino."); return; }
+    if (!password) { setErr("Confirmá tu contraseña."); return; }
     setBusy(true);
     try {
+      // Step 1: re-auth. Throws "Contraseña incorrecta." which we
+      // surface inline. Even if a session is hijacked or the device
+      // is unlocked, withdrawing requires the password again.
+      await reauthWithPassword(password);
+      // Step 2: actual withdraw.
       const isCbu = /^\d{22}$/.test(destination.trim());
       await walletApi.withdraw({
         amount: n, ccy: "ARS",
@@ -2396,6 +2413,26 @@ function WithdrawModal({ T, lang = "es", balance, onClose, onDone }) {
       <div style={{ height: 14 }}/>
       <TextInput T={T} label="CBU o Alias destino" value={destination}
         onChange={setDestination} placeholder="ej: juan.perez.galicia" />
+      <div style={{ height: 14 }}/>
+      {/* Password reauth (samas-0.0.98). Belt-and-braces — even
+          inside an authenticated session, outbound transfers
+          require fresh password proof. */}
+      <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.text, marginBottom: 6 }}>
+        Confirmar con contraseña
+      </div>
+      <input
+        type="password"
+        value={password}
+        onChange={(e) => { setPassword(e.target.value); setErr(null); }}
+        autoComplete="current-password"
+        placeholder="Tu contraseña"
+        style={{
+          width: "100%", padding: "12px 14px", borderRadius: 12,
+          background: T.surface, border: `1px solid ${T.border}`,
+          color: T.text, fontFamily: FONT.sans, fontSize: 14,
+          outline: "none", boxSizing: "border-box",
+        }}
+      />
 
       {err && <div style={{ marginTop: 12, color: T.danger, fontFamily: FONT.sans, fontSize: 12 }}>{err}</div>}
 
