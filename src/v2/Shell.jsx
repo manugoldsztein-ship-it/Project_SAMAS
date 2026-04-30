@@ -2413,6 +2413,16 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.89",
+    title: "Preguntale a SAMAS — multi-turn AI chat about your portfolio",
+    bullets: [
+      "New \"Preguntale a SAMAS\" card on Wallet (right under Análisis IA). Tap → 92vh chat sheet slides up. Type a question, hit Send, get an answer that has YOUR portfolio in context. Multi-turn — keep going, follow-ups respect previous turns. Empty state has 3 starter prompts (diversification / performance / next move) so the user can demo without thinking up a question.",
+      "Edge Function: supabase/functions/chat-portfolio/index.ts. Reads holdings via JWT-scoped RLS, builds a Spanish system prompt with a JSON dump of the user's positions + value-weighted gain%, sends the trimmed conversation history (last 12 turns) to Claude Haiku with the system prompt. 600 max_tokens for crisp 2-4 sentence replies.",
+      "Templated server-side fallback when ANTHROPIC_API_KEY isn't set — keyword matching against the latest user message (concentración / diversificar / vender / comprar / etc.) plus real portfolio facts. Demoable today, no key required.",
+      "UI niceties: thinking dots while waiting, auto-scroll to newest message, Enter sends + Shift+Enter newline, conversation persists across close+reopen until you tap Nueva.",
+    ],
+  },
+  {
     version: "0.0.88",
     title: "AI compose helper — \"Sugerime un post\"",
     bullets: [

@@ -45,6 +45,36 @@ export async function analyzePortfolio() {
 }
 
 /**
+ * chatPortfolio({ messages }) — POST /functions/v1/chat-portfolio
+ *
+ * Multi-turn chat with the user's portfolio in context. Pass the
+ * full message history so far (up to ~12 turns); server re-injects
+ * holdings/transactions data on every call so the model always
+ * sees the freshest book.
+ *
+ * @param {{ messages: Array<{ role: 'user'|'assistant', content: string }> }} input
+ * @returns {Promise<{ reply: string }>}
+ */
+export async function chatPortfolio({ messages }) {
+  if (!Array.isArray(messages) || messages.length === 0) {
+    throw new Error("Mensajes requeridos.");
+  }
+  const { data, error } = await supabase.functions.invoke("chat-portfolio", {
+    body: { messages },
+  });
+  if (error) {
+    let detail = "";
+    try {
+      const body = await error?.context?.json?.();
+      if (body?.error) detail = `: ${body.error}`;
+    } catch (_) { /* fall through */ }
+    throw new Error(`Chat IA falló${detail || ": " + (error.message || "error desconocido")}`);
+  }
+  if (data?.error) throw new Error(`Chat IA falló: ${data.error}`);
+  return data;
+}
+
+/**
  * draftPost() — POST /functions/v1/draft-post
  *
  * Server reads the caller's holdings + last few trade transactions

@@ -33,7 +33,7 @@ import { toast } from "./toast.jsx";
 import { setRefreshHandler } from "./refreshRegistry.js";
 import { t as tr } from "../lib/i18n.js";
 import { useLivePortfolioRatio } from "./livePrices.jsx";
-import { analyzePortfolio } from "../lib/ai.js";
+import { analyzePortfolio, chatPortfolio } from "../lib/ai.js";
 import { hapticNative } from "../lib/native.js";
 
 export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark, onOpenSettings, proMode = false, onOpenProUpsell, lang = "es" }) {
@@ -455,7 +455,11 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
           the response in a sheet. Sits between portfolio peek and
           aporte so it's reachable without scrolling on most screens. */}
       {portfolio && portfolio.totalUsd > 0 && (
-        <AIAnalysisCard T={T} lang={lang} />
+        <>
+          <AIAnalysisCard T={T} lang={lang} />
+          {/* Preguntale a SAMAS — multi-turn chat (samas-0.0.89). */}
+          <AIChatCard T={T} lang={lang} />
+        </>
       )}
 
       {/* ---------- aporte mensual ---------- */}
@@ -1178,6 +1182,343 @@ function AIAnalysisCard({ T, lang = "es" }) {
         document.body
       )}
     </>
+  );
+}
+
+// ============================================================
+// AIChatCard (samas-0.0.89) — "Preguntale a SAMAS" multi-turn
+// chat with the user's portfolio in context. Killer demo for
+// Cohen.
+// ============================================================
+// Card on the Wallet tab → tap → opens a chat sheet with message
+// bubbles. User types, presses Send → server reads holdings via
+// JWT-scoped RLS, prepends a system prompt, calls Claude Haiku
+// with the conversation history, returns reply. Templated server-
+// side fallback when ANTHROPIC_API_KEY isn't set.
+// ============================================================
+function AIChatCard({ T, lang = "es" }) {
+  const [open, setOpen] = useState(false);
+  // Conversation state lives ABOVE the sheet so a close-then-reopen
+  // preserves the chat. Cleared by an explicit "Nueva conversación"
+  // action inside the sheet.
+  const [messages, setMessages] = useState([]); // [{role, content}]
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const scrollRef = React.useRef(null);
+  const inputRef = React.useRef(null);
+
+  // Auto-scroll to the bottom whenever messages change so the
+  // newest reply is always visible without the user dragging.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages, busy]);
+
+  async function send() {
+    const text = input.trim();
+    if (!text || busy) return;
+    setErr(null);
+    const next = [...messages, { role: "user", content: text }];
+    setMessages(next);
+    setInput("");
+    setBusy(true);
+    hapticNative("tap").catch(() => {});
+    try {
+      const { reply } = await chatPortfolio({ messages: next });
+      if (reply) {
+        setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+        hapticNative("success").catch(() => {});
+      }
+    } catch (e) {
+      setErr(e?.message || String(e));
+    } finally {
+      setBusy(false);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }
+
+  function reset() {
+    setMessages([]);
+    setInput("");
+    setErr(null);
+  }
+
+  // Suggested starter prompts — make the empty-state useful so the
+  // user can demo without thinking up a question.
+  const STARTERS = [
+    tr("wallet.chat.starter.diversification", lang),
+    tr("wallet.chat.starter.performance", lang),
+    tr("wallet.chat.starter.next_move", lang),
+  ];
+
+  return (
+    <>
+      <div style={{ margin: "12px 16px 0" }}>
+        <button
+          onClick={() => {
+            setOpen(true);
+            hapticNative("tap").catch(() => {});
+            setTimeout(() => inputRef.current?.focus(), 200);
+          }}
+          style={{
+            width: "100%", padding: 16, borderRadius: 22,
+            background: T.surface, border: `1px solid ${T.border}`,
+            display: "flex", alignItems: "center", gap: 14, cursor: "pointer",
+            textAlign: "left",
+          }}
+        >
+          <div style={{
+            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+            background: T.accent, color: "#06180c",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+              color: T.text, marginBottom: 2,
+            }}>
+              {tr("wallet.chat.cta_title", lang)}
+            </div>
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 12, color: T.textMute, lineHeight: 1.4,
+            }}>
+              {messages.length > 0
+                ? tr("wallet.chat.cta_subtitle_again", lang, { n: messages.length })
+                : tr("wallet.chat.cta_subtitle", lang)}
+            </div>
+          </div>
+          <Pill T={T}>IA</Pill>
+        </button>
+      </div>
+
+      {/* Chat sheet — portaled to body so it escapes the Wallet
+          scroll container's stacking context (same pattern as the
+          AI analysis sheet). */}
+      {open && ReactDOM.createPortal(
+        <div
+          onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
+          style={{
+            position: "fixed", inset: 0, zIndex: 100,
+            background: "rgba(0,0,0,0.55)",
+            display: "flex", alignItems: "flex-end",
+            animation: "samas-fade-in 160ms ease-out",
+          }}
+        >
+          <div style={{
+            width: "100%", height: "92vh",
+            background: T.surface, color: T.text,
+            borderTopLeftRadius: 24, borderTopRightRadius: 24,
+            borderTop: `1px solid ${T.border}`,
+            display: "flex", flexDirection: "column",
+            boxShadow: "0 -18px 50px rgba(0,0,0,0.5)",
+            animation: "samas-sheet-up 220ms ease-out",
+          }}>
+            {/* Drag handle + header */}
+            <div style={{
+              padding: "12px 18px 10px", borderBottom: `1px solid ${T.border}`,
+              display: "flex", alignItems: "center", gap: 10, flexShrink: 0,
+            }}>
+              <div style={{
+                width: 32, height: 32, borderRadius: 10,
+                background: T.accent, color: "#06180c", flexShrink: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
+                </svg>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+                  color: T.accent, letterSpacing: 0.6, textTransform: "uppercase" }}>
+                  {tr("wallet.chat.sheet.kicker", lang)}
+                </div>
+                <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: T.text, letterSpacing: -0.3 }}>
+                  {tr("wallet.chat.sheet.title", lang)}
+                </div>
+              </div>
+              {messages.length > 0 && (
+                <button
+                  onClick={reset}
+                  style={{
+                    background: T.bg, border: `1px solid ${T.border}`,
+                    color: T.textMute, fontFamily: FONT.sans, fontSize: 11, fontWeight: 600,
+                    padding: "6px 10px", borderRadius: 999, cursor: "pointer",
+                  }}
+                >{tr("wallet.chat.reset", lang)}</button>
+              )}
+              <button
+                onClick={() => setOpen(false)}
+                aria-label="Cerrar"
+                style={{
+                  width: 32, height: 32, borderRadius: 16,
+                  background: T.bg, border: `1px solid ${T.border}`,
+                  color: T.textMute, fontFamily: FONT.sans, fontSize: 16,
+                  cursor: "pointer", padding: 0,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >×</button>
+            </div>
+
+            {/* Message list — scrolls. */}
+            <div ref={scrollRef} style={{
+              flex: 1, overflowY: "auto",
+              padding: "14px 16px",
+              WebkitOverflowScrolling: "touch",
+              overscrollBehavior: "contain",
+            }}>
+              {messages.length === 0 && (
+                <div style={{ padding: "8px 4px 14px" }}>
+                  <div style={{
+                    fontFamily: FONT.sans, fontSize: 13, color: T.textMute,
+                    lineHeight: 1.5, marginBottom: 14,
+                  }}>{tr("wallet.chat.empty_intro", lang)}</div>
+                  {/* Suggested starter prompts — tap to fill the input. */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {STARTERS.map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => {
+                          setInput(s);
+                          setTimeout(() => inputRef.current?.focus(), 0);
+                        }}
+                        style={{
+                          padding: "10px 12px", borderRadius: 12,
+                          background: T.bg, border: `1px solid ${T.border}`,
+                          color: T.text, cursor: "pointer", textAlign: "left",
+                          fontFamily: FONT.sans, fontSize: 13, lineHeight: 1.4,
+                        }}
+                      >{s}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {messages.map((m, i) => (
+                <ChatBubble key={i} T={T} role={m.role} content={m.content} />
+              ))}
+              {busy && (
+                <ChatBubble T={T} role="assistant" content={null} thinking />
+              )}
+              {err && (
+                <div style={{
+                  marginTop: 8, padding: "10px 12px", borderRadius: 12,
+                  background: T.dangerSoft, color: T.danger,
+                  fontFamily: FONT.sans, fontSize: 12, lineHeight: 1.5,
+                }}>{err}</div>
+              )}
+            </div>
+
+            {/* Input — pinned to the bottom of the sheet. */}
+            <div style={{
+              flexShrink: 0,
+              padding: "10px 14px calc(env(safe-area-inset-bottom) + 14px)",
+              borderTop: `1px solid ${T.border}`,
+              background: T.surface,
+              display: "flex", alignItems: "flex-end", gap: 8,
+            }}>
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value.slice(0, 500))}
+                onKeyDown={(e) => {
+                  // Enter sends, Shift+Enter inserts newline.
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    send();
+                  }
+                }}
+                placeholder={tr("wallet.chat.input_ph", lang)}
+                rows={1}
+                disabled={busy}
+                style={{
+                  flex: 1, minWidth: 0,
+                  padding: "10px 12px", borderRadius: 14,
+                  background: T.bg, border: `1px solid ${T.border}`,
+                  color: T.text, fontFamily: FONT.sans, fontSize: 14,
+                  resize: "none", outline: "none",
+                  maxHeight: 100,
+                }}
+              />
+              <button
+                onClick={send}
+                disabled={busy || !input.trim()}
+                aria-label={tr("wallet.chat.send", lang)}
+                style={{
+                  width: 38, height: 38, borderRadius: 999,
+                  background: input.trim() && !busy ? T.accent : T.bg,
+                  color: input.trim() && !busy ? "#06180c" : T.textMute,
+                  border: input.trim() && !busy ? "none" : `1px solid ${T.border}`,
+                  cursor: busy || !input.trim() ? "default" : "pointer",
+                  flexShrink: 0,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  padding: 0,
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13"/>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+// Chat bubble — user (right, accent) vs assistant (left, surface).
+// thinking=true renders a 3-dot loader instead of content.
+function ChatBubble({ T, role, content, thinking = false }) {
+  const isUser = role === "user";
+  return (
+    <div style={{
+      display: "flex",
+      justifyContent: isUser ? "flex-end" : "flex-start",
+      marginBottom: 8,
+    }}>
+      <div style={{
+        maxWidth: "85%",
+        padding: "10px 14px",
+        borderRadius: 16,
+        borderTopLeftRadius: isUser ? 16 : 4,
+        borderTopRightRadius: isUser ? 4 : 16,
+        background: isUser ? T.accent : T.bg,
+        color: isUser ? "#06180c" : T.text,
+        border: isUser ? "none" : `1px solid ${T.border}`,
+        fontFamily: FONT.sans, fontSize: 14, lineHeight: 1.5,
+        whiteSpace: "pre-wrap", wordBreak: "break-word",
+      }}>
+        {thinking ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 0" }}>
+            {[0, 1, 2].map((i) => (
+              <div key={i} style={{
+                width: 6, height: 6, borderRadius: 999,
+                background: T.textMute,
+                animation: `samas-chat-dot 1.2s ${i * 0.18}s infinite`,
+              }} />
+            ))}
+            <style>{`
+              @keyframes samas-chat-dot {
+                0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
+                40%           { opacity: 1;   transform: translateY(-3px); }
+              }
+            `}</style>
+          </div>
+        ) : (
+          content
+        )}
+      </div>
+    </div>
   );
 }
 
