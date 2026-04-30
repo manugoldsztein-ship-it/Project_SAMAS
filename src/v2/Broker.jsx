@@ -39,7 +39,7 @@ import { hapticNative } from "../lib/native.js";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { toast } from "./toast.jsx";
 import { t as tr } from "../lib/i18n.js";
-import { analyzeAsset, tradeCoach } from "../lib/ai.js";
+import { analyzeAsset, tradeCoach, suggestWatchlist } from "../lib/ai.js";
 
 // Sub-tabs metadata — drives both the bottom nav and the content
 // switch in the top-level <BrokerShell/> render.
@@ -997,6 +997,22 @@ function WatchlistView({ T, watchlists, assets, onSelectAsset, onRefresh, proMod
           color: T.textMute, fontFamily: FONT.sans, fontSize: 13, fontWeight: 600,
           cursor: "pointer", whiteSpace: "nowrap",
         }}>+ Nueva</button>
+        {/* AI watchlist creator (samas-0.1.0). Same pill shape as
+            "+ Nueva" but accent-bordered + sparkle glyph so it reads
+            as the AI option. */}
+        <button onClick={() => setModal("ai-create")} style={{
+          flexShrink: 0, padding: "8px 14px", borderRadius: 999,
+          background: T.surface, border: `1.5px solid ${T.accent}`,
+          color: T.accent, fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+          cursor: "pointer", whiteSpace: "nowrap",
+          display: "inline-flex", alignItems: "center", gap: 6,
+        }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
+          </svg>
+          IA
+        </button>
       </div>
 
       {/* Selected list header with rename/delete actions */}
@@ -1170,6 +1186,25 @@ function WatchlistView({ T, watchlists, assets, onSelectAsset, onRefresh, proMod
           }}
         />
       )}
+      {/* AI watchlist creator (samas-0.1.0). User types a theme,
+          AI proposes name + color + tickers + reason; user can
+          edit before saving. */}
+      {modal === "ai-create" && (
+        <AIWatchlistModal
+          T={T}
+          lang={lang}
+          onClose={() => setModal(null)}
+          onSave={async ({ name, color, tickers }) => {
+            const wl = await brokerApi.createWatchlist(name, { color });
+            for (let i = 0; i < tickers.length; i++) {
+              await brokerApi.addToWatchlist(wl.id, tickers[i]);
+            }
+            await onRefresh();
+            setSelectedId(wl.id);
+            setModal(null);
+          }}
+        />
+      )}
       {modal === "rename" && selected && (
         <NameModal T={T} title="Renombrar lista" initial={selected.name}
           onClose={() => setModal(null)}
@@ -1276,6 +1311,280 @@ function WatchlistView({ T, watchlists, assets, onSelectAsset, onRefresh, proMod
 // ----------------------------------------------------------
 // Tiny modal shells — used by watchlist mgmt and other simple flows.
 // ----------------------------------------------------------
+// ============================================================
+// AIWatchlistModal (samas-0.1.0) — type a theme → AI proposes a
+// watchlist (name + color + tickers + rationale) → user reviews +
+// edits → saves.
+// ============================================================
+function AIWatchlistModal({ T, lang = "es", onClose, onSave }) {
+  const [theme, setTheme] = useState("");
+  const [proposal, setProposal] = useState(null); // { name, color, tickers, reason }
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [savingBusy, setSavingBusy] = useState(false);
+
+  // Suggestion chips for empty-state inspiration. Tap to fill the
+  // theme input + auto-submit so the user sees "Cohen demo" at work.
+  const STARTERS = [
+    tr("watchlist.ai.starter.tech", lang),
+    tr("watchlist.ai.starter.dividend", lang),
+    tr("watchlist.ai.starter.energy_ar", lang),
+    tr("watchlist.ai.starter.crypto", lang),
+  ];
+
+  async function generate(t) {
+    const themeText = String(t || theme).trim();
+    if (!themeText) { setErr("Ingresá un tema."); return; }
+    setErr(null); setBusy(true); setProposal(null);
+    hapticNative("tap").catch(() => {});
+    try {
+      const data = await suggestWatchlist(themeText);
+      setProposal(data);
+      hapticNative("success").catch(() => {});
+    } catch (e) {
+      if (e?.name === "AIConsentDeniedError") onClose();
+      else setErr(e?.message || String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function toggleTicker(tk) {
+    if (!proposal) return;
+    setProposal((p) => ({
+      ...p,
+      tickers: p.tickers.includes(tk)
+        ? p.tickers.filter((x) => x !== tk)
+        : [...p.tickers, tk],
+    }));
+  }
+
+  async function save() {
+    if (!proposal || savingBusy) return;
+    if (proposal.tickers.length === 0) {
+      setErr("Necesitás al menos un ticker."); return;
+    }
+    setSavingBusy(true);
+    try {
+      await onSave({
+        name: proposal.name,
+        color: proposal.color,
+        tickers: proposal.tickers,
+      });
+    } catch (e) {
+      setErr(e?.message || String(e));
+      setSavingBusy(false);
+    }
+  }
+
+  const colorHex = proposal
+    ? (WL_COLORS.find((c) => c.id === proposal.color)?.hex || T.accent)
+    : null;
+
+  return ReactDOM.createPortal(
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget && !savingBusy) onClose(); }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 130,
+        background: "rgba(0,0,0,0.7)",
+        display: "flex", alignItems: "flex-end", justifyContent: "center",
+        animation: "samas-fade-in 160ms ease-out",
+      }}
+    >
+      <div style={{
+        width: "100%", maxWidth: 540, maxHeight: "90vh",
+        background: T.bgElev || T.bg, color: T.text,
+        borderTopLeftRadius: 24, borderTopRightRadius: 24,
+        border: `1px solid ${T.border}`, borderBottom: "none",
+        display: "flex", flexDirection: "column", overflow: "hidden",
+        animation: "samas-sheet-up 220ms ease-out",
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: "16px 20px 12px", display: "flex", alignItems: "center", gap: 10,
+          borderBottom: `1px solid ${T.border}`,
+        }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: 10,
+            background: T.accent, color: "#06180c", flexShrink: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
+            </svg>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+              color: T.accent, letterSpacing: 0.6, textTransform: "uppercase" }}>
+              IA · {tr("watchlist.ai.kicker", lang)}
+            </div>
+            <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: T.text, letterSpacing: -0.3 }}>
+              {tr("watchlist.ai.title", lang)}
+            </div>
+          </div>
+          <button onClick={onClose} disabled={savingBusy} aria-label="Cerrar"
+            style={{
+              width: 32, height: 32, borderRadius: 16,
+              background: T.bg, border: `1px solid ${T.border}`,
+              color: T.textMute, fontFamily: FONT.sans, fontSize: 16,
+              cursor: savingBusy ? "default" : "pointer", padding: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>×</button>
+        </div>
+
+        {/* Body — scrolls */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "14px 18px" }}>
+          <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, lineHeight: 1.5, marginBottom: 12 }}>
+            {tr("watchlist.ai.intro", lang)}
+          </div>
+          <input
+            value={theme}
+            onChange={(e) => setTheme(e.target.value)}
+            disabled={busy || savingBusy}
+            placeholder={tr("watchlist.ai.input_ph", lang)}
+            onKeyDown={(e) => { if (e.key === "Enter") generate(); }}
+            style={{
+              width: "100%", padding: "12px 14px", borderRadius: 12,
+              background: T.surface, border: `1px solid ${T.border}`,
+              color: T.text, fontFamily: FONT.sans, fontSize: 14,
+              outline: "none", marginBottom: 8, boxSizing: "border-box",
+            }}
+          />
+          {/* Starter chips */}
+          {!proposal && !busy && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
+              {STARTERS.map((s) => (
+                <button key={s} onClick={() => { setTheme(s); generate(s); }}
+                  style={{
+                    padding: "6px 12px", borderRadius: 999,
+                    background: T.bg, border: `1px solid ${T.border}`,
+                    color: T.textMute, fontFamily: FONT.sans, fontSize: 12, fontWeight: 600,
+                    cursor: "pointer",
+                  }}>{s}</button>
+              ))}
+            </div>
+          )}
+
+          {/* Generate button */}
+          {!proposal && (
+            <button
+              onClick={() => generate()}
+              disabled={busy || !theme.trim()}
+              style={{
+                width: "100%", padding: "12px 14px", borderRadius: 12,
+                background: theme.trim() && !busy ? T.accent : T.surface,
+                color: theme.trim() && !busy ? T.accentInk : T.textMute,
+                border: theme.trim() && !busy ? "none" : `1px solid ${T.border}`,
+                fontFamily: FONT.sans, fontSize: 14, fontWeight: 700,
+                cursor: busy || !theme.trim() ? "default" : "pointer",
+                opacity: busy ? 0.7 : 1,
+              }}
+            >
+              {busy ? tr("watchlist.ai.generating", lang) : tr("watchlist.ai.generate", lang)}
+            </button>
+          )}
+
+          {err && (
+            <div style={{
+              marginTop: 10, padding: "10px 12px", borderRadius: 12,
+              background: T.dangerSoft, color: T.danger,
+              fontFamily: FONT.sans, fontSize: 12, lineHeight: 1.4,
+            }}>{err}</div>
+          )}
+
+          {/* Proposal — name preview, reason, tickers (toggle to remove). */}
+          {proposal && (
+            <>
+              <div style={{
+                marginTop: 14, padding: 14, borderRadius: 14,
+                background: `linear-gradient(135deg, ${T.accentSoft}, transparent 80%)`,
+                border: `1.5px solid ${T.accent}`,
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <span style={{
+                    width: 10, height: 10, borderRadius: 5, background: colorHex,
+                  }} />
+                  <input
+                    value={proposal.name}
+                    onChange={(e) => setProposal((p) => ({ ...p, name: e.target.value.slice(0, 30) }))}
+                    style={{
+                      flex: 1,
+                      background: "transparent", border: "none", outline: "none",
+                      color: T.text, fontFamily: FONT.display, fontSize: 17, fontWeight: 700,
+                    }}
+                  />
+                  <span style={{
+                    fontFamily: FONT.mono, fontSize: 10, color: T.textMute, fontWeight: 700,
+                  }}>{proposal.tickers.length}</span>
+                </div>
+                {proposal.reason && (
+                  <div style={{
+                    fontFamily: FONT.sans, fontSize: 12, color: T.textMute, lineHeight: 1.5,
+                  }}>{proposal.reason}</div>
+                )}
+              </div>
+
+              <div style={{
+                marginTop: 14, marginBottom: 8,
+                fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+                color: T.textMute, letterSpacing: 0.5, textTransform: "uppercase",
+              }}>{tr("watchlist.ai.tickers_label", lang)}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {proposal.tickers.map((tk) => (
+                  <button key={tk} onClick={() => toggleTicker(tk)}
+                    style={{
+                      padding: "6px 10px", borderRadius: 999,
+                      background: T.accent, color: T.accentInk,
+                      border: "none", cursor: "pointer",
+                      fontFamily: FONT.mono, fontSize: 12, fontWeight: 700,
+                      letterSpacing: 0.4,
+                      display: "inline-flex", alignItems: "center", gap: 6,
+                    }}>
+                    ${tk}
+                    <span style={{ opacity: 0.7, fontSize: 11 }}>×</span>
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => { setProposal(null); setTheme(""); setErr(null); }}
+                style={{
+                  marginTop: 14, padding: "8px 12px", borderRadius: 999,
+                  background: "transparent", border: `1px solid ${T.border}`,
+                  color: T.textMute, fontFamily: FONT.sans, fontSize: 12, fontWeight: 600,
+                  cursor: "pointer",
+                }}>{tr("watchlist.ai.regenerate", lang)}</button>
+            </>
+          )}
+        </div>
+
+        {/* Sticky footer with Save */}
+        {proposal && (
+          <div style={{
+            padding: "12px 18px calc(env(safe-area-inset-bottom) + 14px)",
+            borderTop: `1px solid ${T.border}`,
+            background: T.bgElev || T.bg,
+          }}>
+            <button
+              onClick={save}
+              disabled={savingBusy || proposal.tickers.length === 0}
+              style={{
+                width: "100%", padding: "13px 16px", borderRadius: 14,
+                background: T.accent, color: T.accentInk,
+                fontFamily: FONT.sans, fontSize: 14, fontWeight: 800, border: "none",
+                cursor: savingBusy ? "default" : "pointer",
+                opacity: savingBusy ? 0.6 : 1,
+              }}>
+              {savingBusy ? tr("watchlist.ai.saving", lang) : tr("watchlist.ai.save", lang)}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function NameModal({ T, title, placeholder, initial, onClose, onSubmit }) {
   const [value, setValue] = useState(initial || "");
   const [busy, setBusy] = useState(false);

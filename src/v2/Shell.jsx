@@ -2585,6 +2585,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.1.0",
+    title: "Milestone: AI Watchlist Creator + 7 AI surfaces total",
+    bullets: [
+      "Marking 0.1.0 as the AI-features milestone. Seventh AI surface lands on the Watchlist tab. New ✦ IA pill next to + Nueva opens a sheet where you type a theme — \"dividendos altos\", \"IA\", \"petróleo argentino\", \"cripto\" — and Claude Haiku assembles a watchlist with name + color tag + 5-8 tickers from the SAMAS universe + a 1-2 sentence rationale. Edit any field before saving.",
+      "New suggest-watchlist Edge Function. Server VALIDATES that returned tickers belong to the SAMAS universe (drops hallucinated symbols) and the color belongs to WL_COLORS. Templated keyword-routed fallback for tech/dividend/crypto/energy/ARG/ETF/commod themes.",
+      "Total AI surfaces: portfolio analysis (Wallet) · multi-turn portfolio chat (Wallet) · per-asset insight (AssetSheet) · trade coach (order confirm) · post draft helper (Social compose) · news \"why does this matter\" (News) · watchlist creator (Watchlist) — plus the consent gate, EXIF stripping, and re-auth from 0.0.98. Demo-ready for Cohen.",
+    ],
+  },
+  {
     version: "0.0.99",
     title: "AI on news — \"¿Por qué me importa?\" on every article",
     bullets: [

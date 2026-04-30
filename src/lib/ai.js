@@ -125,6 +125,40 @@ export async function tradeCoach({ ticker, side, qty, price }) {
 }
 
 /**
+ * suggestWatchlist(theme) — POST /functions/v1/suggest-watchlist
+ *
+ * Asks Claude Haiku to build a watchlist around a user-supplied
+ * theme. Returns:
+ *   {
+ *     name:    string,                                       // ≤30 chars
+ *     color:   "blue"|"green"|"amber"|"purple"|"red",
+ *     tickers: string[],                                     // 5-8 from SAMAS universe
+ *     reason:  string,                                       // 1-2 sentences
+ *     generatedAt: string,
+ *   }
+ *
+ * Server-side fallback uses keyword routing when the Anthropic key
+ * isn't set, so the demo always returns a sensible suggestion.
+ */
+export async function suggestWatchlist(theme) {
+  if (!theme || !theme.trim()) throw new Error("Indicá un tema.");
+  await gateOnConsent();
+  const { data, error } = await supabase.functions.invoke("suggest-watchlist", {
+    body: { theme: theme.trim() },
+  });
+  if (error) {
+    let detail = "";
+    try {
+      const body = await error?.context?.json?.();
+      if (body?.error) detail = `: ${body.error}`;
+    } catch (_) { /* fall through */ }
+    throw new Error(`Sugerencia IA falló${detail || ": " + (error.message || "error desconocido")}`);
+  }
+  if (data?.error) throw new Error(`Sugerencia IA falló: ${data.error}`);
+  return data;
+}
+
+/**
  * explainNews({ title, summary, tickers }) — POST /functions/v1/explain-news
  *
  * Server reads the user's holdings, computes the intersection with
