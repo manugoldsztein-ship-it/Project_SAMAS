@@ -2625,6 +2625,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.1.2",
+    title: "Onboarding refresh — sharper copy + demo data CTA",
+    bullets: [
+      "Tightened all 4 slide bodies to one short sentence each (was 1-2 long sentences). iOS-onboarding feel.",
+      "Slide 2 headline went from \"Invertí desde la app\" to \"Invertí con coach IA\" — leads with the differentiator. Body now mentions the trade coach reviewing each order against your portfolio before confirm.",
+      "Slide 4 retitled \"Tu asistente IA\" (was \"Plan personalizado con IA\" — outdated since 0.1.0 added 6 more AI surfaces). Body now lists the actual capabilities: análisis, post drafts, watchlists temáticas, chat con tu cartera. \"Powered by Claude\" attribution. Icon swapped from concentric rings to the sparkles glyph used everywhere else.",
+      "New \"Cargar datos demo\" secondary CTA on the last slide. Tap → seedDemoAccount() runs (3 watchlists + 7 holdings + cash + ledger), page reloads onto a populated app instead of empty states. Built for Cohen demo opens.",
+    ],
+  },
+  {
     version: "0.1.1",
     title: "Audit pass — sentinel cleanup + AI revoke toggle in Settings",
     bullets: [

@@ -27,6 +27,7 @@ import { Ico } from "./icons.jsx";
 import { LogoMark } from "./SamasLogo.jsx";
 import { t as tr } from "../lib/i18n.js";
 import { hapticNative } from "../lib/native.js";
+import { seedDemoAccount } from "../lib/demoSeed.js";
 
 // One slide = icon + accent color + i18n keys. Keys point at
 // onb.s1.title / onb.s1.body / etc, defined in src/lib/i18n.js.
@@ -53,10 +54,15 @@ const SLIDES = [
     titleKey: "onb.s4.title",
     bodyKey:  "onb.s4.body",
     accent:   "#0EA5E9",
-    // Concentric rings for "AI plan" — same as before.
+    // Sparkles glyph (samas-0.1.2) — matches the AI iconography
+    // we use everywhere else (compose ✦ button, AI INSIGHT card,
+    // chat sheet header, etc). Old concentric rings referred to
+    // the legacy "Plan IA" framing which the copy no longer uses.
     icon: (
-      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2" fill="currentColor"/>
+      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
+        <path d="M19 13l1 2 2 1-2 1-1 2-1-2-2-1 2-1z"/>
+        <path d="M5 14l1 2 2 1-2 1-1 2-1-2-2-1 2-1z"/>
       </svg>
     ),
   },
@@ -78,6 +84,11 @@ export function Onboarding({ T, isNativeApp = false, onDone, lang = "es" }) {
   // pointer events briefly so a fast double-swipe doesn't desync.
   const [dx, setDx] = useState(0);
   const startXRef = useRef(null);
+  // 0.1.2 — "Cargar datos demo" secondary CTA on the final slide.
+  // Disabled while busy so the user can't re-tap before the upserts
+  // settle. seedDemoAccount() reloads the page on success, which
+  // implicitly closes onboarding (the flag we set in done() persists).
+  const [seedingDemo, setSeedingDemo] = useState(false);
   const slide = SLIDES[step];
   const last = step === SLIDES.length - 1;
 
@@ -93,6 +104,25 @@ export function Onboarding({ T, isNativeApp = false, onDone, lang = "es" }) {
     try { localStorage.setItem("samas_v2_onboarded", "true"); } catch {}
     hapticNative("success").catch(() => {});
     onDone();
+  }
+
+  async function startWithDemoData() {
+    if (seedingDemo) return;
+    setSeedingDemo(true);
+    hapticNative("tap").catch(() => {});
+    try {
+      // Mark onboarded BEFORE seeding so the page reload (triggered
+      // inside seedDemoAccount) doesn't bounce the user back to
+      // onboarding. The seed itself reloads the page on success.
+      try { localStorage.setItem("samas_v2_onboarded", "true"); } catch {}
+      await seedDemoAccount();
+      // seedDemoAccount calls window.location.reload() with a 200ms
+      // delay; we never reach the line below in practice.
+      onDone();
+    } catch (e) {
+      console.error("[onboarding] seed failed:", e);
+      setSeedingDemo(false);
+    }
   }
 
   function onTouchStart(e) {
@@ -245,21 +275,72 @@ export function Onboarding({ T, isNativeApp = false, onDone, lang = "es" }) {
           end. */}
       <div style={{ display: "flex", gap: 10 }}>
         {step > 0 && (
-          <button onClick={() => go(step - 1, -1)} style={{
+          <button onClick={() => go(step - 1, -1)} disabled={seedingDemo} style={{
             flex: 1, padding: 16, borderRadius: 14,
             background: T.surface, border: `1px solid ${T.border}`,
-            color: T.text, fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, cursor: "pointer",
+            color: T.text, fontFamily: FONT.sans, fontSize: 14, fontWeight: 600,
+            cursor: seedingDemo ? "default" : "pointer",
+            opacity: seedingDemo ? 0.5 : 1,
           }}>{tr("onb.back", lang)}</button>
         )}
         <button
           onClick={() => last ? done() : go(step + 1, +1)}
+          disabled={seedingDemo}
           style={{
             flex: 2, padding: 16, borderRadius: 14,
             background: T.accent, color: T.accentInk,
-            fontFamily: FONT.sans, fontSize: 15, fontWeight: 700, border: "none", cursor: "pointer",
+            fontFamily: FONT.sans, fontSize: 15, fontWeight: 700, border: "none",
+            cursor: seedingDemo ? "default" : "pointer",
+            opacity: seedingDemo ? 0.6 : 1,
           }}
         >{last ? tr("onb.start", lang) : tr("onb.next", lang)}</button>
       </div>
+
+      {/* Cargar datos demo — secondary CTA on the LAST slide only.
+          For users who want to skip the empty-state experience and
+          land on a populated app (3 watchlists + 7 holdings + cash
+          + ledger entries). samas-0.1.2. */}
+      {last && (
+        <>
+          <button
+            onClick={startWithDemoData}
+            disabled={seedingDemo}
+            style={{
+              width: "100%", marginTop: 8, padding: "12px 16px", borderRadius: 14,
+              background: "transparent", border: `1px solid ${T.border}`,
+              color: seedingDemo ? T.textMute : T.text,
+              fontFamily: FONT.sans, fontSize: 13, fontWeight: 600,
+              cursor: seedingDemo ? "default" : "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            }}
+          >
+            {seedingDemo ? (
+              <>
+                <div style={{
+                  width: 14, height: 14, borderRadius: 999,
+                  border: `2px solid ${T.border}`, borderTopColor: T.accent,
+                  animation: "samas-spin 700ms linear infinite",
+                }} />
+                {tr("onb.demo_seeding", lang)}
+              </>
+            ) : (
+              <>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                {tr("onb.demo_seed", lang)}
+              </>
+            )}
+          </button>
+          <div style={{
+            marginTop: 6, fontFamily: FONT.sans, fontSize: 11,
+            color: T.textMute, lineHeight: 1.4, textAlign: "center",
+          }}>{tr("onb.demo_seed_hint", lang)}</div>
+        </>
+      )}
     </div>
   );
 }

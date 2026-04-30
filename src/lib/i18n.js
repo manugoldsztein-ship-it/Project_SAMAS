@@ -540,17 +540,21 @@ const V2 = {
     "onb.back":  "Atrás",
     "onb.next":  "Siguiente",
     // Slide 1 — wallet
-    "onb.s1.title": "Tu wallet en pesos y dólares",
-    "onb.s1.body":  "Cargá saldo desde MercadoPago, transferencia o cripto. Manejá ARS y USD desde el mismo lugar, con tipo de cambio MEP en vivo.",
-    // Slide 2 — broker
-    "onb.s2.title": "Invertí desde la app",
-    "onb.s2.body":  "Comprá CEDEARs, ETFs, bonos y cripto. Configurá alertas de precio y stop-loss por activo. Tu portafolio, distribución y top movers — todo en un solo lugar.",
+    "onb.s1.title": "Wallet en pesos y dólares",
+    "onb.s1.body":  "MEP en vivo, transferencias y cripto desde un solo lugar. ARS y USD en la misma app.",
+    // Slide 2 — broker (refreshed 0.1.2 to mention Coach IA)
+    "onb.s2.title": "Invertí con coach IA",
+    "onb.s2.body":  "CEDEARs, ETFs, bonos y cripto. La IA revisa cada operación contra tu cartera antes de confirmar.",
     // Slide 3 — social
     "onb.s3.title": "Aprendé con la comunidad",
-    "onb.s3.body":  "Seguí a inversores argentinos, compartí tus trades y descubrí qué están mirando. Idóneos CNV verificados con tilde azul.",
-    // Slide 4 — AI plan
-    "onb.s4.title": "Plan personalizado con IA",
-    "onb.s4.body":  "Decinos tu objetivo y horizonte. La IA clasifica tu perfil (conservador / moderado / agresivo) y te arma una asignación sugerida adaptada al mercado argentino.",
+    "onb.s3.body":  "Seguí inversores reales, compartí tu cartera y mirá qué operan. Idóneos CNV con tilde azul.",
+    // Slide 4 — AI suite (broadened 0.1.2 from "Plan IA" to all 7 surfaces)
+    "onb.s4.title": "Tu asistente IA",
+    "onb.s4.body":  "Análisis de cartera, sugerencias de posts, watchlists temáticas y chat con tu book en contexto. Powered by Claude.",
+    // Final CTA on slide 4 (samas-0.1.2)
+    "onb.demo_seed":      "Cargar datos demo",
+    "onb.demo_seeding":   "Cargando datos demo…",
+    "onb.demo_seed_hint": "Probá la app con una cartera de ejemplo (holdings, watchlists, balance, ledger).",
 
     "notif.title": "Notificaciones",
     "notif.clear_all": "Vaciar",
@@ -1073,14 +1077,17 @@ const V2 = {
     "onb.start": "Get started",
     "onb.back":  "Back",
     "onb.next":  "Next",
-    "onb.s1.title": "Your wallet in pesos and dollars",
-    "onb.s1.body":  "Top up from MercadoPago, transfer, or crypto. Manage ARS and USD from one place, with live MEP exchange rate.",
-    "onb.s2.title": "Invest from the app",
-    "onb.s2.body":  "Buy CEDEARs, ETFs, bonds, and crypto. Configure price alerts and stop-loss per asset. Your portfolio, breakdown, and top movers — all in one place.",
+    "onb.s1.title": "Wallet in pesos and dollars",
+    "onb.s1.body":  "Live MEP rate, transfers, and crypto in one app. ARS and USD side by side.",
+    "onb.s2.title": "Invest with an AI coach",
+    "onb.s2.body":  "CEDEARs, ETFs, bonds, and crypto. The AI reviews each order against your portfolio before you confirm.",
     "onb.s3.title": "Learn with the community",
-    "onb.s3.body":  "Follow Argentine investors, share your trades, and see what they're watching. CNV-licensed advisors verified with a blue check.",
-    "onb.s4.title": "Personalized AI plan",
-    "onb.s4.body":  "Tell us your goal and horizon. The AI classifies your profile (conservative / moderate / aggressive) and suggests an allocation tuned to the Argentine market.",
+    "onb.s3.body":  "Follow real investors, share your portfolio, see what they're trading. CNV-licensed advisors with a blue check.",
+    "onb.s4.title": "Your AI co-pilot",
+    "onb.s4.body":  "Portfolio analysis, post drafts, themed watchlists, and chat with your book in context. Powered by Claude.",
+    "onb.demo_seed":      "Load demo data",
+    "onb.demo_seeding":   "Loading demo data…",
+    "onb.demo_seed_hint": "Try the app with a sample portfolio (holdings, watchlists, balance, ledger).",
 
     "notif.title": "Notifications",
     "notif.clear_all": "Clear all",
