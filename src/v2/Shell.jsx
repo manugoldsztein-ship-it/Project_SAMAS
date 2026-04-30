@@ -2625,6 +2625,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.1.6",
+    title: "AI Daily Brief on Wallet — every open shows a fresh take",
+    bullets: [
+      "Ninth AI surface lands at the very TOP of the Wallet (above the balance card). Auto-loads on every Wallet mount, with a localStorage cache keyed by user + UTC date so we re-fetch at most once per calendar day. Refresh button next to the gain pill forces a manual re-call.",
+      "New daily-brief Edge Function. Reads holdings → computes book total + value-weighted gain% + top mover (held ticker with biggest abs day move). Asks Claude Haiku for a 2-3 sentence \"buen día\" brief that covers state of the cartera, top mover impact, and one \"qué mirar hoy\" line. Templated server-side fallback uses real numbers + sentence skeletons.",
+      "Subtle accent-tinted gradient card. Sparkles icon + \"BRIEF DIARIO IA\" kicker + gain% chip on the right. Skeleton shimmer while loading. Hides silently if AI errors so the wallet never loads behind a flaky AI banner.",
+      "9 AI surfaces total now. Cohen pitch: open the app → AI talks to you about your portfolio before you tap anything.",
+    ],
+  },
+  {
     version: "0.1.5",
     title: "Native OAuth deep-link wiring — samas:// scheme",
     bullets: [

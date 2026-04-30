@@ -33,7 +33,7 @@ import { toast } from "./toast.jsx";
 import { setRefreshHandler } from "./refreshRegistry.js";
 import { t as tr } from "../lib/i18n.js";
 import { useLivePortfolioRatio } from "./livePrices.jsx";
-import { analyzePortfolio, chatPortfolio } from "../lib/ai.js";
+import { analyzePortfolio, chatPortfolio, dailyBrief } from "../lib/ai.js";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { hapticNative } from "../lib/native.js";
 
@@ -194,6 +194,15 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
           </ChromeBtn>
         </div>
       </div>
+
+      {/* ---------- AI Daily Brief (samas-0.1.6) ----------
+          Top-of-screen greeting with portfolio context. Auto-loads
+          on every Wallet mount, cached client-side for ~12 hours so
+          rapid re-mounts don't re-call. Only shown when there's a
+          non-empty portfolio (no point in a brief about nothing). */}
+      {portfolio && portfolio.totalUsd > 0 && (
+        <DailyBriefCard T={T} lang={lang} />
+      )}
 
       {/* ---------- balance card ---------- */}
       <div style={{
@@ -912,6 +921,153 @@ function TaxYearCard({ T, portfolio, lang = "es" }) {
           lineHeight: 1.4, fontStyle: "italic",
         }}>{tr("pro.wallet.tax.note", lang)}</div>
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+// DailyBriefCard (samas-0.1.6) — auto-loaded "good morning" AI
+// summary at the top of the Wallet.
+// ============================================================
+// Caches the response keyed by user_id + UTC date — re-fetches at
+// most once per calendar day so we don't burn LLM calls on every
+// app open. Refresh button forces a re-call.
+//
+// Renders a compact card with the headline + brief paragraph.
+// "—" placeholder while loading. Hides silently on hard error
+// (we don't block the wallet on a flaky AI call).
+function DailyBriefCard({ T, lang = "es" }) {
+  const [data, setData] = useState(() => {
+    // Hydrate from localStorage if we have a fresh cache (same day).
+    try {
+      const raw = localStorage.getItem("samas_daily_brief_v1");
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      const today = new Date().toISOString().slice(0, 10);
+      if (parsed?.date === today && parsed?.payload) return parsed.payload;
+    } catch {}
+    return null;
+  });
+  const [busy, setBusy] = useState(!data);
+  const [hidden, setHidden] = useState(false);
+
+  async function load(force = false) {
+    if (busy && !force) return;
+    setBusy(true);
+    try {
+      const res = await dailyBrief();
+      setData(res);
+      const today = new Date().toISOString().slice(0, 10);
+      try {
+        localStorage.setItem("samas_daily_brief_v1", JSON.stringify({
+          date: today, payload: res,
+        }));
+      } catch {}
+    } catch (e) {
+      // Consent declined or any error → hide the card silently. No
+      // point in showing a "brief failed" banner above the wallet.
+      if (e?.name === "AIConsentDeniedError") setHidden(true);
+      else if (!data) setHidden(true);
+      // If we already had a cached brief and refresh failed, keep
+      // showing the cache.
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Auto-load on mount if no cache. Only fires once.
+  useEffect(() => {
+    if (!data) load(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (hidden) return null;
+
+  const gainColor = data && data.gainPct >= 0 ? T.accent : T.danger;
+
+  return (
+    <div style={{
+      margin: "16px 16px 0", padding: 16, borderRadius: 22,
+      background: `linear-gradient(135deg, ${T.accentSoft} 0%, ${T.surface} 70%)`,
+      border: `1px solid ${T.accent}55`,
+      display: "flex", flexDirection: "column", gap: 10,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+          background: T.accent, color: "#06180c",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
+          </svg>
+        </div>
+        <div style={{
+          flex: 1, fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+          color: T.accent, letterSpacing: 0.6, textTransform: "uppercase",
+        }}>
+          {tr("wallet.brief.kicker", lang)}
+        </div>
+        {data && data.gainPct != null && (
+          <div style={{
+            padding: "3px 8px", borderRadius: 999,
+            background: data.gainPct >= 0 ? T.accentSoft : T.dangerSoft,
+            color: gainColor,
+            fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+          }}>
+            {data.gainPct >= 0 ? "+" : ""}{data.gainPct.toFixed(1)}%
+          </div>
+        )}
+        <button
+          onClick={() => load(true)}
+          disabled={busy}
+          aria-label={tr("wallet.brief.refresh", lang)}
+          title={tr("wallet.brief.refresh", lang)}
+          style={{
+            width: 26, height: 26, borderRadius: 13,
+            background: T.bg, border: `1px solid ${T.border}`,
+            color: T.textMute, padding: 0,
+            cursor: busy ? "default" : "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+          {busy ? (
+            <div style={{
+              width: 12, height: 12, borderRadius: 999,
+              border: `2px solid ${T.border}`, borderTopColor: T.accent,
+              animation: "samas-spin 800ms linear infinite",
+            }} />
+          ) : (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+          )}
+        </button>
+      </div>
+      {busy && !data ? (
+        <div>
+          <div style={{
+            height: 14, marginBottom: 8, borderRadius: 6,
+            background: T.border, opacity: 0.5,
+            animation: "samas-skel 1.4s ease-in-out infinite",
+            backgroundImage: `linear-gradient(90deg, ${T.border} 0, ${T.surface} 50%, ${T.border} 100%)`,
+            backgroundSize: "200% 100%",
+          }} />
+          <div style={{
+            height: 14, width: "85%", borderRadius: 6,
+            background: T.border, opacity: 0.5,
+            animation: "samas-skel 1.4s ease-in-out 0.2s infinite",
+            backgroundImage: `linear-gradient(90deg, ${T.border} 0, ${T.surface} 50%, ${T.border} 100%)`,
+            backgroundSize: "200% 100%",
+          }} />
+        </div>
+      ) : data ? (
+        <div style={{
+          fontFamily: FONT.sans, fontSize: 13, color: T.text, lineHeight: 1.55,
+        }}>{data.brief}</div>
+      ) : null}
     </div>
   );
 }

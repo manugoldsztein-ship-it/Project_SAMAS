@@ -125,6 +125,43 @@ export async function tradeCoach({ ticker, side, qty, price }) {
 }
 
 /**
+ * dailyBrief() — POST /functions/v1/daily-brief
+ *
+ * Server reads the user's holdings, computes book total + weighted
+ * day delta + top mover, and asks Claude Haiku for a "good morning"
+ * 2-3 sentence brief that headlines the Wallet on every app open.
+ *
+ * Returns:
+ *   {
+ *     headline:    string,
+ *     brief:       string,
+ *     totalUsd:    number,
+ *     gainPct:     number,
+ *     topMover:    { ticker, changePct } | null,
+ *     generatedAt: string,
+ *   }
+ *
+ * Server-side templated fallback (deterministic sentence templates
+ * with real numbers) when ANTHROPIC_API_KEY isn't set.
+ */
+export async function dailyBrief() {
+  await gateOnConsent();
+  const { data, error } = await supabase.functions.invoke("daily-brief", {
+    body: {},
+  });
+  if (error) {
+    let detail = "";
+    try {
+      const body = await error?.context?.json?.();
+      if (body?.error) detail = `: ${body.error}`;
+    } catch (_) { /* fall through */ }
+    throw new Error(`Brief IA falló${detail || ": " + (error.message || "error desconocido")}`);
+  }
+  if (data?.error) throw new Error(`Brief IA falló: ${data.error}`);
+  return data;
+}
+
+/**
  * rebalancePortfolio(profile) — POST /functions/v1/rebalance-portfolio
  *
  * Reads the user's holdings + their requested risk profile
