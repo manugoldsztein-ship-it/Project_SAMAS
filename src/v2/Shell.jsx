@@ -2413,6 +2413,15 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.94",
+    title: "Revert TradingView — back to SVG chart",
+    bullets: [
+      "Manuel screenshotted blank chart through 0.0.90/91/92/93 across multiple fix attempts. Lightweight Charts wouldn't render in this Capacitor WebView setup despite static imports, single-effect, ISO date strings, width fallbacks, autoSize. Without remote devtools access on the device I can't dig deeper without burning more time.",
+      "Reverting to the hand-rolled SVG line chart from before 0.0.90. Cohen demo gets a working chart back. TradingView is parked as a future-Pro feature for after we can connect Safari Web Inspector to the device and see what's actually failing.",
+      "Removed the lightweight-charts dependency from package.json (~63KB gzipped lib gone) and the Velas/Área toggle (no candlestick option in SVG mode).",
+    ],
+  },
+  {
     version: "0.0.93",
     title: "Chart third-time-fix: single effect + ISO date strings",
     bullets: [

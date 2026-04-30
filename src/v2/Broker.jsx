@@ -40,12 +40,6 @@ import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { toast } from "./toast.jsx";
 import { t as tr } from "../lib/i18n.js";
 import { analyzeAsset } from "../lib/ai.js";
-// Static import for Lightweight Charts (samas-0.0.92) — dynamic
-// import() didn't reliably fire inside the vite-plugin-singlefile
-// Capacitor bundle, leaving the chart container empty. Inlining
-// the ~63KB gzipped lib costs nothing in singlefile mode anyway
-// since everything ends up in one HTML file.
-import { createChart, CandlestickSeries, AreaSeries } from "lightweight-charts";
 
 // Sub-tabs metadata — drives both the bottom nav and the content
 // switch in the top-level <BrokerShell/> render.
@@ -3604,159 +3598,48 @@ const TIMEFRAMES = [
   { id: "all", key: "pro.asset.tf.all", points: 60,  vol: 0.040, drift: 0.180 },
 ];
 
-// ProAssetChart — TradingView Lightweight Charts (samas-0.0.90).
-// Replaced the hand-rolled SVG with TradingView's open-source charting
-// library (45KB, MIT license). Real candlesticks + area mode, scaled
-// axes, crosshair, the works. Same TIMEFRAMES + same deterministic
-// series generation; we just feed it as OHLC into Lightweight Charts
-// instead of drawing it ourselves.
+// ProAssetChart — SVG line + area (rolled back from TradingView in
+// 0.0.94). Lightweight Charts wouldn't render in this Capacitor
+// WebView setup despite four debug attempts; without remote devtools
+// access I can't dig deeper. Falling back to the hand-rolled SVG so
+// the Cohen demo has a working chart. TradingView is parked as a
+// future-Pro feature once we can isolate the WebView issue.
 function ProAssetChart({ T, asset, lang = "es" }) {
   const [tf, setTf] = useState("1m");
-  const [chartType, setChartType] = useState("candles"); // "candles" | "area"
   const cfg = TIMEFRAMES.find((t) => t.id === tf) || TIMEFRAMES[2];
-
-  // Generate OHLC data from the existing deterministic random walk.
-  // Each point becomes a candle: open = previous close, close = current
-  // value, high/low ±small noise. Time format is ISO date strings
-  // ('YYYY-MM-DD') — Lightweight Charts v5 accepts these directly and
-  // they're easier to debug than Unix-seconds (samas-0.0.93 fix).
-  const ohlc = useMemo(() => {
+  const series = useMemo(() => {
     const rng = tickerSeed(asset.ticker, cfg.points);
     const target = asset.price;
-    const closes = [target];
+    // Build a series ending at the current price by walking backward
+    // from `target` with random walk, then reverse so the latest
+    // point is on the right.
+    const out = [target];
     for (let i = 1; i < cfg.points; i++) {
       const noise = (rng() - 0.5) * cfg.vol;
       const drift = cfg.drift / cfg.points;
-      const prev = closes[i - 1] / (1 + drift + noise);
-      closes.push(prev);
+      const prev = out[i - 1] / (1 + drift + noise);
+      out.push(prev);
     }
-    closes.reverse();
-    // Days-per-bar mapping — fractional values let us still pack
-    // 24-30 bars into a "1d" view by treating each as 1 hour, etc.
-    // We just need monotonically-increasing dates, not real ones.
-    const daysPerBar = (() => {
-      switch (tf) {
-        case "1d": return 1;     // 24-30 bars × 1d → ~1 month — but the
-        case "1w": return 1;     // user reads them as intraday. Time
-        case "1m": return 1;     // axis just needs ascending dates;
-        case "1y": return 7;     // candles look right regardless.
-        case "all": return 30;
-        default: return 1;
-      }
-    })();
-    const todayMs = Date.now();
-    function toIso(ms) {
-      const d = new Date(ms);
-      const y = d.getUTCFullYear();
-      const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-      const dd = String(d.getUTCDate()).padStart(2, "0");
-      return `${y}-${m}-${dd}`;
-    }
-    return closes.map((close, i) => {
-      const open = i === 0 ? close * (1 - cfg.vol * 0.3) : closes[i - 1];
-      const wickRng = tickerSeed(asset.ticker + i, 3);
-      const wickHigh = wickRng() * cfg.vol * 0.5;
-      const wickLow  = wickRng() * cfg.vol * 0.5;
-      const high = Math.max(open, close) * (1 + wickHigh);
-      const low  = Math.min(open, close) * (1 - wickLow);
-      const ms = todayMs - (cfg.points - 1 - i) * daysPerBar * 86400000;
-      return { time: toIso(ms), open, high, low, close };
-    });
-  }, [asset.ticker, asset.price, cfg.points, cfg.vol, cfg.drift, tf]);
-
-  const first = ohlc[0]?.close;
-  const last = ohlc[ohlc.length - 1]?.close;
+    return out.reverse();
+  }, [asset.ticker, asset.price, cfg.points, cfg.vol, cfg.drift]);
+  const first = series[0];
+  const last = series[series.length - 1];
   const periodPct = first ? ((last - first) / first) * 100 : 0;
   const up = periodPct >= 0;
   const ccySym = asset.currency === "ARS" ? "$" : "US$";
 
-  // Combined create + add-series effect (samas-0.0.93). Earlier we had
-  // two effects with a chartReady gate, but the series still wasn't
-  // showing — likely because the StrictMode double-mount + the two-
-  // effect dance created a state where the second mount's chart had
-  // no series attached. One effect = no race, no inter-effect state
-  // drift. Re-creates on chartType / data / tf / theme change. Slight
-  // perf cost (chart re-mounts on candle↔area toggle) but it's fast.
-  const containerRef = React.useRef(null);
-  const chartRef     = React.useRef(null);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const initialWidth =
-      container.clientWidth ||
-      container.parentElement?.clientWidth ||
-      window.innerWidth - 64;
-    let chart;
-    try {
-      chart = createChart(container, {
-        width: Math.max(280, Math.floor(initialWidth)),
-        height: 220,
-        autoSize: true,
-        layout: {
-          background: { color: "transparent" },
-          textColor: T.textMute,
-          fontFamily: FONT.mono,
-          fontSize: 10,
-          attributionLogo: false,
-        },
-        grid: {
-          vertLines: { visible: false },
-          horzLines: { color: T.border, style: 1 },
-        },
-        timeScale: {
-          borderVisible: false,
-          timeVisible: false,
-          secondsVisible: false,
-          fixLeftEdge: true,
-          fixRightEdge: true,
-        },
-        rightPriceScale: { borderVisible: false },
-        crosshair: {
-          mode: 1,
-          vertLine: { color: T.textMute, width: 1, style: 2, labelBackgroundColor: T.surface },
-          horzLine: { color: T.textMute, width: 1, style: 2, labelBackgroundColor: T.surface },
-        },
-        handleScale: false,
-        handleScroll: false,
-      });
-      chartRef.current = chart;
-      // Attach series + data immediately so StrictMode double-mount
-      // doesn't end up with a chart that has no series.
-      let series;
-      if (chartType === "candles") {
-        series = chart.addSeries(CandlestickSeries, {
-          upColor: T.accent,
-          downColor: T.danger,
-          borderUpColor: T.accent,
-          borderDownColor: T.danger,
-          wickUpColor: T.accent,
-          wickDownColor: T.danger,
-        });
-        series.setData(ohlc);
-      } else {
-        series = chart.addSeries(AreaSeries, {
-          lineColor: up ? T.accent : T.danger,
-          lineWidth: 2,
-          topColor: up ? `${T.accent}55` : `${T.danger}55`,
-          bottomColor: "transparent",
-          priceLineVisible: false,
-          lastValueVisible: false,
-        });
-        series.setData(ohlc.map((c) => ({ time: c.time, value: c.close })));
-      }
-      chart.timeScale().fitContent();
-    } catch (e) {
-      console.warn("[ProAssetChart] chart setup failed:", e?.message || e);
-    }
-    return () => {
-      if (chartRef.current) {
-        try { chartRef.current.remove(); } catch (_) {}
-        chartRef.current = null;
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [T.surface, T.textMute, T.border, T.accent, T.danger, ohlc, chartType, up]);
+  // Layout — 320×140 viewBox, full-width responsive. Path math:
+  // build a polyline + close it down to the bottom for the area
+  // fill. Y inverted because SVG origin is top-left.
+  const w = 320, h = 140;
+  const min = Math.min(...series), max = Math.max(...series);
+  const range = max - min || 1;
+  function ptX(i) { return (i / (series.length - 1)) * w; }
+  function ptY(v) { return h - ((v - min) / range) * h; }
+  const linePath = series.map((v, i) =>
+    `${i === 0 ? "M" : "L"} ${ptX(i).toFixed(1)} ${ptY(v).toFixed(1)}`
+  ).join(" ");
+  const fillPath = `${linePath} L ${w} ${h} L 0 ${h} Z`;
 
   return (
     <div style={{
@@ -3781,39 +3664,24 @@ function ProAssetChart({ T, asset, lang = "es" }) {
           {up ? "+" : ""}{ccySym}{fmtMoney(Math.abs(last - first), asset.currency)}
         </div>
       </div>
-      {/* Chart container — Lightweight Charts mounts here. */}
-      <div ref={containerRef} style={{ width: "100%", height: 220 }} />
-      {/* Chart-type toggle — Velas (candles) vs Área. Pro-style. */}
-      <div style={{
-        marginTop: 10, display: "flex", gap: 6, alignItems: "center",
-      }}>
-        <button
-          onClick={() => setChartType("candles")}
-          style={{
-            padding: "5px 10px", borderRadius: 999,
-            background: chartType === "candles" ? T.accent : "transparent",
-            color: chartType === "candles" ? T.accentInk : T.textMute,
-            border: `1px solid ${chartType === "candles" ? T.accent : T.border}`,
-            fontFamily: FONT.mono, fontSize: 10, fontWeight: 700, letterSpacing: 0.4,
-            cursor: "pointer",
-          }}
-        >{tr("pro.asset.chart.candles", lang)}</button>
-        <button
-          onClick={() => setChartType("area")}
-          style={{
-            padding: "5px 10px", borderRadius: 999,
-            background: chartType === "area" ? T.accent : "transparent",
-            color: chartType === "area" ? T.accentInk : T.textMute,
-            border: `1px solid ${chartType === "area" ? T.accent : T.border}`,
-            fontFamily: FONT.mono, fontSize: 10, fontWeight: 700, letterSpacing: 0.4,
-            cursor: "pointer",
-          }}
-        >{tr("pro.asset.chart.area", lang)}</button>
-        <div style={{ flex: 1 }} />
-        <div style={{ fontFamily: FONT.mono, fontSize: 9, color: T.textMute, letterSpacing: 0.4 }}>
-          TRADINGVIEW
-        </div>
-      </div>
+      <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} preserveAspectRatio="none">
+        <defs>
+          <linearGradient id={`grad-${asset.ticker}-${tf}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={up ? T.accent : T.danger} stopOpacity="0.32"/>
+            <stop offset="100%" stopColor={up ? T.accent : T.danger} stopOpacity="0"/>
+          </linearGradient>
+        </defs>
+        {/* Subtle horizontal gridlines at 25/50/75% — give the eye
+            an anchor without chrome heavy enough to compete with
+            the price line itself. */}
+        {[0.25, 0.5, 0.75].map((p) => (
+          <line key={p} x1={0} x2={w} y1={h * p} y2={h * p}
+            stroke={T.border} strokeDasharray="2 4" strokeWidth={0.5} opacity={0.6} />
+        ))}
+        <path d={fillPath} fill={`url(#grad-${asset.ticker}-${tf})`} />
+        <path d={linePath} fill="none" stroke={up ? T.accent : T.danger}
+          strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
       <div style={{
         marginTop: 10, display: "flex", gap: 4,
         background: T.bg, border: `1px solid ${T.border}`,
