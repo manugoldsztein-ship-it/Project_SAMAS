@@ -2413,6 +2413,16 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.0.95",
+    title: "AI Trade Coach — sanity check before you confirm an order",
+    bullets: [
+      "New AI surface: every order's confirmation step now shows a Coach IA card above the Cancelar / Confirmar buttons. Auto-fires when the modal opens. Reads the user's holdings via JWT-scoped RLS, weighs the pending trade against the existing book, returns a verdict (Va / Atención / Revisar) + a one-line headline + a reason.",
+      "Coach catches things like: \"$NVDA llegaría al 47% de tu cartera — concentración alta\", \"Estás cerrando 100% de tu posición en $YPF, asegurate que cambió la tesis\", \"Tu exposición a CEDEARs pasaría a 73%, mucho peso en una categoría\". Doesn't recommend buy/sell directly, just flags structural risk + sanity.",
+      "New analyze-coach Edge Function (Claude Haiku, JWT-scoped, templated heuristic fallback). Heuristic verdict uses real concentration math + sector mix so the demo works without an Anthropic key.",
+      "If the AI errors, the Coach card silently hides — never blocks the trade flow. Cohen demo: tap any asset → buy 100 NVDA → confirmation shows AI weighing in before the user taps Confirmar.",
+    ],
+  },
+  {
     version: "0.0.94",
     title: "Revert TradingView — back to SVG chart",
     bullets: [

@@ -39,7 +39,7 @@ import { hapticNative } from "../lib/native.js";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { toast } from "./toast.jsx";
 import { t as tr } from "../lib/i18n.js";
-import { analyzeAsset } from "../lib/ai.js";
+import { analyzeAsset, tradeCoach } from "../lib/ai.js";
 
 // Sub-tabs metadata — drives both the bottom nav and the content
 // switch in the top-level <BrokerShell/> render.
@@ -2909,6 +2909,18 @@ function ConfirmOrderStep({ T, asset, confirm, busy, err, onCancel, onConfirm, l
         Los valores son estimados. El precio final puede variar levemente al ejecutarse en el mercado.
       </div>
 
+      {/* AI Trade Coach (samas-0.0.95) — runs once on mount with the
+          ticker/side/qty/price; returns a verdict + reason that
+          contextualizes this order against the user's existing book. */}
+      <TradeCoachCard
+        T={T}
+        lang={lang}
+        ticker={asset.ticker}
+        side={confirm.side}
+        qty={confirm.qty}
+        price={confirm.price}
+      />
+
       {err && <div style={{ marginBottom: 12, color: T.danger, fontFamily: FONT.sans, fontSize: 12 }}>{err}</div>}
 
       <div style={{ display: "flex", gap: 10 }}>
@@ -2926,6 +2938,103 @@ function ConfirmOrderStep({ T, asset, confirm, busy, err, onCancel, onConfirm, l
           cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
         }}>{busy ? "Enviando..." : `Confirmar ${isBuy ? "compra" : "venta"}`}</button>
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+// TradeCoachCard (samas-0.0.95) — AI sanity check shown above the
+// Cancel/Confirm buttons in the order confirmation step.
+// ============================================================
+// Auto-fires once on mount with the pending trade params. While
+// loading, shows a subtle skeleton row. On success, renders the
+// verdict (go / caution / flag) with color coding + the AI's
+// headline + reason. On error, hides itself silently — we don't
+// want to block a confirmation flow on AI being down.
+function TradeCoachCard({ T, lang = "es", ticker, side, qty, price }) {
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(true);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    setBusy(true); setErr(null); setData(null);
+    tradeCoach({ ticker, side, qty, price })
+      .then((res) => { if (alive) { setData(res); setBusy(false); } })
+      .catch((e) => { if (alive) { setErr(e?.message || String(e)); setBusy(false); } });
+    return () => { alive = false; };
+  }, [ticker, side, qty, price]);
+
+  // Hide silently on hard error (don't block the confirmation flow).
+  if (err && !data) return null;
+
+  const meta = data ? (() => {
+    if (data.verdict === "flag")
+      return { label: tr("broker.coach.flag", lang), color: T.danger, bg: T.dangerSoft, ring: T.danger };
+    if (data.verdict === "caution")
+      return { label: tr("broker.coach.caution", lang), color: "#F59E0B", bg: "rgba(245, 158, 11, 0.12)", ring: "#F59E0B" };
+    return { label: tr("broker.coach.go", lang), color: T.accent, bg: T.accentSoft, ring: T.accent };
+  })() : null;
+
+  return (
+    <div style={{
+      marginBottom: 14, padding: 14, borderRadius: 14,
+      background: T.surface, border: `1px solid ${meta ? meta.ring + "55" : T.border}`,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: busy || data ? 10 : 0 }}>
+        <div style={{
+          width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+          background: T.accent, color: "#06180c",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
+          </svg>
+        </div>
+        <div style={{
+          flex: 1,
+          fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+          color: T.textMute, letterSpacing: 0.4, textTransform: "uppercase",
+        }}>{tr("broker.coach.title", lang)}</div>
+        {meta && (
+          <div style={{
+            padding: "3px 8px", borderRadius: 999,
+            background: meta.bg, color: meta.color,
+            fontFamily: FONT.sans, fontSize: 10, fontWeight: 700,
+            textTransform: "uppercase", letterSpacing: 0.5,
+          }}>{meta.label}</div>
+        )}
+      </div>
+
+      {busy && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10,
+          color: T.textMute, fontFamily: FONT.sans, fontSize: 12,
+          padding: "2px 0",
+        }}>
+          <div style={{
+            width: 14, height: 14, borderRadius: 999,
+            border: `2px solid ${T.border}`, borderTopColor: T.accent,
+            animation: "samas-spin 800ms linear infinite", flexShrink: 0,
+          }} />
+          {tr("broker.coach.thinking", lang)}
+        </div>
+      )}
+
+      {data && !busy && (
+        <>
+          <div style={{
+            fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+            color: T.text, lineHeight: 1.4, marginBottom: 6,
+          }}>{data.headline}</div>
+          {data.reason && (
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 12, color: T.textMute, lineHeight: 1.5,
+            }}>{data.reason}</div>
+          )}
+        </>
+      )}
     </div>
   );
 }

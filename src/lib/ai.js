@@ -75,6 +75,40 @@ export async function chatPortfolio({ messages }) {
 }
 
 /**
+ * tradeCoach({ ticker, side, qty, price }) — POST /functions/v1/trade-coach
+ *
+ * Server reads the user's holdings, weighs the pending trade against
+ * the current book, returns:
+ *   {
+ *     verdict:  "go" | "caution" | "flag",
+ *     headline: string,
+ *     reason:   string,
+ *     generatedAt: string,
+ *   }
+ *
+ * Falls back to a deterministic heuristic verdict on the same shape
+ * when the Anthropic key isn't set.
+ */
+export async function tradeCoach({ ticker, side, qty, price }) {
+  if (!ticker || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(price) || price <= 0) {
+    throw new Error("Datos de operación inválidos.");
+  }
+  const { data, error } = await supabase.functions.invoke("trade-coach", {
+    body: { ticker, side, qty, price },
+  });
+  if (error) {
+    let detail = "";
+    try {
+      const body = await error?.context?.json?.();
+      if (body?.error) detail = `: ${body.error}`;
+    } catch (_) { /* fall through */ }
+    throw new Error(`Coach IA falló${detail || ": " + (error.message || "error desconocido")}`);
+  }
+  if (data?.error) throw new Error(`Coach IA falló: ${data.error}`);
+  return data;
+}
+
+/**
  * draftPost() — POST /functions/v1/draft-post
  *
  * Server reads the caller's holdings + last few trade transactions
