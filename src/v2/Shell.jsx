@@ -2625,6 +2625,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.1.3",
+    title: "Continuar con Google + Continuar con Apple",
+    bullets: [
+      "Two new OAuth buttons at the top of both Login and Signup screens. Apple-styled black button (per HIG: black bg + glyph + \"Continuar con Apple\"), Google-styled white button (per Google guidelines: white bg + multi-color G logo). Divider \"o con email\" below them, then the existing email/password fields.",
+      "Wired through supabase.auth.signInWithOAuth({ provider }). Until you flip the providers on in Supabase Dashboard, tapping the buttons surfaces an inline \"Próximamente — habilitando Sign in with Apple/Google\" message instead of a raw error. Once enabled, redirects to provider login + back into the app via the existing onAuthStateChange listener.",
+      "App Store guideline 4.8 mandates Apple Sign-In wherever you offer third-party login, so Google + Apple ship together — couldn't add Google alone.",
+      "New supabase/OAUTH_SETUP.md walks Manuel through the complete provider setup: Google Cloud OAuth client, Apple Developer Services ID + Sign-in-with-Apple Key (.p8), pasting credentials into Supabase, and the optional native iOS deep-link wiring for post-Cohen.",
+    ],
+  },
+  {
     version: "0.1.2",
     title: "Onboarding refresh — sharper copy + demo data CTA",
     bullets: [

@@ -240,6 +240,144 @@ function ErrorLine({ text, C }) {
 }
 
 // -----------------------------------------------------------
+// OAuthButtons — Continuar con Google / Continuar con Apple
+// -----------------------------------------------------------
+// Apple's App Store guideline 4.8 requires that any iOS app offering
+// third-party login (Google, Facebook, etc.) MUST also offer Sign in
+// with Apple. So these two ship together — we can't add Google alone.
+//
+// SETUP (Manuel does this on the provider side):
+//   See supabase/OAUTH_SETUP.md for the full walk-through. Until the
+//   providers are enabled in Supabase Dashboard → Authentication →
+//   Providers, tapping these buttons returns "provider not enabled"
+//   from Supabase, which we surface as a friendly inline message.
+//
+// HOW IT WORKS WHEN ENABLED:
+//   1. supabase.auth.signInWithOAuth({ provider, options: { redirectTo } })
+//      kicks off the OAuth dance — opens the provider login in a new
+//      tab (web) or in-app browser (Capacitor with @capacitor/browser).
+//   2. After the user authenticates, the provider redirects to our
+//      Supabase callback URL, which auto-creates / signs in the user.
+//   3. The onAuthStateChange listener (in useSupabaseSession) picks
+//      up the new session and the auth gate unmounts this view.
+//
+// CAPACITOR NATIVE FLOW (post-Cohen, when we wire it):
+//   Need an iOS URL scheme (CFBundleURLTypes in Info.plist) +
+//   @capacitor/browser plugin + an App.addListener('appUrlOpen')
+//   handler that calls supabase.auth.exchangeCodeForSession(...) on
+//   the redirect URL. Documented in OAUTH_SETUP.md.
+// -----------------------------------------------------------
+function OAuthButtons({ C, busy, setBusy, onError }) {
+  async function start(provider) {
+    if (busy) return;
+    setBusy(true);
+    onError(null);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          // For native iOS we'd swap this to a custom scheme like
+          // "app.samas.broker://auth" — needs Info.plist URL scheme
+          // + @capacitor/browser plugin first. For the web preview
+          // and the Cohen demo, the Supabase site_url callback is
+          // sufficient; the app picks up the session via the
+          // onAuthStateChange listener.
+          redirectTo: typeof window !== "undefined" ? window.location.origin : undefined,
+        },
+      });
+      if (error) {
+        const msg = String(error.message || "").toLowerCase();
+        if (msg.includes("provider is not enabled") || msg.includes("not enabled")) {
+          onError(provider === "apple"
+            ? "Próximamente — habilitando Sign in with Apple."
+            : "Próximamente — habilitando Continuar con Google.");
+        } else {
+          onError(error.message);
+        }
+        setBusy(false);
+      }
+      // On success the browser navigates to the OAuth provider; we
+      // don't reach this point in the same JS context. When it comes
+      // back, onAuthStateChange handles the rest. Don't clear busy
+      // here — let the navigation happen.
+    } catch (e) {
+      onError(e?.message || String(e));
+      setBusy(false);
+    }
+  }
+
+  // Apple-style + Google-style button styling. Apple per their HIG:
+  // black background, white "Continue with Apple" text + glyph.
+  // Google per their guidelines: white background, gray border, the
+  // multi-color "G" logo. Keeping the buttons simple and brand-correct
+  // helps the App Store reviewer recognize compliance at a glance.
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+      {/* Apple — first, since iOS users expect it. */}
+      <button onClick={() => start("apple")} disabled={busy} style={{
+        background: "#000",
+        color: "#fff",
+        border: "1px solid #000",
+        borderRadius: 12,
+        padding: "12px",
+        fontSize: 14,
+        fontWeight: 600,
+        cursor: busy ? "not-allowed" : "pointer",
+        fontFamily: "inherit",
+        width: "100%",
+        boxSizing: "border-box",
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+        opacity: busy ? 0.7 : 1,
+      }}>
+        {/*  glyph */}
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M17.05 12.04c-.04-3.51 2.86-5.19 2.99-5.27-1.63-2.39-4.18-2.72-5.08-2.76-2.16-.22-4.22 1.27-5.32 1.27-1.11 0-2.79-1.24-4.59-1.21-2.36.04-4.55 1.37-5.77 3.48-2.46 4.27-.63 10.59 1.78 14.05 1.18 1.69 2.58 3.59 4.42 3.52 1.78-.07 2.45-1.15 4.6-1.15s2.76 1.15 4.62 1.11c1.91-.03 3.12-1.71 4.28-3.41 1.36-1.96 1.92-3.86 1.95-3.96-.04-.02-3.74-1.43-3.78-5.67M13.83 1.78c.98-1.18 1.64-2.83 1.46-4.46-1.41.06-3.13.94-4.14 2.12-.91 1.05-1.7 2.71-1.49 4.32 1.58.12 3.19-.8 4.17-1.98"/>
+        </svg>
+        Continuar con Apple
+      </button>
+
+      {/* Google */}
+      <button onClick={() => start("google")} disabled={busy} style={{
+        background: "#fff",
+        color: "#1f1f1f",
+        border: "1px solid #dadce0",
+        borderRadius: 12,
+        padding: "12px",
+        fontSize: 14,
+        fontWeight: 600,
+        cursor: busy ? "not-allowed" : "pointer",
+        fontFamily: "inherit",
+        width: "100%",
+        boxSizing: "border-box",
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+        opacity: busy ? 0.7 : 1,
+      }}>
+        {/* Google "G" logo — official 4-color paths. */}
+        <svg width="16" height="16" viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+        </svg>
+        Continuar con Google
+      </button>
+
+      {/* Divider — "o" between OAuth and email/password. */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10,
+        marginTop: 4, marginBottom: 4,
+      }}>
+        <div style={{ flex: 1, height: 1, background: C.border }}/>
+        <div style={{ fontSize: 11, fontWeight: 700, color: C.textMd, letterSpacing: 0.5, textTransform: "uppercase" }}>
+          o con email
+        </div>
+        <div style={{ flex: 1, height: 1, background: C.border }}/>
+      </div>
+    </div>
+  );
+}
+
+// -----------------------------------------------------------
 // LOGIN
 // -----------------------------------------------------------
 function LoginView({ C, onSwitchSignup, onSwitchForgot }) {
@@ -247,6 +385,9 @@ function LoginView({ C, onSwitchSignup, onSwitchForgot }) {
   const [password, setPassword] = useState("");
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
+  // 0.1.3 — separate busy flag for OAuth so a stuck OAuth dance
+  // doesn't lock out the email/password path.
+  const [oauthBusy, setOauthBusy] = useState(false);
 
   const submit = async () => {
     setErr(null);
@@ -274,6 +415,8 @@ function LoginView({ C, onSwitchSignup, onSwitchForgot }) {
       <div style={{ fontSize: 13, color: C.textMd, marginBottom: 18 }}>Bienvenido de vuelta a SAMAS.</div>
 
       <ErrorLine text={err} C={C} />
+
+      <OAuthButtons C={C} busy={oauthBusy} setBusy={setOauthBusy} onError={setErr} />
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
         <input
@@ -330,6 +473,7 @@ function SignupView({ C, onSwitchLogin, onSignupDone }) {
   const [uniKey, setUniKey] = useState("");
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [oauthBusy, setOauthBusy] = useState(false); // 0.1.3 OAuth dance
 
   const nombreOk   = nombre.trim().length >= 1;
   const apellidoOk = apellido.trim().length >= 1;
@@ -387,6 +531,8 @@ function SignupView({ C, onSwitchLogin, onSignupDone }) {
       <div style={{ fontSize: 13, color: C.textMd, marginBottom: 18 }}>Dos minutos y ya estás invirtiendo.</div>
 
       <ErrorLine text={err} C={C} />
+
+      <OAuthButtons C={C} busy={oauthBusy} setBusy={setOauthBusy} onError={setErr} />
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
         <div style={{ display: "flex", gap: 10 }}>
