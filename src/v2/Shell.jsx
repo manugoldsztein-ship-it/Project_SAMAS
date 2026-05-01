@@ -15,7 +15,7 @@
 import React, { useState, useEffect, useMemo, Suspense, lazy } from "react";
 import ReactDOM from "react-dom";
 import { SAMAS_THEME, FONT } from "./theme.js";
-import { SamasTabBar, Avatar, avatarPropsFor, initialsOf, AVATAR_PALETTE } from "./shared.jsx";
+import { SamasTabBar, Avatar, avatarPropsFor, AVATAR_PALETTE } from "./shared.jsx";
 import { social as socialApi } from "./api/index.js";
 import { WalletPage } from "./Wallet.jsx";
 // Code-split the heavy tabs and the 2FA enrollment so they don't
@@ -2801,6 +2801,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.6",
+    title: "Dead UI sweep — removed inert Search button + 4 unused imports",
+    bullets: [
+      "Manuel called out: 'Search button on the main menu does nothing'. Confirmed — the ChromeBtn with Ico.Search in the Wallet header had no onClick across 70+ patches. Removed. The ? Explain button (0.4.2) is the actual go-to-find-something surface now.",
+      "Removed 3 unused named imports: testAnthropic in App.jsx, initialsOf in Shell.jsx, genId in v2/api/broker.js. Caught by a grep-driven scan across src/.",
+      "Removed dead Placeholder component in Shell.jsx — defined as 'Próximamente' fallback for unwired tabs but never instantiated since all 4 tabs (Wallet, Invertir, Social, News) went live with real components.",
+      "Wallet header now: theme toggle + ? Explain + Bell. Three buttons, all functional. iPhone SE math now comfortable: 3×40 + 2×6 = 132px right column, leaves room.",
+    ],
+  },
+  {
     version: "0.4.5",
     title: "Closed all 3 open audit items from 0.4.4",
     bullets: [
@@ -3829,58 +3839,10 @@ function SettingsToggle({ T, title, subtitle, value, onChange }) {
   );
 }
 
-// ----------------------------------------------------------
-// Placeholder — temporary "Próximamente" screen for tabs not yet
-// wired up. Once each tab gets its real component this goes away.
-// ----------------------------------------------------------
-function Placeholder({ T, title, subtitle }) {
-  return (
-    <div style={{
-      paddingBottom: "calc(env(safe-area-inset-bottom) + 96px)",
-      minHeight: "100%",
-      display: "flex", flexDirection: "column",
-    }}>
-      <div style={{
-        // Same safe-area-aware top inset as WalletPage so all tabs feel
-        // visually consistent below the status bar / DI.
-        padding: "calc(env(safe-area-inset-top) + 20px) 20px 0",
-      }}>
-        <div style={{
-          fontFamily: FONT.display, fontSize: 28, fontWeight: 700,
-          color: T.text, letterSpacing: -0.6,
-        }}>{title}</div>
-        {subtitle && (
-          <div style={{
-            fontFamily: FONT.sans, fontSize: 13, color: T.textMute, marginTop: 2,
-          }}>{subtitle}</div>
-        )}
-      </div>
-
-      <div style={{
-        flex: 1,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: 32,
-      }}>
-        <div style={{
-          textAlign: "center",
-          padding: "40px 24px",
-          borderRadius: 22,
-          background: T.surface,
-          border: `1px solid ${T.border}`,
-          maxWidth: 320,
-        }}>
-          <div style={{
-            fontFamily: FONT.display, fontSize: 18, fontWeight: 700,
-            color: T.text, marginBottom: 8,
-          }}>Próximamente</div>
-          <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, lineHeight: 1.5 }}>
-            Esta sección está en desarrollo. Volvé pronto.
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+// Placeholder "Próximamente" component lived here through 0.4.5.
+// All four bottom tabs (Wallet, Invertir, Social, News) are wired
+// to real components now — the placeholder hadn't been instantiated
+// in the JSX since the tabs went live. Removed in 0.4.6.
 
 // ----------------------------------------------------------
 // ScrollWithPTR — the page-level scroll container for the wallet/

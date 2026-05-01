@@ -209,7 +209,12 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
               {isDark ? <Ico.Sun size={18}/> : <Ico.Moon size={18}/>}
             </ChromeBtn>
           )}
-          <ChromeBtn T={T}><Ico.Search size={18}/></ChromeBtn>
+          {/* Search ChromeBtn was here through 0.4.5 with no onClick —
+              decorative-only. Removed in 0.4.6 (Manuel's "make sure
+              there's nothing useless"). The ? Explain button below is
+              the actual go-to-find-something surface now. If real
+              global search lands later, it gets a working onClick. */}
+
           {/* Explain-a-term button (samas-0.4.2). Opens a global
               modal with a text input → IA returns a definition in
               plain AR-Spanish. Dispatching a window event lets any

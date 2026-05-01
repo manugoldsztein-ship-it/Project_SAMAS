@@ -23,7 +23,7 @@
 //   the user is used to. Quotes come from the same in-memory list.
 // ============================================================
 
-import { jitter, maybeFail, genId, relativeStamp } from "./_mock.js";
+import { jitter, maybeFail, relativeStamp } from "./_mock.js";
 import { supabase } from "../../lib/supabase.js";
 
 // ----------------------------------------------------------

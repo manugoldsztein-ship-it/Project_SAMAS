@@ -13,7 +13,6 @@ import {
   loadAnthropicKey, saveAnthropicKey,
   loadAnthropicModel, saveAnthropicModel,
   DEFAULT_MODEL as ANTHROPIC_DEFAULT_MODEL,
-  testAnthropic,
 } from "./ai/client.js";
 // Real auth: Supabase session + signup/login/verify-WhatsApp flow. Replaces
 // the demo-PIN LoginScreen. See src/auth/SupabaseAuth.jsx for the UI, and
