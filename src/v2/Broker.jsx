@@ -39,7 +39,7 @@ import { hapticNative } from "../lib/native.js";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { toast } from "./toast.jsx";
 import { t as tr } from "../lib/i18n.js";
-import { analyzeAsset, tradeCoach, suggestWatchlist, rebalancePortfolio } from "../lib/ai.js";
+import { analyzeAsset, tradeCoach, suggestWatchlist, rebalancePortfolio, scoreRisk } from "../lib/ai.js";
 
 // Sub-tabs metadata — drives both the bottom nav and the content
 // switch in the top-level <BrokerShell/> render.
@@ -469,6 +469,12 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
           proposed buy/sell actions. */}
       {portfolio.holdings.length > 0 && (
         <RebalanceCard T={T} lang={lang} onRefresh={() => onSelectAsset && onSelectAsset(null)} />
+      )}
+
+      {/* AI Risk Profile (samas-0.1.9) — per-position 1-10 risk
+          score + AI-refined reason. Auto-loads, expandable rows. */}
+      {portfolio.holdings.length > 0 && (
+        <RiskProfileCard T={T} lang={lang} />
       )}
 
       {/* Distribución bar — % per holding of total cartera. Only in
@@ -3621,6 +3627,167 @@ function TickerBanner({ T, assets }) {
 }
 
 // ----------------------------------------------------------
+// ============================================================
+// RiskProfileCard (samas-0.1.9) — 1-10 risk score per holding
+// ============================================================
+// Auto-loads on mount, renders a compact list of held tickers with
+// color-coded score chips. Each row expandable inline to show the
+// AI-refined reason. Hides silently on AI failure / consent denial.
+function RiskProfileCard({ T, lang = "es" }) {
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(true);
+  const [hidden, setHidden] = useState(false);
+  const [expanded, setExpanded] = useState(null); // ticker | null
+
+  async function load() {
+    setBusy(true);
+    try {
+      const res = await scoreRisk();
+      setData(res);
+    } catch (e) {
+      if (e?.name === "AIConsentDeniedError") setHidden(true);
+      else if (!data) setHidden(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+
+  if (hidden) return null;
+  const scores = data?.scores || {};
+  const tickers = Object.keys(scores);
+  if (data && tickers.length === 0) return null;
+
+  // Sort highest risk first so the user sees what to look at.
+  const sorted = tickers.slice().sort((a, b) => scores[b].score - scores[a].score);
+
+  // Score → color. Low (1-3) = accent green, medium (4-6) = amber,
+  // high (7-10) = danger red. Uses oklch-tolerant fallbacks.
+  function colorForScore(s) {
+    if (s <= 3) return T.accent;
+    if (s <= 6) return "#F59E0B";
+    return T.danger;
+  }
+  function bgForScore(s) {
+    if (s <= 3) return T.accentSoft;
+    if (s <= 6) return "rgba(245, 158, 11, 0.14)";
+    return T.dangerSoft;
+  }
+
+  return (
+    <div style={{
+      margin: "0 16px 18px", padding: 14, borderRadius: 18,
+      background: T.surface, border: `1px solid ${T.border}`,
+    }}>
+      <div style={{
+        display: "flex", alignItems: "center", gap: 8, marginBottom: 12,
+      }}>
+        <div style={{
+          width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+          background: T.accent, color: "#06180c",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
+          </svg>
+        </div>
+        <div style={{
+          flex: 1,
+          fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+          color: T.textMute, letterSpacing: 0.6, textTransform: "uppercase",
+        }}>
+          {tr("portafolio.risk.title", lang)}
+        </div>
+      </div>
+
+      {/* Summary line */}
+      {busy && !data ? (
+        <div style={{
+          height: 14, marginBottom: 12, borderRadius: 6,
+          background: T.border, opacity: 0.5,
+          backgroundImage: `linear-gradient(90deg, ${T.border} 0, ${T.surface} 50%, ${T.border} 100%)`,
+          backgroundSize: "200% 100%",
+          animation: "samas-skel 1.4s ease-in-out infinite",
+        }} />
+      ) : data?.summary ? (
+        <div style={{
+          fontFamily: FONT.sans, fontSize: 12, color: T.textMute, lineHeight: 1.5,
+          marginBottom: 12,
+        }}>{data.summary}</div>
+      ) : null}
+
+      {/* Per-position rows */}
+      {sorted.map((ticker, i) => {
+        const s = scores[ticker];
+        const isOpen = expanded === ticker;
+        return (
+          <div key={ticker} style={{
+            borderTop: i === 0 ? "none" : `1px solid ${T.border}`,
+          }}>
+            <button
+              onClick={() => setExpanded(isOpen ? null : ticker)}
+              style={{
+                width: "100%", padding: "10px 0",
+                background: "transparent", border: "none",
+                display: "flex", alignItems: "center", gap: 12, cursor: "pointer",
+                textAlign: "left",
+              }}
+            >
+              {/* Score chip */}
+              <div style={{
+                width: 38, height: 28, flexShrink: 0,
+                borderRadius: 8,
+                background: bgForScore(s.score),
+                color: colorForScore(s.score),
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontFamily: FONT.mono, fontSize: 14, fontWeight: 800,
+              }}>{s.score}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  display: "flex", alignItems: "baseline", gap: 8,
+                }}>
+                  <span style={{
+                    fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: T.text,
+                    letterSpacing: 0.4,
+                  }}>${ticker}</span>
+                  <span style={{
+                    fontFamily: FONT.sans, fontSize: 11, fontWeight: 600,
+                    color: colorForScore(s.score), textTransform: "uppercase", letterSpacing: 0.4,
+                  }}>{tr(`portafolio.risk.level.${s.level}`, lang)}</span>
+                </div>
+              </div>
+              {/* Caret */}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                stroke={T.textMute} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
+                style={{
+                  transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
+                  transition: "transform 160ms ease-out", flexShrink: 0,
+                }}>
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+            {isOpen && (
+              <div style={{
+                paddingBottom: 10, paddingLeft: 50,
+                fontFamily: FONT.sans, fontSize: 12, color: T.textMute, lineHeight: 1.55,
+              }}>{s.reason}</div>
+            )}
+          </div>
+        );
+      })}
+
+      <div style={{
+        marginTop: 10, fontFamily: FONT.sans, fontSize: 10,
+        color: T.textMute, textAlign: "right",
+      }}>
+        {tr("portafolio.risk.disclaimer", lang)}
+      </div>
+    </div>
+  );
+}
+
 // ============================================================
 // RebalanceCard + RebalanceSheet (samas-0.1.4)
 // ============================================================

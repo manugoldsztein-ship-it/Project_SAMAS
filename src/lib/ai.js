@@ -125,6 +125,38 @@ export async function tradeCoach({ ticker, side, qty, price }) {
 }
 
 /**
+ * scoreRisk() — POST /functions/v1/score-risk
+ *
+ * Server reads holdings, computes deterministic 1-10 risk score per
+ * ticker (category baseline + volatility + concentration + drawdown),
+ * asks Claude Haiku to refine the per-ticker reasons. Tickers + scores
+ * stay deterministic so the LLM can't hallucinate them.
+ *
+ * Returns:
+ *   {
+ *     scores: { [ticker]: { score, level: "low"|"medium"|"high", reason } },
+ *     summary: string,
+ *     generatedAt: string,
+ *   }
+ */
+export async function scoreRisk() {
+  await gateOnConsent();
+  const { data, error } = await supabase.functions.invoke("score-risk", {
+    body: {},
+  });
+  if (error) {
+    let detail = "";
+    try {
+      const body = await error?.context?.json?.();
+      if (body?.error) detail = `: ${body.error}`;
+    } catch (_) { /* fall through */ }
+    throw new Error(`Risk IA falló${detail || ": " + (error.message || "error desconocido")}`);
+  }
+  if (data?.error) throw new Error(`Risk IA falló: ${data.error}`);
+  return data;
+}
+
+/**
  * earningsWatch() — POST /functions/v1/earnings-watch
  *
  * Server reads the user's holdings, picks upcoming earnings dates

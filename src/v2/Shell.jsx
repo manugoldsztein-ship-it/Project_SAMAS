@@ -2625,6 +2625,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.1.9",
+    title: "AI Risk Score per holding — 1-10 chips on Portafolio",
+    bullets: [
+      "Twelfth AI surface lands on Portafolio between Rebalanceo IA and the Pro dashboard. Each held ticker gets a 1-10 risk score with a color-coded chip (green ≤3, amber ≤6, red ≥7), level label (bajo / medio / alto), and an AI-refined reason explaining what's driving the score. Tap any row to expand the reason inline.",
+      "New score-risk Edge Function. Score is fully deterministic, computed server-side from: category baseline (BONO=2, ETF=4, CEDEAR=6, COMMOD=6, ACCION=7, CRYPTO=9), per-ticker volatility multiplier, concentration penalty (>40% adds 2, >25% adds 1), and drawdown bump (-15%+ adds 1). Claude Haiku only refines the human-language reasons; the numbers themselves can't hallucinate.",
+      "Sorted highest-risk first so the most concentrated / volatile positions surface immediately. Hides silently if AI consent is denied or the call errors — Portafolio never breaks behind a flaky AI panel.",
+      "12 AI surfaces total now.",
+    ],
+  },
+  {
     version: "0.1.8",
     title: "AI Earnings Watch — upcoming reports for held tickers",
     bullets: [
