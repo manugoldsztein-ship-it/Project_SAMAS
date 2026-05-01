@@ -162,27 +162,11 @@ export async function getTransactions({ limit = 50, before } = {}) {
 // implementation would call a Postgres function via RPC that wraps
 // both writes in a single transaction.
 async function applyLedgerEntry({ userId, currency, delta, kind, reference, memo }) {
-  // Read current.
-  const { data: cur, error: rErr } = await supabase
-    .from("accounts")
-    .select("balance")
-    .eq("user_id", userId)
-    .eq("currency", currency)
-    .maybeSingle();
-  if (rErr) throw new Error(rErr.message);
-  const currentBalance = Number(cur?.balance || 0);
-  const newBalance = Number((currentBalance + delta).toFixed(2));
-  // Upsert account.
-  const { error: aErr } = await supabase
-    .from("accounts")
-    .upsert(
-      { user_id: userId, currency, balance: newBalance, updated_at: new Date().toISOString() },
-      { onConflict: "user_id,currency" }
-    );
-  if (aErr) throw new Error(aErr.message);
-  // Insert ledger row. amount is SIGNED — positive for inflow,
-  // negative for outflow — so a SUM(amount) over the ledger
-  // reconciles the balance trivially.
+  // samas-0.4.13: balance is now updated by the
+  // transactions_to_balance Postgres trigger. We just insert the
+  // ledger row; the trigger handles accounts.balance atomically
+  // server-side. Re-fetching balance after the insert gives us the
+  // correct post-trigger value for the return shape.
   const { data: tx, error: tErr } = await supabase
     .from("transactions")
     .insert({
@@ -196,7 +180,14 @@ async function applyLedgerEntry({ userId, currency, delta, kind, reference, memo
     .select("id, created_at")
     .single();
   if (tErr) throw new Error(tErr.message);
-  return { txId: tx.id, newBalance };
+  // Re-read accounts to get the post-trigger balance for the return.
+  const { data: postRow } = await supabase
+    .from("accounts")
+    .select("balance")
+    .eq("user_id", userId)
+    .eq("currency", currency)
+    .maybeSingle();
+  return { txId: tx.id, newBalance: Number(postRow?.balance) || 0 };
 }
 
 /**

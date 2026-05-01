@@ -2827,6 +2827,19 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.13",
+    title: "Wallet backend audit + critical placeOrder → balance bug fix",
+    bullets: [
+      "Manuel asked: 'is all the backend there?' before integrating real money rails. Audit landed 1 critical bug + a comprehensive readiness doc.",
+      "BUG (existed since launch): broker.placeOrder inserted into public.transactions on every fill but never updated public.accounts.balance. Manuel's actual data showed it: accounts.ARS = 6244 (the demo seed value), SUM(transactions.amount) = -841,500. Trades were going into the ledger but the balance never moved. Buys didn't deduct cash, sells didn't credit cash.",
+      "FIX: new transactions_to_balance trigger — AFTER INSERT on public.transactions, upsert accounts.balance += amount. Single source of truth: ANY caller that inserts a transactions row gets the balance update for free. placeOrder, deposit, withdraw, swap, wallet_credits, future bank-rail webhooks. The wallet_credits_propagate trigger from 0.4.7 was refactored to only insert the transactions row and let the new trigger handle balance (no more double-update risk).",
+      "Refactored applyLedgerEntry in src/v2/api/wallet.js to skip the manual accounts upsert (the trigger handles it now). Re-fetches the post-trigger balance for the return value.",
+      "Manuel's stale balance is NOT auto-reconciled — the ledger sum is -841k pesos which would put him in negative territory. The cleanest reset is Settings → 'Resetear cuenta demo' (zeros everything + re-seeds). New trades from now on move balance correctly.",
+      "New doc: docs/wallet-backend.md. Comprehensive audit of what's there (tables, triggers, edge functions, client API, realtime sub) vs. what's missing for real-money integration (MP / CBU rails, FX feed, KYC, reconciliation, fraud limits). Most of the missing work is partner-dependent (Cohen integration brings most of it for free since they're already plumbed for ARG retail ALyC operations).",
+      "Migration: supabase/transactions_to_balance.sql, applied via Management API.",
+    ],
+  },
+  {
     version: "0.4.12",
     title: "Objetivos rebuilt with IA — Wallet card + 3-step wizard",
     bullets: [
