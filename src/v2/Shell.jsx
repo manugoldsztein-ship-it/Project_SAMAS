@@ -29,6 +29,7 @@ const NewsPage    = lazy(() => import("./News.jsx").then((m) => ({ default: m.Ne
 const MfaEnrollSection = lazy(() => import("../auth/Mfa.jsx").then((m) => ({ default: m.MfaEnrollSection })));
 import { Onboarding } from "./Onboarding.jsx";
 import { AITour, hasSeenAITour, resetAIToured } from "./AITour.jsx";
+import { TutorialsHub } from "./Tutorials.jsx";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { callRefreshFor } from "./refreshRegistry.js";
 import {
@@ -74,6 +75,9 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
   // AI tour fires AFTER onboarding completes — gives the user a quick
   // walkthrough of the 17 AI surfaces. samas-0.3.2.
   const [showAITour, setShowAITour] = useState(false);
+  // Tutorials hub — opened from Settings → 'Tutoriales y guías'.
+  // samas-0.4.1.
+  const [showTutorials, setShowTutorials] = useState(false);
   const [proMode, setProMode] = useState(() => {
     if (typeof localStorage === "undefined") return true;
     const v = localStorage.getItem(PRO_KEY);
@@ -458,6 +462,10 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
             // finishes before the tour overlay slams in.
             setTimeout(() => setShowAITour(true), 200);
           }}
+          onOpenTutorials={() => {
+            setShowSettings(false);
+            setTimeout(() => setShowTutorials(true), 200);
+          }}
           isDark={isDark}
           onToggleDark={onToggleDark}
           onLogout={onLogout}
@@ -474,6 +482,13 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
           when finish/skip fires. Replayable from Settings. */}
       {showAITour && (
         <AITour T={T} lang={lang} onDone={() => setShowAITour(false)} />
+      )}
+
+      {/* Tutorials hub — list of guides, fullscreen overlay above
+          everything else (samas-0.4.1). Opened from Settings →
+          'Tutoriales y guías'. Read state persists in localStorage. */}
+      {showTutorials && (
+        <TutorialsHub T={T} lang={lang} onClose={() => setShowTutorials(false)} />
       )}
 
       {/* Pro upsell modal — global so any view can dispatch
@@ -531,7 +546,7 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
 // full ProfileSheet from legacy, it's a focused settings panel for
 // the toggles the user actually flips often.
 // ----------------------------------------------------------
-function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus, onOpenPlusUpsell, onReplayAITour, isDark, onToggleDark, onLogout, onClose, isNativeApp, lang = "es", setLang }) {
+function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus, onOpenPlusUpsell, onReplayAITour, onOpenTutorials, isDark, onToggleDark, onLogout, onClose, isNativeApp, lang = "es", setLang }) {
   const [show2FA, setShow2FA] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
@@ -948,6 +963,33 @@ function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus
             <polyline points="9 18 15 12 9 6"/>
           </svg>
         </button>
+
+        {/* Tutorials hub (samas-0.4.1) — opens the in-app guide
+            list. Sits right above the AI tour replay so they read
+            as a learning cluster. */}
+        {onOpenTutorials && (
+          <button
+            onClick={onOpenTutorials}
+            style={{
+              width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 8,
+              background: T.surface, border: `1px solid ${T.border}`,
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              cursor: "pointer", textAlign: "left",
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text }}>
+                {tr("settings.tutorials.title", lang)}
+              </div>
+              <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+                {tr("settings.tutorials.sub", lang)}
+              </div>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </button>
+        )}
 
         {/* Replay AI tour (samas-0.3.2) — re-run the first-launch
             walkthrough of the 17 AI surfaces. Useful for a Cohen
@@ -2734,6 +2776,17 @@ function AIConsentGate({ T, lang = "es" }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.4.1",
+    title: "Tutorials hub — 6 starter guides in Settings",
+    bullets: [
+      "New 'Tutoriales y guías' row at the top of Settings (above the AI tour replay) opens a fullscreen list of 6 in-app guides. Each opens as a bottom sheet with a markdown body rendered by the same in-house parser as Quarterly Review (## h2 + **bold** + paragraphs, no react-markdown dep).",
+      "Starter set covers product walkthroughs + AR retail financial literacy: 'Cómo hacer tu primera operación' (buy flow), 'Qué es SAMAS Plus' (paywall), 'Cómo leer el Riesgo por activo' (1-10 score), 'Qué es un CEDEAR' (financial literacy), 'Cómo escribir una tesis' (thesis tracker from 0.3.3), 'Privacidad cuando compartís tu cartera' (the 0.3.5–0.3.9 work explained).",
+      "Read state persists in localStorage (samas_tutorials_read = JSON id list). The hub list shows a 'Visto' chip on guides the user has opened. No gating — read state is informational only.",
+      "New file src/v2/tutorialsData.js — the 6 tutorial bodies live there as Spanish markdown templates. Adding a tutorial is a single object append. English translation is queued (Spanish-only for the AR / Cohen launch).",
+      "New file src/v2/Tutorials.jsx — TutorialsHub list view + TutorialDetail bottom sheet, both rendered via React portal so they sit above the tab bar.",
+    ],
+  },
   {
     version: "0.4.0",
     title: "AI Sector Rotation — 19th AI surface (sector-level macro tilts)",
