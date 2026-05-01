@@ -5976,11 +5976,13 @@ export default function SAMASApp() {
   const [recurringAporte, setRecurringAporte] = usePersistedState("samas_recurring_aporte", null);
   const [pendingTrade, setPending]    = useState(null);
   const [toast, setToast]             = useState(null);
-  // viewMode default: "v2" on native (iPhone testers see the new
-  // Wallet-first shell automatically), "mobile" on web (legacy mock-
-  // iPhone preview keeps working). Either platform can switch via the
-  // toggle bar at the top of the app.
-  const [viewMode, setViewMode]       = usePersistedState("samas_view_mode", isNativeApp ? "v2" : "mobile");
+  // viewMode (samas-0.4.9): v2 is now the unconditional default on
+  // both native and web preview. The legacy "mobile" + "web" shells
+  // (MobileApp / WebDashboard) stay reachable for dev/QA via the
+  // ?debug=1 URL flag — see the toggle gating below. Production
+  // builds (Capacitor on iOS) never render anything but v2; the
+  // toggle never appears for end users.
+  const [viewMode, setViewMode]       = usePersistedState("samas_view_mode", "v2");
   // Principal vs Pro shell. "principal" renders the new v2 SamasShell
   // (wallet-first design). "pro" renders the legacy MobileApp with the
   // full advanced UI (PRO badge, FX strip, distribución, posiciones
@@ -6787,12 +6789,18 @@ export default function SAMASApp() {
         }
       `}</style>
 
-      {/* viewMode toggle — three options:
-            mobile = legacy iPhone shell (current production look)
-            web    = legacy desktop dashboard layout
-            v2     = new Wallet-first shell (under iteration)
-          Only visible on web preview; native always renders v2. */}
-      {!isNativeApp && (
+      {/* viewMode toggle — debug-only since 0.4.9. Production users
+          (native iOS) always see v2. Web preview defaults to v2 too;
+          the legacy "mobile" + "web" shells are reachable only when
+          the dev opens the URL with ?debug=1. Toggle stays available
+          for QA / regression testing the legacy MobileApp + WebDashboard
+          paths until those are formally retired. */}
+      {!isNativeApp && (() => {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          return params.get("debug") === "1";
+        } catch { return false; }
+      })() && (
         <div style={{ display:"flex", justifyContent:"center", gap:12, padding:"16px 0 8px", position:"sticky", top:0, zIndex:200, background:outerBg, borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
           {[["mobile","Movil"],["web","Web"],["v2","SAMAS v2"]].map(([v, l]) => (
             <button key={v} onClick={() => setViewMode(v)} style={{ background: v===viewMode ? "#16C784" : "rgba(255,255,255,0.07)", color: v===viewMode ? "#fff" : "rgba(255,255,255,0.5)", border:"none", borderRadius:10, padding:"6px 20px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
@@ -6885,7 +6893,20 @@ export default function SAMASApp() {
             </div>
           </div>
         )
-      ) : (isNativeApp || viewMode === "v2") ? (
+      ) : (() => {
+        // samas-0.4.9: v2 is the only path for end users. Native always
+        // gets v2; web preview gets v2 unless the dev explicitly added
+        // ?debug=1 to the URL (which exposes the toggle above) AND
+        // selected mobile/web in localStorage. Anyone landing without
+        // ?debug=1 — including users with a stale viewMode in storage
+        // from before this patch — sees v2 unconditionally.
+        if (isNativeApp) return true;
+        let isDebug = false;
+        try {
+          isDebug = new URLSearchParams(window.location.search).get("debug") === "1";
+        } catch (_) { /* SSR */ }
+        return !isDebug || viewMode === "v2";
+      })() ? (
         isNativeApp ? (
           <ErrorBoundary>
             <SamasShell

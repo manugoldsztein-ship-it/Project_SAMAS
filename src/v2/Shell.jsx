@@ -2801,6 +2801,17 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.9",
+    title: "Legacy MobileApp + WebDashboard gated behind ?debug=1",
+    bullets: [
+      "Capacitor iOS already always rendered v2 SamasShell — production users never see legacy. But web preview defaulted to legacy 'mobile' mode for any user with no stored viewMode. Plus existing localStorage values like 'mobile' would persist across patches. Made v2 the unconditional default for end users on both platforms.",
+      "Render decision tree change: v2 fires unless (web AND ?debug=1 in URL AND viewMode in storage is 'mobile' or 'web'). Anyone hitting the page fresh — including QA, demo viewers, accidental web access — sees v2. Devs flipping between shells for regression testing add ?debug=1 and the toggle bar reappears.",
+      "Default localStorage value flipped from {native: 'v2', web: 'mobile'} to 'v2' for both. Existing legacy-mode users with stale storage still see v2 because the runtime guard ignores their stored choice unless ?debug=1 is present.",
+      "Legacy MobileApp (~258 lines) + WebDashboard (~121 lines) + the legacy page components (PageMercado, PagePortfolio, PageWatchlist, PageOrdenes, PageNoticias, PageIdeas, AssetDetail, etc.) STAY in the codebase as a debug/QA escape hatch. Future patch will fully delete them once we've spent more time confirming v2 covers every flow they did.",
+      "Cohen pitch unchanged — they see v2 regardless. The pitch is the cleanest version of the app it has ever been.",
+    ],
+  },
+  {
     version: "0.4.8",
     title: "App.jsx dead-code sweep — 6 unused components removed",
     pushed: "34b4de4..pending",
