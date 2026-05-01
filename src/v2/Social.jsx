@@ -595,16 +595,17 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
       if (!raw) return;
       const trade = JSON.parse(raw);
       localStorage.removeItem("samas_pending_trade_share");
-      if (!trade || !trade.ticker || !trade.qty || !trade.price) return;
+      if (!trade || !trade.ticker) return;
       setPendingTrade(trade);
       const tplKey = trade.side === "buy"
         ? "social.compose.trade_buy_template"
         : "social.compose.trade_sell_template";
-      const priceStr = `US$${Number(trade.price).toLocaleString("es-AR", { maximumFractionDigits: 2 })}`;
+      // Privacy: don't interpolate qty or price into the body string
+      // (samas-0.3.6). The pendingTrade payload still carries them
+      // for any callers that want them, but the public template only
+      // mentions $TICKER.
       setBody(tr(tplKey, lang, {
-        qty: String(trade.qty),
         ticker: String(trade.ticker),
-        price: priceStr,
       }));
     } catch (e) {
       console.warn("[social] trade prefill failed:", e);
@@ -784,9 +785,17 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
     if (!pendingPortfolio && !body.trim()) { setErr("El post está vacío."); return; }
     setBusy(true);
     try {
+      // Privacy: strip qty + price from the trade payload before
+      // it lands in the DB (samas-0.3.6). Side + ticker are the only
+      // fields the renderer uses now; persisting the rest is a future
+      // leak surface (admin tooling, API consumers, accidental UI
+      // re-render). Same data discipline as the portfolio card.
+      const safeTrade = pendingTrade
+        ? { side: pendingTrade.side, ticker: pendingTrade.ticker }
+        : undefined;
       await socialApi.createPost({
         body,
-        trade: pendingTrade || undefined,
+        trade: safeTrade,
         image: pendingImage || undefined,
         portfolio: pendingPortfolio || undefined,
       });
@@ -1213,6 +1222,9 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
                 card on a feed item; an X button removes the
                 attachment without clearing the body text. */}
             {pendingTrade && (
+              // Privacy-safe compose preview matching the post render
+              // (samas-0.3.6). Shows side + ticker + "Ejecutado en
+              // SAMAS" stamp; no qty, no price.
               <div style={{
                 marginTop: 10, padding: "10px 12px", borderRadius: 12,
                 background: T.bg, border: `1px solid ${T.border}`,
@@ -1225,10 +1237,14 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
                   fontFamily: FONT.mono, fontSize: 10, fontWeight: 700, letterSpacing: 0.6,
                 }}>{pendingTrade.side === "buy" ? "COMPRA" : "VENTA"}</div>
                 <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text }}>
-                  {pendingTrade.qty} {pendingTrade.ticker}
+                  ${pendingTrade.ticker}
                 </div>
-                <div style={{ fontFamily: FONT.mono, fontSize: 12, color: T.textMute, marginLeft: "auto" }}>
-                  US${Number(pendingTrade.price).toLocaleString("es-AR")}
+                <div style={{
+                  marginLeft: "auto",
+                  fontFamily: FONT.sans, fontSize: 10, color: T.textMute,
+                  letterSpacing: 0.4, textTransform: "uppercase",
+                }}>
+                  {tr("social.trade_card.via_samas", lang)}
                 </div>
                 <button
                   onClick={() => setPendingTrade(null)}
@@ -3789,6 +3805,10 @@ function PostCard({ T, p, lang = "es", saved, meId, onLike, onRepost, onSave, on
         )}
 
         {p.trade && (
+          // Privacy: trade-share cards no longer show qty or price
+          // (samas-0.3.6). Same rule as portfolio shares — strangers
+          // see WHAT side + WHICH ticker, but not how many units or
+          // at what fill price. Brag the action, not the size.
           <div style={{
             padding: "10px 12px", borderRadius: 12, marginBottom: 10,
             background: T.bg, border: `1px solid ${T.border}`,
@@ -3811,10 +3831,14 @@ function PostCard({ T, p, lang = "es", saved, meId, onLike, onRepost, onSave, on
                 cursor: onOpenTicker ? "pointer" : "default",
               }}
             >
-              {p.trade.qty} {p.trade.ticker}
+              ${p.trade.ticker}
             </button>
-            <div style={{ fontFamily: FONT.mono, fontSize: 12, color: T.textMute, marginLeft: "auto" }}>
-              US${p.trade.price?.toLocaleString("es-AR")}
+            <div style={{
+              marginLeft: "auto",
+              fontFamily: FONT.sans, fontSize: 10, color: T.textMute,
+              letterSpacing: 0.4, textTransform: "uppercase",
+            }}>
+              {tr("social.trade_card.via_samas", lang)}
             </div>
           </div>
         )}

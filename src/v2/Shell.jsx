@@ -2735,6 +2735,17 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.3.6",
+    title: "Privacy fix — same lockdown on shared trade cards",
+    bullets: [
+      "Companion to 0.3.5. Single-trade share cards (the 'Compartir este trade' flow from the Done screen) now follow the same rule: side + ticker only. No qty, no fill price.",
+      "Was: '[COMPRA] 13 GGAL ........ US$4250'. Now: '[COMPRA] $GGAL ........ Ejecutado en SAMAS'. The compose preview matches the published post.",
+      "Pre-fill template changed from 'Acabo de comprar 13 GGAL a US$4250' to 'Acabo de comprar $GGAL vía SAMAS'. The :compose:remove × button still nukes the attachment.",
+      "Wire-side: trade payload sent to createPost is now scrubbed to { side, ticker } only — qty and price never land in the DB row. The samas:share-trade event still carries qty+price for future consumers (e.g., a private 'my trades' tab), but nothing publicly rendered persists them.",
+      "Caveat: posts created BEFORE this patch still have qty+price in the DB. The renderer ignores them and shows the new shape, so they're visually clean — but they remain in the row. If we want to retroactively scrub, separate migration.",
+    ],
+  },
+  {
     version: "0.3.5",
     title: "Privacy fix — shared portfolio cards no longer leak amounts",
     bullets: [
