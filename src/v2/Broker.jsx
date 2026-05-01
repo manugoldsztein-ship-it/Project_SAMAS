@@ -154,19 +154,21 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true, la
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  // Tax-loss harvest deep-link drain (samas-0.2.0). Wallet's
-  // TaxLossHarvestCard sets samas_pending_harvest_sell + dispatches
-  // samas:harvest-sell. Shell switches to the broker tab; we drain
-  // the briefcase here once `assets` is loaded so we can resolve
-  // ticker → asset object and open the AssetSheet.
+  // Cross-shell deep-link drain for AssetSheet (samas-0.2.2). Shell's
+  // samas:open-asset listener stashes { ticker, ts } in
+  // samas_pending_open_asset and switches to this tab; we drain it
+  // here once `assets` is loaded so we can resolve ticker → asset
+  // object and open the sheet. Used by proactive-insights inbox-row
+  // taps (and was originally introduced for the reverted tax-loss
+  // harvester in 0.2.0).
   useEffect(() => {
     if (!assets || assets.length === 0) return;
     let raw;
-    try { raw = localStorage.getItem("samas_pending_harvest_sell"); } catch { return; }
+    try { raw = localStorage.getItem("samas_pending_open_asset"); } catch { return; }
     if (!raw) return;
     let payload;
     try { payload = JSON.parse(raw); } catch { return; }
-    try { localStorage.removeItem("samas_pending_harvest_sell"); } catch {}
+    try { localStorage.removeItem("samas_pending_open_asset"); } catch {}
     // Stale (older than 60s) → ignore. Stops a previously aborted
     // handoff from popping a sheet on a fresh broker entry.
     if (!payload?.ticker || !payload?.ts || (Date.now() - payload.ts > 60_000)) return;

@@ -157,42 +157,6 @@ export async function scoreRisk() {
 }
 
 /**
- * taxLossHarvest() — POST /functions/v1/tax-loss-harvest
- *
- * Server reads holdings + computes unrealized P&L per ticker,
- * filters to losers, mirrors the deterministic realized-YTD seed
- * used by Pro Wallet's TaxYearCard so the offset target lines up,
- * and returns:
- *   {
- *     items: [{
- *       ticker, name, qty, avgCost, currentPrice, currency,
- *       unrealizedAbs, unrealizedPct, lossUsd, taxSavingsUsd, reason
- *     }, ...],
- *     realizedYtdUsd, totalHarvestableLossUsd, totalTaxSavingsUsd,
- *     summary, generatedAt
- *   }
- *
- * AI refines summary + per-row reason; numbers stay deterministic.
- * Templated fallback when no API key.
- */
-export async function taxLossHarvest() {
-  await gateOnConsent();
-  const { data, error } = await supabase.functions.invoke("tax-loss-harvest", {
-    body: {},
-  });
-  if (error) {
-    let detail = "";
-    try {
-      const body = await error?.context?.json?.();
-      if (body?.error) detail = `: ${body.error}`;
-    } catch (_) { /* fall through */ }
-    throw new Error(`Tax-loss IA falló${detail || ": " + (error.message || "error desconocido")}`);
-  }
-  if (data?.error) throw new Error(`Tax-loss IA falló: ${data.error}`);
-  return data;
-}
-
-/**
  * proactiveInsights() — POST /functions/v1/proactive-insights
  *
  * Server scans the user's holdings for actionable signals

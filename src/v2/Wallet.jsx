@@ -33,7 +33,7 @@ import { toast } from "./toast.jsx";
 import { setRefreshHandler } from "./refreshRegistry.js";
 import { t as tr } from "../lib/i18n.js";
 import { useLivePortfolioRatio } from "./livePrices.jsx";
-import { analyzePortfolio, chatPortfolio, dailyBrief, compareBenchmark, earningsWatch, taxLossHarvest, proactiveInsights } from "../lib/ai.js";
+import { analyzePortfolio, chatPortfolio, dailyBrief, compareBenchmark, earningsWatch, proactiveInsights } from "../lib/ai.js";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { hapticNative } from "../lib/native.js";
 
@@ -471,8 +471,6 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
           <BenchmarkCompareCard T={T} lang={lang} />
           {/* Earnings watch — upcoming reports for held tickers (0.1.8). */}
           <EarningsWatchCard T={T} lang={lang} />
-          {/* Tax-loss harvester — losers + estimated savings (0.2.0). */}
-          <TaxLossHarvestCard T={T} lang={lang} />
           {/* Preguntale a SAMAS — multi-turn chat (samas-0.0.89). */}
           <AIChatCard T={T} lang={lang} />
         </>
@@ -1631,226 +1629,6 @@ function EarningsWatchCard({ T, lang = "es" }) {
   );
 }
 
-// ============================================================
-// TaxLossHarvestCard (samas-0.2.0) — AI tax-loss harvesting
-// ============================================================
-// Reads losers from the holdings table, mirrors the deterministic
-// realized-YTD seed used by Pro Wallet's TaxYearCard, and shows:
-//   - Headline: total estimated tax savings (USD, 15% rate)
-//   - Per-position rows: ticker, current loss %, USD loss, AI reason
-//   - Tap any row → "Ejecutar venta" deep-link into the trade sheet
-//     (briefcase + window event, same pattern as share-trade)
-// Hides silently if no losers OR AI errors / consent denied.
-function TaxLossHarvestCard({ T, lang = "es" }) {
-  const [data, setData] = useState(null);
-  const [busy, setBusy] = useState(true);
-  const [hidden, setHidden] = useState(false);
-  const [expanded, setExpanded] = useState(null); // ticker | null
-  const [showAll, setShowAll] = useState(false);
-
-  async function load() {
-    setBusy(true);
-    try {
-      const res = await taxLossHarvest();
-      setData(res);
-    } catch (e) {
-      if (e?.name === "AIConsentDeniedError") setHidden(true);
-      else if (!data) setHidden(true);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
-
-  if (hidden) return null;
-  if (data && (!data.items || data.items.length === 0)) return null;
-
-  const items = data?.items || [];
-  const visibleItems = showAll ? items : items.slice(0, 3);
-  const hiddenCount = items.length - visibleItems.length;
-  const totalSavings = data?.totalTaxSavingsUsd || 0;
-
-  function openSellSheet(ticker, qty) {
-    // Hand off to BrokerShell via the briefcase + event pattern. The
-    // broker sub-shell drains samas_pending_trade_share-style state
-    // on mount; we use a fresh key so we don't conflict with social
-    // share. Most users won't have BrokerShell mounted from here, so
-    // the simplest reliable thing is to dispatch an open-trade event
-    // for this ticker on the harvest side.
-    try {
-      localStorage.setItem("samas_pending_harvest_sell", JSON.stringify({
-        ticker, qty, ts: Date.now(),
-      }));
-      window.dispatchEvent(new CustomEvent("samas:harvest-sell", {
-        detail: { ticker, qty },
-      }));
-      hapticNative("tap").catch(() => {});
-    } catch (_) { /* ignore */ }
-  }
-
-  return (
-    <div style={{ margin: "20px 16px 0" }}>
-      <SectionHead T={T} title={tr("wallet.harvest.title", lang)} />
-      <div style={{
-        marginTop: 12, padding: 16, borderRadius: 22,
-        background: T.surface, border: `1px solid ${T.border}`,
-      }}>
-        {/* Top-line: estimated tax savings */}
-        {busy && !data ? (
-          <div style={{
-            height: 40, marginBottom: 12, borderRadius: 8,
-            background: T.border, opacity: 0.5,
-            backgroundImage: `linear-gradient(90deg, ${T.border} 0, ${T.surface} 50%, ${T.border} 100%)`,
-            backgroundSize: "200% 100%",
-            animation: "samas-skel 1.4s ease-in-out infinite",
-          }} />
-        ) : totalSavings > 0 ? (
-          <div style={{
-            marginBottom: 12, padding: "10px 12px", borderRadius: 12,
-            background: T.accentSoft, border: `1px solid ${T.accent}33`,
-            display: "flex", alignItems: "center", gap: 10,
-          }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-              background: T.accent, color: "#06180c",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="1" x2="12" y2="23"/>
-                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-              </svg>
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                fontFamily: FONT.mono, fontSize: 10, fontWeight: 700,
-                color: T.accentInk, letterSpacing: 0.5, textTransform: "uppercase",
-              }}>{tr("wallet.harvest.savings_label", lang)}</div>
-              <div style={{
-                fontFamily: FONT.mono, fontSize: 18, fontWeight: 800, color: T.accent,
-              }}>US${totalSavings.toLocaleString("en-US", { maximumFractionDigits: 0 })}</div>
-            </div>
-          </div>
-        ) : null}
-
-        {/* Summary line */}
-        {data?.summary ? (
-          <div style={{
-            fontFamily: FONT.sans, fontSize: 12, color: T.textMute, lineHeight: 1.5,
-            marginBottom: 12,
-          }}>{data.summary}</div>
-        ) : null}
-
-        {/* Per-position rows */}
-        {visibleItems.map((it, idx) => {
-          const isOpen = expanded === it.ticker;
-          return (
-            <div key={it.ticker} style={{
-              borderTop: idx === 0 ? "none" : `1px solid ${T.border}`,
-            }}>
-              <button
-                onClick={() => setExpanded(isOpen ? null : it.ticker)}
-                style={{
-                  width: "100%", padding: "12px 0",
-                  background: "transparent", border: "none",
-                  display: "flex", alignItems: "center", gap: 12, cursor: "pointer",
-                  textAlign: "left",
-                }}
-              >
-                {/* Loss chip */}
-                <div style={{
-                  width: 56, height: 36, flexShrink: 0,
-                  borderRadius: 8,
-                  background: T.dangerSoft,
-                  color: T.danger,
-                  display: "flex", flexDirection: "column",
-                  alignItems: "center", justifyContent: "center",
-                }}>
-                  <div style={{
-                    fontFamily: FONT.mono, fontSize: 12, fontWeight: 800, lineHeight: 1,
-                  }}>{it.unrealizedPct.toFixed(1)}%</div>
-                  <div style={{
-                    fontFamily: FONT.mono, fontSize: 9, fontWeight: 700, marginTop: 2,
-                    letterSpacing: 0.4, textTransform: "uppercase",
-                  }}>US${it.lossUsd.toFixed(0)}</div>
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    display: "flex", alignItems: "baseline", gap: 8,
-                  }}>
-                    <span style={{
-                      fontFamily: FONT.mono, fontSize: 13, fontWeight: 800, color: T.text,
-                      letterSpacing: 0.4,
-                    }}>${it.ticker}</span>
-                    <span style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute }}>
-                      {it.name}
-                    </span>
-                    {it.taxSavingsUsd > 0 && (
-                      <span style={{
-                        marginLeft: "auto",
-                        fontFamily: FONT.mono, fontSize: 10, color: T.accent, fontWeight: 700,
-                      }}>{tr("wallet.harvest.savings_chip", lang, { amt: it.taxSavingsUsd.toFixed(0) })}</span>
-                    )}
-                  </div>
-                </div>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                  stroke={T.textMute} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
-                  style={{
-                    transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
-                    transition: "transform 160ms ease-out", flexShrink: 0,
-                  }}>
-                  <polyline points="6 9 12 15 18 9"/>
-                </svg>
-              </button>
-              {isOpen && (
-                <div style={{ paddingBottom: 12, paddingLeft: 68 }}>
-                  <div style={{
-                    fontFamily: FONT.sans, fontSize: 12, color: T.textMute, lineHeight: 1.55,
-                    marginBottom: 8,
-                  }}>{it.reason}</div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openSellSheet(it.ticker, it.qty);
-                    }}
-                    style={{
-                      padding: "6px 12px", borderRadius: 999,
-                      background: T.danger, border: "none",
-                      color: "#fff", fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
-                      cursor: "pointer",
-                    }}>
-                    {tr("wallet.harvest.sell_cta", lang, { qty: it.qty.toString() })}
-                  </button>
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {hiddenCount > 0 && (
-          <button
-            onClick={() => setShowAll(true)}
-            style={{
-              width: "100%", marginTop: 8, padding: "8px 12px", borderRadius: 10,
-              background: "transparent", border: `1px dashed ${T.border}`,
-              color: T.textMute, fontFamily: FONT.sans, fontSize: 12, fontWeight: 600,
-              cursor: "pointer",
-            }}>
-            {tr("wallet.harvest.show_all", lang, { n: hiddenCount })}
-          </button>
-        )}
-
-        <div style={{
-          marginTop: 10, fontFamily: FONT.sans, fontSize: 10,
-          color: T.textMute, textAlign: "right",
-        }}>
-          {tr("wallet.harvest.disclaimer", lang)}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ============================================================
 // AIChatCard (samas-0.0.89) — "Preguntale a SAMAS" multi-turn
@@ -2469,12 +2247,12 @@ function navigateFromNotif(n) {
       return true;
     case "insight":
       // Proactive insight — if there's a ticker, deep-link into
-      // the AssetSheet using the same harvest-sell event channel
-      // (BrokerShell drains samas_pending_harvest_sell on assets
-      // load). For non-ticker insights (cash_drag) there's no
+      // the AssetSheet via the generic samas:open-asset channel.
+      // BrokerShell drains samas_pending_open_asset once `assets`
+      // is loaded. For non-ticker insights (cash_drag) there's no
       // destination yet — return false so the row stays inert.
       if (!data.ticker) return false;
-      window.dispatchEvent(new CustomEvent("samas:harvest-sell", {
+      window.dispatchEvent(new CustomEvent("samas:open-asset", {
         detail: { ticker: data.ticker },
       }));
       return true;

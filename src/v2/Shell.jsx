@@ -131,27 +131,26 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
     return () => window.removeEventListener("samas:share-watchlist", onShareWatchlist);
   }, []);
 
-  // Tax-loss harvest → Broker handoff (samas-0.2.0). The
-  // TaxLossHarvestCard on Wallet dispatches "samas:harvest-sell"
-  // with { ticker, qty } when the user taps "Vender X" on a loser.
-  // We stash the payload, switch to the Invest tab, and let
-  // BrokerShell drain the briefcase on mount + open the AssetSheet
-  // pre-filled for a sell.
+  // Cross-shell deep-link to AssetSheet (samas-0.2.2). Anyone can
+  // dispatch "samas:open-asset" with { ticker } to land the user on
+  // the Invest tab with the AssetSheet pre-loaded for that ticker.
+  // Currently used by proactive-insights inbox-row taps. Was originally
+  // introduced as samas:harvest-sell with the tax-loss harvester (0.2.0,
+  // reverted in 0.2.2) — same channel, neutralized name.
   useEffect(() => {
-    function onHarvestSell(e) {
+    function onOpenAsset(e) {
       try {
         const detail = e?.detail || {};
         if (!detail.ticker) return;
-        localStorage.setItem("samas_pending_harvest_sell", JSON.stringify({
+        localStorage.setItem("samas_pending_open_asset", JSON.stringify({
           ticker: detail.ticker,
-          qty: detail.qty,
           ts: Date.now(),
         }));
       } catch {}
       setTab("broker");
     }
-    window.addEventListener("samas:harvest-sell", onHarvestSell);
-    return () => window.removeEventListener("samas:harvest-sell", onHarvestSell);
+    window.addEventListener("samas:open-asset", onOpenAsset);
+    return () => window.removeEventListener("samas:open-asset", onOpenAsset);
   }, []);
 
   // Notification → Social handoff (samas-0.0.73). Tapping a social
@@ -2647,6 +2646,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.2.2",
+    title: "Reverted: AI tax-loss harvester (0.2.0)",
+    bullets: [
+      "Pulled the Tax-loss harvester card off Wallet at Manuel's call. Edge Function (tax-loss-harvest) and the entire TaxLossHarvestCard component definition are gone. Down to 13 AI surfaces.",
+      "Renamed the cross-shell deep-link channel introduced with 0.2.0 from samas:harvest-sell to a neutral samas:open-asset (briefcase samas_pending_harvest_sell → samas_pending_open_asset). The channel is still used by proactive-insights inbox-row taps to land on the AssetSheet — same mechanism, neutral name now that its first consumer is gone.",
+      "Removed wallet.harvest.* i18n keys (es + en) and the taxLossHarvest client wrapper.",
+    ],
+  },
   {
     version: "0.2.1",
     title: "AI Proactive Notifications — SAMAS pings you when something matters",
