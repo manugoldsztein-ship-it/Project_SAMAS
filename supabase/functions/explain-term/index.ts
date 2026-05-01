@@ -179,7 +179,10 @@ const TEMPLATED: Record<string, { definition: string; example: string; related: 
 };
 
 function normalize(s: string): string {
-  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  // Strip combining diacritics after NFD decomposition. \p{M} is the
+  // Unicode "Mark" category — matches any combining mark, more robust
+  // than a literal U+0300..U+036F range.
+  return s.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").trim();
 }
 
 function fetchTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {

@@ -2801,6 +2801,17 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.3",
+    title: "Tap-to-explain on bolded terms + bug audit pass",
+    bullets: [
+      "Bolded terms (**term**) inside Tutorials body are now tappable. Dotted-underline hint signals tappability; tap dispatches samas:explain-term { term } and the global Explain modal opens pre-filled. Original plan was long-press text selection but iOS WebView's system Look Up menu hijacks long-press unreliably; tap-on-bolded-term is the cleaner shipping pattern.",
+      "Bug fix #1: send-push Edge Function was in the codebase but never deployed. check-price-alerts (price-alert cron) and proactive-insights both call it via internal HTTP — push notifications were silently failing. Now deployed.",
+      "Bug fix #2: explain-term's diacritic-stripping regex used a literal U+0300..U+036F range that's brittle in some serializers. Replaced with /\\p{M}/gu (Unicode Mark category) — more robust + does the same job. So 'idóneo CNV' typed by the user correctly normalizes to the templated 'idoneo cnv' lookup key.",
+      "Bug fix #3: src/v2/Tutorials.jsx imported useEffect without using it. Removed.",
+      "Audit pass clean: no unguarded localStorage access, no missing React imports, no orphan tr() calls without lang, no client-invoked Edge Functions missing on the server (19 surfaces all wired). All event dispatches have matching listeners.",
+    ],
+  },
+  {
     version: "0.4.2",
     title: "AI Explain — 20th AI surface, ask SAMAS what any term means",
     bullets: [

@@ -19,7 +19,7 @@
 // don't gate anything on read state.
 // ============================================================
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import ReactDOM from "react-dom";
 import { FONT } from "./theme.js";
 import { t as tr } from "../lib/i18n.js";
@@ -47,7 +47,13 @@ function markRead(id) {
 // Tiny markdown renderer — handles ## h2, **bold** inline, blank
 // lines as paragraph breaks. Good enough for the in-house tutorial
 // bodies; no external deps.
-function renderMarkdown(md, T) {
+//
+// samas-0.4.3: bolded terms (**term**) render as tappable buttons
+// with a dotted-underline hint. Tap → dispatches samas:explain-term
+// with the term so the global Explain modal opens pre-filled.
+// Compromise alternative to long-press text selection (which iOS
+// WebView's system menu hijacks unreliably).
+function renderMarkdown(md, T, lang = "es") {
   if (!md) return null;
   const lines = md.split("\n");
   const elements = [];
@@ -59,7 +65,7 @@ function renderMarkdown(md, T) {
       <p key={`p-${elements.length}`} style={{
         fontFamily: FONT.sans, fontSize: 14, color: T.textMute, lineHeight: 1.65,
         margin: "0 0 14px",
-      }}>{renderInline(text, T)}</p>
+      }}>{renderInline(text, T, lang)}</p>
     );
     para = [];
   };
@@ -83,22 +89,48 @@ function renderMarkdown(md, T) {
   return elements;
 }
 
-function renderInline(text, T) {
+function renderInline(text, T, lang) {
   // Split on **bold** + plain text. Bullet lines starting with - or
   // ✅ / ❌ get a small list-item indent so they read distinct from
   // body paragraphs.
   const isBullet = text.startsWith("- ") || text.startsWith("✅ ") || text.startsWith("❌ ");
   const inner = isBullet
-    ? <span style={{ display: "block", paddingLeft: 8 }}>{splitBold(text, T)}</span>
-    : splitBold(text, T);
+    ? <span style={{ display: "block", paddingLeft: 8 }}>{splitBold(text, T, lang)}</span>
+    : splitBold(text, T, lang);
   return inner;
 }
 
-function splitBold(text, T) {
+function splitBold(text, T, lang) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return parts.map((p, i) => {
     if (p.startsWith("**") && p.endsWith("**")) {
-      return <strong key={i} style={{ color: T.text, fontWeight: 700 }}>{p.slice(2, -2)}</strong>;
+      const term = p.slice(2, -2);
+      return (
+        <button
+          key={i}
+          onClick={(e) => {
+            e.stopPropagation();
+            try {
+              window.dispatchEvent(new CustomEvent("samas:explain-term", {
+                detail: { term },
+              }));
+            } catch (_) { /* SSR */ }
+          }}
+          aria-label={tr("explain.aria_explain_term", lang, { t: term })}
+          style={{
+            background: "transparent", border: "none", padding: 0,
+            color: T.text, fontFamily: "inherit", fontSize: "inherit",
+            fontWeight: 700, cursor: "pointer",
+            textDecoration: "underline",
+            textDecorationStyle: "dotted",
+            textDecorationColor: T.accent,
+            textDecorationThickness: "1.5px",
+            textUnderlineOffset: "3px",
+          }}
+        >
+          {term}
+        </button>
+      );
     }
     return <React.Fragment key={i}>{p}</React.Fragment>;
   });
@@ -278,7 +310,7 @@ function TutorialDetail({ T, lang = "es", tutorial, onClose }) {
         <div style={{
           flex: 1, overflowY: "auto", padding: "14px 22px 24px",
         }}>
-          {renderMarkdown(tutorial.body, T)}
+          {renderMarkdown(tutorial.body, T, lang)}
         </div>
 
         {/* Sticky close */}
