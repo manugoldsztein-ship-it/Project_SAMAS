@@ -125,6 +125,39 @@ export async function tradeCoach({ ticker, side, qty, price }) {
 }
 
 /**
+ * earningsWatch() — POST /functions/v1/earnings-watch
+ *
+ * Server reads the user's holdings, picks upcoming earnings dates
+ * for held tickers (within 30 days) from a deterministic per-
+ * ticker calendar, returns:
+ *   {
+ *     items: [{ ticker, name, daysOut, eventDate, pctOfBook, valueUsd, note }, ...],
+ *     summary: string,
+ *     generatedAt: string,
+ *   }
+ *
+ * AI refines each note + the summary; tickers/dates/percentages
+ * stay deterministic (server doesn't trust the LLM with the
+ * numeric fields). Templated fallback when no API key.
+ */
+export async function earningsWatch() {
+  await gateOnConsent();
+  const { data, error } = await supabase.functions.invoke("earnings-watch", {
+    body: {},
+  });
+  if (error) {
+    let detail = "";
+    try {
+      const body = await error?.context?.json?.();
+      if (body?.error) detail = `: ${body.error}`;
+    } catch (_) { /* fall through */ }
+    throw new Error(`Earnings IA falló${detail || ": " + (error.message || "error desconocido")}`);
+  }
+  if (data?.error) throw new Error(`Earnings IA falló: ${data.error}`);
+  return data;
+}
+
+/**
  * compareBenchmark() — POST /functions/v1/compare-benchmark
  *
  * Server reads holdings, computes value-weighted portfolio gain%,

@@ -33,7 +33,7 @@ import { toast } from "./toast.jsx";
 import { setRefreshHandler } from "./refreshRegistry.js";
 import { t as tr } from "../lib/i18n.js";
 import { useLivePortfolioRatio } from "./livePrices.jsx";
-import { analyzePortfolio, chatPortfolio, dailyBrief, compareBenchmark } from "../lib/ai.js";
+import { analyzePortfolio, chatPortfolio, dailyBrief, compareBenchmark, earningsWatch } from "../lib/ai.js";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { hapticNative } from "../lib/native.js";
 
@@ -469,6 +469,8 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
           <AIAnalysisCard T={T} lang={lang} />
           {/* Benchmark compare — "am I beating the market?" (0.1.7). */}
           <BenchmarkCompareCard T={T} lang={lang} />
+          {/* Earnings watch — upcoming reports for held tickers (0.1.8). */}
+          <EarningsWatchCard T={T} lang={lang} />
           {/* Preguntale a SAMAS — multi-turn chat (samas-0.0.89). */}
           <AIChatCard T={T} lang={lang} />
         </>
@@ -1473,6 +1475,155 @@ function BenchmarkCompareCard({ T, lang = "es" }) {
             }}>{data.verdict}</div>
           ) : null}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// EarningsWatchCard (samas-0.1.8) — upcoming earnings + AI note
+// ============================================================
+// Shows up to 3 closest upcoming earnings for held tickers (rest
+// hidden behind a "Ver todas" tap). Each row: countdown chip +
+// ticker + AI commentary on position-impact + day's-out indicator.
+// Hides silently if there are no upcoming earnings (clean Wallet
+// view) or AI hard-fails.
+function EarningsWatchCard({ T, lang = "es" }) {
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(true);
+  const [hidden, setHidden] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+
+  async function load() {
+    setBusy(true);
+    try {
+      const res = await earningsWatch();
+      setData(res);
+    } catch (e) {
+      if (e?.name === "AIConsentDeniedError") setHidden(true);
+      else if (!data) setHidden(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+
+  if (hidden) return null;
+  // No upcoming earnings → don't render anything (vs. an empty card).
+  if (data && (!data.items || data.items.length === 0)) return null;
+
+  const items = data?.items || [];
+  const visibleItems = showAll ? items : items.slice(0, 3);
+  const hiddenCount = items.length - visibleItems.length;
+
+  function countdownLabel(days) {
+    if (days === 0) return tr("wallet.earnings.today", lang);
+    if (days === 1) return tr("wallet.earnings.tomorrow", lang);
+    return tr("wallet.earnings.days_out", lang, { n: days });
+  }
+
+  function countdownColor(days) {
+    if (days <= 1) return T.danger;
+    if (days <= 7) return "#F59E0B";   // amber for "this week"
+    return T.textMute;
+  }
+
+  return (
+    <div style={{ margin: "20px 16px 0" }}>
+      <SectionHead T={T} title={tr("wallet.earnings.title", lang)} />
+      <div style={{
+        marginTop: 12, padding: 16, borderRadius: 22,
+        background: T.surface, border: `1px solid ${T.border}`,
+      }}>
+        {/* Summary header */}
+        {busy && !data ? (
+          <div style={{
+            height: 14, marginBottom: 12, borderRadius: 6,
+            background: T.border, opacity: 0.5,
+            backgroundImage: `linear-gradient(90deg, ${T.border} 0, ${T.surface} 50%, ${T.border} 100%)`,
+            backgroundSize: "200% 100%",
+            animation: "samas-skel 1.4s ease-in-out infinite",
+          }} />
+        ) : data?.summary ? (
+          <div style={{
+            fontFamily: FONT.sans, fontSize: 12, color: T.textMute, lineHeight: 1.5,
+            marginBottom: 8,
+          }}>{data.summary}</div>
+        ) : null}
+
+        {/* Earnings rows */}
+        {visibleItems.map((it, idx) => {
+          const cdColor = countdownColor(it.daysOut);
+          return (
+            <div key={`${it.ticker}-${it.eventDate}`} style={{
+              display: "flex", gap: 12, padding: "12px 0",
+              borderTop: idx === 0 ? "none" : `1px solid ${T.border}`,
+              alignItems: "flex-start",
+            }}>
+              {/* Countdown chip — date hierarchy, not a button */}
+              <div style={{
+                width: 60, flexShrink: 0,
+                padding: "4px 0", borderRadius: 8,
+                background: T.bg, border: `1px solid ${T.border}`,
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                color: cdColor,
+              }}>
+                <div style={{
+                  fontFamily: FONT.mono, fontSize: 18, fontWeight: 800, lineHeight: 1,
+                }}>{it.daysOut === 0 ? "★" : it.daysOut}</div>
+                <div style={{
+                  fontFamily: FONT.mono, fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
+                  textTransform: "uppercase", marginTop: 2,
+                }}>{it.daysOut === 0
+                    ? tr("wallet.earnings.today_short", lang)
+                    : it.daysOut === 1
+                      ? tr("wallet.earnings.tomorrow_short", lang)
+                      : tr("wallet.earnings.days_short", lang)}</div>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4,
+                }}>
+                  <span style={{
+                    fontFamily: FONT.mono, fontSize: 13, fontWeight: 800, color: T.text,
+                    letterSpacing: 0.4,
+                  }}>${it.ticker}</span>
+                  <span style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute }}>
+                    {it.name}
+                  </span>
+                  <span style={{
+                    marginLeft: "auto",
+                    fontFamily: FONT.mono, fontSize: 10, color: cdColor, fontWeight: 700,
+                  }}>{countdownLabel(it.daysOut)}</span>
+                </div>
+                <div style={{
+                  fontFamily: FONT.sans, fontSize: 12, color: T.textMute, lineHeight: 1.5,
+                }}>{it.note}</div>
+                <div style={{
+                  marginTop: 4,
+                  fontFamily: FONT.mono, fontSize: 10, color: T.textMute,
+                }}>
+                  {it.pctOfBook.toFixed(0)}% del book · US${it.valueUsd.toLocaleString("en-US")}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Show all / collapse toggle */}
+        {hiddenCount > 0 && (
+          <button
+            onClick={() => setShowAll(true)}
+            style={{
+              width: "100%", marginTop: 8, padding: "8px 12px", borderRadius: 10,
+              background: "transparent", border: `1px dashed ${T.border}`,
+              color: T.textMute, fontFamily: FONT.sans, fontSize: 12, fontWeight: 600,
+              cursor: "pointer",
+            }}>
+            {tr("wallet.earnings.show_all", lang, { n: hiddenCount })}
+          </button>
+        )}
       </div>
     </div>
   );

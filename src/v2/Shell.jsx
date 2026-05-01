@@ -2625,6 +2625,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.1.8",
+    title: "AI Earnings Watch — upcoming reports for held tickers",
+    bullets: [
+      "Eleventh AI surface lands on Wallet between Benchmark Compare and Preguntale a SAMAS. Shows up to 3 closest upcoming earnings for tickers you hold (rest behind a \"Ver N más\" toggle). Each row: countdown chip (color-coded by proximity — red ≤1 day, amber ≤7 days, gray otherwise), ticker + name, AI commentary on position-impact, and \"X% del book · US$Y\" footer.",
+      "New earnings-watch Edge Function. Per-ticker deterministic offsets (AAPL 4d, NVDA 12d, TSLA 7d, MSFT 28d, GGAL 18d, YPF 22d, etc.) — synthetic for the prototype but stable across the demo. Per-ticker historical post-earnings move % (NVDA ±7.8%, TSLA ±9.5%, etc.) feeds the AI note.",
+      "Templated note rotates 5 angles (today / tomorrow / high-pct concentration / small position / generic) so consecutive items read distinctly. Claude refines each note + the summary; tickers/dates/numbers stay deterministic so the LLM can't hallucinate dates.",
+      "Hides silently when no held ticker has earnings in 30 days OR the AI errors. 11 AI surfaces total now.",
+    ],
+  },
+  {
     version: "0.1.7",
     title: "AI Benchmark Compare — \"¿Le ganás al mercado?\"",
     bullets: [
