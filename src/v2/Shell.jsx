@@ -2735,6 +2735,18 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.3.3",
+    title: "AI Thesis Tracker — write WHY at buy, AI checks if it still holds",
+    bullets: [
+      "Eighteenth AI surface. At the BUY confirmation step, an optional 'Tu tesis (opcional)' textarea lets the user write 1-2 sentences explaining why they're buying. Saved to public.theses on confirm. Doesn't block anything — confirm without writing and you get the same flow as before.",
+      "On the AssetSheet for tickers where the user has an active thesis, a new ThesisCard renders below AI Insight. Shows the original text in italics + 'hace Nd' age + 'Validar con IA' button. Tap → calls validate-thesis Edge Function (consumes quota), returns verdict ('holds' / 'weakened' / 'broken') with a 1-2 sentence reason and an actionable suggestion. Verdict cached on the row so re-opening the AssetSheet shows the last verdict instantly without re-running the LLM.",
+      "Edge Function reads the thesis text + current asset price + cost basis + recent cached news + days since written, and asks Claude to render the verdict. Templated fallback when no API key uses pure price-move thresholds (>+5% holds / -5..-15% weakened / <-15% broken).",
+      "DB migration: supabase/theses.sql. New table with status enum (active / closed / invalidated) + RLS + an after-insert trigger that auto-archives any prior active thesis on the same (user, ticker) so the 'current thesis' lookup stays clean.",
+      "Sells don't (yet) get a 'why I'm selling' log — keeps the BUY flow as the main journaling moment. Could expand later with a sell-side post-mortem flow.",
+      "18 AI surfaces total. Novel concept — no AR broker has anything like 'write your thesis, AI validates it later'. Demo angle: 'watch me commit to a buy with one sentence; in 30 days I'll know if I was right'.",
+    ],
+  },
+  {
     version: "0.3.2",
     title: "AI Onboarding tour — 5-card walkthrough on first launch",
     bullets: [

@@ -334,6 +334,66 @@ export async function quarterlyReview() {
 }
 
 /**
+ * validateThesis({ thesisId | ticker }) — POST /functions/v1/validate-thesis
+ *
+ * Server reads the user's active thesis for the ticker (or by id),
+ * pulls current asset state + cost basis + recent news, asks Claude
+ * to render a verdict ('holds' | 'weakened' | 'broken') with a
+ * 1-2 sentence reason and an accionable suggestion. Caches the
+ * verdict on the theses row so the AssetSheet can render the last
+ * verdict without re-running the LLM.
+ *
+ * USER-INITIATED → consumes quota. Templated fallback when no API
+ * key (verdict purely based on price move since cost basis).
+ */
+export async function validateThesis({ thesisId, ticker } = {}) {
+  await gateOnConsent();
+  await gateOnQuota();
+  const { data, error } = await supabase.functions.invoke("validate-thesis", {
+    body: { thesisId, ticker },
+  });
+  if (error) {
+    let detail = "";
+    try {
+      const body = await error?.context?.json?.();
+      if (body?.error) detail = `: ${body.error}`;
+    } catch (_) { /* fall through */ }
+    throw new Error(`Tesis IA falló${detail || ": " + (error.message || "error desconocido")}`);
+  }
+  if (data?.error) throw new Error(`Tesis IA falló: ${data.error}`);
+  return data;
+}
+
+// Direct DB helpers for theses — these are NOT AI calls (no quota,
+// no consent) so they go around the gate. RLS scopes to caller.
+export async function saveThesis({ ticker, text }) {
+  if (!ticker || !text || !text.trim()) throw new Error("ticker + text required");
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("not authenticated");
+  const { data, error } = await supabase
+    .from("theses")
+    .insert({ user_id: user.id, ticker: ticker.toUpperCase(), thesis_text: text.trim() })
+    .select("id, ticker, thesis_text, status, last_verdict, last_reason, last_validated_at, created_at")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function getActiveThesis(ticker) {
+  if (!ticker) return null;
+  const { data, error } = await supabase
+    .from("theses")
+    .select("id, ticker, thesis_text, status, last_verdict, last_reason, last_validated_at, created_at")
+    .eq("ticker", ticker.toUpperCase())
+    .eq("status", "active")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/**
  * positionSize({ ticker, side }) — POST /functions/v1/position-size
  *
  * Server reads holdings + cash balance, computes 3 deterministic

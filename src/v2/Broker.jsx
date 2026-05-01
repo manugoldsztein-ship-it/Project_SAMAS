@@ -39,7 +39,7 @@ import { hapticNative } from "../lib/native.js";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { toast } from "./toast.jsx";
 import { t as tr } from "../lib/i18n.js";
-import { analyzeAsset, tradeCoach, suggestWatchlist, rebalancePortfolio, scoreRisk, positionSize } from "../lib/ai.js";
+import { analyzeAsset, tradeCoach, suggestWatchlist, rebalancePortfolio, scoreRisk, positionSize, saveThesis, getActiveThesis, validateThesis } from "../lib/ai.js";
 
 // Sub-tabs metadata — drives both the bottom nav and the content
 // switch in the top-level <BrokerShell/> render.
@@ -2220,6 +2220,11 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
   // the form. Holds the snapshot of fees so the user sees exactly what
   // they're agreeing to.
   const [confirm, setConfirm] = useState(null);
+  // Thesis textarea on the buy confirm step (samas-0.3.3). User's
+  // optional 1-2 sentence "why I'm buying this" written at the
+  // moment of decision. Saved alongside the order on confirm. Reset
+  // when the confirm step is dismissed or replaced.
+  const [thesisText, setThesisText] = useState("");
 
   // Existing alert / stop for this asset, loaded once on open.
   const [alert, setAlert] = useState(null);
@@ -2297,6 +2302,17 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
       // it. Calling here gives the most reliable "feedback at the
       // right moment" — DoneScreen's mount comes immediately after.
       hapticNative(r.status === "filled" ? "success" : "tap").catch(() => {});
+      // Save the thesis if the user wrote one. BUY-only — selling
+      // doesn't get a "why I'm selling" log (could be a future patch).
+      // Best-effort: errors here don't block the trade. samas-0.3.3.
+      if (confirm.side === "buy" && thesisText && thesisText.trim()) {
+        try {
+          await saveThesis({ ticker: asset.ticker, text: thesisText });
+        } catch (e) {
+          console.warn("[broker] saveThesis failed:", e?.message);
+        }
+      }
+      setThesisText("");
       setDone(r);
       setConfirm(null);
     } catch (e) {
@@ -2429,6 +2445,13 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
             <AssetAIInsight T={T} ticker={asset.ticker} lang={lang} />
           )}
 
+          {/* Thesis card (samas-0.3.3) — only renders if the user has
+              an active thesis for this ticker. Shows the original
+              text + last AI verdict + "Validar de nuevo" button. */}
+          {!done && !confirm && (
+            <ThesisCard T={T} ticker={asset.ticker} lang={lang} />
+          )}
+
           {done ? (
             <DoneScreen
               T={T}
@@ -2446,8 +2469,10 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
               confirm={confirm}
               busy={busy}
               err={err}
-              onCancel={() => { setConfirm(null); setErr(null); }}
+              onCancel={() => { setConfirm(null); setThesisText(""); setErr(null); }}
               onConfirm={confirmAndPlace}
+              thesisText={thesisText}
+              setThesisText={setThesisText}
               lang={lang}
             />
           ) : (
@@ -3213,7 +3238,7 @@ function StopForm({ T, asset, existing, ownsIt, onSaved, onRemoved }) {
 // every line item (price, comisión, IVA, derechos de mercado) so the
 // user knows exactly what they're paying / receiving.
 // ----------------------------------------------------------
-function ConfirmOrderStep({ T, asset, confirm, busy, err, onCancel, onConfirm, lang = "es" }) {
+function ConfirmOrderStep({ T, asset, confirm, busy, err, onCancel, onConfirm, thesisText = "", setThesisText, lang = "es" }) {
   const ccySym = asset.currency === "ARS" ? "$" : "US$";
   const fee = confirm.fees;
   const isBuy = confirm.side === "buy";
@@ -3285,6 +3310,42 @@ function ConfirmOrderStep({ T, asset, confirm, busy, err, onCancel, onConfirm, l
         qty={confirm.qty}
         price={confirm.price}
       />
+
+      {/* Thesis textarea (samas-0.3.3) — buy-only, optional. Saved
+          alongside the order in public.theses on confirm. AI later
+          validates the thesis from the AssetSheet's ThesisCard. */}
+      {confirm.side === "buy" && setThesisText && (
+        <div style={{
+          marginBottom: 14, padding: 12, borderRadius: 14,
+          background: T.surface, border: `1px solid ${T.border}`,
+        }}>
+          <div style={{
+            fontFamily: FONT.mono, fontSize: 10, fontWeight: 700,
+            color: T.textMute, letterSpacing: 0.6, textTransform: "uppercase",
+            marginBottom: 6,
+          }}>{tr("thesis.input.label", lang)}</div>
+          <textarea
+            value={thesisText}
+            onChange={(e) => setThesisText(e.target.value.slice(0, 500))}
+            placeholder={tr("thesis.input.placeholder", lang)}
+            rows={2}
+            style={{
+              width: "100%", boxSizing: "border-box",
+              padding: "8px 10px", borderRadius: 10,
+              background: T.bg, border: `1px solid ${T.border}`,
+              color: T.text, fontFamily: FONT.sans, fontSize: 13, lineHeight: 1.45,
+              resize: "vertical", outline: "none",
+            }}
+          />
+          <div style={{
+            marginTop: 4, display: "flex", justifyContent: "space-between",
+            fontFamily: FONT.sans, fontSize: 10, color: T.textMute,
+          }}>
+            <span>{tr("thesis.input.hint", lang)}</span>
+            <span>{thesisText.length}/500</span>
+          </div>
+        </div>
+      )}
 
       {err && <div style={{ marginBottom: 12, color: T.danger, fontFamily: FONT.sans, fontSize: 12 }}>{err}</div>}
 
@@ -5000,6 +5061,173 @@ function fmtCompactNumber(n) {
 // fallback keeps the demo working without an Anthropic key.
 // ============================================================
 const ASSET_INSIGHT_CACHE = new Map(); // ticker → response
+
+// ============================================================
+// ThesisCard (samas-0.3.3)
+// ============================================================
+// On AssetSheet for tickers where the user has an active thesis.
+// Shows the original text (when written), last AI verdict + reason
+// if validated, and a "Validar IA" button (consumes quota). Hides
+// silently if no thesis. Free read of the cached verdict; quota'd
+// only when the user taps Validar.
+function ThesisCard({ T, ticker, lang = "es" }) {
+  const [thesis, setThesis] = useState(null); // null = unknown / loading
+  const [busy, setBusy] = useState(false);
+  const [validation, setValidation] = useState(null);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    getActiveThesis(ticker)
+      .then((t) => { if (alive) setThesis(t); })
+      .catch(() => { if (alive) setThesis(null); });
+    return () => { alive = false; };
+  }, [ticker]);
+
+  if (thesis === null) return null;
+  if (!thesis) return null; // no active thesis on this ticker
+
+  async function validate() {
+    if (busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const v = await validateThesis({ thesisId: thesis.id });
+      setValidation(v);
+      // Update the cached row state so the rendered verdict matches
+      // the new server state without an extra refetch.
+      setThesis((prev) => prev ? {
+        ...prev,
+        last_verdict: v.verdict,
+        last_reason: v.reason,
+        last_validated_at: v.validatedAt,
+      } : prev);
+      hapticNative("success").catch(() => {});
+    } catch (e) {
+      if (e?.name === "AIConsentDeniedError" || e?.name === "AIQuotaExceededError") {
+        // Silent — modal already showed
+      } else {
+        setErr(e?.message || String(e));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Pull verdict color from cached state (most recent of cached row +
+  // fresh validation result).
+  const verdict = validation?.verdict || thesis.last_verdict;
+  const reason = validation?.reason || thesis.last_reason;
+  const suggestion = validation?.suggestion || null;
+  const validatedAt = validation?.validatedAt || thesis.last_validated_at;
+  const verdictColor = verdict === "holds" ? T.accent
+    : verdict === "weakened" ? "#F59E0B"
+    : verdict === "broken" ? T.danger
+    : T.textMute;
+  const verdictBg = verdict === "holds" ? T.accentSoft
+    : verdict === "weakened" ? "rgba(245, 158, 11, 0.14)"
+    : verdict === "broken" ? T.dangerSoft
+    : T.surface;
+
+  // Format created date as "hace N días" (Spanish) — simple relative.
+  const daysOld = Math.max(1, Math.floor(
+    (Date.now() - new Date(thesis.created_at).getTime()) / (1000 * 60 * 60 * 24),
+  ));
+
+  return (
+    <div style={{
+      margin: "0 16px 16px", padding: 14, borderRadius: 18,
+      background: T.surface, border: `1px solid ${T.border}`,
+    }}>
+      {/* Kicker */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 8, marginBottom: 10,
+      }}>
+        <div style={{
+          width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+          background: T.accent, color: T.accentInk,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+        </div>
+        <div style={{
+          flex: 1, fontFamily: FONT.mono, fontSize: 10, fontWeight: 700,
+          color: T.textMute, letterSpacing: 0.6, textTransform: "uppercase",
+        }}>
+          {tr("thesis.card.kicker", lang)}
+        </div>
+        <span style={{
+          fontFamily: FONT.mono, fontSize: 10, color: T.textMute,
+        }}>{tr("thesis.card.days_old", lang, { n: daysOld })}</span>
+      </div>
+
+      {/* Original thesis text */}
+      <div style={{
+        padding: "10px 12px", borderRadius: 10,
+        background: T.bg, border: `1px solid ${T.border}`,
+        fontFamily: FONT.sans, fontSize: 13, color: T.text, lineHeight: 1.5,
+        marginBottom: verdict ? 10 : 0,
+        fontStyle: "italic",
+      }}>"{thesis.thesis_text}"</div>
+
+      {/* Verdict (if validated) */}
+      {verdict && (
+        <div style={{
+          padding: "10px 12px", borderRadius: 10,
+          background: verdictBg, border: `1px solid ${verdictColor}55`,
+          marginBottom: 10,
+        }}>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 6, marginBottom: 4,
+          }}>
+            <span style={{
+              fontFamily: FONT.mono, fontSize: 10, fontWeight: 800,
+              color: verdictColor, letterSpacing: 0.5, textTransform: "uppercase",
+            }}>{tr(`thesis.verdict.${verdict}`, lang)}</span>
+          </div>
+          <div style={{
+            fontFamily: FONT.sans, fontSize: 12, color: T.text, lineHeight: 1.5,
+          }}>{reason}</div>
+          {suggestion && (
+            <div style={{
+              marginTop: 6, paddingTop: 6, borderTop: `1px solid ${verdictColor}33`,
+              fontFamily: FONT.sans, fontSize: 11, color: T.textMute, lineHeight: 1.5,
+            }}>{suggestion}</div>
+          )}
+        </div>
+      )}
+
+      {err && (
+        <div style={{
+          marginBottom: 8, padding: "6px 10px", borderRadius: 8,
+          background: T.dangerSoft, color: T.danger,
+          fontFamily: FONT.sans, fontSize: 11,
+        }}>{err}</div>
+      )}
+
+      {/* CTA */}
+      <button
+        onClick={validate}
+        disabled={busy}
+        style={{
+          width: "100%", padding: "10px 12px", borderRadius: 10,
+          background: T.accent, border: "none",
+          color: T.accentInk, fontFamily: FONT.sans, fontSize: 12, fontWeight: 800,
+          cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
+          letterSpacing: 0.2,
+        }}>
+        {busy
+          ? tr("thesis.card.validating", lang)
+          : verdict
+            ? tr("thesis.card.revalidate", lang)
+            : tr("thesis.card.validate", lang)}
+      </button>
+    </div>
+  );
+}
 
 function AssetAIInsight({ T, ticker, lang = "es" }) {
   const [data, setData] = useState(() => ASSET_INSIGHT_CACHE.get(ticker) || null);
