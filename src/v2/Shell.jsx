@@ -28,6 +28,7 @@ const SocialPage  = lazy(() => import("./Social.jsx").then((m) => ({ default: m.
 const NewsPage    = lazy(() => import("./News.jsx").then((m) => ({ default: m.NewsPage })));
 const MfaEnrollSection = lazy(() => import("../auth/Mfa.jsx").then((m) => ({ default: m.MfaEnrollSection })));
 import { Onboarding } from "./Onboarding.jsx";
+import { AITour, hasSeenAITour, resetAIToured } from "./AITour.jsx";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { callRefreshFor } from "./refreshRegistry.js";
 import {
@@ -69,6 +70,10 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
     if (typeof localStorage === "undefined") return false;
     return localStorage.getItem("samas_v2_onboarded") !== "true";
   });
+
+  // AI tour fires AFTER onboarding completes — gives the user a quick
+  // walkthrough of the 17 AI surfaces. samas-0.3.2.
+  const [showAITour, setShowAITour] = useState(false);
   const [proMode, setProMode] = useState(() => {
     if (typeof localStorage === "undefined") return true;
     const v = localStorage.getItem(PRO_KEY);
@@ -215,7 +220,15 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
         T={T}
         isNativeApp={isNativeApp}
         lang={lang}
-        onDone={() => setNeedsOnboarding(false)}
+        onDone={() => {
+          setNeedsOnboarding(false);
+          // Auto-launch the AI tour next mount frame so onboarding's
+          // exit animation isn't covered. Skip if user has already
+          // seen the tour (e.g. they re-onboarded after data wipe).
+          if (!hasSeenAITour()) {
+            setTimeout(() => setShowAITour(true), 350);
+          }
+        }}
       />
     );
   }
@@ -438,6 +451,13 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
           isPlus={isPlus}
           setIsPlus={setIsPlus}
           onOpenPlusUpsell={() => { setShowSettings(false); setShowProUpsell(true); }}
+          onReplayAITour={() => {
+            resetAIToured();
+            setShowSettings(false);
+            // Slight delay so the settings sheet's close animation
+            // finishes before the tour overlay slams in.
+            setTimeout(() => setShowAITour(true), 200);
+          }}
           isDark={isDark}
           onToggleDark={onToggleDark}
           onLogout={onLogout}
@@ -446,6 +466,14 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
           lang={lang}
           setLang={setLang}
         />
+      )}
+
+      {/* AI Tour — first-launch walkthrough of the 17 AI surfaces.
+          Renders via portal so it sits above the tab bar / status
+          bar / everything else. Self-marks samas_v2_ai_toured = true
+          when finish/skip fires. Replayable from Settings. */}
+      {showAITour && (
+        <AITour T={T} lang={lang} onDone={() => setShowAITour(false)} />
       )}
 
       {/* Pro upsell modal — global so any view can dispatch
@@ -503,7 +531,7 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
 // full ProfileSheet from legacy, it's a focused settings panel for
 // the toggles the user actually flips often.
 // ----------------------------------------------------------
-function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus, onOpenPlusUpsell, isDark, onToggleDark, onLogout, onClose, isNativeApp, lang = "es", setLang }) {
+function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus, onOpenPlusUpsell, onReplayAITour, isDark, onToggleDark, onLogout, onClose, isNativeApp, lang = "es", setLang }) {
   const [show2FA, setShow2FA] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
@@ -920,6 +948,33 @@ function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus
             <polyline points="9 18 15 12 9 6"/>
           </svg>
         </button>
+
+        {/* Replay AI tour (samas-0.3.2) — re-run the first-launch
+            walkthrough of the 17 AI surfaces. Useful for a Cohen
+            demo: open settings, tap → tour, hand the phone over. */}
+        {onReplayAITour && (
+          <button
+            onClick={onReplayAITour}
+            style={{
+              width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 8,
+              background: T.surface, border: `1px solid ${T.border}`,
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              cursor: "pointer", textAlign: "left",
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text }}>
+                {tr("settings.ai_tour.title", lang)}
+              </div>
+              <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+                {tr("settings.ai_tour.sub", lang)}
+              </div>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </button>
+        )}
 
         {/* ---------- Demo section ----------
             Investor-demo helpers: seed a curated portfolio (so the
@@ -2679,6 +2734,17 @@ function AIConsentGate({ T, lang = "es" }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.3.2",
+    title: "AI Onboarding tour — 5-card walkthrough on first launch",
+    bullets: [
+      "First-launch fullscreen overlay walking new users through SAMAS's AI story. Fires AFTER the main Onboarding completes (so the user has an account + maybe a portfolio first), persists 'samas_v2_ai_toured = true' in localStorage to never re-show. 5 cards: '17 AI features' / 'AI summarizes your portfolio' / 'Trade with confidence' / 'Hear about what matters' / 'Plus tier'.",
+      "Skip button top-right exits any time. Progress dots top-left. Atrás / Siguiente CTAs bottom — last card's CTA reads 'Empezar' (start using the app). Renders via React portal into document.body so it sits above the tab bar / status bar / everything.",
+      "Replayable from Settings → 'Volver a ver el tour IA'. Useful for the Cohen demo: open Settings, tap, hand the phone over. resetAIToured() flips the localStorage flag back so the next mount re-shows.",
+      "Cohen pitch context: this is the demo's first impression for anyone we hand the phone to. They land on '17 funciones de IA en SAMAS', see the value-prop framed up front, and the rest of the app pre-positions itself.",
+      "New file: src/v2/AITour.jsx (~170 lines, self-contained). i18n: settings.ai_tour.* + ai_tour.* in es+en.",
+    ],
+  },
   {
     version: "0.3.1",
     title: "AI News Digest — 17th AI surface fills out the News tab",
