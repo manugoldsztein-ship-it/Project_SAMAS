@@ -2735,6 +2735,18 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.0",
+    title: "AI Sector Rotation — 19th AI surface (sector-level macro tilts)",
+    bullets: [
+      "Lands on Portafolio between Risk Score and the Pro distribución bar. User picks a macro stance (Crecimiento / Equilibrado / Defensivo) → tap 'Analizar mi mix' → IA returns a summary + 2-3 actionable tilt suggestions comparing current sector mix to the target mix for that stance.",
+      "Distinct from RebalanceCard (0.1.4): rebalance is order-level ('buy 12 NVDA, sell 200 GGAL'), rotation is direction-only ('you're light tech, consider tech'). They complement: rotation tells you WHERE to look, rebalance tells you HOW to execute when you've decided.",
+      "Visual: per-sector dual-bar showing current % vs. target %. Sector palette matches the portfolio share allocation bar (0.3.8) so the visual language stays consistent. Stance presets: growth (45/10/15/5/20/5 CEDEAR/ACCION/ETF/BONO/CRYPTO/COMMOD), balanced (30/20/20/15/10/5), defensive (15/25/10/35/5/10).",
+      "Server-side targets are deterministic; Claude only refines the rationale + suggestion language. Numbers don't drift from the LLM call. Templated fallback when no API key.",
+      "USER-INITIATED → consumes one quota credit per analyze. Hides silently on consent denied / quota hit (modal already showed UI).",
+      "19 AI surfaces total. Closes the macro-direction gap that Rebalance left open.",
+    ],
+  },
+  {
     version: "0.3.9",
     title: "DM privacy — delete conversation + at-rest stamp",
     bullets: [

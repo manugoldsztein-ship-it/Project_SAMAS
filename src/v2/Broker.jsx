@@ -39,7 +39,7 @@ import { hapticNative } from "../lib/native.js";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { toast } from "./toast.jsx";
 import { t as tr } from "../lib/i18n.js";
-import { analyzeAsset, tradeCoach, suggestWatchlist, rebalancePortfolio, scoreRisk, positionSize, saveThesis, getActiveThesis, validateThesis } from "../lib/ai.js";
+import { analyzeAsset, tradeCoach, suggestWatchlist, rebalancePortfolio, scoreRisk, positionSize, saveThesis, getActiveThesis, validateThesis, sectorRotation } from "../lib/ai.js";
 
 // Sub-tabs metadata — drives both the bottom nav and the content
 // switch in the top-level <BrokerShell/> render.
@@ -500,6 +500,15 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
           score + AI-refined reason. Auto-loads, expandable rows. */}
       {portfolio.holdings.length > 0 && (
         <RiskProfileCard T={T} lang={lang} />
+      )}
+
+      {/* AI Sector Rotation (samas-0.4.0) — sector-level macro tilt
+          suggestions. User-initiated card with stance selector
+          (growth / balanced / defensive); tap "Analizar" → IA
+          returns a summary + 2-3 actionable tilts comparing current
+          mix vs target mix for the chosen stance. */}
+      {portfolio.holdings.length > 0 && (
+        <SectorRotationCard T={T} lang={lang} />
       )}
 
       {/* Distribución bar — % per holding of total cartera. Only in
@@ -4067,6 +4076,210 @@ function RiskProfileCard({ T, lang = "es" }) {
 // the target category mix → user reviews + (un)checks each action
 // → "Ejecutar" loops through brokerApi.placeOrder.
 // ============================================================
+// ============================================================
+// SectorRotationCard (samas-0.4.0)
+// ============================================================
+// 19th AI surface. User picks a macro stance (growth / balanced /
+// defensive) → IA computes the gap between current sector mix and
+// target sector mix, returns 2-3 actionable tilt suggestions.
+//
+// Distinct from RebalanceCard above: rebalance is order-level
+// ("buy 12 NVDA, sell 200 GGAL"); rotation is direction-only
+// ("you're light tech, consider tech").
+function SectorRotationCard({ T, lang = "es" }) {
+  const [stance, setStance] = React.useState("balanced");
+  const [data, setData] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [hidden, setHidden] = React.useState(false);
+
+  const stances = [
+    { id: "growth",    label: "growth"    },
+    { id: "balanced",  label: "balanced"  },
+    { id: "defensive", label: "defensive" },
+  ];
+
+  async function analyze() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await sectorRotation(stance);
+      setData(res);
+      hapticNative("success").catch(() => {});
+    } catch (e) {
+      if (e?.name === "AIConsentDeniedError" || e?.name === "AIQuotaExceededError") setHidden(true);
+      else hapticNative("error").catch(() => {});
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (hidden) return null;
+
+  // Sector palette — same picks as the portfolio share allocation
+  // bar so the visual language stays consistent across the app.
+  const sectorColor = (s) => ({
+    CEDEAR: T.accent,
+    ACCION: "#7DD3A0",
+    ETF:    "#60A5FA",
+    BONO:   "#A78BFA",
+    CRYPTO: "#F59E0B",
+    COMMOD: T.textMute,
+  })[s] || T.textMute;
+
+  const actionColor = (a) => a === "increase" ? T.accent : a === "trim" ? T.danger : T.textMute;
+
+  return (
+    <div style={{
+      margin: "0 16px 18px", padding: 14, borderRadius: 18,
+      background: T.surface, border: `1px solid ${T.border}`,
+    }}>
+      {/* Kicker */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 8, marginBottom: 12,
+      }}>
+        <div style={{
+          width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+          background: T.accent, color: T.accentInk,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+            <path d="M21 22v-6h-6"/>
+          </svg>
+        </div>
+        <div style={{
+          flex: 1, fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+          color: T.textMute, letterSpacing: 0.6, textTransform: "uppercase",
+        }}>
+          {tr("portafolio.rotation.title", lang)}
+        </div>
+      </div>
+
+      {/* Stance selector */}
+      <div style={{
+        display: "flex", gap: 6, padding: 4, marginBottom: 12,
+        background: T.bg, border: `1px solid ${T.border}`, borderRadius: 12,
+      }}>
+        {stances.map((s) => {
+          const active = s.id === stance;
+          return (
+            <button key={s.id}
+              onClick={() => setStance(s.id)}
+              style={{
+                flex: 1, padding: "7px 4px", borderRadius: 8,
+                background: active ? T.surface : "transparent",
+                border: active ? `1px solid ${T.border}` : "1px solid transparent",
+                color: active ? T.text : T.textMute,
+                fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+                cursor: "pointer", letterSpacing: 0.3,
+              }}>
+              {tr(`portafolio.rotation.stance.${s.id}`, lang)}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Mix comparison bars (when data is available) */}
+      {data?.deltas && (
+        <div style={{ marginBottom: 12 }}>
+          {data.deltas.map((d) => {
+            const maxBar = Math.max(d.currentPct, d.targetPct, 5);
+            const w = (n) => `${Math.min(100, (n / maxBar) * 100)}%`;
+            return (
+              <div key={d.sector} style={{ marginBottom: 8 }}>
+                <div style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "baseline",
+                  fontFamily: FONT.mono, fontSize: 10, marginBottom: 3,
+                }}>
+                  <span style={{ color: T.text, fontWeight: 700 }}>{d.sector}</span>
+                  <span style={{ color: actionColor(d.action), fontWeight: 700 }}>
+                    {d.currentPct.toFixed(0)}% → {d.targetPct.toFixed(0)}%
+                  </span>
+                </div>
+                {/* Two stacked thin bars: current (top) and target (bottom). */}
+                <div style={{
+                  position: "relative", height: 6, borderRadius: 3,
+                  background: T.bg, marginBottom: 2,
+                }}>
+                  <div style={{
+                    position: "absolute", left: 0, top: 0, bottom: 0,
+                    width: w(d.currentPct), background: sectorColor(d.sector),
+                    borderRadius: 3, opacity: 0.85,
+                  }}/>
+                </div>
+                <div style={{
+                  position: "relative", height: 4, borderRadius: 2,
+                  background: T.bg,
+                }}>
+                  <div style={{
+                    position: "absolute", left: 0, top: 0, bottom: 0,
+                    width: w(d.targetPct),
+                    background: T.textMute, opacity: 0.5,
+                    borderRadius: 2,
+                  }}/>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Summary + suggestions */}
+      {data?.summary && (
+        <div style={{
+          padding: "10px 12px", borderRadius: 10, marginBottom: 8,
+          background: T.bg, border: `1px solid ${T.border}`,
+          fontFamily: FONT.sans, fontSize: 13, color: T.text, lineHeight: 1.5,
+        }}>{data.summary}</div>
+      )}
+
+      {data?.suggestions?.length > 0 && (
+        <div style={{ marginBottom: 8 }}>
+          {data.suggestions.map((s, i) => (
+            <div key={i} style={{
+              padding: "8px 12px", borderRadius: 10, marginBottom: 6,
+              background: T.accentSoft, border: `1px solid ${T.accent}33`,
+              fontFamily: FONT.sans, fontSize: 12, color: T.text, lineHeight: 1.5,
+              display: "flex", alignItems: "flex-start", gap: 8,
+            }}>
+              <span style={{
+                fontFamily: FONT.mono, fontSize: 12, fontWeight: 800, color: T.accent,
+                flexShrink: 0,
+              }}>•</span>
+              <span>{s}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <button
+        onClick={analyze}
+        disabled={busy}
+        style={{
+          width: "100%", padding: "10px 12px", borderRadius: 10,
+          background: T.accent, border: "none",
+          color: T.accentInk, fontFamily: FONT.sans, fontSize: 12, fontWeight: 800,
+          cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
+          letterSpacing: 0.2,
+        }}>
+        {busy
+          ? tr("portafolio.rotation.busy", lang)
+          : data
+            ? tr("portafolio.rotation.reanalyze", lang)
+            : tr("portafolio.rotation.analyze", lang)}
+      </button>
+
+      <div style={{
+        marginTop: 8, fontFamily: FONT.sans, fontSize: 10,
+        color: T.textMute, textAlign: "right",
+      }}>
+        {tr("portafolio.rotation.disclaimer", lang)}
+      </div>
+    </div>
+  );
+}
+
 function RebalanceCard({ T, lang = "es", onRefresh }) {
   const [open, setOpen] = useState(false);
   return (

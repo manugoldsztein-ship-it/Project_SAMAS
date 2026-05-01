@@ -334,6 +334,40 @@ export async function quarterlyReview() {
 }
 
 /**
+ * sectorRotation({ stance }) — POST /functions/v1/sector-rotation
+ *
+ * Server reads holdings, computes sector mix (CEDEAR / ACCION / ETF
+ * / BONO / CRYPTO / COMMOD), compares against the chosen macro
+ * stance (growth / balanced / defensive), returns deltas + a Claude-
+ * written summary + 2-3 actionable tilts.
+ *
+ * Distinct from rebalancePortfolio: this is sector-level macro
+ * direction, no specific orders. "You're 60% tech, consider energy
+ * or financials." Rebalance tells you HOW to execute once you've
+ * decided the direction.
+ *
+ * USER-INITIATED → consumes quota. Templated fallback when no API
+ * key (suggestions built deterministically from the deltas).
+ */
+export async function sectorRotation(stance = "balanced") {
+  await gateOnConsent();
+  await gateOnQuota();
+  const { data, error } = await supabase.functions.invoke("sector-rotation", {
+    body: { stance },
+  });
+  if (error) {
+    let detail = "";
+    try {
+      const body = await error?.context?.json?.();
+      if (body?.error) detail = `: ${body.error}`;
+    } catch (_) { /* fall through */ }
+    throw new Error(`Rotación IA falló${detail || ": " + (error.message || "error desconocido")}`);
+  }
+  if (data?.error) throw new Error(`Rotación IA falló: ${data.error}`);
+  return data;
+}
+
+/**
  * validateThesis({ thesisId | ticker }) — POST /functions/v1/validate-thesis
  *
  * Server reads the user's active thesis for the ticker (or by id),
