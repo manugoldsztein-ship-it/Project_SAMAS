@@ -2735,6 +2735,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.3.5",
+    title: "Privacy fix — shared portfolio cards no longer leak amounts",
+    bullets: [
+      "When you share your portfolio to the social feed, the card no longer shows your total dollar value (was: 'US$1.331' big in the header) and no longer shows the per-ticker quantity (was: '$GGAL 13', '$AAPL 1'). Composition only — strangers can see WHAT you hold and HOW MUCH OF THE BOOK each ticker is, but not the cash size.",
+      "New shape per row: ticker chip + allocation % chip (% of book) + day-change %. Old shape was: ticker chip + qty + day-change %. The header keeps the gain pill on the right; the dollar headline is replaced with 'Composición · N posiciones'.",
+      "Backwards compat: legacy posts in the DB still have totalUsd + qty in their payload, but the renderer ignores those fields now. Old posts render with allocation pct = '—' (since the legacy payload didn't compute it) — visually correct + leak-free.",
+      "Caveat: trade-share cards (sharing a single trade you just made) still show qty + price — that's a different intent, you're explicitly bragging about an order you placed. If we want to lock that down too, separate patch.",
+    ],
+  },
+  {
     version: "0.3.4",
     title: "Loading skeletons polish — kill the last 'Cargando…' text",
     bullets: [

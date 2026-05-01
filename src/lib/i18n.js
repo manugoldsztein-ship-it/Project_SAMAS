@@ -305,7 +305,8 @@ const V2 = {
     "social.compose.remove_portfolio":     "Quitar cartera",
     "social.portfolio_card.title":         "Mi cartera SAMAS",
     "social.portfolio_card.empty":         "Sin posiciones",
-    "social.portfolio_card.locked_label":  "Verificado por SAMAS",
+    "social.portfolio_card.allocation_subtitle": "Composición · {n} posiciones",
+    "social.portfolio_card.locked_label":  "Verificado por SAMAS · sin montos",
     "social.portfolios_tab.empty_title":   "Sé el primero en mostrar tu cartera",
     "social.portfolios_tab.empty_subtitle":"Compartí tu portafolio actual. Las cifras se generan desde tu cuenta y nadie puede editarlas.",
 
@@ -939,7 +940,8 @@ const V2 = {
     "social.compose.remove_portfolio":     "Remove portfolio",
     "social.portfolio_card.title":         "My SAMAS portfolio",
     "social.portfolio_card.empty":         "No holdings",
-    "social.portfolio_card.locked_label":  "Verified by SAMAS",
+    "social.portfolio_card.allocation_subtitle": "Allocation · {n} positions",
+    "social.portfolio_card.locked_label":  "Verified by SAMAS · no amounts shared",
     "social.portfolios_tab.empty_title":   "Be the first to show your book",
     "social.portfolios_tab.empty_subtitle":"Share your current portfolio. The numbers are pulled from your account and can't be edited.",
 

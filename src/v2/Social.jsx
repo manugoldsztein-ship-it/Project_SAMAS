@@ -889,25 +889,32 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
       // shouldn't outrank a 100-share GGAL just by alphabetical
       // order. Cap at 6 to keep the card visually digestible.
       const ranked = [...holdings].sort((a, b) => (b.value || 0) - (a.value || 0)).slice(0, 6);
-      const rows = ranked.map((h) => ({
-        ticker: h.ticker,
-        qty: Number(h.qty) || 0,
-        gainPct: Number(h.gainPct) || 0,
-        currency: h.currency || "USD",
-      }));
-      // Aggregate gain percent across the snapshot — value-weighted
-      // mean of the per-row pct, so the headline number doesn't get
-      // skewed by a tiny position with an outsized %.
-      const totalValue = ranked.reduce((acc, h) => acc + (h.value || 0), 0);
-      const weightedGain = totalValue > 0
-        ? ranked.reduce((acc, h) => acc + ((h.value || 0) * (h.gainPct || 0)), 0) / totalValue
-        : 0;
-      setPendingPortfolio({
-        totalUsd: Math.round(p.totalUsd || 0),
-        gainPct: Number(weightedGain.toFixed(2)),
-        capturedAt: new Date().toISOString(),
-        rows,
-      });
+      // Privacy: shared portfolios show ALLOCATION (% of book) per
+       // ticker, NOT cash amounts or unit counts. Total dollar value
+       // is also dropped from the payload — only the % gain headline
+       // is included. samas-0.3.5.
+       const totalValue = ranked.reduce((acc, h) => acc + (h.value || 0), 0);
+       const rows = ranked.map((h) => ({
+         ticker: h.ticker,
+         pctOfBook: totalValue > 0
+           ? Number((((h.value || 0) / totalValue) * 100).toFixed(1))
+           : 0,
+         gainPct: Number(h.gainPct) || 0,
+         currency: h.currency || "USD",
+       }));
+       // Aggregate gain percent across the snapshot — value-weighted
+       // mean of the per-row pct, so the headline number doesn't get
+       // skewed by a tiny position with an outsized %.
+       const weightedGain = totalValue > 0
+         ? ranked.reduce((acc, h) => acc + ((h.value || 0) * (h.gainPct || 0)), 0) / totalValue
+         : 0;
+       setPendingPortfolio({
+         // totalUsd intentionally omitted — privacy. Don't add it back
+         // without re-thinking the share-card display.
+         gainPct: Number(weightedGain.toFixed(2)),
+         capturedAt: new Date().toISOString(),
+         rows,
+       });
       // Focus the textarea so the user can add commentary if they
       // want — the card itself is read-only.
       setTimeout(() => {
@@ -3447,7 +3454,9 @@ async function resolveHandleToUserId(handle) {
 function PortfolioPostCard({ T, payload, lang = "es", onRemove, onOpenTicker }) {
   if (!payload) return null;
   const rows = Array.isArray(payload.rows) ? payload.rows : [];
-  const total = Math.round(payload.totalUsd || 0).toLocaleString("es-AR");
+  // Privacy: never render payload.totalUsd or per-row qty. samas-0.3.5
+  // dropped totalUsd from new payloads; older posts still have it on
+  // the row but we ignore it here. Allocation-only view from now on.
   const gain = Number(payload.gainPct || 0);
   const gainColor = gain >= 0 ? T.accent : T.danger;
   const gainBg = gain >= 0 ? T.accentSoft : T.dangerSoft;
@@ -3484,8 +3493,14 @@ function PortfolioPostCard({ T, payload, lang = "es", onRemove, onOpenTicker }) 
             color: T.accent, letterSpacing: 0.6, textTransform: "uppercase" }}>
             {tr("social.portfolio_card.title", lang)}
           </div>
-          <div style={{ fontFamily: FONT.mono, fontSize: 18, fontWeight: 700, color: T.text, marginTop: 2 }}>
-            US${total}
+          {/* Privacy: total cash value is not shared. We surface the
+              composition (rows below) + the value-weighted gain
+              chip on the right. samas-0.3.5. */}
+          <div style={{
+            fontFamily: FONT.sans, fontSize: 12, color: T.textMute,
+            marginTop: 4, lineHeight: 1.35,
+          }}>
+            {tr("social.portfolio_card.allocation_subtitle", lang, { n: rows.length })}
           </div>
         </div>
         <div style={{
@@ -3520,9 +3535,13 @@ function PortfolioPostCard({ T, payload, lang = "es", onRemove, onOpenTicker }) 
             {tr("social.portfolio_card.empty", lang)}
           </div>
         ) : rows.map((r) => {
-          const pct = Number(r.gainPct || 0);
-          const pctColor = pct >= 0 ? T.accent : T.danger;
-          const qtyLabel = Number.isInteger(r.qty) ? r.qty : Number(r.qty).toFixed(2);
+          const dayPct = Number(r.gainPct || 0);
+          const dayColor = dayPct >= 0 ? T.accent : T.danger;
+          // Allocation %: prefer pctOfBook from the new payload shape
+          // (samas-0.3.5). Old payloads with `qty` instead — we no
+          // longer render qty for privacy; fall back to "—" if no
+          // pctOfBook (= legacy post pre-fix).
+          const allocPct = r.pctOfBook != null ? Number(r.pctOfBook) : null;
           return (
             <div key={r.ticker} style={{
               display: "flex", alignItems: "center", gap: 10,
@@ -3543,14 +3562,21 @@ function PortfolioPostCard({ T, payload, lang = "es", onRemove, onOpenTicker }) 
                   letterSpacing: 0.4, cursor: onOpenTicker ? "pointer" : "default",
                 }}
               >${r.ticker}</button>
-              <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute }}>
-                {qtyLabel}
+              {/* Allocation chip — what fraction of the book this
+                  ticker is. Privacy-safe (no $ amount, no qty). */}
+              <div style={{
+                fontFamily: FONT.mono, fontSize: 12, fontWeight: 700,
+                color: T.text,
+                padding: "2px 8px", borderRadius: 999,
+                background: T.surface, border: `1px solid ${T.border}`,
+              }}>
+                {allocPct == null ? "—" : `${allocPct.toFixed(1)}%`}
               </div>
               <div style={{
                 marginLeft: "auto",
-                fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: pctColor,
+                fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: dayColor,
               }}>
-                {fmtPct(pct)}
+                {fmtPct(dayPct)}
               </div>
             </div>
           );
