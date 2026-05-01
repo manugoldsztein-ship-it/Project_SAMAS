@@ -468,9 +468,34 @@ export function MfaEnrollSection({ C }) {
   };
 
   if (state === "loading") {
+    // samas-0.4.25: bare text → spinner + skeleton row matching the
+    // "on" state's layout so the transition feels like the row
+    // filling in, not a text→card swap.
     return (
       <div style={wrapperStyle}>
-        <div style={{ fontSize: 13, color: C.textMd }}>Cargando 2FA…</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+            background: C.creamDk, border: `1px solid ${C.border}`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <div style={{
+              width: 16, height: 16, borderRadius: 999,
+              border: `2px solid ${C.border}`, borderTopColor: C.accent,
+              animation: "samas-spin 800ms linear infinite",
+            }}/>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{
+              height: 13, width: "40%", borderRadius: 4,
+              background: C.border, opacity: 0.6, marginBottom: 6,
+            }}/>
+            <div style={{
+              height: 11, width: "75%", borderRadius: 4,
+              background: C.border, opacity: 0.4,
+            }}/>
+          </div>
+        </div>
       </div>
     );
   }

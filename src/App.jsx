@@ -6816,17 +6816,27 @@ export default function SAMASApp() {
         // While Supabase resolves the cached session, show a simple
         // SAMAS splash so the user never sees a black void between the
         // native splash hiding and the auth flow rendering.
+        // samas-0.4.25: replaced bare "Cargando…" text with a soft
+        // accent spinner — same pattern as every premium fintech's
+        // boot screen (Cocos / Brubank / Modo). Less amateur, less
+        // jarring during a Cohen demo where the first 200ms is the
+        // first impression.
         <div style={{
           position: isNativeApp ? "absolute" : "relative",
           inset: isNativeApp ? 0 : "auto",
           minHeight: isNativeApp ? undefined : "calc(100vh - 60px)",
           display:"flex", flexDirection:"column",
           alignItems:"center", justifyContent:"center",
-          background: C.bg, color: C.text, gap: 12,
+          background: C.bg, color: C.text, gap: 16,
           fontFamily: "Inter, system-ui, sans-serif",
         }}>
           <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: -0.5 }}>SAMAS</div>
-          <div style={{ fontSize: 12, color: C.textMd }}>Cargando…</div>
+          <div style={{
+            width: 28, height: 28, borderRadius: 999,
+            border: `2.5px solid ${C.border || "#1F2937"}`,
+            borderTopColor: C.accent,
+            animation: "samas-spin 800ms linear infinite",
+          }}/>
         </div>
       ) : !loggedIn ? (
         // Auth / PIN / MFA / welcome — full-bleed on native, framed on web.

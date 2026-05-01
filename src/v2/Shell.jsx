@@ -2976,6 +2976,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.25",
+    title: "Loading skeletons sweep — kill bare 'Cargando…' text en boot + MFA",
+    bullets: [
+      "El v2 ya tenía sus loading states con skeletons shaped properly desde 0.3.4. Pero el splash boot screen en App.jsx y el panel MFA en src/auth/Mfa.jsx mostraban 'Cargando…' / 'Cargando 2FA…' como texto pelado — el primer thing que ve un investor cuando abre SAMAS por primera vez. Patch los reemplaza con shaped skeletons / spinners.",
+      "BOOT SPLASH (App.jsx) — mientras Supabase resolve la session cacheada, ahora se muestra un spinner accent-colored (28x28, 800ms loop) debajo del wordmark SAMAS en vez de 'Cargando…'. Mismo patrón que Cocos / Brubank / Modo. Menos amateur, menos jarring durante la pitch demo donde los primeros 200ms son first-impression.",
+      "MFA LOADING (auth/Mfa.jsx) — 'Cargando 2FA…' reemplazado por una skeleton row que MIRRORS el layout del estado 'on' (icon box 36x36 con spinner + 2 lines de texto skeleton). Transition de loading → loaded ahora reads como 'la row se llena' en vez de 'texto → card'.",
+      "Audit: las únicas otras menciones de 'Cargando' / 'Loading' que quedan son en comentarios de código que documentan los reemplazos previos (Social.jsx 0.3.4, Broker.jsx 0.0.65, shared.jsx skeletons). Los tres button labels que dicen 'Cargando…' (deposit.busy, common.loading) son correct — texto on a busy button no es un placeholder de lista, es signaling de in-flight state.",
+    ],
+  },
+  {
     version: "0.4.24",
     title: "Demo seeding combo — un tap, app lista para Cohen",
     bullets: [
