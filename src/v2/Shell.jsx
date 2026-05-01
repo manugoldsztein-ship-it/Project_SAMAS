@@ -2735,6 +2735,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.3.7",
+    title: "Retroactive scrub — strip qty/price/totalUsd from old posts",
+    bullets: [
+      "Migration that completes the 0.3.5 + 0.3.6 privacy story. Pre-fix posts still had totalUsd and per-row qty in their payloads, plus qty + price in their trade jsonb — even though the renderer ignored those fields, the data was sitting in the DB row reachable via API / admin tools.",
+      "supabase/scrub_post_amounts.sql rewrites: posts where kind='portfolio' get payload.totalUsd removed and payload.rows[] mapped to { ticker, gainPct, pctOfBook = null }. Posts with trade jsonb get rewritten to { side, ticker } only. Idempotent — already-scrubbed rows are no-ops.",
+      "Includes a sanity-report DO block at the bottom that prints how many rows are still leaky after the run. Should be 0 + 0. If non-zero, something raced.",
+      "Run in Supabase SQL editor — same as the other migrations.",
+    ],
+  },
+  {
     version: "0.3.6",
     title: "Privacy fix — same lockdown on shared trade cards",
     bullets: [
