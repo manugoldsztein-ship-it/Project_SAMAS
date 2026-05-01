@@ -2827,6 +2827,18 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.18",
+    title: "Security headers + GC cron — completa el security pass",
+    bullets: [
+      "Patch final del security pass (después de 0.4.16 + 0.4.17). Cierra los dos items que quedaron abiertos en el audit doc.",
+      "GC CRON — nuevo pg_cron job 'rate-limits-gc-daily' a las 03:00 UTC (00:00 ART, off-peak vs el aporte cron de 12:00 UTC). Llama a public.gc_rate_limits() que ya estaba definida en 0.4.16, prunea filas de public.rate_limits con hit_at < now() - 24h. Sin esto la tabla crecía monotónicamente — al ritmo actual hubiera tardado años en ser problema, pero ahora es problema de nadie.",
+      "SECURITY HEADERS — agregados a las 29 Edge Functions: X-Content-Type-Options=nosniff (anti MIME-sniffing), Cache-Control=private,no-store (evita caching de respuestas autenticadas en proxies/WebView), Referrer-Policy=no-referrer (no leak de URL via Referer si alguna vez se navega), X-Frame-Options=DENY (anti-clickjacking, gratis aunque JSON no se framee).",
+      "Verificado en deploy: curl -I a analyze-portfolio devuelve los 4 headers + el HSTS de Cloudflare bonus. Las funciones ya respondían sobre TLS, ahora con los headers el response is también limpio para cualquier auditor.",
+      "SCRIPT — sweep de los 29 functions en 30 segundos via /tmp/apply_secheaders.py (anchor regex sobre 'Access-Control-Allow-Methods: POST, OPTIONS' + el }; siguiente). 29/29 patcheados, 0 falsos positivos.",
+      "Audit doc actualizado: docs/security-audit.md cierra los 2 items pendientes que quedaban en el scoreboard. Items abiertos restantes son sólo opcionales/condicionales (hCaptcha si vemos abuse, constant-time OTP si subimos a higher-assurance). El security pass que arrancó Manuel está completo.",
+    ],
+  },
+  {
     version: "0.4.17",
     title: "Security sweep — rate limit + body validation a TODAS las Edge Functions",
     bullets: [

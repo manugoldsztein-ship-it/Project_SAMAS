@@ -46,6 +46,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  // samas-0.4.18 security headers
+  "X-Content-Type-Options": "nosniff",
+  "Cache-Control": "private, no-store",
+  "Referrer-Policy": "no-referrer",
+  "X-Frame-Options": "DENY",
 };
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";

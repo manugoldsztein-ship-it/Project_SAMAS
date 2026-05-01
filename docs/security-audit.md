@@ -120,7 +120,7 @@ These are the things 0.4.16 did NOT close. Listed roughly by risk.
 
 9. **MFA is optional, not required** — by design (UX trade-off for retail). Settings exposes it. When real money rails land, consider requiring MFA for any withdraw operation over a threshold.
 
-10. **No security headers on Edge Function responses** — `Strict-Transport-Security`, `X-Content-Type-Options`, etc. The frontend is served as a single-file bundle from inside the iOS app, so HSTS et al don't apply to the user. The Edge Function responses are consumed only by our SDK, also not browser-rendered. Adding them is cheap; doing it in 0.4.17 alongside the sweep.
+10. ~~**No security headers on Edge Function responses**~~ ✅ DONE in 0.4.18. All 29 Edge Functions now return `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store`, `Referrer-Policy: no-referrer`, and `X-Frame-Options: DENY`. Cloudflare adds HSTS on top.
 
 ---
 
@@ -198,10 +198,12 @@ Full source: `supabase/rate_limits.sql`.
 | 5 | Apply to 3 admin/data Edge Functions | 0.4.17 | Claude | ✅ Done |
 | 6 | Apply to send-push (1 util) | 0.4.17 | Claude | ✅ Done |
 | 7 | Apply body-validation to 12 input-taking Edge Functions | 0.4.17 | Claude | ✅ Done |
-| 8 | Add `gc_rate_limits()` to daily cron | 0.4.18 | Claude | ⏳ Next |
-| 9 | Security headers on Edge Function responses | 0.4.18 | Claude | ⏳ Next |
+| 8 | Add `gc_rate_limits()` to daily cron | 0.4.18 | Claude | ✅ Done |
+| 9 | Security headers on Edge Function responses | 0.4.18 | Claude | ✅ Done |
 | 10 | hCaptcha on signup (if abuse signal appears) | TBD | TBD | ⏸ Conditional |
 | 11 | Constant-time OTP comparison | TBD | TBD | ⏸ Low priority |
+
+**Security pass complete.** Items 1-9 done across 0.4.16, 0.4.17, 0.4.18. Items 10-11 are opt-in: implement only if the threat model changes (real abuse signal, or higher-assurance product positioning).
 
 ---
 
