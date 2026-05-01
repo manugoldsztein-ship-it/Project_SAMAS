@@ -630,3 +630,47 @@ export function DmThreadSkeleton({ T }) {
     </div>
   );
 }
+
+// UserRowSkeleton (samas-0.3.4) — mirrors a UserRow in
+// FollowListView / SearchView (avatar + display name + handle on
+// the left, optional follow button on the right). Used while
+// users === null instead of "Cargando…" text.
+export function UserRowSkeleton({ T }) {
+  return (
+    <div style={{
+      padding: "12px 0",
+      borderBottom: `1px solid ${T.border}`,
+      display: "flex", alignItems: "center", gap: 12,
+    }}>
+      <Skeleton T={T} width={42} height={42} borderRadius={14} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <Skeleton T={T} width="50%" height={14} borderRadius={6} marginBottom={6} />
+        <Skeleton T={T} width="35%" height={11} borderRadius={6} />
+      </div>
+      <Skeleton T={T} width={84} height={28} borderRadius={999} />
+    </div>
+  );
+}
+
+// ReplyRowSkeleton (samas-0.3.4) — mirrors a ReplyRow in ThreadView
+// (avatar + display name + reply body + tiny action row). Used
+// while replies === null instead of "Cargando…" divider text.
+export function ReplyRowSkeleton({ T }) {
+  return (
+    <div style={{
+      padding: "10px 4px",
+      borderBottom: `1px solid ${T.border}`,
+      display: "flex", gap: 10,
+    }}>
+      <Skeleton T={T} width={32} height={32} borderRadius={10} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+          <Skeleton T={T} width={70} height={11} borderRadius={6} />
+          <Skeleton T={T} width={50} height={11} borderRadius={6} />
+        </div>
+        <Skeleton T={T} height={12} borderRadius={6} marginBottom={4} />
+        <Skeleton T={T} width="65%" height={12} borderRadius={6} />
+      </div>
+    </div>
+  );
+}

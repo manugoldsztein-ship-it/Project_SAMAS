@@ -2735,6 +2735,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.3.4",
+    title: "Loading skeletons polish — kill the last 'Cargando…' text",
+    bullets: [
+      "Two remaining bare 'Cargando…' text fallbacks in Social.jsx replaced with row-shaped shimmer skeletons. ThreadView's reply section now shows 3 ReplyRowSkeleton placeholders while the replies fetch lands; FollowList overlay shows 5 UserRowSkeleton placeholders. The transition from loading → loaded reads as 'shape filling in' instead of 'text → cards'.",
+      "New composite skeletons in shared.jsx: UserRowSkeleton (avatar + name + handle + follow button) and ReplyRowSkeleton (avatar + name row + 2 body lines). Both mirror the EXACT layout of the row they replace so there's no reflow when data arrives.",
+      "Audited the rest of the app for 'Cargando…' — only places left are inside button labels (deposit.busy, common.loading) which are correct (text on a busy button, not a placeholder for a list).",
+    ],
+  },
+  {
     version: "0.3.3",
     title: "AI Thesis Tracker — write WHY at buy, AI checks if it still holds",
     bullets: [

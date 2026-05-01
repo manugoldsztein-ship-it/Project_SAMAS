@@ -22,7 +22,7 @@ import { social as socialApi, messages as messagesApi, broker as brokerApi } fro
 import { useEdgeSwipeBack } from "./useEdgeSwipeBack.js";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { setRefreshHandler, callRefreshFor } from "./refreshRegistry.js";
-import { avatarPropsFor, PostCardSkeleton, DmThreadSkeleton, useShellEntryDone } from "./shared.jsx";
+import { avatarPropsFor, PostCardSkeleton, DmThreadSkeleton, UserRowSkeleton, ReplyRowSkeleton, useShellEntryDone } from "./shared.jsx";
 import { draftPost } from "../lib/ai.js";
 import { supabase } from "../lib/supabase.js";
 import { t as tr } from "../lib/i18n.js";
@@ -2910,11 +2910,19 @@ function ThreadView({ T, lang = "es", post, onBack, onOpenProfile, onOpenTicker,
           color: T.textMute, letterSpacing: 0.4, textTransform: "uppercase",
         }}>
           {replies === null
-            ? "Cargando…"
+            ? tr("social.thread.replies_loading", lang)
             : replies.length === 0
               ? "Sé el primero en responder."
               : `Respuestas · ${replies.length}`}
         </div>
+
+        {/* Skeleton stack while replies load — replaces the bare
+            "Cargando…" text fallback (samas-0.3.4). */}
+        {replies === null && (
+          <div>
+            {[0, 1, 2].map((i) => <ReplyRowSkeleton key={i} T={T} />)}
+          </div>
+        )}
 
         {/* Replies list */}
         {replies && replies.length > 0 && replies.map((r) => (
@@ -3112,8 +3120,11 @@ function FollowListView({ T, lang = "es", profileUserId, mode, onBack, onOpenPro
 
       <div style={{ flex: 1, overflowY: "auto", padding: "8px 16px" }}>
         {users === null ? (
-          <div style={{ color: T.textMute, fontFamily: FONT.sans, fontSize: 13, textAlign: "center", padding: 30 }}>
-            Cargando…
+          // Skeleton stack — replaces the bare "Cargando…" text
+          // fallback (samas-0.3.4). 5 rows feels like the eventual
+          // list silhouette.
+          <div>
+            {[0, 1, 2, 3, 4].map((i) => <UserRowSkeleton key={i} T={T} />)}
           </div>
         ) : users.length === 0 ? (
           <div style={{ color: T.textMute, fontFamily: FONT.sans, fontSize: 13, textAlign: "center", padding: 30 }}>
