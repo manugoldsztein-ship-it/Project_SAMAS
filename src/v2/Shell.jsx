@@ -2801,6 +2801,17 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.7",
+    title: "Aporte mensual fix — credits now reach balance + Movimientos",
+    bullets: [
+      "Bug Manuel caught: monthly aporte cron was firing fine BUT the user's balance never moved and no Movimiento appeared. Cron inserted into public.wallet_credits (audit trail) and stopped there — never updated accounts.balance, never inserted into transactions. The feature was effectively a silent log-and-forget.",
+      "Fix: new AFTER INSERT trigger on wallet_credits (supabase/wallet_credits_propagation.sql, applied via Management API). For every credit row, the trigger upserts accounts.balance += amount AND inserts a transactions row (kind='deposit', reference='Aporte mensual'). One source of truth — works for any future inserter (manual top-ups, bank-rail integrations, etc.).",
+      "Verified end-to-end on Manuel's account: synthetic +1 ARS insert correctly bumped accounts.balance from 6244 to 6245 + created a matching transactions row. Then rolled back so no real change persisted.",
+      "Why a trigger vs. modifying the cron's TS code: atomic per Postgres semantics (no partial-success window), single source of truth for any caller. The cron stays small.",
+      "Knock-on: when the next aporte fires (12:00 UTC daily / 09:00 AR), the credit will now correctly land in the user's balance + show up in Movimientos as 'Aporte mensual'.",
+    ],
+  },
+  {
     version: "0.4.6",
     title: "Dead UI sweep — removed inert Search button + 4 unused imports",
     bullets: [
