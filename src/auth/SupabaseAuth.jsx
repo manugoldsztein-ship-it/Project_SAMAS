@@ -21,6 +21,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "../lib/supabase";
+import { CaptchaWidget, isCaptchaEnabled } from "../lib/hcaptcha.jsx";
 
 // 0.1.5 — Capacitor detection. When running inside the iOS WebView
 // we need to: (1) open OAuth in the system Safari (not the WebView,
@@ -417,6 +418,8 @@ function LoginView({ C, onSwitchSignup, onSwitchForgot }) {
   // 0.1.3 — separate busy flag for OAuth so a stuck OAuth dance
   // doesn't lock out the email/password path.
   const [oauthBusy, setOauthBusy] = useState(false);
+  // hCaptcha token (samas-0.4.19). See SignupView for the same pattern.
+  const [captchaToken, setCaptchaToken] = useState(null);
 
   const submit = async () => {
     setErr(null);
@@ -424,8 +427,19 @@ function LoginView({ C, onSwitchSignup, onSwitchForgot }) {
       setErr("Ingresá email y contraseña.");
       return;
     }
+    if (isCaptchaEnabled() && !captchaToken) {
+      setErr("Resolvé el captcha para continuar.");
+      return;
+    }
     setBusy(true);
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+      // captchaToken (samas-0.4.19) — only sent when hCaptcha is
+      // enabled at build time. Supabase Dashboard captcha-enforcement
+      // gates whether this is required server-side.
+      ...(captchaToken ? { options: { captchaToken } } : {}),
+    });
     setBusy(false);
     if (error) {
       // Supabase error messages are in English; map the common ones.
@@ -467,6 +481,10 @@ function LoginView({ C, onSwitchSignup, onSwitchForgot }) {
         />
       </div>
 
+      {/* hCaptcha widget (samas-0.4.19). Renders only when
+          VITE_HCAPTCHA_SITEKEY is set at build time. */}
+      <CaptchaWidget onToken={setCaptchaToken} onExpire={() => setCaptchaToken(null)} theme="dark" />
+
       <button onClick={submit} disabled={busy} style={primaryBtn(C, busy)}>
         {busy ? "Ingresando…" : "Ingresar"}
       </button>
@@ -503,6 +521,10 @@ function SignupView({ C, onSwitchLogin, onSignupDone }) {
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const [oauthBusy, setOauthBusy] = useState(false); // 0.1.3 OAuth dance
+  // hCaptcha token (samas-0.4.19). Null until the user solves the
+  // challenge. When isCaptchaEnabled() is false the field is ignored
+  // and signup proceeds without a captcha.
+  const [captchaToken, setCaptchaToken] = useState(null);
 
   const nombreOk   = nombre.trim().length >= 1;
   const apellidoOk = apellido.trim().length >= 1;
@@ -510,7 +532,8 @@ function SignupView({ C, onSwitchLogin, onSignupDone }) {
   const pwdLenOk = password.length >= 8;
   const pwdHasNumSym = /[^a-zA-Z\s]/.test(password); // digit or symbol
   const pwdMatch = password && password === passConfirm;
-  const allOk = nombreOk && apellidoOk && emailOk && pwdLenOk && pwdHasNumSym && pwdMatch;
+  const captchaOk = !isCaptchaEnabled() || !!captchaToken;
+  const allOk = nombreOk && apellidoOk && emailOk && pwdLenOk && pwdHasNumSym && pwdMatch && captchaOk;
 
   const submit = async () => {
     setErr(null);
@@ -520,6 +543,7 @@ function SignupView({ C, onSwitchLogin, onSignupDone }) {
     if (!pwdLenOk) return setErr("La contraseña debe tener al menos 8 caracteres.");
     if (!pwdHasNumSym) return setErr("La contraseña debe incluir al menos un número o símbolo.");
     if (!pwdMatch) return setErr("Las contraseñas no coinciden.");
+    if (isCaptchaEnabled() && !captchaToken) return setErr("Resolvé el captcha para continuar.");
 
     setBusy(true);
     const { data, error } = await supabase.auth.signUp({
@@ -537,6 +561,11 @@ function SignupView({ C, onSwitchLogin, onSignupDone }) {
           apellido: apellido.trim(),
           ...(uniKey ? { university: uniKey } : {}),
         },
+        // captchaToken (samas-0.4.19) — only sent when hCaptcha is
+        // enabled at build time. Supabase Dashboard must also have
+        // captcha protection turned on for this to be enforced; until
+        // then it's a no-op passthrough.
+        ...(captchaToken ? { captchaToken } : {}),
       },
     });
     setBusy(false);
@@ -649,6 +678,11 @@ function SignupView({ C, onSwitchLogin, onSignupDone }) {
           )}
         </div>
       </div>
+
+      {/* hCaptcha widget (samas-0.4.19). Renders only when
+          VITE_HCAPTCHA_SITEKEY is set at build time — otherwise
+          this component returns null and the form is unchanged. */}
+      <CaptchaWidget onToken={setCaptchaToken} onExpire={() => setCaptchaToken(null)} theme="dark" />
 
       <button onClick={submit} disabled={!allOk || busy} style={primaryBtn(C, !allOk || busy)}>
         {busy ? "Creando…" : "Crear cuenta"}

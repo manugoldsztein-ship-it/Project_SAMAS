@@ -61,6 +61,27 @@ async function sha256(text: string): Promise<string> {
     .join("");
 }
 
+// Constant-time string comparison (samas-0.4.19). The previous `!==`
+// short-circuits on the first mismatched character, which leaks
+// timing information about WHERE the divergence is. With SHA-256
+// hashes that's only 64 hex chars and 5 attempts/code, so the
+// theoretical brute force is ~10^77 — not exploitable in practice
+// but cheap to fix and now off the audit list.
+//
+// Returns false immediately on length mismatch (no length oracle —
+// both inputs are always 64 hex chars in our flow). Within the
+// equal-length path, XORs each character pair and ORs into a
+// running result; only after the whole loop finishes do we test
+// against zero.
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -176,7 +197,8 @@ serve(async (req) => {
       );
     }
 
-    if (otp.code_hash !== submittedHash) {
+    // Constant-time comparison (samas-0.4.19) — see timingSafeEqual.
+    if (!timingSafeEqual(otp.code_hash, submittedHash)) {
       // Wrong code — bump attempts, keep the row so user can retry.
       await supabaseAdmin
         .from("otp_codes")

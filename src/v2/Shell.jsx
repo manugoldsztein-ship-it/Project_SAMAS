@@ -2827,6 +2827,18 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.19",
+    title: "Cierra los items opt-in del audit: hCaptcha scaffolding + constant-time OTP",
+    bullets: [
+      "Manuel pidió 'hacer lo restante' del security pass — los 2 items que en 0.4.18 quedaron como 'opt-in / low priority'. Ahora ambos están implementados; el primero feature-flagged hasta que Manuel decida activar.",
+      "CONSTANT-TIME OTP — verify-otp ahora usa una función timingSafeEqual interna (Deno no tiene crypto.timingSafeEqual nativo como Node) que recorre el string completo XOReando cada par de chars en vez de short-circuit-ear en el primer mismatch. Defensa teórica vs un timing oracle que estimaría DÓNDE divergen los hashes — no explotable hoy con SHA-256 + 5-attempts cap pero cierra la fila.",
+      "hCAPTCHA SCAFFOLDING — nuevo módulo src/lib/hcaptcha.js con isCaptchaEnabled() / <CaptchaWidget /> / loadHCaptchaScript() lazy-loader. Feature-flagged: sólo activa cuando VITE_HCAPTCHA_SITEKEY está seteado en .env al build. Default (sin la env): el widget retorna null, los flujos de signup/login funcionan idénticos. Comentario al tope del módulo documenta el setup en 4 pasos (cuenta hCaptcha + .env + Supabase Dashboard config + rebuild).",
+      "AUTH WIRING — SupabaseAuth.jsx ahora monta <CaptchaWidget /> arriba del botón Crear Cuenta y arriba del botón Ingresar. State captchaToken se passe al options.captchaToken de supabase.auth.signUp / signInWithPassword. Con la env unset todo es no-op; con la env seteada el widget renderiza, el form requiere resolverlo, y Supabase enforce server-side cuando lo activás en Dashboard → Auth → Providers → Captcha.",
+      "El módulo hcaptcha.js es defensivo: si el script externo de hCaptcha falla en cargar (CDN down, content blocker, etc.) no rompe el form — log warning y signup procede sin captcha (Supabase rejectaría server-side igual si está enforced ahí). 'Fail closed' del lado server, 'fail safe' del lado UX.",
+      "AUDIT DOC — docs/security-audit.md cierra items 10 y 11 del scoreboard. El security pass ya no tiene items pendientes — sólo opt-in seteables por config (hCaptcha activate) cuando aparezca abuse signal real.",
+    ],
+  },
+  {
     version: "0.4.18",
     title: "Security headers + GC cron — completa el security pass",
     bullets: [

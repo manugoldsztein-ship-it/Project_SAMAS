@@ -102,11 +102,15 @@ These are the things 0.4.16 did NOT close. Listed roughly by risk.
 
 2. ~~**Body-size cap on remaining Edge Functions**~~ ✅ DONE in 0.4.17. Every function that reads `req.json()` now uses `readJsonBody(req)` with the 32KB cap.
 
-3. **No CAPTCHA / anti-bot on signup** — Supabase auth uses email + phone OTP; the OTP step gates effective signup, but a bot could create thousands of unverified email-only accounts. Mitigated by the OTP rate limit (5/15min IP-keyed) but not eliminated. If we see real abuse, add hCaptcha to the signup form (Supabase has first-class support).
+3. ~~**No CAPTCHA / anti-bot on signup**~~ ⚙️ SCAFFOLDING SHIPPED in 0.4.19. `src/lib/hcaptcha.js` provides a feature-flagged hCaptcha integration: when `VITE_HCAPTCHA_SITEKEY` is set at build time, the widget renders on Signup + Login and the token is passed to Supabase auth. To activate end-to-end:
+   1. Sign up at hcaptcha.com (free for low traffic), get a sitekey + secret.
+   2. `echo VITE_HCAPTCHA_SITEKEY=... >> .env` then rebuild.
+   3. Supabase Dashboard → Authentication → Providers → Captcha → enable + paste the secret.
+   Until activated, the form behaves identically to before. No abuse signal observed today — leaving it dark.
 
 ### LOW
 
-4. **OTP comparison uses `===`** — Theoretical timing oracle on the SHA-256 hash. In practice the OTP is 6 digits and only valid for 10 minutes; the per-code attempt ceiling of 5 makes brute-force impossible regardless of timing. If we ever go higher-assurance, swap to `crypto.subtle.digest`-based constant-time comparison.
+4. ~~**OTP comparison uses `===`**~~ ✅ DONE in 0.4.19. `verify-otp` now uses an in-function `timingSafeEqual()` that XORs each character pair across the whole string before testing — no short-circuit, no timing oracle.
 
 5. **CORS allow-origin = `*`** — Justified by JWT-at-the-function-body authorization. If we ever lock down to `https://samas.app` we get a marginal extra layer (defense against a hostile site embedding our endpoints), but it's not a real risk today since we're not browser-exposed yet (Capacitor wraps the WebView).
 
@@ -200,10 +204,10 @@ Full source: `supabase/rate_limits.sql`.
 | 7 | Apply body-validation to 12 input-taking Edge Functions | 0.4.17 | Claude | ✅ Done |
 | 8 | Add `gc_rate_limits()` to daily cron | 0.4.18 | Claude | ✅ Done |
 | 9 | Security headers on Edge Function responses | 0.4.18 | Claude | ✅ Done |
-| 10 | hCaptcha on signup (if abuse signal appears) | TBD | TBD | ⏸ Conditional |
-| 11 | Constant-time OTP comparison | TBD | TBD | ⏸ Low priority |
+| 10 | hCaptcha scaffolding on signup + login | 0.4.19 | Claude | ✅ Shipped (dark) |
+| 11 | Constant-time OTP comparison | 0.4.19 | Claude | ✅ Done |
 
-**Security pass complete.** Items 1-9 done across 0.4.16, 0.4.17, 0.4.18. Items 10-11 are opt-in: implement only if the threat model changes (real abuse signal, or higher-assurance product positioning).
+**Security pass complete.** Items 1-11 done across 0.4.16 → 0.4.19. The hCaptcha scaffold is feature-flagged off by default (no abuse signal today) — flip on by setting `VITE_HCAPTCHA_SITEKEY` + Supabase Dashboard config when needed.
 
 ---
 
