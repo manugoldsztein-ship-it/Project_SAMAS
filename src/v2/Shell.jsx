@@ -2835,6 +2835,20 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.22",
+    title: "Portafolio Hipotético — el item del papá, finalmente shippeado",
+    bullets: [
+      "El item deferido de la lista del padre de Manuel (asesor financiero, samas-0.4.15). Era el feature más-llamativo-faltante para el demo a Cohen: 'cuánto tendrías hoy si hubieras invertido $X hace N años'. Backtest tool client-side, deterministic, cero dependencia de IA.",
+      "NUEVA SUPERFICIE — src/v2/Hipotetico.jsx: card en Wallet entre las cards de IA y Aporte Mensual. NO está gated por aiDisabled (es matemática pura, no LLM). Card con CTA → bottom sheet que toma 3 inputs (estrategia / monto inicial / horizonte) y muestra el resultado live.",
+      "INPUTS — Estrategia: conservadora / moderada / agresiva (mismas calibraciones de samas-0.4.15: 4/7/10% base anual, bands low/base/high). Horizonte: 1y / 3y / 5y / 10y. Monto + currency picker (ARS / USD).",
+      "OUTPUTS — Valor final estimado en grande + rango low–high (mismo patrón de Objetivos para mantener consistencia visual). Chart inline-SVG con gradient fill al estilo de la sparkline del Wallet hero. Stats abajo: retorno total + delta vs plazo fijo (4% baseline). Disclaimer fuerte al pie usando common.ai_disclaimer_returns.",
+      "MOTOR DE CÁLCULO — runBacktest() corre month-by-month compound growth con varianza pseudo-normal seeded por (strategy, months, amount) — cada combo da el mismo chart en cada render (no shimmer). Variance amplitude scales con la estrategia: conservadora ~1%/mes vol, moderada ~2.5%, agresiva ~5%. Da una shape realista (drawdowns + recoveries) en vez de la curva exponencial smooth que gritaría 'esto es fake'.",
+      "BANDS DETERMINÍSTICOS — los números low/high que se muestran en el card SON deterministic (FV formula directo con los return rates low/high del band), no dependen de la varianza. Esto es importante: el chart muestra UNA path simulada, los números muestran el RANGO de paths posibles. Visualmente coherente.",
+      "i18n: 16 keys nuevas en es + en (otras locales fall-back a es). Disclaimer reusa common.ai_disclaimer_returns ya existente.",
+      "Cuando Cohen plug-in real backtest data en el futuro, sólo cambia la función runBacktest — la UI shape y todos los inputs/outputs quedan iguales. Diseño escalable.",
+    ],
+  },
+  {
     version: "0.4.21",
     title: "Crypto removido de toda la app — Cohen no opera crypto",
     bullets: [

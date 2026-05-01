@@ -36,6 +36,7 @@ import { useLivePortfolioRatio } from "./livePrices.jsx";
 import { analyzePortfolio, chatPortfolio, dailyBrief, compareBenchmark, earningsWatch, proactiveInsights, quarterlyReview } from "../lib/ai.js";
 import { isAIDisabled } from "../lib/aiConsent.js";
 import { ObjetivosCard } from "./Objetivos.jsx";
+import { HipoteticoCard } from "./Hipotetico.jsx";
 import { AIQuotaPill } from "./AIQuotaPill.jsx";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { hapticNative } from "../lib/native.js";
@@ -584,6 +585,13 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
           <AIChatCard T={T} lang={lang} />
         </>
       )}
+
+      {/* Portafolio Hipotético (samas-0.4.22) — historical backtest
+          tool. NOT gated on aiDisabled because it's deterministic
+          (compound growth + seeded variance, no LLM call). Available
+          to every user, regardless of portfolio state, since the
+          tool is conceptual ("what if I had invested $X"). */}
+      <HipoteticoCard T={T} lang={lang} />
 
       {/* ---------- aporte mensual ---------- */}
       <div style={{ margin: "28px 16px 0" }}>
