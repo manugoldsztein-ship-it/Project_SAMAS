@@ -2827,6 +2827,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.14",
+    title: "Deposit polish + MP integration spec",
+    bullets: [
+      "Manuel decidió Opción A: modelo unificado (wallet = billetera de inversión, no hay paso 'fondear comitente'). Esto pone en perspectiva la única vía de entrada de plata: el depósito al wallet.",
+      "Polish del DepositModal: agregado picker de moneda (Pesos / Dólares), quick-amount chips por moneda (ARS: 50k/100k/250k/500k; USD: 50/100/500/1000), copy más claro explicando que la misma plata es la que se usa para invertir, mejor explicación del CBU/Alias para transferencia, disclaimer 'Demo: instantáneo. Producción: vía webhook del partner'.",
+      "Nuevo doc docs/mercado-pago-integration.md: spec completo de cómo reemplazar el deposit mock por integración real con MP. Cubre setup MP merchant, mp-create-preference Edge Function, mp-webhook con idempotencia, mp_processed_payments table, deep-link handler. Estimado 1 día de trabajo concentrado.",
+      "Recomendación explícita en el doc: NO implementar antes de la pitch a Cohen. Razones: mock funciona predeciblemente, MP en producción introduce variables (rate limits, webhook failures, payment statuses) que no querés debuggear durante la pitch, Cohen probablemente prefiera que SU rail sea el que acredite ya que son el ALyC. Mock + doc demuestra que entendemos la integración sin quemar tiempo en código tirable.",
+    ],
+  },
+  {
     version: "0.4.13",
     title: "Wallet backend audit + critical placeOrder → balance bug fix",
     bullets: [

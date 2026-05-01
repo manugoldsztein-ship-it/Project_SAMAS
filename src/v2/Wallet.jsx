@@ -3422,6 +3422,7 @@ function ModalShell({ T, title, onClose, children }) {
 
 function DepositModal({ T, lang = "es", balance, onClose, onDone }) {
   const [amount, setAmount] = useState("");
+  const [ccy, setCcy] = useState("ARS");
   const [source, setSource] = useState("mp");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -3432,29 +3433,55 @@ function DepositModal({ T, lang = "es", balance, onClose, onDone }) {
     if (!n || n <= 0) { setErr("Ingresá un monto válido."); return; }
     setBusy(true);
     try {
-      await walletApi.deposit({ amount: n, ccy: "ARS", source });
+      await walletApi.deposit({ amount: n, ccy, source });
       onDone();
     } catch (e) { setErr(e.message); setBusy(false); }
   }
 
+  // Quick-amount chips so the user doesn't have to type for the
+  // common amounts. Different sets per currency since pesos and
+  // dolares operate on different scales.
+  const quickAmounts = ccy === "ARS"
+    ? [50000, 100000, 250000, 500000]
+    : [50, 100, 500, 1000];
+
   return (
     <ModalShell T={T} title={tr("deposit.title", lang)} onClose={onClose}>
-      <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, marginBottom: 16 }}>
-        Acreditamos en pesos a tu cuenta SAMAS.
+      <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, marginBottom: 16, lineHeight: 1.5 }}>
+        Cargá plata a SAMAS. Esa misma plata es la que usás para invertir — no hay
+        paso intermedio.
       </div>
 
+      {/* Currency picker */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+        {[{ id: "ARS", label: "Pesos" }, { id: "USD", label: "Dólares" }].map((c) => (
+          <button key={c.id} onClick={() => { setCcy(c.id); setAmount(""); }} style={{
+            flex: 1, padding: "10px", borderRadius: 12,
+            background: ccy === c.id ? T.accent : T.surface,
+            border: `1px solid ${ccy === c.id ? T.accent : T.border}`,
+            color: ccy === c.id ? T.accentInk : T.text,
+            fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, cursor: "pointer",
+          }}>{c.label}</button>
+        ))}
+      </div>
+
+      {/* Source */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         {[
-          { id: "mp", label: "Mercado Pago" },
-          { id: "transfer", label: "Transferencia" },
+          { id: "mp", label: "Mercado Pago", sub: "Acreditación instantánea" },
+          { id: "transfer", label: "Transferencia", sub: "Tu CBU / Alias" },
         ].map(s => (
           <button key={s.id} onClick={() => setSource(s.id)} style={{
-            flex: 1, padding: "12px", borderRadius: 12,
+            flex: 1, padding: "10px 12px", borderRadius: 12, textAlign: "left",
             background: source === s.id ? T.accentSoft : T.surface,
             border: `1px solid ${source === s.id ? T.accent : T.border}`,
             color: source === s.id ? T.accent : T.text,
-            fontFamily: FONT.sans, fontSize: 13, fontWeight: 600, cursor: "pointer",
-          }}>{s.label}</button>
+            fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, cursor: "pointer",
+            display: "flex", flexDirection: "column", gap: 3,
+          }}>
+            <span>{s.label}</span>
+            <span style={{ fontSize: 10, fontWeight: 500, color: T.textMute }}>{s.sub}</span>
+          </button>
         ))}
       </div>
 
@@ -3472,10 +3499,28 @@ function DepositModal({ T, lang = "es", balance, onClose, onDone }) {
           <div style={{ fontFamily: FONT.mono, fontSize: 12, color: T.textMute }}>
             CVU: {balance.cvu}
           </div>
+          <div style={{ marginTop: 8, fontFamily: FONT.sans, fontSize: 11, color: T.textMute, lineHeight: 1.4 }}>
+            La plata se acredita cuando la transferencia llega — típicamente en
+            menos de 1 minuto en horario bancario.
+          </div>
         </div>
       )}
 
-      <NumberInput T={T} label="Monto (ARS)" value={amount} onChange={setAmount} />
+      <NumberInput T={T} label={`Monto (${ccy})`} value={amount} onChange={setAmount} />
+
+      {/* Quick-amount chips */}
+      <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+        {quickAmounts.map((q) => (
+          <button key={q} onClick={() => setAmount(String(q))} style={{
+            padding: "6px 12px", borderRadius: 999,
+            background: T.bg, border: `1px solid ${T.border}`,
+            color: T.text, fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+            cursor: "pointer",
+          }}>
+            {ccy === "ARS" ? "$" : "US$"}{q.toLocaleString("es-AR")}
+          </button>
+        ))}
+      </div>
 
       {err && <div style={{ marginTop: 12, color: T.danger, fontFamily: FONT.sans, fontSize: 12 }}>{err}</div>}
 
@@ -3485,8 +3530,18 @@ function DepositModal({ T, lang = "es", balance, onClose, onDone }) {
         fontFamily: FONT.sans, fontSize: 15, fontWeight: 700, border: "none",
         cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
       }}>
-        {busy ? "Procesando..." : source === "mp" ? "Ir a Mercado Pago" : "Confirmar"}
+        {busy
+          ? "Procesando..."
+          : source === "mp" ? "Ir a Mercado Pago" : "Generar instrucción"}
       </button>
+
+      <div style={{
+        marginTop: 12, fontFamily: FONT.sans, fontSize: 10, color: T.textMute,
+        textAlign: "center", lineHeight: 1.4,
+      }}>
+        Demo: la plata se acredita instantáneamente. Producción: pasa por el
+        webhook del partner (MP / transferencia bancaria) antes de aparecer.
+      </div>
     </ModalShell>
   );
 }
