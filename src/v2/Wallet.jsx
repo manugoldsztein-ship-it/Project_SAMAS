@@ -35,6 +35,7 @@ import { t as tr } from "../lib/i18n.js";
 import { useLivePortfolioRatio } from "./livePrices.jsx";
 import { analyzePortfolio, chatPortfolio, dailyBrief, compareBenchmark, earningsWatch, proactiveInsights, quarterlyReview } from "../lib/ai.js";
 import { isAIDisabled } from "../lib/aiConsent.js";
+import { ObjetivosCard } from "./Objetivos.jsx";
 import { AIQuotaPill } from "./AIQuotaPill.jsx";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { hapticNative } from "../lib/native.js";
@@ -564,6 +565,8 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
           <EarningsWatchCard T={T} lang={lang} />
           {/* Quarterly review — 90-day narrative summary (0.2.4). */}
           <QuarterlyReviewCard T={T} lang={lang} />
+          {/* Objetivos con IA — goal wizard + progress card (0.4.12). */}
+          <ObjetivosCard T={T} lang={lang} />
           {/* Preguntale a SAMAS — multi-turn chat (samas-0.0.89). */}
           <AIChatCard T={T} lang={lang} />
         </>

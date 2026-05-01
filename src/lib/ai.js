@@ -366,6 +366,82 @@ export async function explainTerm({ term, context } = {}) {
 }
 
 /**
+ * objectivesPlan({ goal, horizonMonths, targetAmount?, targetCurrency? })
+ * — POST /functions/v1/objectives-plan
+ *
+ * Server takes the user's goal + horizon and returns a structured
+ * plan: strategy classification + asset allocation + monthly aporte
+ * (if a target is set) + milestones + Claude-written narrative.
+ *
+ * USER-INITIATED → consumes quota.
+ */
+export async function objectivesPlan({ goal, horizonMonths, targetAmount, targetCurrency } = {}) {
+  if (!goal || !horizonMonths) throw new Error("goal + horizonMonths required");
+  await gateOnConsent();
+  await gateOnQuota();
+  const { data, error } = await supabase.functions.invoke("objectives-plan", {
+    body: { goal, horizonMonths, targetAmount, targetCurrency },
+  });
+  if (error) {
+    let detail = "";
+    try {
+      const body = await error?.context?.json?.();
+      if (body?.error) detail = `: ${body.error}`;
+    } catch (_) { /* fall through */ }
+    throw new Error(`Objetivos IA falló${detail || ": " + (error.message || "error desconocido")}`);
+  }
+  if (data?.error) throw new Error(`Objetivos IA falló: ${data.error}`);
+  return data;
+}
+
+// Direct DB helpers for objectives — not AI calls (no quota / consent).
+// RLS scopes to caller.
+export async function saveObjective({ goal, horizonMonths, targetAmount, targetCurrency, plan }) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("not authenticated");
+  const { data, error } = await supabase
+    .from("objectives")
+    .insert({
+      user_id: user.id,
+      goal_text: goal,
+      target_amount: targetAmount || null,
+      target_currency: targetCurrency || null,
+      horizon_months: horizonMonths,
+      strategy: plan?.strategy || null,
+      plan: plan || null,
+      active: true,
+    })
+    .select("id, goal_text, target_amount, target_currency, horizon_months, strategy, plan, active, created_at")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function getActiveObjective() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data, error } = await supabase
+    .from("objectives")
+    .select("id, goal_text, target_amount, target_currency, horizon_months, strategy, plan, active, created_at")
+    .eq("user_id", user.id)
+    .eq("active", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteObjective(id) {
+  const { error } = await supabase
+    .from("objectives")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+  return { ok: true };
+}
+
+/**
  * sectorRotation({ stance }) — POST /functions/v1/sector-rotation
  *
  * Server reads holdings, computes sector mix (CEDEAR / ACCION / ETF

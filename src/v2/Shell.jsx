@@ -2827,6 +2827,20 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.12",
+    title: "Objetivos rebuilt with IA — Wallet card + 3-step wizard",
+    bullets: [
+      "Per Manuel: 'rearmar el tema de objetivos con IA'. Replaced the legacy ObjectivesWizard (670 lines, BYOK Anthropic key, localStorage-only persistence) with a fresh v2 implementation: Wallet card + 3-step wizard + Edge Function + Supabase persistence.",
+      "New ObjetivosCard on Wallet (between Quarterly Review and AI Chat). Empty state shows a tappable accent-tinted CTA. Active state shows: goal text + horizon + target amount + strategy chip (conservadora/moderada/agresiva color-coded) + sector allocation strip with category tags + monthly aporte hint + Claude-written narrative + Edit/Eliminar buttons.",
+      "New ObjetivosWizard sheet, 3 steps: (1) goal description with 6 preset chips for quick fill (Departamento / Jubilación / Viaje / Auto / Educación / Reserva); (2) horizon picker (1/3/5/10/20 años) + optional target amount + currency; (3) generated plan preview with strategy classification, allocation breakdown bars, monthly aporte, milestones at 25/50/75/100% of horizon, narrative.",
+      "New objectives-plan Edge Function. Strategy classified deterministically by horizon (< 24mo conservadora, 24-72mo moderada, > 72mo agresiva) with a USD-short-term bump-down rule. Allocation presets per strategy (BONO-heavy on conservadora, CEDEAR-heavy on agresiva). PMT formula computes monthly aporte needed to hit the target at the strategy's expected annual return (6/10/14%). Milestones via FV-of-annuity. Claude only refines the narrative; numbers stay deterministic.",
+      "New `objectives` table in Supabase with RLS + auto-archive trigger (one active per user). Plan stored as jsonb so the schema can evolve. Migration: supabase/objectives.sql, applied via Management API.",
+      "USER-INITIATED → consumes one quota credit per Generar Plan tap. Hidden when AI is disabled (via 0.4.11 master switch).",
+      "Legacy ObjectivesWizard in BrokerShell stays in place for backward compat — users with a localStorage-saved plan still see it on Portafolio. Cleanup of the duplicate entry point is a future patch.",
+      "21 AI surfaces total now (objectives-plan added to the count).",
+    ],
+  },
+  {
     version: "0.4.11",
     title: "AI master switch — turn off ALL AI features at once",
     bullets: [
