@@ -164,6 +164,36 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
   // pull-to-refresh can invoke it.
   useEffect(() => setRefreshHandler("wallet", refresh), [refresh]);
 
+  // Realtime: when a new transactions row hits this user (a trade
+  // fill in Broker, an aporte cron credit, a swap), call refresh()
+  // so the Movimientos list + balance + portfolio all re-fetch.
+  // samas-0.4.10. Without this, the Wallet stayed stale until the
+  // user pulled to refresh manually.
+  useEffect(() => {
+    let alive = true;
+    let channel = null;
+    (async () => {
+      const { data: u } = await supabase.auth.getUser();
+      const uid = u?.user?.id;
+      if (!uid || !alive) return;
+      channel = supabase
+        .channel(`wallet-tx-${uid}`)
+        .on("postgres_changes", {
+          event: "INSERT",
+          schema: "public",
+          table: "transactions",
+          filter: `user_id=eq.${uid}`,
+        }, () => {
+          if (alive) refresh();
+        })
+        .subscribe();
+    })();
+    return () => {
+      alive = false;
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [refresh]);
+
   // ----------- derived -----------
   const userName = user?.name?.split(" ")[0] || "Usuario";
   const userInitials = user?.initials || "??";
@@ -588,7 +618,12 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
 
       {/* ---------- movimientos ---------- */}
       <div style={{ margin: "28px 16px 0" }}>
-        <SectionHead T={T} title={tr("wallet.section.txns", lang)} action={tr("wallet.filter", lang)}/>
+        <SectionHead
+          T={T}
+          title={tr("wallet.section.txns", lang)}
+          action={tr("wallet.see_all", lang)}
+          onAction={() => setActiveModal("txns_all")}
+        />
         <div style={{
           marginTop: 12, borderRadius: 22, background: T.surface,
           border: `1px solid ${T.border}`, overflow: "hidden",
@@ -644,6 +679,10 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
       )}
 
       {/* ---------- modals ---------- */}
+      {activeModal === "txns_all" && (
+        <TxnsAllSheet T={T} lang={lang} balanceVisible={balanceVisible}
+          onClose={() => setActiveModal(null)} />
+      )}
       {activeModal === "deposit" && (
         <DepositModal T={T} lang={lang} balance={balance}
           onClose={() => setActiveModal(null)}
@@ -3128,6 +3167,146 @@ function CardPreview({ T, card, onClick }) {
 // ----------------------------------------------------------
 // TxnRow — single transaction line.
 // ----------------------------------------------------------
+// ----------------------------------------------------------
+// TxnsAllSheet (samas-0.4.10) — full transactions history
+// ----------------------------------------------------------
+// Bottom sheet opened from Wallet's Movimientos "Ver todos" link.
+// Replaces the dead "Filtrar" link that used to sit there with no
+// onClick. Pulls up to 200 most recent rows from public.transactions
+// and renders them grouped by day (Hoy / Ayer / DD MMM).
+function TxnsAllSheet({ T, lang = "es", balanceVisible, onClose }) {
+  const [items, setItems] = useState(null); // null=loading, [] = empty
+  useEffect(() => {
+    let alive = true;
+    walletApi.getTransactions({ limit: 200 })
+      .then((r) => { if (alive) setItems(r); })
+      .catch((e) => {
+        console.error("[txns-all] load:", e);
+        if (alive) setItems([]);
+      });
+    return () => { alive = false; };
+  }, []);
+
+  // Group by day for visual scanability — same pattern as the
+  // Notifications inbox (Hoy / Antes).
+  const groups = React.useMemo(() => {
+    if (!items) return null;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const yest = today.getTime() - 24 * 60 * 60 * 1000;
+    const buckets = new Map(); // labelKey → array
+    for (const t of items) {
+      let label;
+      if (t.at >= today.getTime()) label = tr("wallet.today", lang);
+      else if (t.at >= yest) label = tr("wallet.yesterday", lang);
+      else {
+        const d = new Date(t.at);
+        label = d.toLocaleDateString("es-AR", { day: "2-digit", month: "short" });
+      }
+      const arr = buckets.get(label) || [];
+      arr.push(t);
+      buckets.set(label, arr);
+    }
+    return [...buckets.entries()];
+  }, [items, lang]);
+
+  return (
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
+      position: "fixed", inset: 0, zIndex: 100,
+      background: "rgba(0,0,0,0.6)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+    }}>
+      <div style={{
+        width: "100%", maxWidth: 540, maxHeight: "92dvh",
+        minHeight: "60dvh",
+        background: T.bgElev, color: T.text,
+        borderTopLeftRadius: 28, borderTopRightRadius: 28,
+        border: `1px solid ${T.border}`, borderBottom: "none",
+        display: "flex", flexDirection: "column", overflow: "hidden",
+      }}>
+        {/* Drag handle */}
+        <div style={{ display: "flex", justifyContent: "center", paddingTop: 14 }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: T.border }}/>
+        </div>
+        {/* Header */}
+        <div style={{
+          padding: "14px 20px 10px", display: "flex",
+          justifyContent: "space-between", alignItems: "center",
+        }}>
+          <div style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text }}>
+            {tr("wallet.section.txns", lang)}
+          </div>
+          <button onClick={onClose} style={{
+            background: "transparent", border: "none",
+            color: T.textMute, fontFamily: FONT.sans, fontSize: 14, fontWeight: 600,
+            cursor: "pointer",
+          }}>{tr("wallet.txns_all.close", lang)}</button>
+        </div>
+        {/* Body */}
+        <div style={{
+          flex: 1, overflowY: "auto",
+          padding: "0 16px 24px",
+        }}>
+          {items === null ? (
+            <div style={{ padding: "16px 0 0" }}>
+              <div style={{
+                background: T.surface, border: `1px solid ${T.border}`,
+                borderRadius: 14, overflow: "hidden",
+              }}>
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <div key={i} style={{
+                    padding: "14px 16px",
+                    borderBottom: i === 4 ? "none" : `1px solid ${T.border}`,
+                    display: "flex", gap: 12, alignItems: "center",
+                  }}>
+                    <Skeleton T={T} width={38} height={38} borderRadius={12} />
+                    <div style={{ flex: 1 }}>
+                      <Skeleton T={T} height={14} width="55%" marginBottom={6} />
+                      <Skeleton T={T} height={11} width="40%" />
+                    </div>
+                    <Skeleton T={T} width={70} height={14} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : items.length === 0 ? (
+            <div style={{
+              padding: "40px 20px", textAlign: "center",
+              fontFamily: FONT.sans, color: T.textMute,
+            }}>
+              <div style={{ fontFamily: FONT.display, fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 4 }}>
+                {tr("wallet.txns_all.empty_title", lang)}
+              </div>
+              <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+                {tr("wallet.txns_all.empty_sub", lang)}
+              </div>
+            </div>
+          ) : (
+            (groups || []).map(([label, rows]) => (
+              <div key={label} style={{ marginTop: 16 }}>
+                <div style={{
+                  fontFamily: FONT.mono, fontSize: 10, fontWeight: 700,
+                  color: T.textMute, letterSpacing: 0.6, textTransform: "uppercase",
+                  marginBottom: 6, padding: "0 4px",
+                }}>{label}</div>
+                <div style={{
+                  background: T.surface, border: `1px solid ${T.border}`,
+                  borderRadius: 14, overflow: "hidden",
+                }}>
+                  {rows.map((t, i) => (
+                    <TxnRow key={t.id} t={t} T={T}
+                      isLast={i === rows.length - 1}
+                      visible={balanceVisible} />
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TxnRow({ t, T, isLast, visible }) {
   const isIn = t.type === "in";
   const isSwap = t.type === "swap";

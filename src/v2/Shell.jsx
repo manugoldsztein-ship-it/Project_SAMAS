@@ -61,6 +61,19 @@ const PRO_KEY = "samas_v2_pro_mode";
 
 function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDark, onLogout, lang = "es", setLang }) {
   const [tab, setTab] = useState("wallet");
+  // Tab-focus refresh (samas-0.4.10). WalletPage stays mounted in
+  // the background when the user goes to Invertir / Social / News;
+  // its refresh() only fires on initial mount + pull-to-refresh,
+  // so trades placed in BrokerShell wouldn't show up in
+  // Movimientos when the user came back. Fix: when tab transitions
+  // INTO wallet from something else, trigger callRefreshFor("wallet").
+  const prevTabRef = React.useRef(tab);
+  useEffect(() => {
+    if (tab === "wallet" && prevTabRef.current !== "wallet") {
+      callRefreshFor("wallet");
+    }
+    prevTabRef.current = tab;
+  }, [tab]);
   // balanceVisible is lifted here (not inside WalletPage) so the
   // user's choice persists when they navigate to another tab and
   // come back. Same UX as Brubank / MercadoPago.
@@ -2800,6 +2813,17 @@ function AIConsentGate({ T, lang = "es" }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.4.10",
+    title: "Movimientos fix — auto-refresh on tab focus + realtime + 'Ver todos'",
+    bullets: [
+      "Bug Manuel caught: 'Lo de movimientos no funciona'. Three things were broken at once. Fixed all three:",
+      "1. Wallet stayed mounted when the user went to Invertir/Social/News tabs (its state was preserved by design). But refresh() only fired on initial mount + pull-to-refresh, so when the user placed a trade in BrokerShell and came back, Movimientos still showed pre-trade state until they pulled-to-refresh. Now Shell tracks tab transitions; coming back to Wallet from any other tab triggers callRefreshFor('wallet') automatically.",
+      "2. New Postgres realtime subscription on `transactions` filtered by user_id. Any new row (trade fill, aporte cron credit, swap) → wallet refresh fires. Movimientos updates within ~200ms of the trade landing in the DB, no user action required.",
+      "3. Replaced the dead 'Filtrar' link in the Movimientos section header (it had no onAction wired) with 'Ver todo'. Tap → opens TxnsAllSheet, a new bottom sheet showing the last 200 transactions grouped by day (Hoy / Ayer / DD MMM). Skeleton stack while loading, empty state with copy.",
+      "Net result: Manuel makes a trade in Invest → tab swipe back to Wallet → balance + portfolio peek + Movimientos all updated. Or stays on Wallet → trade fills via aporte cron at 09:00 AR → row appears live without reloading the app.",
+    ],
+  },
   {
     version: "0.4.9",
     title: "Legacy MobileApp + WebDashboard gated behind ?debug=1",
