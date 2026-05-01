@@ -2647,6 +2647,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.2.5",
+    title: "Fix: Daily Brief stuck on loading skeleton forever",
+    bullets: [
+      "Bug since 0.1.6: DailyBriefCard initialized busy=true when no cache was present (correct — show loading), but then the load() function had a guard `if (busy && !force) return` that fired against that initial busy=true and silently returned without ever calling the Edge Function. The card sat on the loading skeleton indefinitely. Manuel saw nothing useful at the top of his Wallet for ~10 patches.",
+      "Fix: replace the busy-state guard with a useRef in-flight flag. Refs initialize false and only become true once the call actually starts, so the auto-load on mount no longer hits the early return. Refresh button still uses force=true to bypass.",
+      "Audited the other AI cards on Wallet + Broker for the same pattern — none of them had it. DailyBrief was the only victim.",
+    ],
+  },
+  {
     version: "0.2.4",
     title: "AI Quarterly Review — Claude narrates your last 90 days",
     bullets: [

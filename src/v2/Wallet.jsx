@@ -956,9 +956,15 @@ function DailyBriefCard({ T, lang = "es" }) {
   });
   const [busy, setBusy] = useState(!data);
   const [hidden, setHidden] = useState(false);
+  // In-flight ref so the refresh button can't double-fire while a
+  // call is mid-air. The previous busy-state guard fired against
+  // initial-mount busy=true and silently blocked the auto-load,
+  // leaving the card stuck on the skeleton forever (samas-0.2.5).
+  const inFlight = React.useRef(false);
 
   async function load(force = false) {
-    if (busy && !force) return;
+    if (inFlight.current && !force) return;
+    inFlight.current = true;
     setBusy(true);
     try {
       const res = await dailyBrief();
@@ -978,6 +984,7 @@ function DailyBriefCard({ T, lang = "es" }) {
       // showing the cache.
     } finally {
       setBusy(false);
+      inFlight.current = false;
     }
   }
 
