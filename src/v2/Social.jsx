@@ -3541,8 +3541,53 @@ function PortfolioPostCard({ T, payload, lang = "es", onRemove, onOpenTicker }) 
           >×</button>
         )}
       </div>
-      {/* Holdings rows. Each row: ticker chip · qty · gain%. The
-          ticker is tappable when onOpenTicker is provided so a
+      {/* Allocation bar (samas-0.3.8) — single horizontal stacked
+          bar visualizing the share-of-book per ticker. Reinforces
+          the privacy framing: composition matters, dollar amounts
+          don't. Each segment width = pctOfBook for that ticker.
+          Hidden when no rows have pctOfBook (legacy posts). */}
+      {rows.length > 0 && rows.some((r) => r.pctOfBook != null) && (
+        <div style={{ padding: "10px 14px 0" }}>
+          <div style={{
+            display: "flex", height: 8, borderRadius: 999, overflow: "hidden",
+            background: T.bg, border: `1px solid ${T.border}`,
+          }}>
+            {rows.map((r, i) => {
+              const w = r.pctOfBook != null ? Math.max(0, Number(r.pctOfBook)) : 0;
+              if (w <= 0) return null;
+              // Cycle a small accent palette so adjacent segments
+              // read distinctly. Order: accent → softer accent →
+              // amber → tertiary green → danger-tinted → muted.
+              // Hand-picked so the bar reads as "composition", not
+              // "performance" (we don't want viewers reading red as
+              // "loss" here — the bar shows ALLOCATION, not gain).
+              const palette = [
+                T.accent,
+                "#7DD3A0",   // softer green
+                "#F59E0B",   // amber
+                "#60A5FA",   // blue
+                "#A78BFA",   // violet
+                T.textMute,  // muted catch-all for tail
+              ];
+              const color = palette[i % palette.length];
+              return (
+                <div
+                  key={r.ticker}
+                  title={`${r.ticker} · ${w.toFixed(1)}%`}
+                  style={{
+                    flex: `${w} 0 0`,
+                    minWidth: w >= 1 ? 4 : 0,
+                    background: color,
+                  }}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Holdings rows. Each row: ticker chip · allocation % · day gain%.
+          The ticker is tappable when onOpenTicker is provided so a
           reader can drill into that asset's feed. The compose
           preview passes onOpenTicker=undefined → non-interactive. */}
       <div style={{ padding: "8px 14px 12px" }}>

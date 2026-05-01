@@ -2735,6 +2735,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.3.8",
+    title: "Allocation bar on portfolio share — visual privacy framing",
+    bullets: [
+      "Small horizontal stacked bar at the top of the portfolio share card visualizing share-of-book per ticker. Each segment width = pctOfBook. 6-color palette (accent green / soft green / amber / blue / violet / muted) — picked deliberately so red doesn't read as 'loss' here; the bar shows ALLOCATION, not performance.",
+      "Reinforces the 'composition only, no amounts' message visually — a viewer's eye lands on the bar first and reads 'this person is heavy in NVDA + light in BTC' without ever needing a dollar number. Privacy as design, not just disclaimer.",
+      "Hidden when no rows have pctOfBook (legacy posts — they fall back to the rows-only view from 0.3.5). Tooltip on each segment shows the ticker + percent for hover/long-press.",
+    ],
+  },
+  {
     version: "0.3.7",
     title: "Retroactive scrub — strip qty/price/totalUsd from old posts",
     bullets: [
