@@ -131,6 +131,29 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
     return () => window.removeEventListener("samas:share-watchlist", onShareWatchlist);
   }, []);
 
+  // Tax-loss harvest → Broker handoff (samas-0.2.0). The
+  // TaxLossHarvestCard on Wallet dispatches "samas:harvest-sell"
+  // with { ticker, qty } when the user taps "Vender X" on a loser.
+  // We stash the payload, switch to the Invest tab, and let
+  // BrokerShell drain the briefcase on mount + open the AssetSheet
+  // pre-filled for a sell.
+  useEffect(() => {
+    function onHarvestSell(e) {
+      try {
+        const detail = e?.detail || {};
+        if (!detail.ticker) return;
+        localStorage.setItem("samas_pending_harvest_sell", JSON.stringify({
+          ticker: detail.ticker,
+          qty: detail.qty,
+          ts: Date.now(),
+        }));
+      } catch {}
+      setTab("broker");
+    }
+    window.addEventListener("samas:harvest-sell", onHarvestSell);
+    return () => window.removeEventListener("samas:harvest-sell", onHarvestSell);
+  }, []);
+
   // Notification → Social handoff (samas-0.0.73). Tapping a social
   // notification in the Wallet bell inbox dispatches one of two
   // events with the target id. We stash that id in localStorage and
@@ -2624,6 +2647,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.2.0",
+    title: "AI Tax-loss harvester — crystalize losses, save on impuesto cedular",
+    bullets: [
+      "Thirteenth AI surface lands on Wallet between Earnings Watch and Preguntale a SAMAS. Reads holdings → finds positions in unrealized loss → estimates how much impuesto cedular (15% on USD-sourced gains) you can offset by harvesting them this fiscal year. Headline shows the total estimated tax savings in green; per-position rows expand to a Claude-written reason and a \"Vender X ahora\" deep-link that switches to Invest tab + opens the AssetSheet pre-loaded for that ticker.",
+      "New tax-loss-harvest Edge Function. Mirrors the deterministic realized-YTD seed used by Pro Wallet's TaxYearCard so the offset target lines up with what the user already sees there. Numbers stay deterministic; Claude refines summary + per-row reasons. Templated fallback when no API key.",
+      "New cross-shell handoff: samas:harvest-sell event + samas_pending_harvest_sell briefcase. BrokerShell drains it once `assets` is loaded and pops the AssetSheet, same pattern as share-trade / share-watchlist / open-profile.",
+      "Hides silently if no losers, AI errors, or consent denied. 13 AI surfaces total now.",
+    ],
+  },
   {
     version: "0.1.9",
     title: "AI Risk Score per holding — 1-10 chips on Portafolio",

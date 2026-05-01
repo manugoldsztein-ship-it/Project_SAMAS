@@ -154,6 +154,29 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true, la
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  // Tax-loss harvest deep-link drain (samas-0.2.0). Wallet's
+  // TaxLossHarvestCard sets samas_pending_harvest_sell + dispatches
+  // samas:harvest-sell. Shell switches to the broker tab; we drain
+  // the briefcase here once `assets` is loaded so we can resolve
+  // ticker → asset object and open the AssetSheet.
+  useEffect(() => {
+    if (!assets || assets.length === 0) return;
+    let raw;
+    try { raw = localStorage.getItem("samas_pending_harvest_sell"); } catch { return; }
+    if (!raw) return;
+    let payload;
+    try { payload = JSON.parse(raw); } catch { return; }
+    try { localStorage.removeItem("samas_pending_harvest_sell"); } catch {}
+    // Stale (older than 60s) → ignore. Stops a previously aborted
+    // handoff from popping a sheet on a fresh broker entry.
+    if (!payload?.ticker || !payload?.ts || (Date.now() - payload.ts > 60_000)) return;
+    const a = assets.find((x) => x.ticker === payload.ticker);
+    if (a) {
+      setTab("portafolio");
+      setSelectedAsset(a);
+    }
+  }, [assets]);
+
   // Sub-nav bottom inset same logic as main shell — float 12px above
   // the home-indicator zone.
   const navBottom = isNativeApp
