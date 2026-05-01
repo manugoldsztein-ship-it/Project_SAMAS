@@ -42,6 +42,9 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import {
+  consumeRateLimit, RATE_LIMITS, buildBucket, rateLimit429,
+} from "../_shared/rate-limit.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -131,6 +134,15 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+
+    // --- rate limit (samas-0.4.17): ADMIN tier ---
+    // Sensitive irreversible op. 30 / 5min is generous (a real user
+    // calls this once ever) but blocks scripted abuse.
+    const _rl = await consumeRateLimit(admin, {
+      bucket: buildBucket("delete-user-account", { userId }),
+      ...RATE_LIMITS.ADMIN,
+    });
+    if (!_rl.allowed) return rateLimit429(_rl, corsHeaders);
 
     // --- 1. Storage cleanup (not part of the FK graph) ---
     const storageDeleted = await deleteStorageFolder(admin, userId);

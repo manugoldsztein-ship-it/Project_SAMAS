@@ -29,6 +29,9 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import {
+  consumeRateLimit, RATE_LIMITS, buildBucket, rateLimit429,
+} from "../_shared/rate-limit.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -90,6 +93,15 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+
+    // --- rate limit (samas-0.4.17): ADMIN tier ---
+    // Heavy IO op (parallel queries across ~18 tables). Throttle to
+    // 30 / 5min so a script can't spam this and DoS our DB.
+    const _rl = await consumeRateLimit(admin, {
+      bucket: buildBucket("export-user-data", { userId }),
+      ...RATE_LIMITS.ADMIN,
+    });
+    if (!_rl.allowed) return rateLimit429(_rl, corsHeaders);
 
     // Run every section's query in parallel — single round-trip
     // latency-wise, and the underlying postgres can handle a

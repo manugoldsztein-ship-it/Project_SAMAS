@@ -29,6 +29,12 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import {
+  consumeRateLimit, RATE_LIMITS, buildBucket, rateLimit429, makeAdminClient,
+} from "../_shared/rate-limit.ts";
+import {
+  readJsonBody, sanitizeString, validationErrorResponse,
+} from "../_shared/validate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -165,9 +171,32 @@ serve(async (req) => {
       });
     }
 
-    // --- parse body ---
-    const body = await req.json().catch(() => ({}));
-    const messages = Array.isArray(body?.messages) ? body.messages : [];
+    // --- rate limit (samas-0.4.17): AI tier ---
+    const rl = await consumeRateLimit(makeAdminClient(), {
+      bucket: buildBucket("chat-portfolio", { userId: user.id }),
+      ...RATE_LIMITS.AI,
+    });
+    if (!rl.allowed) return rateLimit429(rl, corsHeaders);
+
+    // --- parse body (size-checked) ---
+    let body: { messages?: unknown };
+    try {
+      body = await readJsonBody(req) as { messages?: unknown };
+    } catch (e) {
+      const ve = validationErrorResponse(e, corsHeaders);
+      if (ve) return ve;
+      throw e;
+    }
+    const rawMessages = Array.isArray(body?.messages) ? body.messages : [];
+    // Sanitize each message: cap content to 2000 chars; reject any
+    // role that isn't user/assistant.
+    const messages = rawMessages
+      .filter((m: unknown) => m && typeof m === "object")
+      .map((m: { role?: unknown; content?: unknown }) => ({
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: sanitizeString(m.content, 2000),
+      }))
+      .filter((m: { content: string }) => m.content.length > 0);
     if (messages.length === 0) {
       return new Response(JSON.stringify({ error: "messages requerido" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },

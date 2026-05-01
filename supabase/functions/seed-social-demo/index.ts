@@ -36,6 +36,9 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import {
+  consumeRateLimit, RATE_LIMITS, buildBucket, rateLimit429,
+} from "../_shared/rate-limit.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -595,6 +598,16 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+
+    // --- rate limit (samas-0.4.17): ADMIN tier ---
+    // Heavy op (mints up to 12 auth users + ~60 posts + replies +
+    // follows). 30/5min way more than enough — a real demo run is
+    // once per device. Throttle prevents abuse.
+    const _rl = await consumeRateLimit(admin, {
+      bucket: buildBucket("seed-social-demo", { userId: callerId }),
+      ...RATE_LIMITS.ADMIN,
+    });
+    if (!_rl.allowed) return rateLimit429(_rl, corsHeaders);
 
     // --- 1. Ensure all 12 seed users exist (auth + profile) ---
     const handleToUserId = new Map<string, string>();

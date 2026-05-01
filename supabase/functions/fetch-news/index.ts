@@ -27,6 +27,12 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import {
+  consumeRateLimit, RATE_LIMITS, buildBucket, rateLimit429, makeAdminClient,
+} from "../_shared/rate-limit.ts";
+import {
+  readJsonBody, sanitizeString, validationErrorResponse,
+} from "../_shared/validate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -682,8 +688,23 @@ serve(async (req: Request) => {
       });
     }
 
+    // --- rate limit (samas-0.4.17): AI tier ---
+    const _rl = await consumeRateLimit(makeAdminClient(), {
+      bucket: buildBucket("fetch-news", { userId: userData.user.id }),
+      ...RATE_LIMITS.AI,
+    });
+    if (!_rl.allowed) return rateLimit429(_rl, corsHeaders);
+
     // Parse body.
-    const body = await req.json().catch(() => null);
+    let _body: unknown;
+    try {
+      _body = await readJsonBody(req);
+    } catch (e) {
+      const ve = validationErrorResponse(e, corsHeaders);
+      if (ve) return ve;
+      throw e;
+    }
+    const body = _body as Record<string, unknown>;
     const tickerRaw = body?.ticker;
     if (!tickerRaw || typeof tickerRaw !== "string") {
       return new Response(JSON.stringify({ error: "ticker required" }), {

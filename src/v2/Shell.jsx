@@ -2827,6 +2827,20 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.17",
+    title: "Security sweep — rate limit + body validation a TODAS las Edge Functions",
+    bullets: [
+      "Patch de cierre del security pass que arrancó en 0.4.16. Sweep mecánico que aplica el patrón de rate-limit + body-size cap a las 25 Edge Functions restantes (las 2 críticas — send-otp / verify-otp — ya fueron hardenizadas en 0.4.16).",
+      "RATE LIMIT APLICADO — 21 funciones de IA (analyze-asset, analyze-portfolio, chat-portfolio, compare-benchmark, daily-brief, draft-post, earnings-watch, explain-news, explain-term, fetch-news, news-digest, objectives-plan, position-size, proactive-insights, quarterly-review, rebalance-portfolio, score-risk, sector-rotation, suggest-watchlist, trade-coach, validate-thesis) usan RATE_LIMITS.AI = 60/min per-user. Defensa-en-profundidad sobre la cuota ai_usage_daily de SAMAS Plus.",
+      "RATE LIMIT — 3 funciones admin (delete-user-account, export-user-data, seed-social-demo) usan RATE_LIMITS.ADMIN = 30/5min. Cada una es una operación pesada/irreversible que un usuario llama una vez en su vida — el rate limit no afecta UX real pero bloquea scripted abuse.",
+      "RATE LIMIT — send-push usa STD para llamadas user-initiated; el path service-role/cron está exento (el cron interno necesita ratos de fan-out sin limite).",
+      "BODY VALIDATION APLICADO — 12 funciones que toman input del usuario (analyze-asset, chat-portfolio, explain-news, explain-term, fetch-news, objectives-plan, position-size, rebalance-portfolio, sector-rotation, suggest-watchlist, trade-coach, validate-thesis) ahora envuelven req.json() con readJsonBody() — body-size cap 32KB + JSON parse error → 400. El resto de las funciones (analyze-portfolio, compare-benchmark, daily-brief, etc.) no toman input del cliente, sólo el JWT.",
+      "SCRIPT DE PATCHEO — para acelerar el sweep escribí dos scripts Python en /tmp/apply_rl.py y /tmp/apply_body.py que aplican el patrón con regex anchors. 19 de los 25 patches automatizados (~75%); los 6 restantes con shape de auth-gate diferente, hand-edited.",
+      "DEPLOYMENT — 25 functions redeployadas via supabase functions deploy --no-verify-jwt en un for-loop. Cada deploy uploadea el _shared/rate-limit.ts + _shared/validate.ts junto con el index.ts (Supabase platform las sirve desde el mismo bundle).",
+      "Las 2 funciones cron (check-price-alerts, process-recurring-aportes) intencionalmente NO tienen rate limit — son llamadas internas de pg_cron con service_role, no expuestas al público.",
+    ],
+  },
+  {
     version: "0.4.16",
     title: "Security audit + rate limit infra + auth route hardening",
     bullets: [

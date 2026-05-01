@@ -41,6 +41,9 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import {
+  consumeRateLimit, RATE_LIMITS, buildBucket, rateLimit429,
+} from "../_shared/rate-limit.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -194,6 +197,15 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: "userId mismatch" }), {
           status: 403, headers: { ...corsHeaders, "content-type": "application/json" },
         });
+      }
+      // Rate limit user-initiated pushes. Service-role/cron path
+      // skipped (callerId === undefined). samas-0.4.17.
+      if (callerId) {
+        const _rl = await consumeRateLimit(admin, {
+          bucket: buildBucket("send-push", { userId: callerId }),
+          ...RATE_LIMITS.STD,
+        });
+        if (!_rl.allowed) return rateLimit429(_rl, corsHeaders);
       }
     }
 

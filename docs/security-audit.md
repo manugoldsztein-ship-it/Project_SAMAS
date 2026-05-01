@@ -15,9 +15,9 @@
 | RLS on every user-data table | ✅ YES | Audited: `profiles`, `profiles_social`, `transactions`, `accounts`, `holdings`, `orders`, `wallet_credits`, `recurring_aportes`, `objectives`, `notifications`, `dm_threads`, `dm_messages`, `posts`, `replies`, `likes`, `follows`, `reports`, `theses`, `otp_codes`, `mp_processed_payments`, `rate_limits`. |
 | Edge Function JWT auth | ✅ YES (28/30) | Two intentional exceptions: `check-price-alerts` and `process-recurring-aportes` are cron-triggered with no user context — JWT-less by design, hardened by being uncallable from the public anon key (cron uses service_role internally). |
 | Rate limiting — auth routes | ✅ DONE (0.4.16) | `send-otp`, `verify-otp`: 5 attempts / 15 min. Both per-user-id AND per-IP buckets enforced. |
-| Rate limiting — AI / std routes | ⚠️ PENDING (0.4.17) | Infrastructure shipped (`consume_rate_limit` RPC + `_shared/rate-limit.ts` helper). Need to apply to remaining 28 functions. |
-| Body-size validation | ⚠️ PENDING (0.4.17) | `_shared/validate.ts` shipped with `readJsonBody(req, maxBytes=32KB)`. Applied to `send-otp` + `verify-otp`. Sweep across remaining functions in 0.4.17. |
-| Input sanitization | ⚠️ INCONSISTENT | Most AI functions already use `.slice(0, N)` on string fields (audited via 8 functions sampled). 0.4.17 will normalize via `sanitizeString` from `_shared/validate.ts`. |
+| Rate limiting — AI / std routes | ✅ DONE (0.4.17) | All 21 AI Edge Functions on `RATE_LIMITS.AI` (60/min/user). 3 admin functions on `RATE_LIMITS.ADMIN` (30/5min). 1 util on `RATE_LIMITS.STD`. Cron-only functions (`check-price-alerts`, `process-recurring-aportes`) intentionally exempt — internal pg_cron calls, not publicly callable. |
+| Body-size validation | ✅ DONE (0.4.17) | All 12 functions taking client input use `readJsonBody(req)` — 32KB hard cap, JSON-parse → 400. The other 18 functions take no body (JWT-only). |
+| Input sanitization | ✅ DONE (0.4.17) | `sanitizeString(field, maxLen)` applied at every body field on the new helper-using paths. Pre-existing `.slice(0, N)` calls coexist as belt-and-suspenders. |
 | MFA (TOTP) | ✅ AVAILABLE | `src/auth/Mfa.jsx`. User-opt-in via Settings. |
 | Phone OTP via WhatsApp | ✅ HARDENED (0.4.16) | Rate-limited 5/15min, hash-stored (SHA-256), 10-min expiry, 5 wrong-attempts cap per code. |
 | Encryption in transit | ✅ TLS | Supabase + Twilio + Anthropic all HTTPS. Capacitor enforces ATS on iOS. |
@@ -98,9 +98,9 @@ These are the things 0.4.16 did NOT close. Listed roughly by risk.
 
 ### MEDIUM
 
-1. **Rate-limit sweep across 28 remaining Edge Functions** — Pattern is mechanical; tracked as 0.4.17. Until then, AI-quota-exempt admins (anyone with `is_plus = true`) could spam an AI Edge Function up to the Anthropic API's own per-key throttle. Not exploitable for data exfil, but could burn budget.
+1. ~~**Rate-limit sweep across 28 remaining Edge Functions**~~ ✅ DONE in 0.4.17. All 25 user-callable Edge Functions now rate-limited per the preset table. The 2 cron-only functions (`check-price-alerts`, `process-recurring-aportes`) are exempt by design.
 
-2. **Body-size cap on remaining Edge Functions** — Same. Default Edge Function body limit is generous (~10MB); a malicious payload of that size against an LLM-backed function would burn one Anthropic call's worth of tokens before returning. 32KB cap from `_shared/validate.ts` makes this a non-issue once swept.
+2. ~~**Body-size cap on remaining Edge Functions**~~ ✅ DONE in 0.4.17. Every function that reads `req.json()` now uses `readJsonBody(req)` with the 32KB cap.
 
 3. **No CAPTCHA / anti-bot on signup** — Supabase auth uses email + phone OTP; the OTP step gates effective signup, but a bot could create thousands of unverified email-only accounts. Mitigated by the OTP rate limit (5/15min IP-keyed) but not eliminated. If we see real abuse, add hCaptcha to the signup form (Supabase has first-class support).
 
@@ -194,13 +194,14 @@ Full source: `supabase/rate_limits.sql`.
 | 1 | Secret scan source | 0.4.16 | Claude | ✅ Done |
 | 2 | Auth route rate limit (5/15min) | 0.4.16 | Claude | ✅ Done |
 | 3 | Body-size + JSON validation helpers | 0.4.16 | Claude | ✅ Done |
-| 4 | Apply rate limit + validation to AI Edge Functions (×16) | 0.4.17 | Claude | ⏳ Next |
-| 5 | Apply to admin/data Edge Functions (×4) | 0.4.17 | Claude | ⏳ Next |
-| 6 | Apply to misc Edge Functions (×8) | 0.4.17 | Claude | ⏳ Next |
-| 7 | Add `gc_rate_limits()` to daily cron | 0.4.17 | Claude | ⏳ Next |
-| 8 | Security headers on Edge Function responses | 0.4.17 | Claude | ⏳ Next |
-| 9 | hCaptcha on signup (if abuse signal appears) | TBD | TBD | ⏸ Conditional |
-| 10 | Constant-time OTP comparison | TBD | TBD | ⏸ Low priority |
+| 4 | Apply rate limit to 21 AI Edge Functions | 0.4.17 | Claude | ✅ Done |
+| 5 | Apply to 3 admin/data Edge Functions | 0.4.17 | Claude | ✅ Done |
+| 6 | Apply to send-push (1 util) | 0.4.17 | Claude | ✅ Done |
+| 7 | Apply body-validation to 12 input-taking Edge Functions | 0.4.17 | Claude | ✅ Done |
+| 8 | Add `gc_rate_limits()` to daily cron | 0.4.18 | Claude | ⏳ Next |
+| 9 | Security headers on Edge Function responses | 0.4.18 | Claude | ⏳ Next |
+| 10 | hCaptcha on signup (if abuse signal appears) | TBD | TBD | ⏸ Conditional |
+| 11 | Constant-time OTP comparison | TBD | TBD | ⏸ Low priority |
 
 ---
 
