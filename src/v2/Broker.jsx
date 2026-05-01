@@ -1381,7 +1381,7 @@ function AIWatchlistModal({ T, lang = "es", onClose, onSave }) {
       setProposal(data);
       hapticNative("success").catch(() => {});
     } catch (e) {
-      if (e?.name === "AIConsentDeniedError") onClose();
+      if (e?.name === "AIConsentDeniedError" || e?.name === "AIQuotaExceededError") onClose();
       else setErr(e?.message || String(e));
     } finally {
       setBusy(false);
@@ -3341,7 +3341,7 @@ function PositionSizingCard({ T, lang = "es", ticker, side, onPick }) {
         }
       } catch (e) {
         if (!alive) return;
-        if (e?.name === "AIConsentDeniedError") setHidden(true);
+        if (e?.name === "AIConsentDeniedError" || e?.name === "AIQuotaExceededError") setHidden(true);
         else setHidden(true);
       } finally {
         if (alive) setBusy(false);
@@ -3854,7 +3854,7 @@ function RiskProfileCard({ T, lang = "es" }) {
       const res = await scoreRisk();
       setData(res);
     } catch (e) {
-      if (e?.name === "AIConsentDeniedError") setHidden(true);
+      if (e?.name === "AIConsentDeniedError" || e?.name === "AIQuotaExceededError") setHidden(true);
       else if (!data) setHidden(true);
     } finally {
       setBusy(false);
@@ -4086,7 +4086,7 @@ function RebalanceSheet({ T, lang = "es", onClose, onExecuted }) {
       setSelected(initialSel);
       hapticNative("success").catch(() => {});
     } catch (e) {
-      if (e?.name === "AIConsentDeniedError") onClose();
+      if (e?.name === "AIConsentDeniedError" || e?.name === "AIQuotaExceededError") onClose();
       else setErr(e?.message || String(e));
     } finally {
       setBusy(false);
@@ -5025,7 +5025,7 @@ function AssetAIInsight({ T, ticker, lang = "es" }) {
       hapticNative("success").catch(() => {});
     } catch (e) {
       // Consent declined — bail without surfacing as error.
-      if (e?.name === "AIConsentDeniedError") { /* no-op */ }
+      if (e?.name === "AIConsentDeniedError" || e?.name === "AIQuotaExceededError") { /* no-op */ }
       else setErr(e?.message || String(e));
     } finally {
       setBusy(false);

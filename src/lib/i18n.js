@@ -154,6 +154,7 @@ const V2 = {
     "pro.pricing.cta_busy":       "Procesando…",
     "pro.pricing.cta_later":      "Más tarde",
     "pro.pricing.success":        "¡Bienvenido a Pro! Disfrutá de todas las herramientas.",
+    "pro.pricing.error":          "No pude activar Plus: {err}",
     "pro.pricing.legal":          "Renovación automática. Cancelá cuando quieras desde Settings. (Demo: la suscripción real con App Store IAP se activa antes del lanzamiento.)",
 
     "settings.light_mode":        "Modo claro",
@@ -749,6 +750,7 @@ const V2 = {
     "pro.pricing.cta_busy":       "Processing…",
     "pro.pricing.cta_later":      "Later",
     "pro.pricing.success":        "Welcome to Pro! Enjoy every tool.",
+    "pro.pricing.error":          "Couldn't activate Plus: {err}",
     "pro.pricing.legal":          "Auto-renews. Cancel anytime from Settings. (Demo: real App Store IAP subscription wires up before commercial launch.)",
 
     "settings.light_mode":        "Light mode",

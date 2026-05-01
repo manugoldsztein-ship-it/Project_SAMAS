@@ -978,7 +978,7 @@ function DailyBriefCard({ T, lang = "es" }) {
     } catch (e) {
       // Consent declined or any error → hide the card silently. No
       // point in showing a "brief failed" banner above the wallet.
-      if (e?.name === "AIConsentDeniedError") setHidden(true);
+      if (e?.name === "AIConsentDeniedError" || e?.name === "AIQuotaExceededError") setHidden(true);
       else if (!data) setHidden(true);
       // If we already had a cached brief and refresh failed, keep
       // showing the cache.
@@ -1124,7 +1124,7 @@ function AIAnalysisCard({ T, lang = "es" }) {
       hapticNative("success").catch(() => {});
     } catch (e) {
       // User declined the consent dialog — close the sheet silently.
-      if (e?.name === "AIConsentDeniedError") { setOpen(false); }
+      if (e?.name === "AIConsentDeniedError" || e?.name === "AIQuotaExceededError") { setOpen(false); }
       else { setErr(e?.message || String(e)); }
     } finally {
       setBusy(false);
@@ -1375,7 +1375,7 @@ function BenchmarkCompareCard({ T, lang = "es" }) {
       const res = await compareBenchmark();
       setData(res);
     } catch (e) {
-      if (e?.name === "AIConsentDeniedError") setHidden(true);
+      if (e?.name === "AIConsentDeniedError" || e?.name === "AIQuotaExceededError") setHidden(true);
       else if (!data) setHidden(true);
     } finally {
       setBusy(false);
@@ -1509,7 +1509,7 @@ function EarningsWatchCard({ T, lang = "es" }) {
       const res = await earningsWatch();
       setData(res);
     } catch (e) {
-      if (e?.name === "AIConsentDeniedError") setHidden(true);
+      if (e?.name === "AIConsentDeniedError" || e?.name === "AIQuotaExceededError") setHidden(true);
       else if (!data) setHidden(true);
     } finally {
       setBusy(false);
@@ -1661,7 +1661,7 @@ function QuarterlyReviewCard({ T, lang = "es" }) {
       // Hide silently if the user has no positions to review.
       if (!res?.stats) setHidden(true);
     } catch (e) {
-      if (e?.name === "AIConsentDeniedError") setHidden(true);
+      if (e?.name === "AIConsentDeniedError" || e?.name === "AIQuotaExceededError") setHidden(true);
       else if (!data) setHidden(true);
     } finally {
       setBusy(false);
@@ -2027,8 +2027,10 @@ function AIChatCard({ T, lang = "es" }) {
         hapticNative("success").catch(() => {});
       }
     } catch (e) {
-      // Consent declined → roll back the optimistic user message + close.
-      if (e?.name === "AIConsentDeniedError") {
+      // Consent declined OR quota hit → roll back the optimistic user
+      // message + close. Quota also pops the Plus upsell modal globally
+      // (handled by gateOnQuota dispatch).
+      if (e?.name === "AIConsentDeniedError" || e?.name === "AIQuotaExceededError") {
         setMessages((prev) => prev.slice(0, -1));
         setInput(text);  // restore typed input so they don't lose it
         setOpen(false);
@@ -2347,8 +2349,9 @@ function NotificationsInbox({ T, lang = "es", onClose }) {
       }
       setTimeout(() => setGenFlash(null), 4000);
     } catch (e) {
-      if (e?.name === "AIConsentDeniedError") {
-        // User declined — silent. The consent gate already showed UI.
+      if (e?.name === "AIConsentDeniedError" || e?.name === "AIQuotaExceededError") {
+        // Consent declined OR quota hit — silent. Consent modal or
+        // Plus upsell modal already showed UI.
       } else {
         setGenFlash(tr("notif.insights.error", lang));
         setTimeout(() => setGenFlash(null), 4000);

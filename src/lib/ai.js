@@ -18,9 +18,107 @@ export class AIConsentDeniedError extends Error {
   constructor() { super("AI consent denied"); this.name = "AIConsentDeniedError"; }
 }
 
+// Sentinel for the daily AI quota (samas-0.2.6). Free users get N
+// user-initiated AI calls per UTC day. When this fires, callers
+// dispatch samas:open-pro-upsell with reason="quota" so the Plus
+// pricing sheet pops with quota-specific copy.
+export class AIQuotaExceededError extends Error {
+  constructor(payload = {}) {
+    super("AI quota exceeded");
+    this.name = "AIQuotaExceededError";
+    this.count = payload.count ?? 0;
+    this.limit = payload.limit ?? 5;
+  }
+}
+
 async function gateOnConsent() {
   const ok = await ensureAIConsent();
   if (!ok) throw new AIConsentDeniedError();
+}
+
+// Atomic quota check + increment for user-initiated AI surfaces.
+// Plus users always pass through (server returns allowed:true with
+// is_plus:true and no limit). Free users hit the SQL function which
+// atomically upserts the day's counter; if they're over the limit
+// the increment is rolled back server-side so a blocked attempt
+// doesn't burn future quota.
+//
+// On RPC failure (e.g. migration not run yet) we fail OPEN — the AI
+// call proceeds. Better UX during rollout than blocking everyone
+// when the migration hasn't landed in their environment.
+async function gateOnQuota() {
+  let allowed = true;
+  let payload = null;
+  try {
+    const { data, error } = await supabase.rpc("consume_ai_quota");
+    if (error) {
+      // RPC missing or unreachable → fail open. Log only.
+      console.warn("[ai-quota] consume_ai_quota error:", error.message);
+      return;
+    }
+    if (data && data.allowed === false) {
+      allowed = false;
+      payload = { count: data.count, limit: data.limit };
+    }
+  } catch (e) {
+    // Network / transport issue → fail open.
+    console.warn("[ai-quota] gate threw, failing open:", e?.message);
+    return;
+  }
+  if (!allowed) {
+    // Pop the Plus upsell modal globally before throwing so components
+    // that just bubble the error up still trigger the conversion UX.
+    try {
+      window.dispatchEvent(new CustomEvent("samas:open-pro-upsell", {
+        detail: { reason: "quota", count: payload?.count, limit: payload?.limit },
+      }));
+    } catch (_) { /* SSR / no window */ }
+    throw new AIQuotaExceededError(payload || {});
+  }
+}
+
+// Read-only quota status — used by UI to show "3/5 IA hoy" without
+// consuming a credit. Returns { isPlus, count, limit } or null on
+// failure. Components treat null as "data unavailable" and hide
+// the indicator silently.
+export async function getAIQuotaStatus() {
+  try {
+    const { data, error } = await supabase.rpc("get_ai_quota_status");
+    if (error || !data) return null;
+    return {
+      isPlus: !!data.is_plus,
+      count: Number(data.count) || 0,
+      limit: data.limit == null ? null : Number(data.limit),
+    };
+  } catch (_e) { return null; }
+}
+
+// Activate Plus — prototype tap-to-flip. Production replaces this
+// with server-side Apple IAP receipt verification.
+export async function activatePlus() {
+  const { data, error } = await supabase.rpc("activate_plus");
+  if (error) throw new Error(`Plus activation falló: ${error.message}`);
+  return data;
+}
+
+// Helper for AI-calling components. Catches the two sentinels we
+// expect: AIConsentDenied → silent (consent modal already explained)
+// and AIQuotaExceeded → opens the Plus upsell modal globally and
+// returns true so callers can no-op without surfacing an error toast.
+// Returns false (= not handled) for other errors so the caller can
+// surface them.
+export function handleAIError(e) {
+  if (!e) return false;
+  if (e.name === "AIConsentDeniedError") return true;
+  if (e.name === "AIQuotaExceededError") {
+    try {
+      window.dispatchEvent(new CustomEvent("samas:open-pro-upsell", {
+        detail: { reason: "quota", count: e.count, limit: e.limit },
+      }));
+    } catch (_) { /* SSR / no window */ }
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -41,6 +139,7 @@ async function gateOnConsent() {
  */
 export async function analyzePortfolio() {
   await gateOnConsent();
+  await gateOnQuota(); // user-initiated → counts toward daily limit
   const { data, error } = await supabase.functions.invoke("analyze-portfolio", {
     body: {},
   });
@@ -69,11 +168,14 @@ export async function analyzePortfolio() {
  * @param {{ messages: Array<{ role: 'user'|'assistant', content: string }> }} input
  * @returns {Promise<{ reply: string }>}
  */
+// chatPortfolio is quota'd per message. Each user prompt consumes
+// one credit. Plus removes the cap.
 export async function chatPortfolio({ messages }) {
   if (!Array.isArray(messages) || messages.length === 0) {
     throw new Error("Mensajes requeridos.");
   }
   await gateOnConsent();
+  await gateOnQuota(); // each chat message = 1 credit
   const { data, error } = await supabase.functions.invoke("chat-portfolio", {
     body: { messages },
   });
@@ -104,6 +206,8 @@ export async function chatPortfolio({ messages }) {
  * Falls back to a deterministic heuristic verdict on the same shape
  * when the Anthropic key isn't set.
  */
+// tradeCoach is FREE for both tiers (safety feature — runs at order
+// confirmation, paywalling protection looks predatory).
 export async function tradeCoach({ ticker, side, qty, price }) {
   if (!ticker || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(price) || price <= 0) {
     throw new Error("Datos de operación inválidos.");
@@ -241,8 +345,12 @@ export async function positionSize({ ticker, side = "buy" }) {
  * "Refresh insights" button. Could also run from pg_cron daily
  * via service-role looping all users (future migration).
  */
+// proactiveInsights consumes quota — manual "Generar" button on the
+// inbox is user-initiated. (Future cron-driven daily push, when wired,
+// will run server-side and won't consume client quota.)
 export async function proactiveInsights() {
   await gateOnConsent();
+  await gateOnQuota();
   const { data, error } = await supabase.functions.invoke("proactive-insights", {
     body: {},
   });
@@ -384,11 +492,13 @@ export async function dailyBrief() {
  * Anthropic key is set, Claude refines the rationale on each
  * action without changing tickers or quantities.
  */
+// rebalancePortfolio consumes quota — heavyweight tap-to-run.
 export async function rebalancePortfolio(profile = "balanced") {
   if (!["conservative", "balanced", "aggressive"].includes(profile)) {
     throw new Error("Perfil inválido.");
   }
   await gateOnConsent();
+  await gateOnQuota();
   const { data, error } = await supabase.functions.invoke("rebalance-portfolio", {
     body: { profile },
   });
@@ -420,9 +530,11 @@ export async function rebalancePortfolio(profile = "balanced") {
  * Server-side fallback uses keyword routing when the Anthropic key
  * isn't set, so the demo always returns a sensible suggestion.
  */
+// suggestWatchlist consumes quota — user types a theme + taps generate.
 export async function suggestWatchlist(theme) {
   if (!theme || !theme.trim()) throw new Error("Indicá un tema.");
   await gateOnConsent();
+  await gateOnQuota();
   const { data, error } = await supabase.functions.invoke("suggest-watchlist", {
     body: { theme: theme.trim() },
   });
@@ -456,8 +568,10 @@ export async function suggestWatchlist(theme) {
  * Falls back to a templated explanation server-side when the
  * Anthropic key isn't set, so the demo always returns something.
  */
+// explainNews consumes quota — per-article tap.
 export async function explainNews({ title, summary, tickers, source }) {
   await gateOnConsent();
+  await gateOnQuota();
   const { data, error } = await supabase.functions.invoke("explain-news", {
     body: { title, summary, tickers, source },
   });
@@ -485,8 +599,10 @@ export async function explainNews({ title, summary, tickers, source }) {
  * when the Anthropic key isn't set, so the demo always returns
  * something usable.
  */
+// draftPost consumes quota — composer assistance is user-initiated.
 export async function draftPost() {
   await gateOnConsent();
+  await gateOnQuota();
   const { data, error } = await supabase.functions.invoke("draft-post", {
     body: {},
   });
@@ -518,9 +634,12 @@ export async function draftPost() {
  * Falls back to a templated insight server-side if the Anthropic
  * key isn't set, so the demo always returns a 200 with content.
  */
+// analyzeAsset consumes quota — deep AI analysis on a single asset,
+// triggered by user tapping "Análisis IA" in the AssetSheet.
 export async function analyzeAsset(ticker) {
   if (!ticker) throw new Error("Ticker requerido.");
   await gateOnConsent();
+  await gateOnQuota();
   const { data, error } = await supabase.functions.invoke("analyze-asset", {
     body: { ticker: String(ticker).toUpperCase() },
   });

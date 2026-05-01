@@ -47,6 +47,7 @@ import { seedSocialDemo } from "../lib/seedSocial.js";
 import { hapticNative } from "../lib/native.js";
 import { deleteAccount, exportData } from "../lib/account.js";
 import { grantAIConsent, denyAIConsent, hasAIConsent, revokeAIConsent } from "../lib/aiConsent.js";
+import { activatePlus, getAIQuotaStatus } from "../lib/ai.js";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { LivePricesProvider } from "./livePrices.jsx";
 
@@ -78,6 +79,19 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
       localStorage.setItem(PRO_KEY, String(proMode));
     }
   }, [proMode]);
+
+  // SAMAS Plus subscription state (samas-0.2.6). Distinct from
+  // proMode — proMode is the free UI density toggle, isPlus is the
+  // paid tier (US$5/mo) that removes the daily AI quota cap.
+  // Hydrate from RPC on mount; refreshed when the user subscribes.
+  const [isPlus, setIsPlus] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    getAIQuotaStatus().then((s) => {
+      if (alive && s) setIsPlus(!!s.isPlus);
+    });
+    return () => { alive = false; };
+  }, []);
 
   // Pro upsell modal — global because Wallet, Broker, etc all need
   // to be able to open it. Listens for "samas:open-pro-upsell" so
@@ -439,24 +453,30 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
         <ProUpsellModal
           T={T}
           lang={lang}
-          isPro={proMode}
+          isPro={isPlus}
           onActivate={() => { setShowProUpsell(false); setShowProPricing(true); }}
           onClose={() => setShowProUpsell(false)}
         />
       )}
 
-      {/* Pro pricing sheet — second step of the activation flow.
-          Suscribirme is currently faked (no real billing yet), but
-          flipping proMode + showing the success toast is enough for
-          the pitch demo and for users to see the Pro screens. */}
+      {/* Plus pricing sheet — second step of the activation flow.
+          Suscribirme is currently faked (no real billing yet);
+          activatePlus() flips profiles_social.is_plus = true server-
+          side via SECURITY DEFINER RPC. App Store IAP will replace
+          this with proper receipt verification. */}
       {showProPricing && (
         <ProPricingSheet
           T={T}
           lang={lang}
-          onSubscribe={() => {
-            setProMode(true);
-            setShowProPricing(false);
-            toast.success(tr("pro.pricing.success", lang));
+          onSubscribe={async () => {
+            try {
+              await activatePlus();
+              setIsPlus(true);
+              setShowProPricing(false);
+              toast.success(tr("pro.pricing.success", lang));
+            } catch (e) {
+              toast.error(tr("pro.pricing.error", lang, { err: e?.message || "" }));
+            }
           }}
           onClose={() => setShowProPricing(false)}
         />
@@ -2646,6 +2666,18 @@ function AIConsentGate({ T, lang = "es" }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.2.6",
+    title: "SAMAS Plus — AI quota gate + the actual paywall mechanism",
+    bullets: [
+      "First real monetization mechanism. Free tier gets 5 user-initiated AI calls per UTC day; SAMAS Plus (US$5/mo) removes the cap. Auto-loads (Daily Brief, Earnings Watch, Compare Benchmark, Risk Score, Quarterly Review) stay free in both tiers — they're the funnel hook. So are safety features (Trade Coach, Position Sizing).",
+      "Quota'd surfaces (8): chat with SAMAS, deep portfolio analysis, deep asset analysis, rebalance assistant, suggest watchlist, explain news, draft post, generate proactive insights. Each call hits a server-side SECURITY DEFINER RPC `consume_ai_quota` that atomically increments today's counter and returns { allowed, count, limit }. When the user hits the limit the increment rolls back automatically so blocked attempts don't burn future quota.",
+      "When the quota fires, gateOnQuota dispatches `samas:open-pro-upsell` with reason='quota' globally and throws AIQuotaExceededError. Components silently catch it (the upsell modal already showed). Activation calls `activate_plus` RPC which flips profiles_social.is_plus = true. Production swap: replace activate_plus with Apple StoreKit IAP receipt verification.",
+      "isPlus state lives in SamasShell, hydrated via getAIQuotaStatus on mount. ProUpsellModal's 'Pro activado ✓' state now keys off isPlus (the subscription) instead of proMode (the free UI density toggle). Two concepts, two flags, no more confusion.",
+      "Migration: supabase/samas_plus.sql. Adds is_plus + plus_activated_at columns on profiles_social, ai_usage_daily table, and the three RPCs (consume_ai_quota, get_ai_quota_status, activate_plus).",
+      "Copy still says 'Pro' in the upsell modal — 0.2.7 reframes it as 'Plus' / 'tu asesor personal'.",
+    ],
+  },
   {
     version: "0.2.5",
     title: "Fix: Daily Brief stuck on loading skeleton forever",

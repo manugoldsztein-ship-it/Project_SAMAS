@@ -858,8 +858,8 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
       }
     } catch (e) {
       // Consent declined → silent no-op (the modal already explained).
-      if (e?.name === "AIConsentDeniedError") {
-        // intentionally no setErr
+      if (e?.name === "AIConsentDeniedError" || e?.name === "AIQuotaExceededError") {
+        // Consent declined OR quota hit → silent. Modal already opened.
       } else {
         console.warn("[social] suggest post failed:", e);
         setErr(tr("social.compose.suggest_err", lang));

@@ -404,7 +404,7 @@ function NewsCard({ T, item, lang = "es" }) {
       hapticNative("success").catch(() => {});
     } catch (err) {
       // Consent declined → silently close without surfacing error.
-      if (err?.name === "AIConsentDeniedError") setAiOpen(false);
+      if (err?.name === "AIConsentDeniedError" || err?.name === "AIQuotaExceededError") setAiOpen(false);
       else setAiErr(err?.message || String(err));
     } finally {
       setAiBusy(false);
