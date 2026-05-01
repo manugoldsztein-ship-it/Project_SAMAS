@@ -157,6 +157,40 @@ export async function scoreRisk() {
 }
 
 /**
+ * positionSize({ ticker, side }) — POST /functions/v1/position-size
+ *
+ * Server reads holdings + cash balance, computes 3 deterministic
+ * position-size buckets (conservador / estandar / agresivo) for a
+ * BUY, or 3 take-fractions (un_tercio / la_mitad / todo) for a SELL,
+ * and returns:
+ *   {
+ *     suggestions: [{ label, displayLabel, qty, pctOfBook, valueUsd, rationale }, ...],
+ *     summary: string,
+ *     side: "buy" | "sell",
+ *     generatedAt: string,
+ *   }
+ *
+ * Numbers stay deterministic; Claude refines each rationale.
+ * Templated fallback when no API key.
+ */
+export async function positionSize({ ticker, side = "buy" }) {
+  await gateOnConsent();
+  const { data, error } = await supabase.functions.invoke("position-size", {
+    body: { ticker, side },
+  });
+  if (error) {
+    let detail = "";
+    try {
+      const body = await error?.context?.json?.();
+      if (body?.error) detail = `: ${body.error}`;
+    } catch (_) { /* fall through */ }
+    throw new Error(`Sizing IA falló${detail || ": " + (error.message || "error desconocido")}`);
+  }
+  if (data?.error) throw new Error(`Sizing IA falló: ${data.error}`);
+  return data;
+}
+
+/**
  * proactiveInsights() — POST /functions/v1/proactive-insights
  *
  * Server scans the user's holdings for actionable signals

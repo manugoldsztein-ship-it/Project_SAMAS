@@ -39,7 +39,7 @@ import { hapticNative } from "../lib/native.js";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { toast } from "./toast.jsx";
 import { t as tr } from "../lib/i18n.js";
-import { analyzeAsset, tradeCoach, suggestWatchlist, rebalancePortfolio, scoreRisk } from "../lib/ai.js";
+import { analyzeAsset, tradeCoach, suggestWatchlist, rebalancePortfolio, scoreRisk, positionSize } from "../lib/ai.js";
 
 // Sub-tabs metadata — drives both the bottom nav and the content
 // switch in the top-level <BrokerShell/> render.
@@ -2560,6 +2560,23 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
 
               <NumberInput T={T} label={tr("asset.qty", lang)} value={qtyStr} onChange={setQtyStr} placeholder="0" />
 
+              {/* AI Position Sizing helper (samas-0.2.3) — auto-loads
+                  on mount with the ticker + side; renders 3 chips
+                  (conservador / estándar / agresivo for buy, or
+                  un tercio / la mitad / todo for sell). Tap a chip
+                  to autofill qtyStr. Hides silently on AI failure /
+                  consent denial / sub-minimum balance. */}
+              <PositionSizingCard
+                T={T}
+                lang={lang}
+                ticker={asset.ticker}
+                side={side}
+                onPick={(qty) => {
+                  setQtyStr(String(qty));
+                  hapticNative("tap").catch(() => {});
+                }}
+              />
+
               {type === "limit" && (
                 <div style={{ marginTop: 12 }}>
                   <NumberInput T={T} label={`${tr("asset.price", lang)} ${tr("asset.limit", lang).toLowerCase()} (${asset.currency})`} value={limitStr} onChange={setLimitStr} placeholder={String(asset.price)} />
@@ -3286,6 +3303,173 @@ function ConfirmOrderStep({ T, asset, confirm, busy, err, onCancel, onConfirm, l
           cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
         }}>{busy ? "Enviando..." : `Confirmar ${isBuy ? "compra" : "venta"}`}</button>
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+// PositionSizingCard (samas-0.2.3) — AI sizing chips next to qty
+// ============================================================
+// Auto-loads on mount with the ticker + side; calls position-size
+// Edge Function which returns 3 deterministic suggestions. Renders
+// each as a tap-to-fill chip with qty, % of book, and a one-line
+// rationale. Hides silently on AI failure / consent denial / when
+// the server returns 0 viable sizes (insufficient balance, etc).
+function PositionSizingCard({ T, lang = "es", ticker, side, onPick }) {
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(true);
+  const [hidden, setHidden] = useState(false);
+  const [picked, setPicked] = useState(null); // bucket id | null
+
+  // Re-fetch whenever the user flips between buy/sell so the chips
+  // match. ticker is constant per AssetSheet mount but cheap to
+  // include in the deps for safety.
+  useEffect(() => {
+    let alive = true;
+    setBusy(true);
+    setData(null);
+    setHidden(false);
+    setPicked(null);
+    (async () => {
+      try {
+        const res = await positionSize({ ticker, side });
+        if (!alive) return;
+        if (!res?.suggestions || res.suggestions.length === 0) {
+          setHidden(true);
+        } else {
+          setData(res);
+        }
+      } catch (e) {
+        if (!alive) return;
+        if (e?.name === "AIConsentDeniedError") setHidden(true);
+        else setHidden(true);
+      } finally {
+        if (alive) setBusy(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [ticker, side]);
+
+  if (hidden) return null;
+
+  const isBuy = side === "buy";
+  // Color per bucket — conservador = subtle, estandar = accent,
+  // agresivo = warm. Sell variants get a single danger tint.
+  const tintForBucket = (id) => {
+    if (!isBuy) return T.danger;
+    if (id === "conservador") return T.textMute;
+    if (id === "estandar")    return T.accent;
+    return "#F59E0B"; // amber for agresivo
+  };
+
+  return (
+    <div style={{
+      marginTop: 12, padding: 12, borderRadius: 14,
+      background: T.surface, border: `1px solid ${T.border}`,
+    }}>
+      <div style={{
+        display: "flex", alignItems: "center", gap: 8, marginBottom: 10,
+      }}>
+        <div style={{
+          width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+          background: T.accent, color: T.accentInk,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
+          </svg>
+        </div>
+        <div style={{
+          flex: 1, fontFamily: FONT.mono, fontSize: 10, fontWeight: 700,
+          color: T.textMute, letterSpacing: 0.6, textTransform: "uppercase",
+        }}>
+          {tr(isBuy ? "asset.sizing.title_buy" : "asset.sizing.title_sell", lang)}
+        </div>
+      </div>
+
+      {/* Skeleton while loading */}
+      {busy && !data ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {[0, 1, 2].map((i) => (
+            <div key={i} style={{
+              height: 44, borderRadius: 10,
+              background: T.bgElev || T.bg, opacity: 0.5,
+              backgroundImage: `linear-gradient(90deg, ${T.border} 0, ${T.surface} 50%, ${T.border} 100%)`,
+              backgroundSize: "200% 100%",
+              animation: `samas-skel 1.4s ease-in-out ${i * 0.15}s infinite`,
+            }} />
+          ))}
+        </div>
+      ) : null}
+
+      {/* Summary line */}
+      {data?.summary && (
+        <div style={{
+          fontFamily: FONT.sans, fontSize: 11, color: T.textMute, lineHeight: 1.5,
+          marginBottom: 10,
+        }}>{data.summary}</div>
+      )}
+
+      {/* Suggestions */}
+      {data?.suggestions?.map((s) => {
+        const tint = tintForBucket(s.label);
+        const isPicked = picked === s.label;
+        return (
+          <button
+            key={s.label}
+            onClick={() => {
+              setPicked(s.label);
+              onPick && onPick(s.qty);
+            }}
+            style={{
+              width: "100%", marginBottom: 8, padding: "10px 12px", borderRadius: 12,
+              background: isPicked ? T.accentSoft : T.bgElev || T.bg,
+              border: `1px solid ${isPicked ? T.accent : T.border}`,
+              display: "flex", alignItems: "center", gap: 10,
+              cursor: "pointer", textAlign: "left",
+            }}
+          >
+            <div style={{
+              minWidth: 60, padding: "4px 8px", borderRadius: 8,
+              background: tint + "22", color: tint,
+              fontFamily: FONT.mono, fontSize: 11, fontWeight: 800,
+              letterSpacing: 0.4, textTransform: "uppercase", textAlign: "center",
+            }}>
+              {s.displayLabel}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                display: "flex", alignItems: "baseline", gap: 6,
+                fontFamily: FONT.mono, fontSize: 14, fontWeight: 800, color: T.text,
+              }}>
+                <span>{s.qty}</span>
+                <span style={{ fontSize: 10, color: T.textMute, fontWeight: 600 }}>
+                  {tr("asset.sizing.units", lang)}
+                </span>
+                {isBuy && (
+                  <span style={{
+                    marginLeft: "auto", fontSize: 10, color: T.textMute, fontWeight: 600,
+                  }}>
+                    → {s.pctOfBook.toFixed(0)}% del book
+                  </span>
+                )}
+              </div>
+              <div style={{
+                marginTop: 2, fontFamily: FONT.sans, fontSize: 11, color: T.textMute,
+                lineHeight: 1.4,
+              }}>{s.rationale}</div>
+            </div>
+          </button>
+        );
+      })}
+
+      {data?.suggestions?.length > 0 && (
+        <div style={{
+          marginTop: 4, fontFamily: FONT.sans, fontSize: 10,
+          color: T.textMute, textAlign: "right",
+        }}>{tr("asset.sizing.disclaimer", lang)}</div>
+      )}
     </div>
   );
 }

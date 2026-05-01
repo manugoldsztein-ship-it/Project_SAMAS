@@ -2647,6 +2647,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.2.3",
+    title: "AI Position Sizing — Conservador / Estándar / Agresivo at the qty input",
+    bullets: [
+      "Fifteenth AI surface fills the empty slot in the trade flow. Trade Coach already runs at the confirmation step (0.0.95); now there's an AI sizer at the qty INPUT step — fires before the user types a number, gives them three deterministic suggestions to pick from with one tap.",
+      "New position-size Edge Function. For BUY: three buckets (conservador / estándar / agresivo) computed from caps on % of book + % of cash + a concentration ceiling per bucket (10/20/35%). Conservative bucket also gets a category-risk dampener so a CRYPTO conservative is smaller than a BONO conservative for the same %. For SELL: three take-fractions (un tercio / la mitad / cerrar posición). Numbers stay deterministic; Claude refines the per-bucket rationale.",
+      "Tap a chip → setQtyStr autofills the qty input, then user can edit or proceed to Review as usual. Hides silently when AI errors, consent denied, or balance is below the minimum to buy 1 unit at any bucket.",
+      "15 AI surfaces total. Filling out the AI story along the entire trade flow: Position size at qty entry → Trade Coach at confirmation → Done screen.",
+    ],
+  },
+  {
     version: "0.2.2",
     title: "Reverted: AI tax-loss harvester (0.2.0)",
     bullets: [
