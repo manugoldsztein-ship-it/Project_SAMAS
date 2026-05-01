@@ -2680,6 +2680,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.3.0",
+    title: "Privacy Manifest — App Store submission unblocker",
+    bullets: [
+      "Added ios/App/App/PrivacyInfo.xcprivacy. Required by Apple since iOS 17 / 2024-Q1 for any app submitted to the App Store. Declares: 6 data types collected (name, email, phone, user-generated content, photos/videos, diagnostic data), all linked to user identity, none used for tracking. Plus 4 Required-Reason API declarations (UserDefaults CA92.1 via Capacitor Preferences, file timestamp C617.1, system boot 35F9.1, disk space E174.1).",
+      "Added the file to the App Xcode target (PBXBuildFile + PBXFileReference + Resources build phase) by editing project.pbxproj directly. Verified the file lands in App.app/PrivacyInfo.xcprivacy after xcodebuild — Apple's validator picks it up on submission.",
+      "Tracking explicitly set to false. No IDFA usage. NSPrivacyTrackingDomains empty array.",
+      "Keep this file in sync as we add: payment data (would need DataCategoryFinancialInfo + a new purpose), third-party SDKs that collect/track, new Apple Required-Reason APIs.",
+    ],
+  },
+  {
     version: "0.2.9",
     title: "Settings Plus management — activate / status / cancel",
     bullets: [
