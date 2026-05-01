@@ -46,6 +46,11 @@ export function denyAIConsent() {
  * tapped Rechazar on the prompt.
  */
 export function ensureAIConsent() {
+  // Global off-switch beats everything (samas-0.4.11). Returning
+  // false here causes every gateOnConsent() to throw
+  // AIConsentDeniedError, which every AI surface already catches +
+  // silently hides itself. No re-render storm; just clean self-hide.
+  if (isAIDisabled()) return Promise.resolve(false);
   if (hasAIConsent()) return Promise.resolve(true);
   if (pending) return pending;
   pending = new Promise((resolve) => {
@@ -60,4 +65,44 @@ export function ensureAIConsent() {
 /** For testing / Settings reset — un-grant consent. */
 export function revokeAIConsent() {
   try { localStorage.removeItem(KEY); } catch {}
+}
+
+// ============================================================
+// AI DISABLED — global off-switch (samas-0.4.11)
+// ============================================================
+// Distinct from consent. Consent is "did you agree to share data
+// with Anthropic"; disabled is "I want NO AI features, period".
+// A user can consent and later flip this on without re-prompting.
+//
+// When isAIDisabled() returns true:
+//   - ensureAIConsent() resolves false → all gateOnConsent() calls
+//     throw AIConsentDeniedError → every AI surface silently hides.
+//   - getAIQuotaStatus() short-circuits to null → AIQuotaPill hides.
+//   - Components that explicitly check this flag (Wallet header ?
+//     button, Plus settings row, etc.) hide their UI.
+//
+// Persisted in localStorage so the choice survives reloads.
+// Broadcasts a samas:ai-disabled-changed event so any mounted
+// component can react without polling.
+// ============================================================
+
+const DISABLED_KEY = "samas_ai_disabled_v1";
+
+export function isAIDisabled() {
+  if (typeof localStorage === "undefined") return false;
+  try { return localStorage.getItem(DISABLED_KEY) === "1"; } catch { return false; }
+}
+
+export function setAIDisabled(disabled) {
+  try {
+    if (disabled) localStorage.setItem(DISABLED_KEY, "1");
+    else localStorage.removeItem(DISABLED_KEY);
+  } catch (_) { /* noop */ }
+  try {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("samas:ai-disabled-changed", {
+        detail: { disabled: !!disabled },
+      }));
+    }
+  } catch (_) { /* SSR */ }
 }

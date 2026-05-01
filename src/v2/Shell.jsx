@@ -49,7 +49,7 @@ import { seedDemoAccount, resetDemoAccount } from "../lib/demoSeed.js";
 import { seedSocialDemo } from "../lib/seedSocial.js";
 import { hapticNative } from "../lib/native.js";
 import { deleteAccount, exportData } from "../lib/account.js";
-import { grantAIConsent, denyAIConsent, hasAIConsent, revokeAIConsent } from "../lib/aiConsent.js";
+import { grantAIConsent, denyAIConsent, hasAIConsent, revokeAIConsent, isAIDisabled, setAIDisabled } from "../lib/aiConsent.js";
 import { activatePlus, cancelPlus, getAIQuotaStatus } from "../lib/ai.js";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { LivePricesProvider } from "./livePrices.jsx";
@@ -814,14 +814,18 @@ function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus
         {/* SAMAS Plus row (samas-0.2.9) — distinct from Pro view
             below. Plus = paid AI subscription, Pro view = free UI
             density toggle. Active = green chip + "Cancelar" CTA.
-            Inactive = gray chip + "Activar" CTA → opens upsell modal. */}
-        <PlusSettingsRow
-          T={T}
-          isPlus={isPlus}
-          setIsPlus={setIsPlus}
-          onOpenPlusUpsell={onOpenPlusUpsell}
-          lang={lang}
-        />
+            Inactive = gray chip + "Activar" CTA → opens upsell modal.
+            Hidden when AI is globally disabled (samas-0.4.11) since
+            Plus exists solely to remove the AI quota cap. */}
+        {!isAIDisabled() && (
+          <PlusSettingsRow
+            T={T}
+            isPlus={isPlus}
+            setIsPlus={setIsPlus}
+            onOpenPlusUpsell={onOpenPlusUpsell}
+            lang={lang}
+          />
+        )}
 
         {/* Pro view density toggle row (free in both tiers). */}
         <SettingsToggle
@@ -1193,6 +1197,15 @@ function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus
         }}>
           {tr("settings.section.ai", lang)}
         </div>
+
+        {/* AI master switch (samas-0.4.11) — when off, every AI
+            surface across the app self-hides + the ? Explain button
+            in Wallet header disappears + the Quota pill goes away.
+            Distinct from the revoke-consent button below: this
+            doesn't ask the user to re-consent later, it just turns
+            the whole feature off until they flip it back on. */}
+        <AIDisabledToggle T={T} lang={lang} />
+
         <button
           onClick={() => {
             revokeAIConsent();
@@ -2814,6 +2827,17 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.11",
+    title: "AI master switch — turn off ALL AI features at once",
+    bullets: [
+      "Per Manuel: 'el usuario debería tener la opción de apagar todo lo de AI'. New 'Funciones de IA' toggle at the top of Settings → Inteligencia. ON = AI everywhere (default). OFF = every AI surface across the app self-hides immediately.",
+      "Implementation: a global isAIDisabled() flag in localStorage. Distinct from the existing 'Olvidar mi consentimiento' button (which only revokes the data-sharing consent and re-prompts on next AI call). The new master switch is a clean 'turn it all off, no popups, no nags'.",
+      "When OFF: ensureAIConsent() short-circuits to false → every gateOnConsent() throws AIConsentDeniedError → all 20 AI surfaces self-hide via their existing catch handlers. Plus the ? Explain button in Wallet header hides, the AIQuotaPill goes away (getAIQuotaStatus returns null), the SAMAS Plus row in Settings hides (Plus exists solely for unlimited AI), and the 5 auto-loading AI cards on Wallet (DailyBrief, Analysis, Benchmark, Earnings, Quarterly Review, Chat) skip mounting entirely instead of briefly showing a skeleton.",
+      "Live update: flipping the toggle dispatches samas:ai-disabled-changed → mounted components react without a re-render of the whole shell.",
+      "Renamed the existing 'Desactivar funciones IA' button to 'Olvidar mi consentimiento' since that's what it actually did (revoke + re-prompt). The new master switch is the real off-switch.",
+    ],
+  },
+  {
     version: "0.4.10",
     title: "Movimientos fix — auto-refresh on tab focus + realtime + 'Ver todos'",
     bullets: [
@@ -3863,6 +3887,62 @@ function PlusSettingsRow({ T, isPlus, setIsPlus, onOpenPlusUpsell, lang = "es" }
         </button>
       )}
     </div>
+  );
+}
+
+// AI master switch toggle (samas-0.4.11). Reads localStorage on
+// mount, listens for samas:ai-disabled-changed broadcasts so other
+// surfaces stay in sync. Flipping the toggle persists + broadcasts.
+function AIDisabledToggle({ T, lang = "es" }) {
+  const [disabled, setDisabled] = React.useState(() => isAIDisabled());
+
+  React.useEffect(() => {
+    function onChange(e) {
+      setDisabled(!!e?.detail?.disabled);
+    }
+    window.addEventListener("samas:ai-disabled-changed", onChange);
+    return () => window.removeEventListener("samas:ai-disabled-changed", onChange);
+  }, []);
+
+  function flip() {
+    const next = !disabled;
+    setAIDisabled(next);
+    setDisabled(next);
+  }
+
+  // The toggle reads "Funciones de IA" with active = ON (= AI
+  // enabled) so the natural reading is "I want AI on / off".
+  // Internal state stores the OPPOSITE (disabled flag) — invert
+  // when displaying.
+  return (
+    <button onClick={flip} style={{
+      width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 8,
+      background: T.surface, border: `1px solid ${T.border}`,
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      cursor: "pointer", textAlign: "left",
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text }}>
+          {tr("settings.ai.master.title", lang)}
+        </div>
+        <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+          {disabled
+            ? tr("settings.ai.master.sub_off", lang)
+            : tr("settings.ai.master.sub_on", lang)}
+        </div>
+      </div>
+      <div style={{
+        width: 44, height: 24, borderRadius: 12, flexShrink: 0,
+        background: disabled ? T.border : T.accent,
+        position: "relative", transition: "background 0.15s ease",
+      }}>
+        <div style={{
+          position: "absolute", top: 2, left: disabled ? 2 : 22,
+          width: 20, height: 20, borderRadius: "50%",
+          background: "#fff", transition: "left 0.15s ease",
+        }}/>
+      </div>
+    </button>
   );
 }
 

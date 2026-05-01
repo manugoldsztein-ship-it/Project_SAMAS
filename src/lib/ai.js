@@ -9,7 +9,7 @@
 // ============================================================
 
 import { supabase } from "./supabase.js";
-import { ensureAIConsent } from "./aiConsent.js";
+import { ensureAIConsent, isAIDisabled } from "./aiConsent.js";
 
 // Sentinel error so callers can distinguish "user said no thanks"
 // from genuine API failures. UIs treat AIConsentDeniedError as
@@ -93,6 +93,9 @@ async function gateOnQuota() {
 // failure. Components treat null as "data unavailable" and hide
 // the indicator silently.
 export async function getAIQuotaStatus() {
+  // Short-circuit when AI is globally disabled — no need to round-
+  // trip to the server, and the AIQuotaPill self-hides on null.
+  if (isAIDisabled()) return null;
   try {
     const { data, error } = await supabase.rpc("get_ai_quota_status");
     if (error || !data) return null;

@@ -34,6 +34,7 @@ import { setRefreshHandler } from "./refreshRegistry.js";
 import { t as tr } from "../lib/i18n.js";
 import { useLivePortfolioRatio } from "./livePrices.jsx";
 import { analyzePortfolio, chatPortfolio, dailyBrief, compareBenchmark, earningsWatch, proactiveInsights, quarterlyReview } from "../lib/ai.js";
+import { isAIDisabled } from "../lib/aiConsent.js";
 import { AIQuotaPill } from "./AIQuotaPill.jsx";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { hapticNative } from "../lib/native.js";
@@ -84,7 +85,17 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
 
   // ----------- UI state -----------
   const [ccy, setCcy] = useState("ARS");
-  const [activeModal, setActiveModal] = useState(null); // "deposit" | "withdraw" | "card" | "aporte" | "inbox" | null
+  const [activeModal, setActiveModal] = useState(null); // "deposit" | "withdraw" | "card" | "aporte" | "inbox" | "txns_all" | null
+  // AI master switch state (samas-0.4.11) — drives whether the ?
+  // Explain button + AI cards render. Listens for the
+  // samas:ai-disabled-changed broadcast so a Settings flip
+  // immediately updates the Wallet without a re-mount.
+  const [aiDisabled, setAiDisabled] = useState(() => isAIDisabled());
+  useEffect(() => {
+    function onChange(e) { setAiDisabled(!!e?.detail?.disabled); }
+    window.addEventListener("samas:ai-disabled-changed", onChange);
+    return () => window.removeEventListener("samas:ai-disabled-changed", onChange);
+  }, []);
   // Unread badge on the bell. Refetched on tab focus + after the
   // inbox closes (since opening it marks rows read). Returns 0 when
   // the table doesn't exist yet, so the dot just stays hidden until
@@ -248,21 +259,24 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
           {/* Explain-a-term button (samas-0.4.2). Opens a global
               modal with a text input → IA returns a definition in
               plain AR-Spanish. Dispatching a window event lets any
-              other component pop the same modal in the future. */}
-          <ChromeBtn
-            T={T}
-            onClick={() => {
-              try {
-                window.dispatchEvent(new CustomEvent("samas:explain-term", { detail: {} }));
-              } catch (_) { /* SSR */ }
-            }}
-            aria-label={tr("explain.aria_open", lang)}
-          >
-            <span style={{
-              fontFamily: FONT.display, fontSize: 16, fontWeight: 800, color: T.text,
-              lineHeight: 1, padding: 0,
-            }}>?</span>
-          </ChromeBtn>
+              other component pop the same modal in the future.
+              Hidden when AI is globally disabled (samas-0.4.11). */}
+          {!aiDisabled && (
+            <ChromeBtn
+              T={T}
+              onClick={() => {
+                try {
+                  window.dispatchEvent(new CustomEvent("samas:explain-term", { detail: {} }));
+                } catch (_) { /* SSR */ }
+              }}
+              aria-label={tr("explain.aria_open", lang)}
+            >
+              <span style={{
+                fontFamily: FONT.display, fontSize: 16, fontWeight: 800, color: T.text,
+                lineHeight: 1, padding: 0,
+              }}>?</span>
+            </ChromeBtn>
+          )}
           <ChromeBtn T={T} dot={unread > 0} onClick={() => setActiveModal("inbox")}>
             <Ico.Bell size={18}/>
           </ChromeBtn>
@@ -274,7 +288,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
           on every Wallet mount, cached client-side for ~12 hours so
           rapid re-mounts don't re-call. Only shown when there's a
           non-empty portfolio (no point in a brief about nothing). */}
-      {portfolio && portfolio.totalUsd > 0 && (
+      {!aiDisabled && portfolio && portfolio.totalUsd > 0 && (
         <DailyBriefCard T={T} lang={lang} />
       )}
 
@@ -541,7 +555,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
           the analyze-portfolio Edge Function (Claude Haiku) and shows
           the response in a sheet. Sits between portfolio peek and
           aporte so it's reachable without scrolling on most screens. */}
-      {portfolio && portfolio.totalUsd > 0 && (
+      {!aiDisabled && portfolio && portfolio.totalUsd > 0 && (
         <>
           <AIAnalysisCard T={T} lang={lang} />
           {/* Benchmark compare — "am I beating the market?" (0.1.7). */}
