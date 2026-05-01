@@ -2365,6 +2365,34 @@ function ProPricingSheet({ T, lang = "es", onSubscribe, onClose }) {
           padding: "8px 18px 12px",
           display: "flex", flexDirection: "column", gap: 10,
         }}>
+          {/* Trial banner (samas-0.4.23) — first-time-user friction
+              killer. Production: bound to App Store IAP introductory
+              offer (Apple's "free trial" SKU type). Demo: visual
+              affordance only, the activate-plus RPC doesn't model
+              trial state yet. Copy explicit so the user knows what
+              they're signing up for. */}
+          <div style={{
+            padding: "12px 14px", borderRadius: 14,
+            background: `linear-gradient(135deg, ${T.accent} 0%, ${T.accentSoft} 100%)`,
+            color: T.accentInk,
+            display: "flex", alignItems: "center", gap: 12,
+          }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+              background: T.accentInk + "22", color: T.accentInk,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontFamily: FONT.display, fontSize: 18, fontWeight: 800,
+            }}>7</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontFamily: FONT.sans, fontSize: 14, fontWeight: 800, marginBottom: 2,
+              }}>{tr("pro.pricing.trial.title", lang)}</div>
+              <div style={{
+                fontFamily: FONT.sans, fontSize: 11, opacity: 0.85, lineHeight: 1.4,
+              }}>{tr("pro.pricing.trial.sub", lang)}</div>
+            </div>
+          </div>
+
           <PlanCard
             id="monthly"
             label={tr("pro.pricing.monthly", lang)}
@@ -2380,6 +2408,43 @@ function ProPricingSheet({ T, lang = "es", onSubscribe, onClose }) {
             hint={tr("pro.pricing.annual_hint", lang)}
             recommended
           />
+
+          {/* Value framing (samas-0.4.23) — "what does USD 5/mo
+              actually buy you?" reasoning. Three stats that ground
+              the price in something tangible. The asesor-financiero
+              framing is intentional — Manuel's father review
+              (samas-0.4.15) flagged that retail users default to
+              "esto es caro" without context. */}
+          <div style={{
+            marginTop: 4, padding: "12px 14px", borderRadius: 14,
+            background: T.surface, border: `1px solid ${T.border}`,
+          }}>
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+              color: T.textMute, letterSpacing: 0.5, textTransform: "uppercase",
+              marginBottom: 10,
+            }}>{tr("pro.pricing.value_label", lang)}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {[
+                { k: "coffee",  emoji: "☕" },
+                { k: "advisor", emoji: "💼" },
+                { k: "trade",   emoji: "📊" },
+              ].map((item) => (
+                <div key={item.k} style={{
+                  display: "flex", alignItems: "flex-start", gap: 10,
+                  fontFamily: FONT.sans, fontSize: 12, color: T.text, lineHeight: 1.45,
+                }}>
+                  <div style={{
+                    flexShrink: 0, fontSize: 16, lineHeight: 1,
+                    width: 24, height: 24, borderRadius: 6,
+                    background: T.bg, border: `1px solid ${T.border}`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>{item.emoji}</div>
+                  <span style={{ flex: 1 }}>{tr(`pro.pricing.value.${item.k}`, lang)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
 
           {/* What's included — compact reminder of the 9 Pro features
               the user already saw on the upsell modal. We re-render
@@ -2834,6 +2899,17 @@ function AIConsentGate({ T, lang = "es" }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.4.23",
+    title: "Pricing screen polish — trial offer + value framing",
+    bullets: [
+      "El ProPricingSheet ya existía desde 0.2.7 con USD 5/mes + USD 48/año. Esta patch agrega los 2 elementos que toda paywall premium tiene y al SAMAS pricing le faltaban: trial offer + value framing.",
+      "TRIAL BANNER — al tope de la lista de planes, banner gradient accent→accentSoft con un '7' grande y copy '7 días gratis para probarlo · Activás IA ilimitada hoy. Si no es para vos, cancelás antes del día 7 y no se cobra nada.' Visualmente el primer elemento que ve el usuario después del header — friction killer.",
+      "VALUE FRAMING CARD — debajo de los planes, card con 3 stats que aterrizan el precio en algo tangible: ☕ 'Menos que un café por mes' / 💼 'Un asesor financiero argentino cobra desde USD 50/sesión, Plus es 1/10 ilimitado' / 📊 'Si Plus te ahorra UNA decisión mal timeada al año, se paga 10x'. Asesor-financiero framing intencional — el papá de Manuel (samas-0.4.15) flagged que retail defaultea a 'esto es caro' sin contexto.",
+      "Plumbing del trial: visual affordance only por ahora — la activate_plus RPC no modela trial state todavía. Cuando se haga el wiring de App Store IAP, se mapea al introductory offer SKU (Apple's 'free trial' tipo). Copy explícito así el tester sabe que es demo: 'Demo: la suscripción real con App Store IAP se activa antes del lanzamiento.'",
+      "i18n: 8 keys nuevas en es + en (pro.pricing.trial.* + pro.pricing.value.*).",
+    ],
+  },
   {
     version: "0.4.22",
     title: "Portafolio Hipotético — el item del papá, finalmente shippeado",
