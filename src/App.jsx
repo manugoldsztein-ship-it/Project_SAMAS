@@ -14,9 +14,10 @@ import {
   loadAnthropicModel, saveAnthropicModel,
   DEFAULT_MODEL as ANTHROPIC_DEFAULT_MODEL,
 } from "./ai/client.js";
-// Real auth: Supabase session + signup/login/verify-WhatsApp flow. Replaces
-// the demo-PIN LoginScreen. See src/auth/SupabaseAuth.jsx for the UI, and
-// src/lib/supabase.js for the client configuration.
+// Real auth: Supabase session + signup/login/verify-WhatsApp flow.
+// See src/auth/SupabaseAuth.jsx for the UI, and src/lib/supabase.js
+// for the client configuration. (The legacy demo-PIN LoginScreen
+// component was removed in samas-0.4.8 dead-code sweep.)
 import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./lib/supabase.js";
 // useSupabaseSession is the eager hook (called on every render); the
 // flow itself is the heavy form tree, lazy-loaded so it stays out of
@@ -972,39 +973,6 @@ const BRAND = {
   BTC:    { bg:"#F7931A", fg:"#fff",    sym:null,  svg:"btc"     },
   ETH:    { bg:"#627EEA", fg:"#fff",    sym:null,  svg:"eth"     },
 };
-
-function BrandSVG({ name, size }) {
-  const s = Math.max(size - 8, 12);
-  // Apple
-  if (name === "apple") return <svg width={s} height={s} viewBox="0 0 814 1000" fill="white"><path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105.3-57.4-155.5-127.4C46 680.6 0 498.8 0 326.8 0 124.5 140.8 15.1 283 15.1c74.4 0 136.5 48.8 183.3 48.8 44.7 0 115.5-51.9 201.9-51.9 32.4 0 117.6 2.6 179.8 97.1zm-85.1-166.5c34.8-41.3 60.9-98.5 60.9-155.7 0-7.8-.7-15.7-2-23.5-57.3 2.3-124.3 38.5-164.2 82.3-31.4 35.1-61.9 92.6-61.9 150.4 0 8.5 1.3 17 2 19.6 3.3.5 8.6 1.3 13.9 1.3 51.2 0 114.4-34.1 151.3-74.4z"/></svg>;
-  // NVIDIA green N
-  if (name === "nvidia") return <svg width={s} height={s} viewBox="0 0 24 24"><path d="M9.5 4v10.7L5 4H2v16h3V9.3L9.5 20h2.8L17 9.3V20h3V4h-3l-4.5 10.7L9.5 4z" fill="#76B900"/></svg>;
-  // Microsoft 4-color grid
-  if (name === "msft") return <svg width={s} height={s} viewBox="0 0 23 23"><rect x="0"  y="0"  width="11" height="11" fill="#F25022"/><rect x="12" y="0"  width="11" height="11" fill="#7FBA00"/><rect x="0"  y="12" width="11" height="11" fill="#00A4EF"/><rect x="12" y="12" width="11" height="11" fill="#FFB900"/></svg>;
-  // Google
-  if (name === "google") return <svg width={s} height={s} viewBox="0 0 48 48"><path d="M43.6 20H24v8h11.3C33.8 32.6 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34.1 6.4 29.4 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20c11 0 19.7-8 19.7-20 0-1.3-.1-2.7-.1-4z" fill="#4285F4"/><path d="M6.3 14.7l6.6 4.8C14.5 16 19 12 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7C34.1 6.4 29.4 4 24 4 16.3 4 9.6 8.3 6.3 14.7z" fill="#EA4335"/><path d="M24 44c5.2 0 9.9-1.8 13.5-4.7l-6.2-5.2c-2 1.4-4.5 2.2-7.3 2.2-5.3 0-9.8-3.6-11.3-8.5l-6.6 5.1C9.6 39.7 16.3 44 24 44z" fill="#34A853"/><path d="M43.9 20H24v8h11.3c-.7 2.1-2 3.9-3.7 5.1l6.2 5.2C41.1 34.8 44 29.8 44 24c0-1.3-.1-2.7-.1-4z" fill="#FBBC05"/></svg>;
-  // Amazon smile
-  if (name === "amazon") return <svg width={s} height={s} viewBox="0 0 24 24"><text x="1" y="13" fontSize="8.5" fontWeight="900" fontFamily="Arial Black,sans-serif" fill="#FF9900">amazon</text><path d="M3 17.5c4.5 2.5 12 2.5 16-1" stroke="#FF9900" strokeWidth="1.5" strokeLinecap="round" fill="none"/><path d="M18.5 15.5c1 0.5 1.5 1 1 1.5" stroke="#FF9900" strokeWidth="1" strokeLinecap="round" fill="none"/></svg>;
-  // Tesla T
-  if (name === "tesla") return <svg width={s} height={s} viewBox="0 0 24 24" fill="#fff"><path d="M12 3.5C8.1 3.5 4.7 5.9 3 9.3h4.1C8.2 8.1 9.5 7.4 12 7.4s3.8.7 4.9 1.9H21C19.3 5.9 15.9 3.5 12 3.5z"/><path d="M12 7.4c-1.3 0-2.5.3-3.3.9L12 20.5l3.3-12.2c-.8-.6-2-.9-3.3-.9z"/></svg>;
-  // Meta
-  if (name === "meta") return <svg width={s} height={s} viewBox="0 0 24 24" fill="white"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-2 14.5v-9l7 4.5-7 4.5z"/><text x="2" y="15" fontSize="7" fontWeight="900" fontFamily="Arial,sans-serif" fill="white">META</text></svg>;
-  // Disney D
-  if (name === "disney") return <svg width={s} height={s} viewBox="0 0 24 24"><text x="1" y="17" fontSize="11" fontWeight="900" fontFamily="Arial,sans-serif" fill="white">D</text><circle cx="15" cy="7" r="5" fill="none" stroke="white" strokeWidth="1.5"/></svg>;
-  // Mastercard
-  if (name === "mc") return <svg width={s} height={s} viewBox="0 0 24 24"><circle cx="8"  cy="12" r="7" fill="#EB001B"/><circle cx="16" cy="12" r="7" fill="#F79E1B" fillOpacity="0.85"/></svg>;
-  // BBVA
-  if (name === "bbva") return <svg width={s} height={s} viewBox="0 0 24 24"><rect width="24" height="24" fill="#004A97"/><text x="2" y="16" fontSize="8" fontWeight="900" fontFamily="Arial,sans-serif" fill="white">BBVA</text></svg>;
-  // YPF
-  if (name === "ypf") return <svg width={s} height={s} viewBox="0 0 24 24"><rect width="24" height="24" fill="#003087"/><text x="2" y="16" fontSize="9" fontWeight="900" fontFamily="Arial,sans-serif" fill="#FFD700">YPF</text></svg>;
-  // Telecom
-  if (name === "telecom") return <svg width={s} height={s} viewBox="0 0 24 24"><rect width="24" height="24" fill="#00B0F0"/><text x="1" y="15" fontSize="7.5" fontWeight="900" fontFamily="Arial,sans-serif" fill="white">TECO</text></svg>;
-  // Bitcoin B
-  if (name === "btc") return <svg width={s} height={s} viewBox="0 0 24 24" fill="white"><path d="M14.5 9.5C14.5 8.1 13.5 7 12 7H8v5h4c1.5 0 2.5-1.1 2.5-2.5zm.5 4.5c0-1.5-1.1-2.5-2.5-2.5H8v5h4.5C14 16.5 15 15.4 15 14zM6 4v16h6.5c3.3 0 5.5-2 5.5-4.5 0-1.6-.8-3-2.2-3.8C17 10.9 17.5 9.7 17.5 8.5 17.5 6.3 15.8 4 12.5 4H6z"/></svg>;
-  // Ethereum
-  if (name === "eth") return <svg width={s} height={s} viewBox="0 0 24 24" fill="white"><polyline points="12,2 4,12 12,16 20,12"/><polyline points="12,16 4,12 12,22 20,12"/></svg>;
-  return <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}><text fontSize={Math.round(s/2.5)} fontWeight="900" fontFamily="Arial,sans-serif" fill="white" x="1" y={Math.round(s*0.7)}>{name.toUpperCase().slice(0,3)}</text></svg>;
-}
 
 function AssetLogo({ asset, size = 36, C }) {
   const catColors = { Acciones:C.accent, CEDEAR:"#7C3AED", ETF:"#2563EB", Commodity:C.green, Crypto:"#F7931A" };
@@ -2617,33 +2585,6 @@ function PageIdeas({ C, showUSD, onSelectAsset, lang }) {
 }
 
 // ============================================================
-// PAGE: PRODUCTOS (legacy - now merged into PageIdeas)
-// ============================================================
-function PageProductos({ C, showUSD, onSelectAsset }) {
-  const [subTab, setSubTab] = useState("on");
-  const subtabs = [["on","ON"],["fondos","Fondos"],["bonos","Bonos"]];
-  return (
-    <div style={{ padding:"14px 14px 20px" }}>
-      <div style={{ marginBottom:14 }}>
-        <div style={{ fontSize:18, fontWeight:800, color:C.text, marginBottom:2 }}>Productos</div>
-        <div style={{ fontSize:12, color:C.textMd }}>Renta fija y fondos de inversion</div>
-      </div>
-      <div style={{ display:"flex", background:C.creamDk, borderRadius:12, padding:3, gap:3, marginBottom:16 }}>
-        {subtabs.map(([v,l]) => (
-          <button key={v} onClick={() => setSubTab(v)}
-            style={{ flex:1, padding:"8px", background:v===subTab?C.card:"transparent", color:v===subTab?C.text:C.textMd, border:"none", borderRadius:9, fontWeight:600, fontSize:12, cursor:"pointer", fontFamily:"inherit", boxShadow:v===subTab?"0 1px 4px rgba(0,0,0,0.1)":"none", transition:"all 0.15s" }}>
-            {l}
-          </button>
-        ))}
-      </div>
-      {subTab === "on"     && <PageON C={C} showUSD={showUSD}/>}
-      {subTab === "fondos" && <PageFondos C={C}/>}
-      {subTab === "bonos"  && <PageBonos C={C} showUSD={showUSD}/>}
-    </div>
-  );
-}
-
-// ============================================================
 // PAGE: REPORTES COHEN (web only)
 // ============================================================
 const REPORTES = [
@@ -4098,19 +4039,6 @@ function PageMercado({ onSelectAsset, C, showUSD, lang }) {
   );
 }
 
-// ============================================================
-// PAGE: NOTICIAS
-// ============================================================
-// Optional news proxy — read from localStorage at runtime. If the user has
-// not configured one, we skip the fetch entirely and stay on seeded data
-// instead of hammering a hardcoded localhost URL that won't exist in a
-// deployed single-file bundle.
-function loadNewsEndpoint() {
-  try {
-    return (typeof localStorage !== "undefined" && localStorage.getItem("samas_news_endpoint")) || "";
-  } catch { return ""; }
-}
-
 // PageNoticias — live news from the fetch-news Edge Function.
 // Default view: mixed feed for tickers the user holds + their watchlists.
 // Search bar: type a ticker → fetch only that ticker.
@@ -4301,37 +4229,6 @@ function PageNoticias({ holdings, watchlists, onSelectAsset, C, lang }) {
 }
 
 // ============================================================
-// PAGE: TRENDING
-// ============================================================
-function PageTrending({ onSelectAsset, C, lang }) {
-  const t = useT(lang);
-  const sorted = [...ASSETS].sort((a, b) => b.change - a.change);
-  const top3 = sorted.slice(0, 3), bot3 = sorted.slice(-3).reverse();
-  const Row = ({ asset, rank, up }) => (
-    <button onClick={() => onSelectAsset(asset)} style={{ background:C.card, borderRadius:14, border:"1px solid "+(up?C.green+"33":C.red+"33"), padding:"12px 14px", display:"flex", alignItems:"center", gap:12, cursor:"pointer", width:"100%", textAlign:"left", fontFamily:"inherit", marginBottom:8 }}>
-      <div style={{ width:28, height:28, borderRadius:8, background:up?C.green+"22":C.red+"22", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}><span style={{ fontFamily:"monospace", fontWeight:800, fontSize:13, color:up?C.green:C.red }}>{rank+1}</span></div>
-      <AssetLogo asset={asset} size={34} C={C}/>
-      <div style={{ flex:1, minWidth:0 }}><div style={{ fontWeight:700, fontSize:13, color:C.text }}>{asset.ticker}</div><div style={{ fontSize:10, color:C.textLt, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{asset.name}</div></div>
-      <div style={{ textAlign:"right", flexShrink:0 }}><div style={{ fontWeight:700, fontSize:13, fontFamily:"monospace", color:C.text }}>${fN(asset.price)}</div><div style={{ fontWeight:800, fontSize:14, color:up?C.green:C.red }}>{up?"+":"-"}{Math.abs(asset.change).toFixed(2)}%</div></div>
-    </button>
-  );
-  return (
-    <div style={{ padding:"14px 14px 20px" }}>
-      <div style={{ marginBottom:20 }}><div style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:3 }}>{t("trend_title")}</div><div style={{ fontSize:12, color:C.textMd }}>{t("trend_sub")}</div></div>
-      <div style={{ marginBottom:20 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}><div style={{ width:28, height:28, borderRadius:8, background:C.green+"22", display:"flex", alignItems:"center", justifyContent:"center" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></div><div><div style={{ fontWeight:700, fontSize:13, color:C.green }}>{t("trend_gainers")}</div><div style={{ fontSize:10, color:C.textLt }}>Top 3 por ganancia</div></div></div>
-        {top3.map((a, i) => <Row key={a.ticker} asset={a} rank={i} up={true}/>)}
-      </div>
-      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:20 }}><div style={{ flex:1, height:1, background:C.border }}/><div style={{ fontSize:10, fontWeight:700, color:C.textLt, letterSpacing:1 }}>HOY</div><div style={{ flex:1, height:1, background:C.border }}/></div>
-      <div>
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}><div style={{ width:28, height:28, borderRadius:8, background:C.red+"22", display:"flex", alignItems:"center", justifyContent:"center" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg></div><div><div style={{ fontWeight:700, fontSize:13, color:C.red }}>{t("trend_losers")}</div><div style={{ fontSize:10, color:C.textLt }}>Top 3 por perdida</div></div></div>
-        {bot3.map((a, i) => <Row key={a.ticker} asset={a} rank={i} up={false}/>)}
-      </div>
-    </div>
-  );
-}
-
-// ============================================================
 // PAGE: ORDENES
 // ============================================================
 function PageOrdenes({ orders, C, lang }) {
@@ -4418,16 +4315,6 @@ function SAMASLogo({ textColor = "#FFFFFF" }) {
     <div style={{ display:"flex", alignItems:"center", gap:9 }}>
       <SamasMark size={24} markColor={markColor} dotColor="#16C784"/>
       <span style={{ fontFamily:"Sora,sans-serif", fontSize:16, fontWeight:600, color:textColor, letterSpacing:2 }}>SAMAS</span>
-    </div>
-  );
-}
-
-function SAMASLogoLarge() {
-  return (
-    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:16 }}>
-      <SamasMark size={84} markColor="#FFFFFF" dotColor="#16C784"/>
-      <div style={{ color:"#FFFFFF", fontSize:30, fontWeight:500, fontFamily:"Sora,sans-serif", letterSpacing:6 }}>SAMAS</div>
-      <div style={{ color:"#16C784", fontSize:13, fontWeight:400, fontFamily:"Sora,sans-serif", letterSpacing:1, marginTop:-6 }}>Tu centro financiero</div>
     </div>
   );
 }
@@ -5074,85 +4961,6 @@ function SignupForm({ onBack, onComplete, emailjsCfg, C }) {
   );
 }
 
-function LoginScreen({ onLogin, onSignup, emailjsCfg, C, isWeb = false }) {
-  const [view, setView]       = useState("login");  // "login" | "signup"
-  const [phase, setPhase]     = useState("idle");
-  const [pin, setPin]         = useState("");
-  const [pinErr, setPinErr]   = useState(false);
-  // On the Web build there's no reliable face recognition available — laptop
-  // webcams don't expose any TrueDepth/Face-ID style auth — so we skip the
-  // Face ID UX entirely and default straight to the PIN entry.
-  const [showPin, setShowPin] = useState(isWeb);
-  const doFaceID = () => { setPhase("scanning"); setTimeout(() => { setPhase("success"); setTimeout(onLogin, 800); }, 1800); };
-  const doPin = () => { if (pin === DEMO_USER.pin) { setPhase("success"); setTimeout(onLogin, 600); } else { setPinErr(true); setPin(""); setTimeout(() => setPinErr(false), 1400); } };
-  // Fresh signup → call onSignup (which resets state) rather than onLogin,
-  // so the new account doesn't inherit the demo portfolio.
-  if (view === "signup") return <SignupForm onBack={() => setView("login")} onComplete={() => { setPhase("success"); setTimeout(onSignup || onLogin, 400); }} emailjsCfg={emailjsCfg} C={C}/>;
-  return (
-    <div style={{ position:"absolute", inset:0, zIndex:100, background:"linear-gradient(160deg,#0D1117 0%,#0D2B1C 55%,#000000 100%)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"space-between", padding:"0 0 32px" }}>
-      <style>{"@keyframes scanLine{0%{top:18%}100%{top:78%}} @keyframes glow{0%,100%{box-shadow:0 0 20px rgba(192,96,144,0.3)}50%{box-shadow:0 0 40px rgba(192,96,144,0.7)}} @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}"}</style>
-      <div style={{ width:"100%", paddingTop:30, paddingLeft:20, paddingRight:20, paddingBottom:8, display:"flex", justifyContent:"space-between" }}>
-        <span style={{ color:"rgba(255,255,255,0.5)", fontSize:12, fontWeight:600 }}>{new Date().toLocaleTimeString("es-AR", { hour:"2-digit", minute:"2-digit" })}</span>
-      </div>
-      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8, animation:"fadeIn 0.6s ease-out" }}>
-        <SAMASLogoLarge/>
-        <div style={{ color:"rgba(255,255,255,0.3)", fontSize:11, letterSpacing:3, textTransform:"uppercase" }}>Inversiones</div>
-      </div>
-      {!showPin && !isWeb ? (
-        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:20 }}>
-          <div style={{ position:"relative", width:160, height:160 }}>
-            <div style={{ position:"absolute", inset:0, borderRadius:"50%", border:"2px solid "+(phase==="success"?"#4ADE80":phase==="scanning"?"#0D1117":"rgba(255,255,255,0.12)"), transition:"border-color 0.4s" }}/>
-            <div style={{ position:"absolute", inset:10, borderRadius:"50%", background:"rgba(255,255,255,0.03)", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
-              {phase === "scanning" && <div style={{ position:"absolute", left:0, right:0, height:2, background:"linear-gradient(90deg,transparent,#0D1117,transparent)", animation:"scanLine 0.9s ease-in-out infinite alternate", top:"50%" }}/>}
-              {phase !== "success" ? (
-                <svg width="70" height="70" viewBox="0 0 80 80" fill="none" style={{ opacity: phase==="scanning" ? 0.4 : 0.25 }}>
-                  <ellipse cx="40" cy="36" rx="24" ry="28" stroke="rgba(255,255,255,0.6)" strokeWidth="2"/><ellipse cx="31" cy="30" rx="3.5" ry="4.5" stroke="rgba(255,255,255,0.6)" strokeWidth="2"/><ellipse cx="49" cy="30" rx="3.5" ry="4.5" stroke="rgba(255,255,255,0.6)" strokeWidth="2"/><path d="M40 35 L37 43 Q40 45 43 43 Z" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" fill="none"/><path d="M32 50 Q40 55 48 50" stroke="rgba(255,255,255,0.6)" strokeWidth="2" strokeLinecap="round" fill="none"/>
-                  <path d="M8 20 L8 8 L20 8" stroke="#0D1117" strokeWidth="2" strokeLinecap="round"/><path d="M60 8 L72 8 L72 20" stroke="#0D1117" strokeWidth="2" strokeLinecap="round"/><path d="M8 55 L8 67 L20 67" stroke="#0D1117" strokeWidth="2" strokeLinecap="round"/><path d="M60 67 L72 67 L72 55" stroke="#0D1117" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-              ) : (
-                <svg width="56" height="56" viewBox="0 0 56 56" fill="none"><circle cx="28" cy="28" r="24" fill="rgba(74,222,128,0.15)" stroke="#4ADE80" strokeWidth="2"/><polyline points="17,28 24,36 39,20" stroke="#4ADE80" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              )}
-            </div>
-            {["tl","tr","bl","br"].map(p => <div key={p} style={{ position:"absolute", top:p.startsWith("t")?-2:"auto", bottom:p.startsWith("b")?-2:"auto", left:p.endsWith("l")?-2:"auto", right:p.endsWith("r")?-2:"auto", width:18, height:18, borderTop:p.startsWith("t")?"2px solid #0D1117":"none", borderBottom:p.startsWith("b")?"2px solid #0D1117":"none", borderLeft:p.endsWith("l")?"2px solid #0D1117":"none", borderRight:p.endsWith("r")?"2px solid #0D1117":"none" }}/>)}
-          </div>
-          <div style={{ color: phase==="success"?"#4ADE80":phase==="scanning"?"#0D1117":"rgba(255,255,255,0.45)", fontSize:14, fontWeight: phase!=="idle" ? 600 : 400, textAlign:"center" }}>
-            {phase==="idle"?"Usar Face ID para ingresar":phase==="scanning"?"Escaneando rostro...":"Identidad verificada"}
-          </div>
-          {phase === "idle" && <button onClick={doFaceID} style={{ background:"linear-gradient(135deg,#0D1117,#E080B0)", border:"none", borderRadius:18, padding:"14px 40px", color:"#fff", fontWeight:800, fontSize:15, cursor:"pointer", fontFamily:"inherit", animation:"glow 2s ease-in-out infinite" }}>Ingresar con Face ID</button>}
-        </div>
-      ) : (
-        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:20, width:"100%", padding:"0 32px" }}>
-          <div style={{ color:"rgba(255,255,255,0.5)", fontSize:13 }}>PIN de seguridad</div>
-          <div style={{ display:"flex", gap:14 }}>
-            {[0,1,2,3].map(i => <div key={i} style={{ width:13, height:13, borderRadius:"50%", background: i < pin.length ? (pinErr?"#F87171":"#0D1117") : "rgba(255,255,255,0.2)", border:"1.5px solid "+(i < pin.length ? (pinErr?"#F87171":"#0D1117") : "rgba(255,255,255,0.3)"), transition:"all 0.15s" }}/>)}
-          </div>
-          {pinErr && <div style={{ color:"#F87171", fontSize:12, fontWeight:600, marginTop:-10 }}>PIN incorrecto</div>}
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, width:"100%" }}>
-            {[1,2,3,4,5,6,7,8,9,"",0,"x"].map((k, i) => (
-              <button key={i} onClick={() => { if (k==="x") { setPin(p => p.slice(0,-1)); return; } if (k==="") return; const next = pin + String(k); setPin(next); if (next.length === 4) setTimeout(doPin, 120); }}
-                disabled={k===""}
-                style={{ background:k===""?"transparent":"rgba(255,255,255,0.07)", border:k===""?"none":"1px solid rgba(255,255,255,0.1)", borderRadius:14, padding:"16px 0", color:k==="x"?"rgba(255,255,255,0.4)":"#fff", fontSize:k==="x"?16:22, fontWeight:600, cursor:k===""?"default":"pointer", fontFamily:"inherit" }}>
-                {k==="x"?"<-":k}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
-        {!isWeb && !showPin && phase==="idle" && <button onClick={() => setShowPin(true)} style={{ background:"transparent", border:"none", color:"rgba(255,255,255,0.3)", fontSize:12, cursor:"pointer", fontFamily:"inherit", textDecoration:"underline" }}>Usar PIN</button>}
-        {!isWeb && showPin && <button onClick={() => { setShowPin(false); setPin(""); }} style={{ background:"transparent", border:"none", color:"rgba(255,255,255,0.3)", fontSize:12, cursor:"pointer", fontFamily:"inherit", textDecoration:"underline" }}>Usar Face ID</button>}
-        {phase==="idle" && (
-          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-            <span style={{ color:"rgba(255,255,255,0.35)", fontSize:12 }}>Sos nuevo en SAMAS?</span>
-            <button onClick={() => setView("signup")} style={{ background:"transparent", border:"none", color:"#16C784", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Crear cuenta</button>
-          </div>
-        )}
-        <div style={{ color:"rgba(255,255,255,0.15)", fontSize:10, letterSpacing:1 }}>samas.com.ar v2.5.0</div>
-      </div>
-    </div>
-  );
-}
-
 // ============================================================
 // PROFILE SHEET
 // ============================================================
@@ -5647,7 +5455,7 @@ function ProfileSheet({ displayUser, uiMode, onChangeUiMode, onResetAccount, onR
 // ============================================================
 function MobileApp({ appState, handlers, C }) {
   const { loggedIn, needsAuth, needsMfa, mfaPassed, setMfaPassed, needsPinGate, needsWelcome, uiMode, displayUser, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, isDark, tab, showUSD, lang, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker, appShell, setAppShell } = appState;
-  const { handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte } = handlers;
+  const { handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte } = handlers;
   // Modal state hoisted out of PagePortfolio so the wizard's absolute
   // overlay covers the full phone frame (otherwise it was clipped by the
   // page's overflow:auto scroll container — the X button could fall out
@@ -6619,13 +6427,9 @@ export default function SAMASApp() {
       samasNotify(`Alerta programada · ${ticker}`, `Te avisamos cuando ${dir} $${fN(alert.price)}.`);
     }
   };
-  // handleLogin / handleSignup are no-ops now — the Supabase auth flow in
-  // SupabaseAuthFlow handles signup + login directly with the SDK, and the
-  // useSupabaseSession hook updates our session state automatically. We keep
-  // stubs here so any stale call sites (e.g. the old LoginScreen renders,
-  // now unreachable) don't crash.
-  const handleLogin = () => {};
-  const handleSignup = () => {};
+  // (Removed in samas-0.4.8 dead-code sweep: handleLogin / handleSignup
+  // no-op stubs that existed as defensive shims for the deleted
+  // LoginScreen component. Zero call sites in the active codebase.)
   // Tutorial kickoff: show it once, after login, for users who haven't seen
   // it yet. Reads from profiles.seen_tutorial so the flag persists across
   // devices and browsers (was previously localStorage, which meant every
@@ -6919,7 +6723,7 @@ export default function SAMASApp() {
   };
 
   const appState = { isDark, loggedIn, needsAuth, needsMfa, mfaPassed, setMfaPassed, needsPinGate, needsWelcome, uiMode, displayUser, sbSession, sbProfile, refetchProfile, pinUnlocked, setPinUnlocked, showProfile, tab, showUSD, orders, selectedAsset, pendingTrade, toast, holdings, stopLosses, priceAlerts, balance, showTutorial, lang, watchlist, watchlists, finnhubKey, finnhub, emailjsCfg, anthropicKey, anthropicModel, savedPlan, portfolioHistory, recurringAporte, pickerTicker, appShell, setAppShell };
-  const handlers = { handleLogin, handleSignup, handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, handleSavePin, handleChangeUiMode, handleResetAccount, handleResetPin, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte };
+  const handlers = { handleDeposit, setShowProfile, setIsDark, setTab, setShowUSD, setLang, setSelected, handleTrade, executeTrade, setPending, handleSetSL, handleSetAlert, handleLogout, handleSavePin, handleChangeUiMode, handleResetAccount, handleResetPin, finishTutorial, setShowTutorial, toggleWatchlist, createWatchlist, renameWatchlist, removeWatchlist, addToWatchlist, removeFromWatchlist, setTickerInLists, setPickerTicker, setFinnhubKey, setEmailjsCfg, setAnthropicKey, setAnthropicModel, setSavedPlan, setRecurringAporte };
 
   const outerBg = isDark ? "#080808" : "#050505";
 

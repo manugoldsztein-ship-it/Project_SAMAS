@@ -2801,6 +2801,18 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.8",
+    title: "App.jsx dead-code sweep — 6 unused components removed",
+    pushed: "34b4de4..pending",
+    bullets: [
+      "Comprehensive dead-code audit on the legacy 7139-line App.jsx. Cross-referenced all 72 top-level function declarations against actual usage (JSX instantiations + callable refs) inside App.jsx and across the rest of src/. Found 6 truly dead components / utilities + 2 dead handler stubs + 1 stale comment block.",
+      "Removed: BrandSVG (33 lines, hardcoded brand SVG icons never instantiated), PageProductos (27 lines, retired Productos page), PageTrending (31 lines, retired Trending page), loadNewsEndpoint (13 lines, news endpoint loader nothing called), LoginScreen (78 lines, demo-PIN login replaced by Supabase auth), SAMASLogoLarge (10 lines, only used by LoginScreen).",
+      "Cleaned up the orphaned handleLogin / handleSignup no-op stubs and their entries in the handlers destructure / object — they existed solely as defensive shims for the deleted LoginScreen.",
+      "Net: 196 lines removed from App.jsx (7139 → 6943). Production bundle size unchanged (Rollup tree-shakes unused exports anyway), but the file is materially easier to navigate and read.",
+      "Re-ran the audit after each removal pass; converged after 3 passes (no more orphans). Build still clean.",
+    ],
+  },
+  {
     version: "0.4.7",
     title: "Aporte mensual fix — credits now reach balance + Movimientos",
     bullets: [
