@@ -593,6 +593,10 @@ function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus
   // be re-tapped mid-flight. Idempotent on the server, but the UX is
   // cleaner if we don't fire two seeds at once.
   const [seedingSocial, setSeedingSocial] = useState(false);
+  // samas-0.4.24 — full-demo combo button has its own busy flag so
+  // the row can show a spinner without blocking the granular seed
+  // buttons below.
+  const [seedingFull, setSeedingFull] = useState(false);
 
   // App Store self-service flows (Guideline 5.1.1(v)). Both call
   // their respective Edge Functions; UI state mirrored locally.
@@ -1081,6 +1085,78 @@ function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus
         }}>
           {tr("settings.demo.section", lang)}
         </div>
+        {/* Full-demo single-tap (samas-0.4.24) — runs both seed
+            functions + activates Plus + sets up an aporte mensual
+            in one go. Designed for "Cohen demo in 5 minutes": tap
+            once, hand the phone over, every surface is populated.
+            Each step swallows its own errors so a partial failure
+            still leaves the rest of the demo working. */}
+        <button
+          disabled={seedingFull}
+          onClick={async () => {
+            if (seedingFull) return;
+            if (!confirm(tr("settings.demo.seed_full_confirm", lang))) return;
+            setSeedingFull(true);
+            const status = { broker: false, social: false, plus: false };
+            try {
+              toast.info(tr("settings.demo.seed_full_step.broker", lang), { duration: 2000 });
+              try { await seedDemoAccount(); status.broker = true; } catch (_e) { /* swallow */ }
+              toast.info(tr("settings.demo.seed_full_step.social", lang), { duration: 2000 });
+              try { await seedSocialDemo(); status.social = true; } catch (_e) { /* swallow */ }
+              toast.info(tr("settings.demo.seed_full_step.plus", lang), { duration: 2000 });
+              try { await activatePlus(); setIsPlus(true); status.plus = true; } catch (_e) { /* swallow */ }
+              const ok = Object.values(status).filter(Boolean).length;
+              if (ok === 3) {
+                toast.success(tr("settings.demo.seed_full_done", lang));
+              } else {
+                toast.warning
+                  ? toast.warning(tr("settings.demo.seed_full_partial", lang, { n: String(ok) }))
+                  : toast.info(tr("settings.demo.seed_full_partial", lang, { n: String(ok) }));
+              }
+            } finally {
+              setSeedingFull(false);
+            }
+          }}
+          style={{
+            width: "100%", padding: "14px 16px", borderRadius: 14, marginBottom: 8,
+            background: `linear-gradient(135deg, ${T.accent} 0%, ${T.accentSoft} 100%)`,
+            border: `1.5px solid ${T.accent}`,
+            color: T.accentInk,
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            cursor: seedingFull ? "default" : "pointer", textAlign: "left",
+            opacity: seedingFull ? 0.7 : 1,
+            fontFamily: "inherit",
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 6,
+              fontFamily: FONT.sans, fontSize: 14, fontWeight: 800,
+            }}>
+              <span style={{ fontSize: 16 }}>★</span>
+              {seedingFull
+                ? tr("settings.demo.seed_full_running", lang)
+                : tr("settings.demo.seed_full", lang)}
+            </div>
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 11, opacity: 0.85, marginTop: 2,
+              lineHeight: 1.4,
+            }}>
+              {tr("settings.demo.seed_full_sub", lang)}
+            </div>
+          </div>
+          {seedingFull ? (
+            <div style={{
+              width: 18, height: 18, borderRadius: 999, flexShrink: 0,
+              border: `2.5px solid ${T.accentInk}33`, borderTopColor: T.accentInk,
+              animation: "samas-spin 800ms linear infinite",
+            }}/>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          )}
+        </button>
         <button
           onClick={() => {
             if (confirm(tr("settings.demo.seed_confirm", lang))) seedDemoAccount();
@@ -2899,6 +2975,18 @@ function AIConsentGate({ T, lang = "es" }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.4.24",
+    title: "Demo seeding combo — un tap, app lista para Cohen",
+    bullets: [
+      "Antes había 2 botones separados en Settings → Demo (Cargar cuenta demo + Sembrar red social) y Plus se activaba aparte. Para una pitch de 5 minutos eso son 3 taps + esperas. Esta patch los unifica.",
+      "Nuevo botón gradient 'Demo completo · todo en uno' al tope de la sección Demo en Settings. Tap → confirma → corre los 3 pasos en serie (broker seed → social seed → activatePlus) con toasts de progreso por step.",
+      "Cada step swallowea sus propios errores — un fallo de la Edge Function de social no bloquea que se active Plus. Si los 3 pasan, toast success 'Demo completo listo. Mostralo a Cohen.'. Si parcial, toast 'Demo parcial: N/3 pasos completados. Reintentá los faltantes manualmente.'",
+      "Visual: gradient accent→accentSoft que matchea el banner de trial del 0.4.23 y el card de Hipotético del 0.4.22 — coherencia visual entre las superficies premium / pitch-ready.",
+      "Los botones granulares (Cargar cuenta demo / Sembrar red social) se mantienen abajo para casos donde Manuel sólo quiera correr uno (debugging social, repopular sin tocar Plus, etc.). Useful flexibility, no perdimos opcionalidad por agregar el atajo.",
+      "i18n: 9 keys nuevas en es + en (settings.demo.seed_full + .sub + .confirm + .running + .step.* + .done + .partial).",
+    ],
+  },
   {
     version: "0.4.23",
     title: "Pricing screen polish — trial offer + value framing",
