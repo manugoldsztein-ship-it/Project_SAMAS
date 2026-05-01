@@ -25,6 +25,12 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import {
+  consumeRateLimit, RATE_LIMITS, buildBucket, getRequestIp, rateLimit429,
+} from "../_shared/rate-limit.ts";
+import {
+  readJsonBody, sanitizeString, validationErrorResponse,
+} from "../_shared/validate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -89,26 +95,49 @@ serve(async (req) => {
       );
     }
 
-    // --- body ---
-    const { phone } = await req.json();
-    if (!looksLikePhone(phone)) {
+    // service_role client to bypass RLS on otp_codes (deny-all for clients)
+    // and rate_limits (also deny-all). samas-0.4.16.
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // --- rate limit (samas-0.4.16) ---
+    // Auth-route preset: 5 attempts per 15 minutes per user. Apply
+    // user-id-keyed AND ip-keyed buckets — user-id stops a logged-in
+    // attacker from spamming OTPs to phones; ip-keyed catches anyone
+    // hitting many user accounts from the same source. We require
+    // both to pass.
+    const ip = getRequestIp(req);
+    const userBucket = buildBucket("send-otp", { userId: user.id });
+    const ipBucket   = buildBucket("send-otp", { ip });
+    const userRl = await consumeRateLimit(supabaseAdmin, { bucket: userBucket, ...RATE_LIMITS.AUTH });
+    if (!userRl.allowed) return rateLimit429(userRl, corsHeaders);
+    const ipRl = await consumeRateLimit(supabaseAdmin, { bucket: ipBucket, ...RATE_LIMITS.AUTH });
+    if (!ipRl.allowed) return rateLimit429(ipRl, corsHeaders);
+
+    // --- body (size-checked, JSON-parsed) ---
+    let body: { phone?: unknown };
+    try {
+      body = await readJsonBody(req) as { phone?: unknown };
+    } catch (e) {
+      const ve = validationErrorResponse(e, corsHeaders);
+      if (ve) return ve;
+      throw e;
+    }
+    const phoneRaw = sanitizeString(body.phone, 32);
+    if (!looksLikePhone(phoneRaw)) {
       return new Response(
         JSON.stringify({ error: "Invalid phone. Use international format, e.g. +5491112345678." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
-    const to = normalizePhone(phone);
+    const to = normalizePhone(phoneRaw);
 
     // --- generate + store code ---
     const code = randomCode();
     const codeHash = await sha256(code);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
-
-    // service_role client to bypass RLS on otp_codes (deny-all for clients).
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
 
     // Upsert so a second send for the same user replaces the old code.
     const { error: upErr } = await supabaseAdmin

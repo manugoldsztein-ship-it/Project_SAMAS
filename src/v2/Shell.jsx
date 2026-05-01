@@ -2827,6 +2827,19 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.16",
+    title: "Security audit + rate limit infra + auth route hardening",
+    bullets: [
+      "Manuel pidió full security pass. Esta patch ataca infraestructura + las rutas críticas de auth. Sweep mecánico al resto de las Edge Functions queda para 0.4.17.",
+      "SECRET SCAN — corrido sobre src/ supabase/functions/ supabase/*.sql ios/ capacitor.config.json. CERO hits de keys hardcodeadas (Anthropic / MP / service_role / JWT / AWS / Stripe / passwords). Único token visible en el bundle es la publishable key de Supabase en src/lib/supabase.js, que es PÚBLICA por diseño — RLS protege los datos. Documentado en el audit.",
+      "RATE LIMIT INFRA — nueva tabla public.rate_limits + RPC consume_rate_limit(bucket, limit, window_s) que devuelve {allowed, count, retry_after}. RLS deny-all desde clientes; sólo el service_role la lee/escribe vía la RPC SECURITY DEFINER. Sliding window por count(*) sobre hit_at >= now() - window. TTL diario via gc_rate_limits().",
+      "SHARED HELPERS — supabase/functions/_shared/rate-limit.ts (consumeRateLimit + presets RATE_LIMITS.AUTH/AI/STD/ADMIN + getRequestIp + buildBucket + rateLimit429) y _shared/validate.ts (readJsonBody con 32KB cap, sanitizeString, sanitizeInt, ValidationError → response). Disponibles para que cada Edge Function aplique el patrón uniformemente.",
+      "AUTH ROUTES HARDENED — send-otp + verify-otp ahora rate-limited 5 attempts / 15 min, con bucket DOBLE: per-user-id (frena al usuario logueado spammeando) + per-IP (frena al atacante ciclando cuentas desde una sola fuente). Body size cap 32KB. Todos los inputs sanitizados via sanitizeString. Las protecciones existentes (10-min OTP expiry, SHA-256 hash, MAX_ATTEMPTS=5 wrong codes) se mantienen.",
+      "Migración aplicada via Management API. Edge Functions deployadas via supabase functions deploy --no-verify-jwt. Sanity check del RPC en Postgres directo: 4ta llamada con limit=3 retorna allowed=false con retry_after=60.",
+      "AUDIT DOC — docs/security-audit.md. Cubre estado actual (qué está hardenizado, qué no), threat model, scoreboard de items abiertos, smoke tests para verificar que el rate limit funciona, y qué SI/NO podés decirle a Cohen sobre nuestra postura de seguridad. Honesto: 'prototype-grade, no production-grade'.",
+    ],
+  },
+  {
     version: "0.4.15",
     title: "Feedback de asesor financiero: disclaimers + return rates calibrados + Cashflow gratis",
     bullets: [

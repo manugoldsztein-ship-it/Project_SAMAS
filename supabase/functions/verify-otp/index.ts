@@ -17,6 +17,12 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import {
+  consumeRateLimit, RATE_LIMITS, buildBucket, getRequestIp, rateLimit429,
+} from "../_shared/rate-limit.ts";
+import {
+  readJsonBody, sanitizeString, validationErrorResponse,
+} from "../_shared/validate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -73,28 +79,56 @@ serve(async (req) => {
       );
     }
 
-    // --- body ---
-    const { phone, code } = await req.json();
-    if (!looksLikePhone(phone)) {
+    // service_role client (bypasses RLS on otp_codes + rate_limits).
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // --- rate limit (samas-0.4.16) ---
+    // Auth-route preset: 5 attempts per 15 minutes. Both user-id and
+    // IP keyed. Applied BEFORE we touch otp_codes so we don't burn
+    // attempts counter on rate-limited requests. Note that the
+    // existing MAX_ATTEMPTS (5 wrong codes per stored OTP) is a
+    // SEPARATE protection — that bounds wrong guesses on a single
+    // code; this bounds total verify calls per window.
+    const ip = getRequestIp(req);
+    const userRl = await consumeRateLimit(supabaseAdmin, {
+      bucket: buildBucket("verify-otp", { userId: user.id }),
+      ...RATE_LIMITS.AUTH,
+    });
+    if (!userRl.allowed) return rateLimit429(userRl, corsHeaders);
+    const ipRl = await consumeRateLimit(supabaseAdmin, {
+      bucket: buildBucket("verify-otp", { ip }),
+      ...RATE_LIMITS.AUTH,
+    });
+    if (!ipRl.allowed) return rateLimit429(ipRl, corsHeaders);
+
+    // --- body (size-checked, JSON-parsed) ---
+    let body: { phone?: unknown; code?: unknown };
+    try {
+      body = await readJsonBody(req) as { phone?: unknown; code?: unknown };
+    } catch (e) {
+      const ve = validationErrorResponse(e, corsHeaders);
+      if (ve) return ve;
+      throw e;
+    }
+    const phoneRaw = sanitizeString(body.phone, 32);
+    const codeRaw  = sanitizeString(body.code, 16);
+    if (!looksLikePhone(phoneRaw)) {
       return new Response(
         JSON.stringify({ error: "Invalid phone" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
-    if (!looksLikeCode(code)) {
+    if (!looksLikeCode(codeRaw)) {
       return new Response(
         JSON.stringify({ error: "Invalid code" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
-    const to = normalizePhone(phone);
-    const submittedHash = await sha256(code.trim());
-
-    // --- load stored OTP (service_role bypasses RLS) ---
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    const to = normalizePhone(phoneRaw);
+    const submittedHash = await sha256(codeRaw);
 
     const { data: otp, error: lookupErr } = await supabaseAdmin
       .from("otp_codes")
