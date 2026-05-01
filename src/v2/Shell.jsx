@@ -2648,6 +2648,17 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.2.1",
+    title: "AI Proactive Notifications — SAMAS pings you when something matters",
+    bullets: [
+      "Fourteenth AI surface — different shape than the others. Instead of a card you tap, this one writes proactive notifications to your inbox + sends a push when actionable signals fire on your portfolio. Open the bell icon → tap \"Generar\" → IA scans your holdings, generates up to 5 fresh insights, drops them into the inbox via realtime so you see them slide in.",
+      "Five signal types, all deterministic: concentration (>30% in one ticker), big drawdown (-15% from cost), big gain (+30% from cost), earnings within 0-2 days, and cash-drag for under-built portfolios. Each insight gets a Claude-refined title + body; numbers stay deterministic. 24h dedupe per signal+ticker so re-running doesn't spam you.",
+      "Tapping a ticker insight in the inbox deep-links into Invest tab → AssetSheet for that ticker (re-uses the samas:harvest-sell channel from 0.2.0). New \"insight\" notification kind has a sparkle icon + accent tint to read distinctly from social/price/aporte rows.",
+      "Push notification sent best-effort: 1 insight = full title+body push; multiple = compact \"N nuevos insights\" combined ping (lock screen stays clean). Cron-scheduling for daily auto-runs is wired but off by default — flip it on with a pg_cron migration once we have ANTHROPIC_API_KEY in production.",
+      "14 AI surfaces total. Cohen pitch: open the app → bell shows a red dot → there's already a Claude-written insight waiting about your biggest position.",
+    ],
+  },
+  {
     version: "0.2.0",
     title: "AI Tax-loss harvester — crystalize losses, save on impuesto cedular",
     bullets: [

@@ -193,6 +193,39 @@ export async function taxLossHarvest() {
 }
 
 /**
+ * proactiveInsights() — POST /functions/v1/proactive-insights
+ *
+ * Server scans the user's holdings for actionable signals
+ * (concentration, big drawdown, big gain, earnings soon, cash
+ * drag), dedupes against the last 24h of inserted insights, and
+ * writes up to 5 fresh notifications (kind='insight'). Returns:
+ *   { inserted: number, summary: string, kinds: string[] }
+ *
+ * AI refines title + body for each insight; underlying signals
+ * stay deterministic. Templated fallback when no API key.
+ *
+ * Designed to be called on-demand from the bell-icon inbox
+ * "Refresh insights" button. Could also run from pg_cron daily
+ * via service-role looping all users (future migration).
+ */
+export async function proactiveInsights() {
+  await gateOnConsent();
+  const { data, error } = await supabase.functions.invoke("proactive-insights", {
+    body: {},
+  });
+  if (error) {
+    let detail = "";
+    try {
+      const body = await error?.context?.json?.();
+      if (body?.error) detail = `: ${body.error}`;
+    } catch (_) { /* fall through */ }
+    throw new Error(`Insights IA falló${detail || ": " + (error.message || "error desconocido")}`);
+  }
+  if (data?.error) throw new Error(`Insights IA falló: ${data.error}`);
+  return data;
+}
+
+/**
  * earningsWatch() — POST /functions/v1/earnings-watch
  *
  * Server reads the user's holdings, picks upcoming earnings dates

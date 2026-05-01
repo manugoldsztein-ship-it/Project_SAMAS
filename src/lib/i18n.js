@@ -605,6 +605,11 @@ const V2 = {
     "notif.empty_title": "Bandeja vacía",
     "notif.empty_sub": "Tus alertas, aportes y avisos van a aparecer acá.",
     "notif.earlier": "Antes",
+    "notif.insights.generate":   "Generar",
+    "notif.insights.generating": "Pensando…",
+    "notif.insights.created":    "{n} insight nuevo. Mirá abajo.",
+    "notif.insights.none":       "Cartera tranquila. Sin alertas accionables.",
+    "notif.insights.error":      "No pude generar insights ahora. Probá de nuevo.",
 
   },
 
@@ -1182,6 +1187,11 @@ const V2 = {
     "notif.empty_title": "Inbox empty",
     "notif.empty_sub": "Your alerts, contributions and pings will show up here.",
     "notif.earlier": "Earlier",
+    "notif.insights.generate":   "Generate",
+    "notif.insights.generating": "Thinking…",
+    "notif.insights.created":    "{n} new insight. See below.",
+    "notif.insights.none":       "Portfolio quiet. Nothing actionable right now.",
+    "notif.insights.error":      "Couldn't generate insights. Try again.",
 
   },
 

@@ -33,7 +33,7 @@ import { toast } from "./toast.jsx";
 import { setRefreshHandler } from "./refreshRegistry.js";
 import { t as tr } from "../lib/i18n.js";
 import { useLivePortfolioRatio } from "./livePrices.jsx";
-import { analyzePortfolio, chatPortfolio, dailyBrief, compareBenchmark, earningsWatch, taxLossHarvest } from "../lib/ai.js";
+import { analyzePortfolio, chatPortfolio, dailyBrief, compareBenchmark, earningsWatch, taxLossHarvest, proactiveInsights } from "../lib/ai.js";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { hapticNative } from "../lib/native.js";
 
@@ -2199,6 +2199,36 @@ function ChatBubble({ T, role, content, thinking = false }) {
 function NotificationsInbox({ T, lang = "es", onClose }) {
   const [items, setItems] = useState(null); // null=loading, [] = empty
   const [busy, setBusy] = useState(false);
+  // Proactive insights generator (samas-0.2.1). Tap → calls the
+  // proactive-insights Edge Function, which writes notif rows the
+  // realtime subscription below picks up automatically.
+  const [genBusy, setGenBusy] = useState(false);
+  const [genFlash, setGenFlash] = useState(null); // string | null
+
+  async function generateInsights() {
+    if (genBusy) return;
+    setGenBusy(true);
+    setGenFlash(null);
+    try {
+      const res = await proactiveInsights();
+      hapticNative("success").catch(() => {});
+      if ((res?.inserted || 0) === 0) {
+        setGenFlash(tr("notif.insights.none", lang));
+      } else {
+        setGenFlash(tr("notif.insights.created", lang, { n: res.inserted }));
+      }
+      setTimeout(() => setGenFlash(null), 4000);
+    } catch (e) {
+      if (e?.name === "AIConsentDeniedError") {
+        // User declined — silent. The consent gate already showed UI.
+      } else {
+        setGenFlash(tr("notif.insights.error", lang));
+        setTimeout(() => setGenFlash(null), 4000);
+      }
+    } finally {
+      setGenBusy(false);
+    }
+  }
 
   useEffect(() => {
     let alive = true;
@@ -2300,14 +2330,37 @@ function NotificationsInbox({ T, lang = "es", onClose }) {
           <div style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text }}>
             {tr("notif.title", lang)}
           </div>
-          {items && items.length > 0 && (
-            <button onClick={clearAll} disabled={busy} style={{
-              background: "transparent", border: "none",
-              color: T.textMute, fontFamily: FONT.sans, fontSize: 12, fontWeight: 600,
-              cursor: busy ? "default" : "pointer",
-            }}>{tr("notif.clear_all", lang)}</button>
-          )}
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <button onClick={generateInsights} disabled={genBusy} style={{
+              background: T.accentSoft, border: `1px solid ${T.accent}55`,
+              color: T.accent, fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+              padding: "5px 10px", borderRadius: 999,
+              cursor: genBusy ? "default" : "pointer",
+              display: "flex", alignItems: "center", gap: 6,
+            }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
+                style={genBusy ? { animation: "samas-spin 1s linear infinite" } : null}>
+                <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
+              </svg>
+              {genBusy ? tr("notif.insights.generating", lang) : tr("notif.insights.generate", lang)}
+            </button>
+            {items && items.length > 0 && (
+              <button onClick={clearAll} disabled={busy} style={{
+                background: "transparent", border: "none",
+                color: T.textMute, fontFamily: FONT.sans, fontSize: 12, fontWeight: 600,
+                cursor: busy ? "default" : "pointer",
+              }}>{tr("notif.clear_all", lang)}</button>
+            )}
+          </div>
         </div>
+        {genFlash && (
+          <div style={{
+            margin: "0 20px 8px", padding: "8px 12px", borderRadius: 10,
+            background: T.accentSoft, border: `1px solid ${T.accent}55`,
+            color: T.accent, fontFamily: FONT.sans, fontSize: 12, fontWeight: 600,
+          }}>{genFlash}</div>
+        )}
         <div style={{
           flex: 1, overflowY: "auto",
           padding: "0 16px 24px",
@@ -2412,6 +2465,17 @@ function navigateFromNotif(n) {
       if (!data.post_id) return false;
       window.dispatchEvent(new CustomEvent("samas:open-thread", {
         detail: { postId: data.post_id },
+      }));
+      return true;
+    case "insight":
+      // Proactive insight — if there's a ticker, deep-link into
+      // the AssetSheet using the same harvest-sell event channel
+      // (BrokerShell drains samas_pending_harvest_sell on assets
+      // load). For non-ticker insights (cash_drag) there's no
+      // destination yet — return false so the row stays inert.
+      if (!data.ticker) return false;
+      window.dispatchEvent(new CustomEvent("samas:harvest-sell", {
+        detail: { ticker: data.ticker },
       }));
       return true;
     // price_alert / aporte / news / system kinds don't have a
@@ -2520,6 +2584,7 @@ function NotifRow({ T, n, isLast, onTap }) {
       case "social_repost": return { emoji: "🔁", tint: T.accent };
       case "social_reply":  return { emoji: "💬", tint: T.accent };
       case "social_follow": return { emoji: "👤", tint: T.accent };
+      case "insight":       return { emoji: "✦",  tint: T.accent };
       default:              return { emoji: "🔔", tint: T.textMute };
     }
   })();
@@ -2533,7 +2598,8 @@ function NotifRow({ T, n, isLast, onTap }) {
     n?.kind === "social_like" ||
     n?.kind === "social_repost" ||
     n?.kind === "social_reply" ||
-    n?.kind === "mention";
+    n?.kind === "mention" ||
+    (n?.kind === "insight" && !!n?.data?.ticker);
   function handleTap() {
     if (!actionable) return;
     const navigated = navigateFromNotif(n);
