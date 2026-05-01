@@ -59,12 +59,23 @@ async function gateOnQuota() {
     if (data && data.allowed === false) {
       allowed = false;
       payload = { count: data.count, limit: data.limit };
+    } else if (data) {
+      // Successful consume → broadcast the new count so any mounted
+      // QuotaPill / indicator can refresh without re-polling the RPC.
+      payload = { count: data.count, limit: data.limit, isPlus: !!data.is_plus };
     }
   } catch (e) {
     // Network / transport issue → fail open.
     console.warn("[ai-quota] gate threw, failing open:", e?.message);
     return;
   }
+  // Broadcast the change either way (consumed OR blocked) so indicators
+  // re-render with the latest count from the server.
+  try {
+    window.dispatchEvent(new CustomEvent("samas:ai-quota-changed", {
+      detail: payload || {},
+    }));
+  } catch (_) { /* SSR / no window */ }
   if (!allowed) {
     // Pop the Plus upsell modal globally before throwing so components
     // that just bubble the error up still trigger the conversion UX.
@@ -98,6 +109,13 @@ export async function getAIQuotaStatus() {
 export async function activatePlus() {
   const { data, error } = await supabase.rpc("activate_plus");
   if (error) throw new Error(`Plus activation falló: ${error.message}`);
+  // Broadcast so any QuotaPill / indicator hides itself immediately
+  // without waiting for the next render cycle.
+  try {
+    window.dispatchEvent(new CustomEvent("samas:ai-quota-changed", {
+      detail: { isPlus: true, count: 0, limit: null },
+    }));
+  } catch (_) { /* SSR */ }
   return data;
 }
 

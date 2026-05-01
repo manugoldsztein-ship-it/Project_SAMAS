@@ -2665,6 +2665,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.2.8",
+    title: "AI quota indicator — '3/5 IA hoy' pill on quota'd surfaces",
+    bullets: [
+      "Companion to the 0.2.6 paywall mechanism. Free users now see a small '3/5 IA hoy' pill on the AI Chat sheet, the bell-inbox header, and the AI Analysis sheet — whenever they're somewhere they're spending quota. Plus users see no pill (no cap to advertise). Tap the pill = jump straight to the Plus upsell modal.",
+      "Color logic: count < 80% of limit = muted gray, count >= 80% = amber warning, count >= limit = red 'next call will block'. Pre-quota awareness without nagging — at 4/5 the amber tint signals 'last one' before the upsell fires automatically on the 6th attempt.",
+      "Refresh strategy: pill mounts polling getAIQuotaStatus once, then subscribes to a new global event 'samas:ai-quota-changed' that gateOnQuota fires after each consume. No re-polling on every render. activatePlus also fires this event so the pill hides instantly when the user subscribes.",
+      "New file: src/v2/AIQuotaPill.jsx (~85 lines, self-contained). Easy to drop on any future quota'd surface — RebalanceCard sheet, suggestWatchlist input, draftPost composer — when those want the indicator too.",
+    ],
+  },
+  {
     version: "0.2.7",
     title: "Plus copy reframe — 'tu asesor personal por US$5/mes'",
     bullets: [

@@ -34,6 +34,7 @@ import { setRefreshHandler } from "./refreshRegistry.js";
 import { t as tr } from "../lib/i18n.js";
 import { useLivePortfolioRatio } from "./livePrices.jsx";
 import { analyzePortfolio, chatPortfolio, dailyBrief, compareBenchmark, earningsWatch, proactiveInsights, quarterlyReview } from "../lib/ai.js";
+import { AIQuotaPill } from "./AIQuotaPill.jsx";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { hapticNative } from "../lib/native.js";
 
@@ -1233,9 +1234,13 @@ function AIAnalysisCard({ T, lang = "es" }) {
                 </svg>
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
-                  color: T.accent, letterSpacing: 0.6, textTransform: "uppercase" }}>
-                  {tr("wallet.ai.sheet.kicker", lang)}
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+                  color: T.accent, letterSpacing: 0.6, textTransform: "uppercase",
+                }}>
+                  <span>{tr("wallet.ai.sheet.kicker", lang)}</span>
+                  <AIQuotaPill T={T} lang={lang} />
                 </div>
                 <div style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text, letterSpacing: -0.3 }}>
                   {tr("wallet.ai.sheet.title", lang)}
@@ -2143,9 +2148,15 @@ function AIChatCard({ T, lang = "es" }) {
                 </svg>
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
-                  color: T.accent, letterSpacing: 0.6, textTransform: "uppercase" }}>
-                  {tr("wallet.chat.sheet.kicker", lang)}
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+                  color: T.accent, letterSpacing: 0.6, textTransform: "uppercase",
+                }}>
+                  <span>{tr("wallet.chat.sheet.kicker", lang)}</span>
+                  {/* Quota pill — shows X/5 IA hoy for free users.
+                      Hides for Plus / unknown. Tap → upsell modal. */}
+                  <AIQuotaPill T={T} lang={lang} />
                 </div>
                 <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: T.text, letterSpacing: -0.3 }}>
                   {tr("wallet.chat.sheet.title", lang)}
@@ -2461,8 +2472,11 @@ function NotificationsInbox({ T, lang = "es", onClose }) {
           padding: "14px 20px 10px", display: "flex",
           justifyContent: "space-between", alignItems: "center",
         }}>
-          <div style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text }}>
-            {tr("notif.title", lang)}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text }}>
+              {tr("notif.title", lang)}
+            </div>
+            <AIQuotaPill T={T} lang={lang} />
           </div>
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
             <button onClick={generateInsights} disabled={genBusy} style={{
