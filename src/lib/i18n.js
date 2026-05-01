@@ -38,6 +38,15 @@ const V2 = {
 
     "settings.pro_mode":          "Modo Pro",
     "settings.pro_mode_sub":      "Banner en vivo, distribución y top movers",
+    "settings.plus.title":            "SAMAS Plus",
+    "settings.plus.active":           "Activo",
+    "settings.plus.active_sub":       "IA ilimitada · US$5/mes · renueva automáticamente",
+    "settings.plus.inactive_sub":     "Tu asesor personal por US$5/mes. IA ilimitada todos los días.",
+    "settings.plus.activate_cta":     "Activar",
+    "settings.plus.cancel_cta":       "Cancelar",
+    "settings.plus.cancelling":       "Cancelando…",
+    "settings.plus.cancel_confirm":   "¿Cancelar tu suscripción a SAMAS Plus? Volvés al límite de 5 IA por día. Podés volver a activar en cualquier momento.",
+    "settings.plus.cancel_success":   "Plus cancelado. Volviste a la tier gratuita.",
 
     // Pro portfolio dashboard (samas-0.0.42)
     "pro.sector.title":           "Composición por sector",
@@ -636,6 +645,15 @@ const V2 = {
     "settings.section.account":    "Account",
 
     "settings.pro_mode":          "Pro mode",
+    "settings.plus.title":            "SAMAS Plus",
+    "settings.plus.active":           "Active",
+    "settings.plus.active_sub":       "Unlimited AI · US$5/mo · auto-renews",
+    "settings.plus.inactive_sub":     "Your personal advisor for US$5/mo. Unlimited AI every day.",
+    "settings.plus.activate_cta":     "Activate",
+    "settings.plus.cancel_cta":       "Cancel",
+    "settings.plus.cancelling":       "Cancelling…",
+    "settings.plus.cancel_confirm":   "Cancel your SAMAS Plus subscription? You'll go back to the 5 AI calls per day limit. You can re-activate anytime.",
+    "settings.plus.cancel_success":   "Plus cancelled. Back on the free tier.",
     "settings.pro_mode_sub":      "Live banner, allocation and top movers",
 
     // Pro portfolio dashboard (samas-0.0.42)

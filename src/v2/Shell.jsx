@@ -47,7 +47,7 @@ import { seedSocialDemo } from "../lib/seedSocial.js";
 import { hapticNative } from "../lib/native.js";
 import { deleteAccount, exportData } from "../lib/account.js";
 import { grantAIConsent, denyAIConsent, hasAIConsent, revokeAIConsent } from "../lib/aiConsent.js";
-import { activatePlus, getAIQuotaStatus } from "../lib/ai.js";
+import { activatePlus, cancelPlus, getAIQuotaStatus } from "../lib/ai.js";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { LivePricesProvider } from "./livePrices.jsx";
 
@@ -435,6 +435,9 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
           user={user}
           proMode={proMode}
           setProMode={setProMode}
+          isPlus={isPlus}
+          setIsPlus={setIsPlus}
+          onOpenPlusUpsell={() => { setShowSettings(false); setShowProUpsell(true); }}
           isDark={isDark}
           onToggleDark={onToggleDark}
           onLogout={onLogout}
@@ -500,7 +503,7 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
 // full ProfileSheet from legacy, it's a focused settings panel for
 // the toggles the user actually flips often.
 // ----------------------------------------------------------
-function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onLogout, onClose, isNativeApp, lang = "es", setLang }) {
+function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus, onOpenPlusUpsell, isDark, onToggleDark, onLogout, onClose, isNativeApp, lang = "es", setLang }) {
   const [show2FA, setShow2FA] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
@@ -728,7 +731,19 @@ function SettingsSheet({ T, user, proMode, setProMode, isDark, onToggleDark, onL
           </svg>
         </button>
 
-        {/* Pro mode row */}
+        {/* SAMAS Plus row (samas-0.2.9) — distinct from Pro view
+            below. Plus = paid AI subscription, Pro view = free UI
+            density toggle. Active = green chip + "Cancelar" CTA.
+            Inactive = gray chip + "Activar" CTA → opens upsell modal. */}
+        <PlusSettingsRow
+          T={T}
+          isPlus={isPlus}
+          setIsPlus={setIsPlus}
+          onOpenPlusUpsell={onOpenPlusUpsell}
+          lang={lang}
+        />
+
+        {/* Pro view density toggle row (free in both tiers). */}
         <SettingsToggle
           T={T}
           title={tr("settings.pro_mode", lang)}
@@ -2665,6 +2680,17 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.2.9",
+    title: "Settings Plus management — activate / status / cancel",
+    bullets: [
+      "New PlusSettingsRow at the top of Settings showing subscription status. Inactive: gray icon + 'Activar' button → opens the upsell modal. Active: green chip 'Activo' + 'Cancelar' button → confirm dialog → cancel_plus RPC flips is_plus = false.",
+      "Distinct from the Pro-view density toggle just below it. Both rows live together so the user can see both controls in one place: top row = paid AI subscription, bottom row = free UI density. No more semantic overlap.",
+      "New cancel_plus RPC (SECURITY DEFINER, mirrors activate_plus). Production swap: Apple StoreKit handles cancellation in iOS Settings → Subscriptions; we receive DID-CHANGE-RENEWAL-STATUS webhook and flip the flag server-side.",
+      "Cancel triggers a fresh getAIQuotaStatus + broadcasts the new state, so the AIQuotaPill (0.2.8) re-appears immediately with today's free-tier count without a full page refresh. The legal blurb in the pricing screen ('Cancelá cuando quieras desde Settings') is now actually backed by code.",
+      "Migration: supabase/samas_plus_cancel.sql.",
+    ],
+  },
+  {
     version: "0.2.8",
     title: "AI quota indicator — '3/5 IA hoy' pill on quota'd surfaces",
     bullets: [
@@ -3387,6 +3413,96 @@ const CHANGELOG = [
     ],
   },
 ];
+
+// PlusSettingsRow (samas-0.2.9) — Plus subscription status + CTA.
+// Inactive: shows "Activar Plus" button → opens upsell modal.
+// Active: shows green chip + "Cancelar" → confirms then calls
+// cancel_plus RPC. Distinct from the Pro-view toggle below.
+function PlusSettingsRow({ T, isPlus, setIsPlus, onOpenPlusUpsell, lang = "es" }) {
+  const [busy, setBusy] = React.useState(false);
+  async function handleCancel() {
+    if (busy) return;
+    if (!confirm(tr("settings.plus.cancel_confirm", lang))) return;
+    setBusy(true);
+    try {
+      await cancelPlus();
+      if (setIsPlus) setIsPlus(false);
+      toast.success(tr("settings.plus.cancel_success", lang));
+    } catch (e) {
+      toast.error(e?.message || String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div style={{
+      width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 8,
+      background: T.surface, border: `1px solid ${T.border}`,
+      display: "flex", alignItems: "center", gap: 12,
+    }}>
+      <div style={{
+        width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+        background: isPlus ? T.accentSoft : T.bg,
+        color: isPlus ? T.accent : T.textMute,
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
+        </svg>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          display: "flex", alignItems: "center", gap: 6,
+          fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, color: T.text,
+        }}>
+          <span>{tr("settings.plus.title", lang)}</span>
+          {isPlus && (
+            <span style={{
+              padding: "2px 8px", borderRadius: 999,
+              background: T.accent, color: T.accentInk,
+              fontFamily: FONT.mono, fontSize: 9, fontWeight: 800,
+              letterSpacing: 0.5, textTransform: "uppercase",
+            }}>{tr("settings.plus.active", lang)}</span>
+          )}
+        </div>
+        <div style={{
+          fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2,
+          lineHeight: 1.4,
+        }}>
+          {isPlus
+            ? tr("settings.plus.active_sub", lang)
+            : tr("settings.plus.inactive_sub", lang)}
+        </div>
+      </div>
+      {isPlus ? (
+        <button
+          onClick={handleCancel}
+          disabled={busy}
+          style={{
+            padding: "7px 12px", borderRadius: 999,
+            background: "transparent", border: `1px solid ${T.danger}55`,
+            color: T.danger, fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+            cursor: busy ? "default" : "pointer", flexShrink: 0,
+            opacity: busy ? 0.6 : 1,
+          }}>
+          {busy ? tr("settings.plus.cancelling", lang) : tr("settings.plus.cancel_cta", lang)}
+        </button>
+      ) : (
+        <button
+          onClick={onOpenPlusUpsell}
+          style={{
+            padding: "7px 12px", borderRadius: 999,
+            background: T.accent, border: "none",
+            color: T.accentInk, fontFamily: FONT.sans, fontSize: 11, fontWeight: 800,
+            cursor: "pointer", flexShrink: 0,
+          }}>
+          {tr("settings.plus.activate_cta", lang)}
+        </button>
+      )}
+    </div>
+  );
+}
 
 function SettingsToggle({ T, title, subtitle, value, onChange }) {
   return (

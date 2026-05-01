@@ -119,6 +119,26 @@ export async function activatePlus() {
   return data;
 }
 
+// Cancel Plus — prototype tap-to-flip. Production: Apple StoreKit
+// handles cancellation in iOS Settings → Subscriptions; we receive
+// the DID-CHANGE-RENEWAL-STATUS webhook and flip is_plus server-side.
+export async function cancelPlus() {
+  const { data, error } = await supabase.rpc("cancel_plus");
+  if (error) throw new Error(`Plus cancel falló: ${error.message}`);
+  // Re-read current quota status so the indicator picks up the new
+  // free-tier count immediately (server returns 0 since no calls
+  // were made today as Plus, but be safe and broadcast unknown).
+  try {
+    const status = await getAIQuotaStatus();
+    if (status) {
+      window.dispatchEvent(new CustomEvent("samas:ai-quota-changed", {
+        detail: status,
+      }));
+    }
+  } catch (_) { /* ignore */ }
+  return data;
+}
+
 // Helper for AI-calling components. Catches the two sentinels we
 // expect: AIConsentDenied → silent (consent modal already explained)
 // and AIQuotaExceeded → opens the Plus upsell modal globally and
