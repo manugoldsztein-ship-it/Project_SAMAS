@@ -368,6 +368,39 @@ export async function positionSize({ ticker, side = "buy" }) {
 }
 
 /**
+ * newsDigest() — POST /functions/v1/news-digest
+ *
+ * Server reads holdings, pulls cached articles for the top 5
+ * weighted tickers, asks Claude to write a 2-3 sentence digest
+ * naming concrete headlines + impact. Returns:
+ *   {
+ *     digest: string,
+ *     headlines: [{ ticker, name, title, source, url, publishedAt, pctOfBook }, ...],
+ *     coveredTickers: string[],
+ *     generatedAt: string,
+ *   }
+ *
+ * FREE in both tiers — auto-loaded surface, no quota consumed.
+ * Templated fallback when no API key.
+ */
+export async function newsDigest() {
+  await gateOnConsent();
+  const { data, error } = await supabase.functions.invoke("news-digest", {
+    body: {},
+  });
+  if (error) {
+    let detail = "";
+    try {
+      const body = await error?.context?.json?.();
+      if (body?.error) detail = `: ${body.error}`;
+    } catch (_) { /* fall through */ }
+    throw new Error(`Digest IA falló${detail || ": " + (error.message || "error desconocido")}`);
+  }
+  if (data?.error) throw new Error(`Digest IA falló: ${data.error}`);
+  return data;
+}
+
+/**
  * proactiveInsights() — POST /functions/v1/proactive-insights
  *
  * Server scans the user's holdings for actionable signals

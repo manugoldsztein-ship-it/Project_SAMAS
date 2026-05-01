@@ -482,6 +482,8 @@ const V2 = {
     "broker.strategy.aggressive": "Agresiva",
 
     "news.subtitle": "Mercados, Argentina, cripto y más",
+    "news.digest.kicker":  "Hoy en tu cartera · IA",
+    "news.digest.show_all": "Ver {n} titulares más",
     "news.search_ph": "Buscar por ticker (NVDA, BTC, GGAL...)",
     "news.cat.all": "Todo",
     "news.empty_title": "Sin resultados",
@@ -1086,6 +1088,8 @@ const V2 = {
     "broker.strategy.aggressive": "Aggressive",
 
     "news.subtitle": "Markets, Argentina, crypto and more",
+    "news.digest.kicker":  "Today in your portfolio · AI",
+    "news.digest.show_all": "Show {n} more headlines",
     "news.search_ph": "Search by ticker (NVDA, BTC, GGAL...)",
     "news.cat.all": "All",
     "news.empty_title": "No results",

@@ -20,7 +20,7 @@ import { FONT } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import { news as newsApi } from "./api/index.js";
 import { Skeleton } from "./shared.jsx";
-import { explainNews } from "../lib/ai.js";
+import { explainNews, newsDigest } from "../lib/ai.js";
 import { hapticNative } from "../lib/native.js";
 import { t as tr } from "../lib/i18n.js";
 import { setRefreshHandler } from "./refreshRegistry.js";
@@ -212,6 +212,12 @@ export function NewsPage({ T, lang = "es" }) {
           </div>
         </div>
       )}
+
+      {/* AI News Digest (samas-0.3.1) — auto-loaded summary of the
+          headlines that matter for the user's holdings, written by
+          Claude. Sits between the ticker bar and search so the user
+          sees personalized signal before scrolling the generic feed. */}
+      <NewsDigestCard T={T} lang={lang} />
 
       {/* Search */}
       <div style={{ padding: "16px 16px 8px" }}>
@@ -597,6 +603,157 @@ function NewsCard({ T, item, lang = "es" }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================
+// NewsDigestCard (samas-0.3.1) — daily AI summary of news that
+// matters for the user's held tickers. Auto-loads on mount, hides
+// silently on AI failure or when the user has no holdings.
+// ============================================================
+// FREE for both tiers (auto-loaded surface, no quota consumed).
+// Tap a headline = open the article in the OS browser, same path
+// as the regular feed rows. Tap the kicker icon = no-op (passive
+// surface, no expansion).
+function NewsDigestCard({ T, lang = "es" }) {
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(true);
+  const [hidden, setHidden] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const inFlight = React.useRef(false);
+
+  useEffect(() => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    newsDigest()
+      .then((res) => setData(res))
+      .catch((e) => {
+        if (e?.name === "AIConsentDeniedError") setHidden(true);
+        else setHidden(true);
+      })
+      .finally(() => {
+        setBusy(false);
+        inFlight.current = false;
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (hidden) return null;
+  // No headlines and no AI digest → don't render an empty card.
+  if (data && (!data.digest || (data.headlines?.length === 0 && data.coveredTickers?.length === 0))) return null;
+
+  const headlines = data?.headlines || [];
+  const visible = showAll ? headlines : headlines.slice(0, 3);
+  const hiddenCount = headlines.length - visible.length;
+
+  function openHeadline(h) {
+    if (!h?.url) return;
+    try { window.open(h.url, "_blank", "noopener,noreferrer"); } catch (_) {}
+  }
+
+  return (
+    <div style={{ padding: "16px 16px 8px" }}>
+      <div style={{
+        padding: 14, borderRadius: 18,
+        background: `linear-gradient(135deg, ${T.accentSoft} 0%, ${T.surface} 70%)`,
+        border: `1px solid ${T.accent}55`,
+      }}>
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8, marginBottom: 8,
+        }}>
+          <div style={{
+            width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+            background: T.accent, color: T.accentInk,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
+            </svg>
+          </div>
+          <div style={{
+            flex: 1, fontFamily: FONT.mono, fontSize: 10, fontWeight: 700,
+            color: T.accent, letterSpacing: 0.6, textTransform: "uppercase",
+          }}>
+            {tr("news.digest.kicker", lang)}
+          </div>
+        </div>
+
+        {busy && !data ? (
+          <>
+            <div style={{
+              height: 12, marginBottom: 8, borderRadius: 4,
+              background: T.border, opacity: 0.5,
+              backgroundImage: `linear-gradient(90deg, ${T.border} 0, ${T.surface} 50%, ${T.border} 100%)`,
+              backgroundSize: "200% 100%",
+              animation: "samas-skel 1.4s ease-in-out infinite",
+            }}/>
+            <div style={{
+              height: 12, width: "75%", borderRadius: 4,
+              background: T.border, opacity: 0.5,
+              backgroundImage: `linear-gradient(90deg, ${T.border} 0, ${T.surface} 50%, ${T.border} 100%)`,
+              backgroundSize: "200% 100%",
+              animation: "samas-skel 1.4s ease-in-out 0.2s infinite",
+            }}/>
+          </>
+        ) : (
+          <div style={{
+            fontFamily: FONT.sans, fontSize: 13, color: T.text, lineHeight: 1.55,
+            marginBottom: visible.length > 0 ? 12 : 0,
+          }}>{data?.digest}</div>
+        )}
+
+        {/* Per-headline rows */}
+        {visible.map((h, i) => (
+          <button
+            key={`${h.ticker}-${i}`}
+            onClick={() => openHeadline(h)}
+            style={{
+              width: "100%", padding: "10px 0",
+              borderTop: i === 0 ? `1px solid ${T.border}88` : `1px solid ${T.border}`,
+              background: "transparent", border: "none",
+              display: "flex", alignItems: "flex-start", gap: 10,
+              cursor: h.url ? "pointer" : "default", textAlign: "left",
+            }}>
+            <span style={{
+              padding: "2px 7px", borderRadius: 6, flexShrink: 0,
+              background: T.bg, border: `1px solid ${T.border}`,
+              fontFamily: FONT.mono, fontSize: 10, fontWeight: 800, color: T.text,
+              letterSpacing: 0.3,
+            }}>${h.ticker}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontFamily: FONT.sans, fontSize: 12, fontWeight: 600, color: T.text,
+                lineHeight: 1.4,
+                overflow: "hidden", textOverflow: "ellipsis",
+                display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+              }}>{h.title}</div>
+              {h.source && (
+                <div style={{
+                  marginTop: 2,
+                  fontFamily: FONT.mono, fontSize: 9, color: T.textMute,
+                  letterSpacing: 0.4, textTransform: "uppercase",
+                }}>{h.source}</div>
+              )}
+            </div>
+          </button>
+        ))}
+
+        {hiddenCount > 0 && (
+          <button
+            onClick={() => setShowAll(true)}
+            style={{
+              width: "100%", marginTop: 6, padding: "6px 12px", borderRadius: 8,
+              background: "transparent", border: `1px dashed ${T.border}`,
+              color: T.textMute, fontFamily: FONT.sans, fontSize: 11, fontWeight: 600,
+              cursor: "pointer",
+            }}>
+            {tr("news.digest.show_all", lang, { n: hiddenCount })}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

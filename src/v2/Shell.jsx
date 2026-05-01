@@ -2680,6 +2680,17 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.3.1",
+    title: "AI News Digest — 17th AI surface fills out the News tab",
+    bullets: [
+      "Lands at the top of the News tab between the marquee ticker bar and the search input. Auto-loads on tab open with a 2-3 sentence Claude-written digest of headlines from the user's top 5 weighted holdings, plus the underlying article rows that the digest references. Tap any headline → opens the article in the browser.",
+      "New news-digest Edge Function. Reads holdings → sorts by USD value → picks top 5 tickers → reads cached articles from public.articles for those tickers → asks Claude to synthesize 2-3 sentences naming concrete headlines + impact. Numbers / tickers / URLs pass through unchanged; LLM only writes the synthesis.",
+      "FREE for both tiers — auto-loaded surface, no quota consumed. Same model as Daily Brief, Earnings Watch, Compare Benchmark, Risk Score, Quarterly Review.",
+      "Hides silently when: user has no holdings, no cached articles for those tickers, AI fails, or consent denied. The card only appears when there's something useful to say.",
+      "17 AI surfaces total now. Closes the gap on 'the News tab isn't doing much' from the punch list.",
+    ],
+  },
+  {
     version: "0.3.0",
     title: "Privacy Manifest — App Store submission unblocker",
     bullets: [
