@@ -30,6 +30,7 @@ const MfaEnrollSection = lazy(() => import("../auth/Mfa.jsx").then((m) => ({ def
 import { Onboarding } from "./Onboarding.jsx";
 import { AITour, hasSeenAITour, resetAIToured } from "./AITour.jsx";
 import { TutorialsHub } from "./Tutorials.jsx";
+import { ExplainTermSheet } from "./ExplainTerm.jsx";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { callRefreshFor } from "./refreshRegistry.js";
 import {
@@ -78,6 +79,18 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
   // Tutorials hub — opened from Settings → 'Tutoriales y guías'.
   // samas-0.4.1.
   const [showTutorials, setShowTutorials] = useState(false);
+  // Explain-term modal (samas-0.4.2) — opened from the ? button in
+  // the Wallet header or any future surface that dispatches the
+  // samas:explain-term event. detail.term optionally pre-fills.
+  const [explainTermState, setExplainTermState] = useState(null); // null | { term: "" }
+  useEffect(() => {
+    function onExplain(e) {
+      const initialTerm = e?.detail?.term ? String(e.detail.term) : "";
+      setExplainTermState({ term: initialTerm });
+    }
+    window.addEventListener("samas:explain-term", onExplain);
+    return () => window.removeEventListener("samas:explain-term", onExplain);
+  }, []);
   const [proMode, setProMode] = useState(() => {
     if (typeof localStorage === "undefined") return true;
     const v = localStorage.getItem(PRO_KEY);
@@ -489,6 +502,17 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
           'Tutoriales y guías'. Read state persists in localStorage. */}
       {showTutorials && (
         <TutorialsHub T={T} lang={lang} onClose={() => setShowTutorials(false)} />
+      )}
+
+      {/* Explain-term modal (samas-0.4.2) — global AI glossary.
+          Opened from the ? button in Wallet header, or any future
+          component dispatching samas:explain-term { term? }. */}
+      {explainTermState && (
+        <ExplainTermSheet
+          T={T} lang={lang}
+          initialTerm={explainTermState.term || ""}
+          onClose={() => setExplainTermState(null)}
+        />
       )}
 
       {/* Pro upsell modal — global so any view can dispatch
@@ -2776,6 +2800,18 @@ function AIConsentGate({ T, lang = "es" }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.4.2",
+    title: "AI Explain — 20th AI surface, ask SAMAS what any term means",
+    bullets: [
+      "Companion to the Tutorials hub. New ? button in the Wallet header (between Search and Bell) opens a global modal with a text input — type any financial term, tap Explicar, IA returns a 2-3 sentence definition in plain AR-Spanish + a concrete example + 0-3 related terms you can tap to chain into.",
+      "Why a typed input vs. long-press text selection: on iOS WebView the system Look Up menu always wins on long-press, can't reliably hijack selection. Typed input is more discoverable, works inside any tab, and lets users ask about terms they heard on TV / Twitter / WhatsApp — not just terms that appear inside the app.",
+      "New explain-term Edge Function. Templated glossary covers ~25 of the most common AR-retail terms (CEDEAR, MEP, CCL, ALyC, CNV, idóneo, stop-loss, orden mercado/límite, BYMA, MERVAL, drawdown, P/E, Sharpe, beta, volatilidad, AFIP, impuesto cedular, tax-loss, spread, GGAL, etc.) so the demo works without an API key. Claude refines / handles unknowns when the key is set.",
+      "Recent terms persist (samas_explain_recent in localStorage, last 8 unique). Tap a chip to re-look-up. Suggestion chips (CEDEAR, MEP, Stop-loss, Idóneo CNV, Drawdown, Sharpe, Tax-loss) shown when input is empty + no recent history — discoverability hint for first-time users.",
+      "Wired via global window event samas:explain-term so any other component can dispatch it later (e.g. a long-press gesture on a tooltip in a future patch could open the modal pre-filled).",
+      "USER-INITIATED → consumes one quota credit per explain. 20 AI surfaces total now.",
+    ],
+  },
   {
     version: "0.4.1",
     title: "Tutorials hub — 6 starter guides in Settings",

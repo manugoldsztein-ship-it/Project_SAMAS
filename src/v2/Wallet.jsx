@@ -190,6 +190,24 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
             </ChromeBtn>
           )}
           <ChromeBtn T={T}><Ico.Search size={18}/></ChromeBtn>
+          {/* Explain-a-term button (samas-0.4.2). Opens a global
+              modal with a text input → IA returns a definition in
+              plain AR-Spanish. Dispatching a window event lets any
+              other component pop the same modal in the future. */}
+          <ChromeBtn
+            T={T}
+            onClick={() => {
+              try {
+                window.dispatchEvent(new CustomEvent("samas:explain-term", { detail: {} }));
+              } catch (_) { /* SSR */ }
+            }}
+            aria-label={tr("explain.aria_open", lang)}
+          >
+            <span style={{
+              fontFamily: FONT.display, fontSize: 16, fontWeight: 800, color: T.text,
+              lineHeight: 1, padding: 0,
+            }}>?</span>
+          </ChromeBtn>
           <ChromeBtn T={T} dot={unread > 0} onClick={() => setActiveModal("inbox")}>
             <Ico.Bell size={18}/>
           </ChromeBtn>

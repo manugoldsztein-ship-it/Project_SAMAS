@@ -334,6 +334,35 @@ export async function quarterlyReview() {
 }
 
 /**
+ * explainTerm({ term, context? }) — POST /functions/v1/explain-term
+ *
+ * Glossary/dictionary in AR-Spanish. User types a term they don't
+ * understand; server returns a 2-3 sentence definition + a concrete
+ * example + 0-3 related terms they might want next.
+ *
+ * USER-INITIATED → consumes quota. Templated fallback covers ~25
+ * common AR-retail terms when no API key is set.
+ */
+export async function explainTerm({ term, context } = {}) {
+  if (!term || !term.trim()) throw new Error("term required");
+  await gateOnConsent();
+  await gateOnQuota();
+  const { data, error } = await supabase.functions.invoke("explain-term", {
+    body: { term, context },
+  });
+  if (error) {
+    let detail = "";
+    try {
+      const body = await error?.context?.json?.();
+      if (body?.error) detail = `: ${body.error}`;
+    } catch (_) { /* fall through */ }
+    throw new Error(`Explicación IA falló${detail || ": " + (error.message || "error desconocido")}`);
+  }
+  if (data?.error) throw new Error(`Explicación IA falló: ${data.error}`);
+  return data;
+}
+
+/**
  * sectorRotation({ stance }) — POST /functions/v1/sector-rotation
  *
  * Server reads holdings, computes sector mix (CEDEAR / ACCION / ETF
