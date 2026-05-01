@@ -125,6 +125,41 @@ export async function tradeCoach({ ticker, side, qty, price }) {
 }
 
 /**
+ * compareBenchmark() — POST /functions/v1/compare-benchmark
+ *
+ * Server reads holdings, computes value-weighted portfolio gain%,
+ * compares to deterministic benchmark returns (Merval / S&P / BTC),
+ * asks Claude Haiku for a 1-2 sentence verdict.
+ *
+ * Returns:
+ *   {
+ *     portfolio:   { gainPct, totalUsd },
+ *     benchmarks:  [{ id, name, gainPct, beat }],
+ *     verdict:     string,
+ *     generatedAt: string,
+ *   }
+ *
+ * Server-side templated fallback rotates verdict sentences based on
+ * how many benchmarks the portfolio beats.
+ */
+export async function compareBenchmark() {
+  await gateOnConsent();
+  const { data, error } = await supabase.functions.invoke("compare-benchmark", {
+    body: {},
+  });
+  if (error) {
+    let detail = "";
+    try {
+      const body = await error?.context?.json?.();
+      if (body?.error) detail = `: ${body.error}`;
+    } catch (_) { /* fall through */ }
+    throw new Error(`Comparación IA falló${detail || ": " + (error.message || "error desconocido")}`);
+  }
+  if (data?.error) throw new Error(`Comparación IA falló: ${data.error}`);
+  return data;
+}
+
+/**
  * dailyBrief() — POST /functions/v1/daily-brief
  *
  * Server reads the user's holdings, computes book total + weighted

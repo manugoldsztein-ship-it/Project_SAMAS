@@ -2625,6 +2625,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.1.7",
+    title: "AI Benchmark Compare — \"¿Le ganás al mercado?\"",
+    bullets: [
+      "Tenth AI surface lands on Wallet between AI Analysis and Preguntale a SAMAS. Compares your value-weighted portfolio gain% to three benchmarks: Merval (acciones AR), S&P 500, and Bitcoin. Each row shows the benchmark's return + a green \"Le ganás\" / red \"Queda atrás\" tag. AI verdict at the bottom: 1-2 sentences interpreting the comparison (\"supera 2 de 3, mantenete enfocado\" / \"queda atrás de los tres, revisá tesis sin pánico\").",
+      "New compare-benchmark Edge Function. Server-side templated fallback rotates verdict sentences based on how many benchmarks the portfolio beats. Benchmark return values are deterministic synthetic numbers (Merval +18.5%, S&P +11.2%, BTC +24.7%) — stable across the demo so the verdict stays consistent. Update annually.",
+      "Answers the most-asked retail question (\"am I beating the market?\") at a glance, without making the user drill into a chart.",
+      "10 AI surfaces total now.",
+    ],
+  },
+  {
     version: "0.1.6",
     title: "AI Daily Brief on Wallet — every open shows a fresh take",
     bullets: [

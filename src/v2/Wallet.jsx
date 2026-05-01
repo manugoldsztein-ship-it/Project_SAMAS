@@ -33,7 +33,7 @@ import { toast } from "./toast.jsx";
 import { setRefreshHandler } from "./refreshRegistry.js";
 import { t as tr } from "../lib/i18n.js";
 import { useLivePortfolioRatio } from "./livePrices.jsx";
-import { analyzePortfolio, chatPortfolio, dailyBrief } from "../lib/ai.js";
+import { analyzePortfolio, chatPortfolio, dailyBrief, compareBenchmark } from "../lib/ai.js";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { hapticNative } from "../lib/native.js";
 
@@ -467,6 +467,8 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
       {portfolio && portfolio.totalUsd > 0 && (
         <>
           <AIAnalysisCard T={T} lang={lang} />
+          {/* Benchmark compare — "am I beating the market?" (0.1.7). */}
+          <BenchmarkCompareCard T={T} lang={lang} />
           {/* Preguntale a SAMAS — multi-turn chat (samas-0.0.89). */}
           <AIChatCard T={T} lang={lang} />
         </>
@@ -1341,6 +1343,138 @@ function AIAnalysisCard({ T, lang = "es" }) {
         document.body
       )}
     </>
+  );
+}
+
+// ============================================================
+// BenchmarkCompareCard (samas-0.1.7) — "am I beating the market?"
+// ============================================================
+// Compact card showing portfolio gain% next to Merval / S&P / BTC.
+// Auto-loads on mount, caches per session — refresh button forces
+// re-fetch. Color-codes each row: green check if portfolio beats,
+// red × if behind.
+function BenchmarkCompareCard({ T, lang = "es" }) {
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(true);
+  const [hidden, setHidden] = useState(false);
+
+  async function load() {
+    setBusy(true);
+    try {
+      const res = await compareBenchmark();
+      setData(res);
+    } catch (e) {
+      if (e?.name === "AIConsentDeniedError") setHidden(true);
+      else if (!data) setHidden(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+
+  if (hidden) return null;
+
+  const portfolioGain = data?.portfolio?.gainPct;
+  const portfolioColor = portfolioGain == null ? T.textMute
+    : portfolioGain >= 0 ? T.accent : T.danger;
+
+  return (
+    <div style={{ margin: "20px 16px 0" }}>
+      <SectionHead T={T} title={tr("wallet.benchmark.title", lang)} />
+      <div style={{
+        marginTop: 12, padding: 16, borderRadius: 22,
+        background: T.surface, border: `1px solid ${T.border}`,
+      }}>
+        {/* Portfolio row — distinct treatment so it reads as YOU */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 12,
+          padding: "10px 0", borderBottom: `1px solid ${T.border}`,
+        }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+            background: T.accent, color: "#06180c",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
+            </svg>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text }}>
+              {tr("wallet.benchmark.you", lang)}
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+              {data?.portfolio?.totalUsd
+                ? `US$${data.portfolio.totalUsd.toLocaleString("en-US")}`
+                : "—"}
+            </div>
+          </div>
+          <div style={{
+            fontFamily: FONT.mono, fontSize: 16, fontWeight: 800,
+            color: portfolioColor, fontVariantNumeric: "tabular-nums",
+          }}>
+            {busy && !data ? "…" : (
+              portfolioGain != null
+                ? `${portfolioGain >= 0 ? "+" : ""}${portfolioGain.toFixed(1)}%`
+                : "—"
+            )}
+          </div>
+        </div>
+
+        {/* Benchmark rows */}
+        {(data?.benchmarks || []).map((b) => (
+          <div key={b.id} style={{
+            display: "flex", alignItems: "center", gap: 12,
+            padding: "10px 0",
+            borderBottom: `1px solid ${T.border}`,
+          }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+              background: T.bg, border: `1px solid ${T.border}`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontFamily: FONT.mono, fontSize: 11, fontWeight: 800,
+              color: T.textMute, letterSpacing: 0.4,
+            }}>
+              {b.id === "merval" ? "AR" : b.id === "spx" ? "US" : "₿"}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 600, color: T.text }}>
+                {b.name}
+              </div>
+              <div style={{ fontFamily: FONT.sans, fontSize: 11, color: b.beat ? T.accent : T.danger, marginTop: 2 }}>
+                {b.beat ? tr("wallet.benchmark.beat", lang) : tr("wallet.benchmark.behind", lang)}
+              </div>
+            </div>
+            <div style={{
+              fontFamily: FONT.mono, fontSize: 14, fontWeight: 700,
+              color: b.gainPct >= 0 ? T.text : T.danger,
+              fontVariantNumeric: "tabular-nums",
+            }}>
+              {b.gainPct >= 0 ? "+" : ""}{b.gainPct.toFixed(1)}%
+            </div>
+          </div>
+        ))}
+
+        {/* AI verdict */}
+        <div style={{ paddingTop: 12 }}>
+          {busy && !data ? (
+            <div style={{
+              height: 14, marginBottom: 6, borderRadius: 6,
+              background: T.border, opacity: 0.5,
+              animation: "samas-skel 1.4s ease-in-out infinite",
+              backgroundImage: `linear-gradient(90deg, ${T.border} 0, ${T.surface} 50%, ${T.border} 100%)`,
+              backgroundSize: "200% 100%",
+            }} />
+          ) : data?.verdict ? (
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 13, color: T.textMute, lineHeight: 1.5,
+            }}>{data.verdict}</div>
+          ) : null}
+        </div>
+      </div>
+    </div>
   );
 }
 
