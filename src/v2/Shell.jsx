@@ -2647,6 +2647,17 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.2.4",
+    title: "AI Quarterly Review — Claude narrates your last 90 days",
+    bullets: [
+      "Sixteenth AI surface lands on Wallet between Earnings Watch and Preguntale a SAMAS. Pure narrative — no tap targets, no decisions to make. Card shows a 1-line headline + the quarter's return %; tap → bottom sheet with a 3-4 paragraph Claude-written review in plain Spanish, with sections: 'Tu trimestre en una mirada', 'Lo que se movió', 'Actividad', 'Hacia adelante'.",
+      "New quarterly-review Edge Function. Reads holdings (current snapshot) + orders (last 90 days, executed only) and computes deterministic stats: value-weighted return %, top 3 winners, top 3 losers, trade count, most-operated ticker, new positions opened, positions closed, sector mix. Stats sent to Claude as authority; the LLM only writes the prose — numbers can't drift.",
+      "Sheet renders the markdown narrative with a tiny in-house h2/p parser (no react-markdown dep — 4 paragraphs of structure don't justify the bundle weight). Stats strip on top: trade count + most-operated ticker. Winners/losers row with green/red chips per ticker.",
+      "Templated fallback writes the same skeleton prose with the same numbers when ANTHROPIC_API_KEY isn't set, so the Cohen demo doesn't break before the budget approval. Hides silently when the user has no positions.",
+      "16 AI surfaces total. Killer demo line: 'open Wallet, scroll down, IA writes you a private-banker-quality review of your last 3 months in plain Spanish.'",
+    ],
+  },
+  {
     version: "0.2.3",
     title: "AI Position Sizing — Conservador / Estándar / Agresivo at the qty input",
     bullets: [

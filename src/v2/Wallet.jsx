@@ -33,7 +33,7 @@ import { toast } from "./toast.jsx";
 import { setRefreshHandler } from "./refreshRegistry.js";
 import { t as tr } from "../lib/i18n.js";
 import { useLivePortfolioRatio } from "./livePrices.jsx";
-import { analyzePortfolio, chatPortfolio, dailyBrief, compareBenchmark, earningsWatch, proactiveInsights } from "../lib/ai.js";
+import { analyzePortfolio, chatPortfolio, dailyBrief, compareBenchmark, earningsWatch, proactiveInsights, quarterlyReview } from "../lib/ai.js";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { hapticNative } from "../lib/native.js";
 
@@ -471,6 +471,8 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
           <BenchmarkCompareCard T={T} lang={lang} />
           {/* Earnings watch — upcoming reports for held tickers (0.1.8). */}
           <EarningsWatchCard T={T} lang={lang} />
+          {/* Quarterly review — 90-day narrative summary (0.2.4). */}
+          <QuarterlyReviewCard T={T} lang={lang} />
           {/* Preguntale a SAMAS — multi-turn chat (samas-0.0.89). */}
           <AIChatCard T={T} lang={lang} />
         </>
@@ -1629,6 +1631,347 @@ function EarningsWatchCard({ T, lang = "es" }) {
   );
 }
 
+
+// ============================================================
+// QuarterlyReviewCard (samas-0.2.4) — narrative 90-day review
+// ============================================================
+// Card on the Wallet → tap → opens a sheet with a Claude-written
+// 3-4 paragraph review of the user's last 90 days. Auto-loads the
+// headline + key stat (return %) on the card so the user sees the
+// hook before tapping. Lazy-loads the full narrative on sheet open
+// to keep wallet renders fast.
+function QuarterlyReviewCard({ T, lang = "es" }) {
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(true);
+  const [hidden, setHidden] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  async function load() {
+    setBusy(true);
+    try {
+      const res = await quarterlyReview();
+      setData(res);
+      // Hide silently if the user has no positions to review.
+      if (!res?.stats) setHidden(true);
+    } catch (e) {
+      if (e?.name === "AIConsentDeniedError") setHidden(true);
+      else if (!data) setHidden(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+
+  if (hidden) return null;
+
+  const ret = data?.stats?.quarterReturnPct ?? 0;
+  const retColor = ret >= 0 ? T.accent : T.danger;
+  const retSign = ret >= 0 ? "+" : "";
+
+  return (
+    <>
+      <div style={{ margin: "20px 16px 0" }}>
+        <SectionHead T={T} title={tr("wallet.review.title", lang)} />
+        <button
+          onClick={() => {
+            if (!data) return;
+            setOpen(true);
+            hapticNative("tap").catch(() => {});
+          }}
+          disabled={!data}
+          style={{
+            width: "100%", marginTop: 12, padding: 16, borderRadius: 22,
+            background: T.surface, border: `1px solid ${T.border}`,
+            display: "flex", alignItems: "center", gap: 14,
+            cursor: data ? "pointer" : "default", textAlign: "left",
+          }}>
+          {/* Icon block */}
+          <div style={{
+            width: 44, height: 44, flexShrink: 0, borderRadius: 12,
+            background: T.accentSoft, color: T.accent,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {busy && !data ? (
+              <>
+                <div style={{
+                  height: 12, width: "70%", marginBottom: 6, borderRadius: 4,
+                  background: T.border, opacity: 0.5,
+                  backgroundImage: `linear-gradient(90deg, ${T.border} 0, ${T.surface} 50%, ${T.border} 100%)`,
+                  backgroundSize: "200% 100%",
+                  animation: "samas-skel 1.4s ease-in-out infinite",
+                }} />
+                <div style={{
+                  height: 10, width: "50%", borderRadius: 4,
+                  background: T.border, opacity: 0.5,
+                  backgroundImage: `linear-gradient(90deg, ${T.border} 0, ${T.surface} 50%, ${T.border} 100%)`,
+                  backgroundSize: "200% 100%",
+                  animation: "samas-skel 1.4s ease-in-out 0.2s infinite",
+                }} />
+              </>
+            ) : (
+              <>
+                <div style={{
+                  fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text,
+                  lineHeight: 1.4, marginBottom: 4,
+                }}>{data?.headline || tr("wallet.review.subtitle", lang)}</div>
+                <div style={{
+                  display: "flex", alignItems: "baseline", gap: 8,
+                  fontFamily: FONT.mono, fontSize: 11, color: T.textMute,
+                }}>
+                  <span style={{
+                    color: retColor, fontSize: 13, fontWeight: 800,
+                  }}>{retSign}{ret.toFixed(1)}%</span>
+                  <span>· {tr("wallet.review.period_label", lang)}</span>
+                </div>
+              </>
+            )}
+          </div>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.textMute}
+            strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
+      </div>
+
+      {open && data && (
+        <QuarterlyReviewSheet
+          T={T} lang={lang} data={data}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+// ============================================================
+// QuarterlyReviewSheet — full narrative + stats
+// ============================================================
+// Bottom sheet that renders the Claude-written markdown review
+// plus a stat strip (winners / losers / activity). Markdown is
+// rendered with a tiny in-house parser since pulling in a full
+// react-markdown dependency for 4 paragraphs of h2 + p is overkill.
+function QuarterlyReviewSheet({ T, lang = "es", data, onClose }) {
+  const stats = data?.stats || {};
+  // Tiny markdown → React renderer. Handles ## h2 and paragraphs.
+  // Bolds anything between ** **. $TICKER stays plain.
+  function renderMarkdown(md) {
+    if (!md) return null;
+    const lines = md.split("\n");
+    const elements = [];
+    let para = [];
+    const flushPara = () => {
+      if (para.length === 0) return;
+      const text = para.join(" ").trim();
+      if (text) elements.push(
+        <p key={`p-${elements.length}`} style={{
+          fontFamily: FONT.sans, fontSize: 13, color: T.textMute, lineHeight: 1.65,
+          margin: "0 0 12px",
+        }}>{renderInline(text)}</p>
+      );
+      para = [];
+    };
+    function renderInline(text) {
+      const parts = text.split(/(\*\*[^*]+\*\*)/g);
+      return parts.map((p, i) => {
+        if (p.startsWith("**") && p.endsWith("**")) {
+          return <strong key={i} style={{ color: T.text, fontWeight: 700 }}>{p.slice(2, -2)}</strong>;
+        }
+        return p;
+      });
+    }
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (line.startsWith("## ")) {
+        flushPara();
+        elements.push(
+          <h2 key={`h-${elements.length}`} style={{
+            fontFamily: FONT.display, fontSize: 14, fontWeight: 800,
+            color: T.text, letterSpacing: -0.2, margin: "16px 0 8px",
+            textTransform: "uppercase",
+          }}>{line.slice(3)}</h2>
+        );
+      } else if (line === "") {
+        flushPara();
+      } else {
+        para.push(line);
+      }
+    }
+    flushPara();
+    return elements;
+  }
+
+  const ret = stats?.quarterReturnPct ?? 0;
+  const retColor = ret >= 0 ? T.accent : T.danger;
+  const retSign = ret >= 0 ? "+" : "";
+
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 110,
+        background: "rgba(0,0,0,0.7)",
+        display: "flex", alignItems: "flex-end", justifyContent: "center",
+      }}
+    >
+      <div style={{
+        width: "100%", maxWidth: 540, maxHeight: "92dvh",
+        background: T.bgElev || T.bg, color: T.text,
+        borderTopLeftRadius: 28, borderTopRightRadius: 28,
+        border: `1px solid ${T.border}`, borderBottom: "none",
+        display: "flex", flexDirection: "column", overflow: "hidden",
+      }}>
+        {/* Drag handle */}
+        <div style={{ display: "flex", justifyContent: "center", paddingTop: 12 }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: T.border }}/>
+        </div>
+
+        {/* Header — accent gradient */}
+        <div style={{
+          padding: "14px 22px 16px",
+          background: `linear-gradient(180deg, ${T.accentSoft} 0%, transparent 100%)`,
+        }}>
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            padding: "4px 10px", borderRadius: 999,
+            background: T.accent, color: T.accentInk,
+            fontFamily: FONT.mono, fontSize: 9, fontWeight: 800,
+            letterSpacing: 0.6, textTransform: "uppercase",
+            marginBottom: 8,
+          }}>
+            ✦ Review IA · {tr("wallet.review.period_label", lang)}
+          </div>
+          <div style={{
+            fontFamily: FONT.display, fontSize: 22, fontWeight: 700,
+            color: T.text, letterSpacing: -0.4, lineHeight: 1.25,
+            marginBottom: 6,
+          }}>{data?.headline}</div>
+          <div style={{
+            display: "flex", alignItems: "baseline", gap: 8,
+            fontFamily: FONT.mono, fontSize: 12, color: T.textMute,
+          }}>
+            <span style={{
+              fontSize: 22, fontWeight: 800, color: retColor, letterSpacing: -0.4,
+            }}>{retSign}{ret.toFixed(1)}%</span>
+            <span>{tr("wallet.review.return_label", lang)}</span>
+          </div>
+        </div>
+
+        {/* Scrollable body */}
+        <div style={{
+          flex: 1, overflowY: "auto", padding: "8px 22px 20px",
+        }}>
+          {/* Stats strip */}
+          <div style={{
+            display: "grid", gridTemplateColumns: "1fr 1fr",
+            gap: 8, marginBottom: 14,
+          }}>
+            <div style={{
+              padding: 12, borderRadius: 14,
+              background: T.surface, border: `1px solid ${T.border}`,
+            }}>
+              <div style={{
+                fontFamily: FONT.mono, fontSize: 9, fontWeight: 700,
+                color: T.textMute, letterSpacing: 0.6, textTransform: "uppercase",
+                marginBottom: 4,
+              }}>{tr("wallet.review.trades_label", lang)}</div>
+              <div style={{
+                fontFamily: FONT.mono, fontSize: 18, fontWeight: 800, color: T.text,
+              }}>{stats?.tradesCount || 0}</div>
+            </div>
+            <div style={{
+              padding: 12, borderRadius: 14,
+              background: T.surface, border: `1px solid ${T.border}`,
+            }}>
+              <div style={{
+                fontFamily: FONT.mono, fontSize: 9, fontWeight: 700,
+                color: T.textMute, letterSpacing: 0.6, textTransform: "uppercase",
+                marginBottom: 4,
+              }}>{tr("wallet.review.busiest_label", lang)}</div>
+              <div style={{
+                fontFamily: FONT.mono, fontSize: 14, fontWeight: 800, color: T.text,
+              }}>{stats?.busiest ? `$${stats.busiest.ticker}` : "—"}</div>
+            </div>
+          </div>
+
+          {/* Winners / Losers chips */}
+          {(stats?.winners?.length > 0 || stats?.losers?.length > 0) && (
+            <div style={{
+              display: "flex", flexDirection: "column", gap: 6,
+              marginBottom: 14, padding: 12, borderRadius: 14,
+              background: T.surface, border: `1px solid ${T.border}`,
+            }}>
+              {stats.winners?.length > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <span style={{
+                    fontFamily: FONT.mono, fontSize: 9, fontWeight: 700,
+                    color: T.textMute, letterSpacing: 0.6, textTransform: "uppercase",
+                    marginRight: 4,
+                  }}>{tr("wallet.review.winners_label", lang)}</span>
+                  {stats.winners.map((w) => (
+                    <span key={w.ticker} style={{
+                      fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+                      padding: "3px 8px", borderRadius: 999,
+                      background: T.accentSoft, color: T.accent,
+                    }}>${w.ticker} +{w.gainPct.toFixed(1)}%</span>
+                  ))}
+                </div>
+              )}
+              {stats.losers?.length > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <span style={{
+                    fontFamily: FONT.mono, fontSize: 9, fontWeight: 700,
+                    color: T.textMute, letterSpacing: 0.6, textTransform: "uppercase",
+                    marginRight: 4,
+                  }}>{tr("wallet.review.losers_label", lang)}</span>
+                  {stats.losers.map((l) => (
+                    <span key={l.ticker} style={{
+                      fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
+                      padding: "3px 8px", borderRadius: 999,
+                      background: T.dangerSoft, color: T.danger,
+                    }}>${l.ticker} {l.gainPct.toFixed(1)}%</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Narrative */}
+          <div>{renderMarkdown(data?.narrative)}</div>
+
+          <div style={{
+            marginTop: 8, fontFamily: FONT.sans, fontSize: 10,
+            color: T.textMute, textAlign: "center",
+          }}>{tr("wallet.review.disclaimer", lang)}</div>
+        </div>
+
+        {/* Sticky close */}
+        <div style={{
+          padding: "12px 18px calc(env(safe-area-inset-bottom) + 16px)",
+          borderTop: `1px solid ${T.border}`,
+          background: T.bgElev || T.bg,
+        }}>
+          <button onClick={onClose} style={{
+            width: "100%", padding: "13px 16px", borderRadius: 14,
+            background: T.accent, border: "none",
+            color: T.accentInk, fontFamily: FONT.sans, fontSize: 14, fontWeight: 800,
+            cursor: "pointer",
+          }}>{tr("wallet.review.close", lang)}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ============================================================
 // AIChatCard (samas-0.0.89) — "Preguntale a SAMAS" multi-turn

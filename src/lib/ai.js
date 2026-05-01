@@ -157,6 +157,41 @@ export async function scoreRisk() {
 }
 
 /**
+ * quarterlyReview() — POST /functions/v1/quarterly-review
+ *
+ * Server reads holdings + orders for the trailing 90 days, computes
+ * winners / losers / activity stats / sector mix, and asks Claude
+ * to write a 3-4 paragraph markdown narrative + a 1-line headline.
+ * Templated fallback when no API key (uses the same numbers, just
+ * skeleton prose).
+ *
+ * Returns:
+ *   {
+ *     period: { from, to, days: 90 },
+ *     stats:  { ... full computed stats ... },
+ *     narrative: string,    // markdown
+ *     headline:  string,
+ *     generatedAt: string,
+ *   }
+ */
+export async function quarterlyReview() {
+  await gateOnConsent();
+  const { data, error } = await supabase.functions.invoke("quarterly-review", {
+    body: {},
+  });
+  if (error) {
+    let detail = "";
+    try {
+      const body = await error?.context?.json?.();
+      if (body?.error) detail = `: ${body.error}`;
+    } catch (_) { /* fall through */ }
+    throw new Error(`Review IA falló${detail || ": " + (error.message || "error desconocido")}`);
+  }
+  if (data?.error) throw new Error(`Review IA falló: ${data.error}`);
+  return data;
+}
+
+/**
  * positionSize({ ticker, side }) — POST /functions/v1/position-size
  *
  * Server reads holdings + cash balance, computes 3 deterministic
