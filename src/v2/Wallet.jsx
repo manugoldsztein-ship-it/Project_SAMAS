@@ -37,7 +37,7 @@ import { analyzePortfolio, chatPortfolio, dailyBrief, compareBenchmark, earnings
 import { reauthWithPassword } from "../lib/reauth.js";
 import { hapticNative } from "../lib/native.js";
 
-export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark, onOpenSettings, proMode = false, onOpenProUpsell, lang = "es" }) {
+export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark, onOpenSettings, proMode = false, isPlus = false, onOpenProUpsell, lang = "es" }) {
   // ----------- data state -----------
   const [balance, setBalance] = useState(null);
   const [fx, setFx] = useState(null);
@@ -307,12 +307,15 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
         </div>
       )}
 
-      {/* ---------- Pro hint card ----------
-          Only when Pro is OFF — pushes the user toward the upsell
-          modal that lists every Pro feature. Sits between FX and
+      {/* ---------- Plus upsell hint card (samas-0.2.7) ----------
+          Only when the user is NOT subscribed to SAMAS Plus —
+          pushes them toward the Plus pitch (advisor positioning).
+          Was gated on !proMode in earlier patches when "Pro" still
+          meant the paid tier; now Pro is the free UI density toggle
+          and Plus is the paid AI subscription. Sits between FX and
           portfolio peek so it's visible above the fold without
           competing with the hero balance card. */}
-      {!proMode && onOpenProUpsell && (
+      {!isPlus && onOpenProUpsell && (
         <button
           onClick={onOpenProUpsell}
           style={{

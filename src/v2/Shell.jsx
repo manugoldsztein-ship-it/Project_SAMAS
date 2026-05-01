@@ -249,6 +249,7 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
             onToggleDark={onToggleDark}
             onOpenSettings={() => setShowSettings(true)}
             proMode={proMode}
+            isPlus={isPlus}
             onOpenProUpsell={() => setShowProUpsell(true)}
             lang={lang}
           />
@@ -1898,15 +1899,12 @@ function inputStyle(T) {
 // launch it'll route to App Store IAP.
 // ============================================================
 const PRO_FEATURE_KEYS = [
-  { key: "sector",   icon: "📊" },
-  { key: "risk",     icon: "📈" },
-  { key: "bench",    icon: "🆚" },
-  { key: "chart",    icon: "📉" },
-  { key: "heatmap",  icon: "🔥" },
-  { key: "earnings", icon: "📅" },
-  { key: "cashflow", icon: "💸" },
-  { key: "tax",      icon: "🧾" },
-  { key: "wl",       icon: "🎨" },
+  { key: "unlimited", icon: "✦" },
+  { key: "advisor",   icon: "💬" },
+  { key: "review",    icon: "📋" },
+  { key: "priority",  icon: "🔔" },
+  { key: "export",    icon: "📤" },
+  { key: "early",     icon: "🚀" },
 ];
 
 function ProUpsellModal({ T, lang = "es", isPro, onActivate, onClose }) {
@@ -2030,7 +2028,7 @@ function ProUpsellModal({ T, lang = "es", isPro, onActivate, onClose }) {
               opacity: isPro ? 0.6 : 1,
               letterSpacing: 0.2,
             }}
-          >{isPro ? "Pro activado ✓" : tr("pro.upsell.cta_activate", lang)}</button>
+          >{isPro ? tr("pro.upsell.cta_activated", lang) : tr("pro.upsell.cta_activate", lang)}</button>
         </div>
       </div>
     </div>
@@ -2666,6 +2664,17 @@ function AIConsentGate({ T, lang = "es" }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.2.7",
+    title: "Plus copy reframe — 'tu asesor personal por US$5/mes'",
+    bullets: [
+      "Reframed the entire upsell pitch from generic 'Pro upgrade' to specific 'Tu asesor personal de inversiones'. Cohen pitch hook is now positioning Plus against Sala de Inversores at AR$15.000/mes (vs. just 'features'), so the AR retail user reads it as private banking democratized.",
+      "Replaced the 9-feature list (sector donut, heatmap, beta/vol/sharpe — all of which are now FREE Pro-view features) with 6 advisor-positioned Plus features: Unlimited AI · 24/7 advisor · Monthly reviews · Proactive insights · Data exports · Early access. The icon set goes from data-viz emojis (📊 📈 🔥) to advisor-themed ones (✦ 💬 📋 🔔 📤 🚀).",
+      "Wallet hint card now appears on !isPlus instead of !proMode. Was showing 'Unlock Pro' to subscribed users with the free Lite UI on; now it shows only to non-subscribers, regardless of UI density preference.",
+      "Renamed all subscription copy from 'Pro' → 'Plus' across es + en. Added pro.upsell.cta_activated key ('Plus activado ✓') so the modal's already-subscribed state renders cleanly. The 'Pro' identifier in the codebase (PRO_KEY localStorage, proMode state, ProUpsellModal component name) stayed put — they describe the FREE UI density toggle and renaming them would be a much bigger refactor.",
+      "Pricing screen: title 'Activá SAMAS Plus' / subtitle 'Tu asesor personal por US$5/mes. Cancelá cuando quieras.'. Includes-list now reads from the new Plus-feature keys.",
+    ],
+  },
   {
     version: "0.2.6",
     title: "SAMAS Plus — AI quota gate + the actual paywall mechanism",
