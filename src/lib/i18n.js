@@ -207,6 +207,11 @@ const V2 = {
 
     "settings.language":          "Idioma",
 
+    "settings.text_size":         "Tamaño del texto",
+    "settings.text_size.default": "Sigue el tamaño del sistema (iOS).",
+    "settings.text_size.override":"Escalado al {pct}% según iOS.",
+    "settings.text_size.open_hint":"Abrí Ajustes → Pantalla y brillo → Tamaño del texto, o usá el slider del Centro de Control.",
+
     "settings.faceid":            "Face ID",
     "settings.touchid":           "Touch ID",
     "settings.biometry":          "Biometría",
@@ -915,6 +920,12 @@ const V2 = {
     "settings.theme_to_dark":     "Switch to dark theme",
 
     "settings.language":          "Language",
+
+    "settings.text_size":         "Text size",
+    "settings.text_size.default": "Following the system size (iOS).",
+    "settings.text_size.override":"Scaled to {pct}% per iOS settings.",
+    "settings.text_size.open_hint":"Open Settings → Display & Brightness → Text Size, or use the Control Center slider.",
+
 
     "settings.faceid":            "Face ID",
     "settings.touchid":           "Touch ID",

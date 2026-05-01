@@ -2,11 +2,17 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import SAMASApp from "./App.jsx";
 import { initNative } from "./lib/native.js";
+import { initDynamicType } from "./lib/dynamicType.jsx";
 
 // Boot Capacitor integrations as soon as the script loads. No-op on
 // the web — only does work when running inside the iOS/Android wrap.
 // Fire-and-forget; we don't block the React render on it.
 initNative();
+
+// iOS Dynamic Type bridge (samas-0.4.20). Reads the scale that
+// AppDelegate.swift pushed into window.__SAMAS_TYPE_SCALE__ and
+// applies it via CSS zoom on document.body. No-op on web.
+initDynamicType();
 
 // Demo-reset hook: ?reset=1 wipes all SAMAS-persisted state before the app
 // mounts (holdings, orders, balance, watchlists, plan, tutorial flag, etc.).

@@ -43,6 +43,7 @@ import {
 } from "../lib/push.js";
 import { supabase } from "../lib/supabase.js";
 import { LANGUAGES } from "../lib/languages.js";
+import { getTypeScale, subscribeToTypeScale } from "../lib/dynamicType.jsx";
 import { t as tr } from "../lib/i18n.js";
 import { toast } from "./toast.jsx";
 import { seedDemoAccount, resetDemoAccount } from "../lib/demoSeed.js";
@@ -941,6 +942,13 @@ function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus
             )}
           </>
         )}
+
+        {/* Text size indicator (samas-0.4.20). Shows the current iOS
+            Dynamic Type scale (live-updates when the user drags the
+            Control Center slider while we're foreground). On native
+            this always reflects the system text size; on web it
+            shows 100% as a placeholder. */}
+        {isNativeApp && <TextSizeRow T={T} lang={lang} />}
 
         {/* Face ID / Touch ID — when the device doesn't have biometry
             available we still show the row but with the reason in the
@@ -2827,6 +2835,19 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.20",
+    title: "iOS Dynamic Type — la app responde al slider de Tamaño del texto del sistema",
+    bullets: [
+      "Manuel mostró el slider de Tamaño del Texto del Centro de Control y pidió compatibilidad. Native UIKit responde solo, pero un WKWebView con sizes en pixels los ignora — esta patch tiende el puente.",
+      "NATIVE BRIDGE — AppDelegate.swift ahora lee UIApplication.shared.preferredContentSizeCategory, mapea a un multiplier (XS=0.85, default=1.00, hasta AX5=2.00) y pushea a JS via webView.evaluateJavaScript que setea window.__SAMAS_TYPE_SCALE__ + dispatchea el evento 'samas:type-scale-changed'.",
+      "TRIGGERS — el push se dispara en (1) didFinishLaunching para el valor inicial, (2) applicationDidBecomeActive para captar cambios mientras la app estaba backgroundeada, (3) UIContentSizeCategoryDidChangeNotification para updates en vivo cuando el usuario arrastra el slider del Centro de Control con la app foreground.",
+      "JS LAYER — nuevo módulo src/lib/dynamicType.jsx: initDynamicType() lee window.__SAMAS_TYPE_SCALE__ + subscribe al evento, y aplica el scale via CSS zoom en document.body. zoom escala todo proporcionalmente (fonts, padding, layout, SVGs) sin tener que reescribir los miles de fontSize literals del código. position:fixed/absolute siguen anclando bien porque zoom actúa en el layout box, no en transform.",
+      "BOOT — initDynamicType() se llama en main.jsx junto a initNative(). En web (no Capacitor) es no-op: scale queda en 1.0 y todo renderea idéntico.",
+      "SETTINGS UI — nuevo TextSizeRow en SettingsSheet (sólo visible en native) que muestra el scale actual con una píldora 'AA' donde la segunda A se agranda con el sistema. Tap → intenta abrir Settings → Pantalla y brillo (App-Prefs:root URL) y muestra un toast con el path como fallback porque iOS no expone deep-link directo a la pane de Tamaño del Texto sin entitlement especial.",
+      "i18n: 4 keys nuevas (settings.text_size + .default + .override + .open_hint) en es y en. Otras locales fall-back a es.",
+    ],
+  },
+  {
     version: "0.4.19",
     title: "Cierra los items opt-in del audit: hCaptcha scaffolding + constant-time OTP",
     bullets: [
@@ -4072,6 +4093,78 @@ function SettingsToggle({ T, title, subtitle, value, onChange }) {
           width: 20, height: 20, borderRadius: "50%",
           background: "#fff", transition: "left 0.15s ease",
         }}/>
+      </div>
+    </button>
+  );
+}
+
+// ----------------------------------------------------------
+// TextSizeRow (samas-0.4.20) — read-only indicator showing current
+// iOS Dynamic Type scale.
+// ----------------------------------------------------------
+// On native the scale is pushed by AppDelegate.swift via
+// window.__SAMAS_TYPE_SCALE__ and the "samas:type-scale-changed"
+// event. We subscribe so the row live-updates when the user
+// drags the Control Center slider while the app is foreground.
+//
+// We DON'T let the user override the scale from this row — that
+// would compete with iOS's own slider and confuse the model.
+// Instead we provide a one-tap shortcut to the iOS Settings page
+// for accessibility text size.
+// ----------------------------------------------------------
+function TextSizeRow({ T, lang = "es" }) {
+  const [scale, setScale] = useState(() => getTypeScale());
+  useEffect(() => {
+    const unsub = subscribeToTypeScale((s) => setScale(s));
+    return unsub;
+  }, []);
+  const pct = Math.round(scale * 100);
+  const subtitle = scale === 1
+    ? tr("settings.text_size.default", lang)
+    : tr("settings.text_size.override", lang, { pct });
+  return (
+    <button
+      onClick={() => {
+        // Best we can do from a WKWebView — open the Settings app.
+        // iOS doesn't expose a deep-link to the Text Size pane
+        // specifically; the prefs:root URL scheme requires special
+        // entitlement we don't have. App-Prefs:root works on some
+        // iOS versions but inconsistently. Fallback to a toast that
+        // tells the user the path.
+        try {
+          window.location.href = "App-Prefs:root=DISPLAY";
+        } catch (_e) { /* ignore */ }
+        toast.info(tr("settings.text_size.open_hint", lang), { duration: 6000 });
+      }}
+      style={{
+        width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 8,
+        background: T.surface, border: `1px solid ${T.border}`,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        cursor: "pointer", textAlign: "left",
+        fontFamily: "inherit",
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text }}>
+          {tr("settings.text_size", lang)}
+        </div>
+        <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+          {subtitle}
+        </div>
+      </div>
+      {/* "AA" pill mirrors the icon iOS uses next to its own Text
+          Size slider. Size of the second A scales with the current
+          Dynamic Type setting so the pill itself previews how big
+          text will look — visually intuitive. */}
+      <div style={{
+        flexShrink: 0,
+        display: "flex", alignItems: "baseline", gap: 1,
+        padding: "5px 10px", borderRadius: 10,
+        background: T.bg, border: `1px solid ${T.border}`,
+        color: T.text, fontFamily: FONT.sans, fontWeight: 800,
+      }}>
+        <span style={{ fontSize: 11 }}>A</span>
+        <span style={{ fontSize: Math.max(11, Math.round(11 * scale * 1.4)) }}>A</span>
       </div>
     </button>
   );
