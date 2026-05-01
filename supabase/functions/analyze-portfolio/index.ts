@@ -72,8 +72,6 @@ const ASSETS: Record<string, {
   GGAL: { name: "Grupo Galicia",    category: "ACCION", currency: "ARS", price: 4250,   changePct: -2.10 },
   YPF:  { name: "YPF",              category: "ACCION", currency: "ARS", price: 38500,  changePct:  3.45 },
   PAMP: { name: "Pampa Energía",    category: "ACCION", currency: "ARS", price: 5820,   changePct:  0.92 },
-  BTC:  { name: "Bitcoin",          category: "CRYPTO", currency: "USD", price: 92450,  changePct:  0.92 },
-  ETH:  { name: "Ethereum",         category: "CRYPTO", currency: "USD", price: 2845,   changePct:  2.18 },
   AL30: { name: "Bonar 2030",       category: "BONO",   currency: "USD", price: 56.70,  changePct:  0.40 },
   SPY:  { name: "S&P 500 ETF",      category: "ETF",    currency: "USD", price: 512.40, changePct:  0.62 },
   QQQ:  { name: "Nasdaq-100 ETF",   category: "ETF",    currency: "USD", price: 431.20, changePct:  0.88 },
@@ -237,7 +235,7 @@ serve(async (req) => {
       console.log("[analyze-portfolio] no API key — returning templated analysis");
       const top = ranked[0];
       const topPct = totalUsd > 0 ? (top.valueUsd / totalUsd) * 100 : 0;
-      // Sector mix (CEDEAR / ACCION / CRYPTO / etc.)
+      // Sector mix (CEDEAR / ACCION / BONO / ETF / COMMOD)
       const sectorMap: Record<string, number> = {};
       for (const r of ranked) {
         sectorMap[r.category] = (sectorMap[r.category] || 0) + r.valueUsd;
@@ -245,7 +243,7 @@ serve(async (req) => {
       const topSector = Object.entries(sectorMap).sort((a, b) => b[1] - a[1])[0];
       const sectorPct = totalUsd > 0 ? (topSector[1] / totalUsd) * 100 : 0;
       const sectorLabel: Record<string, string> = {
-        CEDEAR: "CEDEARs", ACCION: "acciones argentinas", CRYPTO: "cripto",
+        CEDEAR: "CEDEARs", ACCION: "acciones argentinas",
         BONO: "bonos", ETF: "ETFs", COMMOD: "commodities",
       };
       const sectorName = sectorLabel[topSector[0]] || topSector[0].toLowerCase();

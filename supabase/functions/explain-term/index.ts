@@ -129,7 +129,7 @@ const TEMPLATED: Record<string, { definition: string; example: string; related: 
   },
   "drawdown": {
     definition: "Caída desde el pico más reciente. Si tu posición valía US$1.000 y ahora vale US$700, tu drawdown es 30%. Es la métrica clásica de cuánto está sufriendo una posición vs. su mejor momento.",
-    example: "BTC tuvo un drawdown del 50% en 2022 desde el pico de noviembre 2021.",
+    example: "El Merval tuvo un drawdown del 30% durante 2022 desde el pico de marzo.",
     related: ["volatilidad", "riesgo"],
   },
   "tesis": {
@@ -159,7 +159,7 @@ const TEMPLATED: Record<string, { definition: string; example: string; related: 
   },
   "volatilidad": {
     definition: "Cuánto se mueve el precio del activo, típicamente medido como desviación estándar anualizada de los retornos diarios. Más volatilidad = más swings = más riesgo de drawdown grande, pero también más oportunidad de retorno.",
-    example: "Bonos tienen volatilidad ~5%. Acciones argentinas ~30%. Cripto ~80%+. Lo mismo no es lo mismo arriba que abajo.",
+    example: "Bonos hard-dollar tienen volatilidad ~5%. CEDEARs ~20%. Acciones argentinas ~30%+. La misma exposición pesa distinto según volatilidad.",
     related: ["beta", "Sharpe", "drawdown"],
   },
   "afip": {
@@ -288,7 +288,7 @@ serve(async (req) => {
       `Reglas:`,
       `- Voseo (vos), profesional, sereno. Cero hype, cero emojis.`,
       `- Si el término es ambiguo (ej. "ratio" sin contexto), aclaralo en definition y dejá related con las posibles interpretaciones.`,
-      `- Si es un ticker (ej. "GGAL", "AAPL"), describí brevemente la empresa + categoría (CEDEAR / acción AR / cripto / ETF / bono).`,
+      `- Si es un ticker (ej. "GGAL", "AAPL"), describí brevemente la empresa + categoría (CEDEAR / acción AR / ETF / bono / commodity).`,
       `- Si no es un término financiero o no podés explicarlo razonablemente, devolvé definition diciendo que no aplica.`,
       `- example debe ser concreto y aterrizado a AR — usá pesos / USD según corresponda, mencioná tickers reales si aporta.`,
       `- No des recomendación de comprar / vender.`,

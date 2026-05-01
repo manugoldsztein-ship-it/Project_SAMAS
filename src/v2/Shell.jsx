@@ -2835,6 +2835,21 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.21",
+    title: "Crypto removido de toda la app — Cohen no opera crypto",
+    bullets: [
+      "Manuel: 'Cohen does not operate Crypto, so remove all mention of that'. Sweep comprehensive — el universo de assets ya no tiene BTC/ETH, las category-filter chips no muestran Cripto, las allocations de IA no asignan ningún %, y las copys de UI/i18n quedaron purgadas.",
+      "ASSET UNIVERSE — BTC + ETH removed de src/v2/api/broker.js + src/App.jsx legacy ASSETS + 17 Edge Functions (analyze-asset, analyze-portfolio, chat-portfolio, compare-benchmark, daily-brief, draft-post, explain-news, fetch-news, news-digest, objectives-plan, position-size, proactive-insights, quarterly-review, rebalance-portfolio, score-risk, sector-rotation, suggest-watchlist, validate-thesis, trade-coach). Reemplazado en holdings seed con GLD para mantener diversificación demo.",
+      "ALLOCATION PRESETS — el slot CRYPTO del % redistribuido a CEDEAR / ETF / COMMOD en cada strategy mientras mantenemos el directional skew (defensivo BONO-heavy, agresivo CEDEAR-heavy). Esto cubre objectives-plan (3 perfiles), sector-rotation (3 stances), rebalance-portfolio (3 perfiles).",
+      "BENCHMARKS — compare-benchmark cambió Bitcoin → AL30 (Bonar 2030) como tercer benchmark. El Merval, S&P y AL30 son los 3 que mira un asesor argentino real.",
+      "CATEGORY FILTERS — chips de Mercado / Watchlist / Reports / Tutorials ya no muestran 'Cripto' / 'Crypto'. Donde tenía sentido lo reemplazé con 'Bono' / 'Renta Fija' (ej. en Mercado para que la columna no quede coja). Watchlist starter chip 'Cripto' → 'Bonos hard-dollar'.",
+      "DEPOSIT METHODS — el método 'USDT (TRC-20)' fue removido del DepositSheet. Quedan transferencia bancaria + MercadoPago, que son los rails que Cohen efectivamente usa.",
+      "SEED SOCIAL DEMO — usuario @santi.cripto renombrado a @santi.fondos (Santiago Rodríguez ahora es 'Fondos comunes y plazos fijos UVA. Sin emoción, con disciplina'). Sus 4 posts re-escritos para reflejar FCI Money Market + PF UVA + GLD diversification — más coherente con el AR retail conservador que es el cliente típico de Cohen.",
+      "i18n: keys 'market.filter.crypto', 'watchlist.ai.starter.crypto', 'pro.sector.crypto' removidas en TODOS los locales (es/en/pt/it/fr/de/zh/ru/ja/he/ar/ko). Strings que mencionaban 'crypto/cripto/krypto' en news.subtitle, onboarding bodies, y rebalance.profile.aggressive_sub fueron reescritos a referirse a renta fija / commodities.",
+      "DEPLOY — 21 Edge Functions redeployadas via supabase functions deploy en for-loop. Build + sync + install en device confirmados.",
+    ],
+  },
+  {
     version: "0.4.20",
     title: "iOS Dynamic Type — la app responde al slider de Tamaño del texto del sistema",
     bullets: [

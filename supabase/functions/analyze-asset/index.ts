@@ -3,7 +3,7 @@
 // ============================================================
 // Twin of analyze-portfolio (0.0.83) but scoped to one asset.
 // Triggered from AssetSheet's "Análisis IA" card when the user
-// taps a ticker (NVDA / GGAL / BTC / etc).
+// taps a ticker (NVDA / GGAL / AL30 / etc).
 //
 // Request body:  { ticker: string }
 // Response:
@@ -65,8 +65,6 @@ const ASSETS: Record<string, {
   GGAL: { name: "Grupo Galicia",    category: "ACCION", currency: "ARS", price: 4250,   changePct: -2.10 },
   YPF:  { name: "YPF",              category: "ACCION", currency: "ARS", price: 38500,  changePct:  3.45 },
   PAMP: { name: "Pampa Energía",    category: "ACCION", currency: "ARS", price: 5820,   changePct:  0.92 },
-  BTC:  { name: "Bitcoin",          category: "CRYPTO", currency: "USD", price: 92450,  changePct:  0.92 },
-  ETH:  { name: "Ethereum",         category: "CRYPTO", currency: "USD", price: 2845,   changePct:  2.18 },
   AL30: { name: "Bonar 2030",       category: "BONO",   currency: "USD", price: 56.70,  changePct:  0.40 },
   SPY:  { name: "S&P 500 ETF",      category: "ETF",    currency: "USD", price: 512.40, changePct:  0.62 },
   QQQ:  { name: "Nasdaq-100 ETF",   category: "ETF",    currency: "USD", price: 431.20, changePct:  0.88 },
@@ -80,7 +78,6 @@ const ASSETS: Record<string, {
 const CATEGORY_LABEL: Record<string, string> = {
   CEDEAR: "CEDEAR (acción extranjera)",
   ACCION: "acción argentina",
-  CRYPTO: "criptomoneda",
   BONO:   "bono soberano",
   ETF:    "ETF",
   COMMOD: "commodity",
@@ -141,14 +138,8 @@ function templatedInsight(ticker: string, meta: {
             bullets: ["Generación eléctrica: 3,500 MW instalados, ~10% del SADI.",
                       "Sector hidrocarburos creciendo en Loma Campana + Rincón de Aranda.",
                       "Dividendo recurrente: ~5% yield estimado para 2026."] },
-    BTC:  { thesis: "Halving + ETF inflows institucionales sostienen el piso por encima de US$80K.",
-            bullets: ["ETFs spot acumularon US$45B AUM en su primer año.",
-                      "Hashrate global en máximos históricos = más demanda computacional.",
-                      "Volatilidad regulatoria sigue siendo el mayor riesgo."] },
-    ETH:  { thesis: "Dencun bajó fees en L2s 90%; staking yield (~3.8%) apuntala precio.",
-            bullets: ["L2 ecosystem (Base, Arbitrum, Optimism) capturando volumen DeFi.",
-                      "ETH ETFs spot operativos desde mediados 2024 — flujos más erráticos que BTC.",
-                      "Competencia de Solana en throughput y costo sigue activa."] },
+    // BTC + ETH per-ticker thesis entries removed in samas-0.4.21 —
+    // Cohen doesn't operate crypto so they're never queried.
     AL30: { thesis: "Bono dolar más líquido del menú AR. Carry alto si la curva sigue normalizándose.",
             bullets: ["Yield al vencimiento: ~12% USD a precios actuales.",
                       "Argentina pagó cupón enero sin demora — credibilidad recuperándose.",

@@ -114,7 +114,7 @@ export const SAMAS_SPARKS = {
 // side sees matching tiles for the same row. Used only when the asset
 // has no category set; assets with a known category use
 // CATEGORY_PALETTES below so the fallback color encodes the kind of
-// asset (Acciones=green, CEDEAR=blue, Crypto=orange, etc.) instead of
+// asset (Acciones=green, CEDEAR=blue, Bono=sky, etc.) instead of
 // being arbitrary.
 const FALLBACK_PALETTE = [
   "#3B82F6", "#16C784", "#F59E0B", "#EF4444",
@@ -127,19 +127,16 @@ const FALLBACK_PALETTE = [
 // without breaking the "this kind of asset is blue" mental model.
 //
 // Keys cover both the source-data shape (raw `cat`: "Acciones",
-// "CEDEAR", "Crypto", "ETF", "Commodity") and the legacy uppercase
-// keys ("ACCION", "CEDEAR", "CRYPTO", "ETF", "COMMOD", "BONO") so
-// the function lands on a palette regardless of which name the
-// caller passed.
+// "CEDEAR", "ETF", "Commodity", "Bono") and the legacy uppercase
+// keys ("ACCION", "CEDEAR", "ETF", "COMMOD", "BONO") so the function
+// lands on a palette regardless of which name the caller passed.
+// Crypto palette removed in samas-0.4.21 — Cohen doesn't operate it.
 const CATEGORY_PALETTES = {
   // Acciones argentinas — green family.
   "Acciones":  ["#16C784", "#10B981", "#059669"],
   "ACCION":    ["#16C784", "#10B981", "#059669"],
   // CEDEARs — blue family.
   "CEDEAR":    ["#2563EB", "#3B82F6", "#1D4ED8"],
-  // Crypto — bitcoin-orange family.
-  "Crypto":    ["#F7931A", "#F59E0B", "#D97706"],
-  "CRYPTO":    ["#F7931A", "#F59E0B", "#D97706"],
   // ETFs — violet family.
   "ETF":       ["#7C3AED", "#8B5CF6", "#6D28D9"],
   // Commodities — gold family.
@@ -262,7 +259,7 @@ export function AssetLogo({ asset, size = 40, T }) {
 
   // Deterministic fallback. If the asset has a category, pick from
   // that family's palette so the color encodes the kind of asset
-  // (CEDEAR=blue, Acciones=green, Crypto=orange, …) — same mental
+  // (CEDEAR=blue, Acciones=green, Bono=sky, …) — same mental
   // model as the deleted CATEGORY_TILES dict but actually wired up
   // this time and using a richer palette. If the category is
   // unknown, fall back to the legacy ticker-hash palette.

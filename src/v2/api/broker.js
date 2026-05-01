@@ -65,9 +65,9 @@ function uiToDbStatus(s) {
 // ----------------------------------------------------------
 // Hardcoded for the demo. In production this comes from the broker
 // or a market data provider (Finnhub / CMS Capital). Each asset:
-//   ticker      symbol used in orders ("GGAL", "AAPL", "BTC", ...)
+//   ticker      symbol used in orders ("GGAL", "AAPL", "AL30", ...)
 //   name        display name
-//   category    "ACCION" | "CEDEAR" | "BONO" | "CRYPTO" | "ETF" | ...
+//   category    "ACCION" | "CEDEAR" | "BONO" | "ETF" | "COMMOD"
 //   currency    "ARS" | "USD"
 //   price       last traded
 //   changePct   24h percentage change
@@ -87,8 +87,9 @@ const ASSETS = [
   { ticker: "GGAL", name: "Grupo Galicia",   category: "ACCION", currency: "ARS", price: 4250,   changePct: -2.10, logo: "https://logo.clearbit.com/galiciaseguros.com.ar" },
   { ticker: "YPF",  name: "YPF",             category: "ACCION", currency: "ARS", price: 38500,  changePct:  3.45, logo: "https://logo.clearbit.com/ypf.com" },
   { ticker: "PAMP", name: "Pampa Energía",   category: "ACCION", currency: "ARS", price: 5820,   changePct:  0.92, logo: "https://logo.clearbit.com/pampaenergia.com" },
-  { ticker: "BTC",  name: "Bitcoin",         category: "CRYPTO", currency: "USD", price: 92450,  changePct:  0.92, logo: "https://logo.clearbit.com/bitcoin.org" },
-  { ticker: "ETH",  name: "Ethereum",        category: "CRYPTO", currency: "USD", price: 2845,   changePct:  2.18, logo: "https://logo.clearbit.com/ethereum.org" },
+  // Crypto removed in samas-0.4.21 — Cohen (broker of record for the
+  // pitch) doesn't operate crypto. Kept the BONO/ETF/COMMOD lineup
+  // which is fully Cohen-coverable.
   { ticker: "AL30", name: "Bonar 2030",      category: "BONO",   currency: "USD", price: 56.70,  changePct:  0.40, logo: null },
   { ticker: "SPY",  name: "S&P 500 ETF",     category: "ETF",    currency: "USD", price: 512.40, changePct:  0.62, logo: "https://logo.clearbit.com/ssga.com" },
   { ticker: "QQQ",  name: "Nasdaq-100 ETF",  category: "ETF",    currency: "USD", price: 431.20, changePct:  0.88, logo: "https://logo.clearbit.com/invesco.com" },
@@ -124,7 +125,7 @@ function seed() {
     holdings: [
       { ticker: "GGAL", qty: 250, avgCost: 4150 },
       { ticker: "AAPL", qty: 8,   avgCost: 210.00 },
-      { ticker: "BTC",  qty: 0.018, avgCost: 89000 },
+      { ticker: "GLD",  qty: 2,   avgCost: 220.00 },
     ],
     orders: [],                    // submitted but not necessarily filled
     // Watchlists migrated to Supabase in 0.0.78 — see public.watchlists +

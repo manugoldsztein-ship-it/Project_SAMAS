@@ -65,8 +65,6 @@ const ASSETS: Record<string, { name: string; currency: string; price: number; }>
   YPF:   { name: "YPF",              currency: "ARS", price: 38500 },
   PAMP:  { name: "Pampa Energía",    currency: "ARS", price: 5820 },
   ALUA:  { name: "Aluar",            currency: "ARS", price: 1180 },
-  BTC:   { name: "Bitcoin",          currency: "USD", price: 67400 },
-  ETH:   { name: "Ethereum",         currency: "USD", price: 3580 },
   SPY:   { name: "S&P 500 ETF",      currency: "USD", price: 542.30 },
   QQQ:   { name: "Nasdaq-100 ETF",   currency: "USD", price: 478.20 },
 };

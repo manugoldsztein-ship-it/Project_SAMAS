@@ -2,7 +2,7 @@
 // sector-rotation — IA sector rotation analysis
 // ============================================================
 // Reads the user's holdings, computes sector mix (CEDEAR / ACCION /
-// CRYPTO / ETF / BONO / COMMOD), compares against three pre-set
+// ETF / BONO / COMMOD), compares against three pre-set
 // macro stances, and asks Claude to suggest concrete tilts.
 //
 // Distinct from rebalance-portfolio (0.1.4):
@@ -18,7 +18,7 @@
 //
 // Stance presets (deterministic baseline — Claude refines the
 // rationale, doesn't change the targets):
-//   - "growth"      : tech/CEDEAR heavy, crypto OK, light bonds
+//   - "growth"      : tech/CEDEAR heavy, light bonds
 //   - "balanced"    : mix CEDEAR + ACCION + ETF + some BONO
 //   - "defensive"   : ACCION (utilities/cash-flow), heavy BONO,
 //                     light tech
@@ -79,8 +79,6 @@ const ASSETS: Record<string, { name: string; category: string; currency: string;
   YPF:   { name: "YPF",              category: "ACCION", currency: "ARS", price: 38500 },
   PAMP:  { name: "Pampa Energía",    category: "ACCION", currency: "ARS", price: 5820 },
   ALUA:  { name: "Aluar",            category: "ACCION", currency: "ARS", price: 1180 },
-  BTC:   { name: "Bitcoin",          category: "CRYPTO", currency: "USD", price: 67400 },
-  ETH:   { name: "Ethereum",         category: "CRYPTO", currency: "USD", price: 3580 },
   SPY:   { name: "S&P 500 ETF",      category: "ETF",    currency: "USD", price: 542.30 },
   QQQ:   { name: "Nasdaq-100 ETF",   category: "ETF",    currency: "USD", price: 478.20 },
   AL30:  { name: "Bonar 2030",       category: "BONO",   currency: "USD", price: 58.30 },
@@ -90,20 +88,24 @@ const ASSETS: Record<string, { name: string; category: string; currency: string;
 
 const ARS_TO_USD = 1 / 1245;
 
-const SECTORS = ["CEDEAR", "ACCION", "ETF", "BONO", "CRYPTO", "COMMOD"] as const;
+// CRYPTO removed in samas-0.4.21 — Cohen doesn't operate it.
+// Residual % redistributed across CEDEAR / ETF / COMMOD per stance
+// while keeping the directional thesis (growth tilts CEDEAR-heavy,
+// defensive tilts BONO-heavy).
+const SECTORS = ["CEDEAR", "ACCION", "ETF", "BONO", "COMMOD"] as const;
 type Sector = typeof SECTORS[number];
 
 // Target mixes per stance — must sum to 100. Hand-tuned so each
 // stance reads as a coherent macro thesis, not random buckets.
 const STANCES: Record<string, Record<Sector, number>> = {
   growth: {
-    CEDEAR: 45, ACCION: 10, ETF: 15, BONO: 5,  CRYPTO: 20, COMMOD: 5,
+    CEDEAR: 55, ACCION: 10, ETF: 20, BONO: 5,  COMMOD: 10,
   },
   balanced: {
-    CEDEAR: 30, ACCION: 20, ETF: 20, BONO: 15, CRYPTO: 10, COMMOD: 5,
+    CEDEAR: 35, ACCION: 20, ETF: 22, BONO: 15, COMMOD: 8,
   },
   defensive: {
-    CEDEAR: 15, ACCION: 25, ETF: 10, BONO: 35, CRYPTO: 5,  COMMOD: 10,
+    CEDEAR: 15, ACCION: 25, ETF: 10, BONO: 38, COMMOD: 12,
   },
 };
 
@@ -177,7 +179,7 @@ serve(async (req) => {
 
     let totalUsd = 0;
     const sectorUsd: Record<Sector, number> = {
-      CEDEAR: 0, ACCION: 0, ETF: 0, BONO: 0, CRYPTO: 0, COMMOD: 0,
+      CEDEAR: 0, ACCION: 0, ETF: 0, BONO: 0, COMMOD: 0,
     };
     for (const h of holdings) {
       const meta = ASSETS[h.ticker];

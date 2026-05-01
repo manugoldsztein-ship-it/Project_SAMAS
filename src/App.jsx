@@ -102,8 +102,9 @@ const ASSETS = [
   { ticker:"GLD",    name:"Gold ETF",         cat:"Commodity", price:22860,   change:1.24,  chg1m:6.8,   chgYTD:18.4,  vol:"$6.1M",  mktCap:"$68B",   hi52:25000,   lo52:17000,   pe:null, up:true,  yf:"GLD",    desc:"ETF que replica el precio del oro fisico. Cobertura contra inflacion.", logo:"https://logo.clearbit.com/spdrs.com" },
   { ticker:"OIL",    name:"Petróleo WTI",     cat:"Commodity", price:8130,    change:-0.73, chg1m:-3.2,  chgYTD:-8.1,  vol:"$4.2M",  mktCap:"N/A",    hi52:9800,    lo52:6200,    pe:null, up:false, yf:"USO",    desc:"West Texas Intermediate, el referente global del petroleo crudo.", logo:"https://logo.clearbit.com/uscfinvestments.com" },
   { ticker:"COPPER", name:"Cobre",            cat:"Commodity", price:452,     change:2.11,  chg1m:8.4,   chgYTD:14.2,  vol:"$2.1M",  mktCap:"N/A",    hi52:510,     lo52:340,     pe:null, up:true,  yf:"CPER",   desc:"Metal industrial clave. Indicador adelantado de crecimiento economico global.", logo:"https://logo.clearbit.com/usecuritiesinvestments.com" },
-  { ticker:"BTC",    name:"Bitcoin",          cat:"Crypto",    price:8342000, change:1.87,  chg1m:12.4,  chgYTD:38.2,  vol:"$24.1M", mktCap:"$1.6T",  hi52:9800000, lo52:4200000, pe:null, up:true,  yf:"BTC-USD",desc:"La primera y mas grande criptomoneda. Reserva de valor digital con 21M monedas.", logo:"https://logo.clearbit.com/bitcoin.org" },
+  { ticker:"AL30",   name:"Bonar 2030",       cat:"Bono",      price:5670,    change:0.40,  chg1m:1.2,   chgYTD:4.1,   vol:"$8.5M",  mktCap:"N/A",    hi52:6200,    lo52:4800,    pe:null, up:true,  yf:"AL30",   desc:"Bono soberano argentino en USD ley extranjera, vencimiento 2030. Cupón step-up.", logo:null },
 ];
+// BTC removed in samas-0.4.21 — Cohen (broker of record) doesn't operate crypto.
 
 const INIT_HOLDINGS = [
   { ticker:"GGAL", qty:500, avg:7800  },
@@ -124,7 +125,7 @@ const NEWS = [
   { id:1,  tickers:["GGAL","BBAR"], cat:"Acciones",    src:"Ambito",      time:"Hace 12 min", title:"Bancos argentinos lideran subas del Merval tras inflacion menor a lo esperado", body:"El sector financiero reacciono positivamente ante la publicacion del IPC de marzo." },
   { id:2,  tickers:["NVDA","QQQ"],  cat:"CEDEAR",    src:"Reuters",     time:"Hace 28 min", title:"NVIDIA supera expectativas; Wall Street sube con fuerza",                       body:"Ingresos record impulsados por la demanda de chips para IA." },
   { id:3,  tickers:["YPF","OIL"],   cat:"Acciones",    src:"Bloomberg",   time:"Hace 45 min", title:"Petroleo sube 2% tras recorte sorpresivo de la OPEP+",                          body:"Arabia Saudita anuncio una reduccion adicional de 500.000 barriles diarios." },
-  { id:4,  tickers:["BTC"],         cat:"Crypto",    src:"CoinDesk",    time:"Hace 1h",     title:"Bitcoin alcanza USD 84.000 impulsado por ETFs spot con entradas record",        body:"Los fondos cotizados de Bitcoin acumularon mas de USD 1.200 millones." },
+  { id:4,  tickers:["AL30","GD30"], cat:"Bono",      src:"Cronista",    time:"Hace 1h",     title:"Bonos hard-dollar argentinos cierran +1.4% por sexta rueda consecutiva",         body:"AL30 y GD30 lideran las subas. Mercado descuenta acuerdo con el FMI antes de fin de año." },
   { id:5,  tickers:["SPY","GLD"],   cat:"ETF",       src:"CNBC",        time:"Hace 1h 20m", title:"Fed mantiene tasas; mercados celebran tono mas dovish de Powell",               body:"El presidente de la Fed senalo que los datos justifican una pausa." },
   { id:6,  tickers:["AAPL","MSFT"], cat:"CEDEAR",    src:"WSJ",         time:"Hace 2h",     title:"Apple y Microsoft suben tras rumores de acuerdo de distribucion de IA",         body:"Ambas companias estudian integrar modelos de lenguaje en sus plataformas." },
   { id:7,  tickers:["PAMP","ALUA"], cat:"Acciones",    src:"El Cronista", time:"Hace 3h",     title:"Energia y materiales basicos recuperan terreno tras desregulacion",             body:"El Gobierno confirmo nuevas medidas de liberalizacion del sector energetico." },
@@ -766,7 +767,7 @@ const fARS = n => n >= 1e6 ? "$" + (n/1e6).toFixed(2) + "M" : n >= 1e3 ? "$" + (
 const FINNHUB_SYMBOL_OVERRIDE = {
   ALUA: null,   // BCBA-only, not on free tier
   MIRG: null,   // BCBA-only
-  BTC: "BINANCE:BTCUSDT", // unofficial crypto symbol; falls back to mock if 404
+  AL30: null,   // Sovereign bond, no Finnhub coverage
   OIL: "USO",   // WTI proxy
   COPPER: "CPER",
 };
@@ -969,13 +970,11 @@ const BRAND = {
   OIL:    { bg:"#1B3A4B", fg:"#E8A020", sym:"OIL" },
   COPPER: { bg:"#B87333", fg:"#fff",    sym:"Cu"  },
   SLV:    { bg:"#8E8E93", fg:"#fff",    sym:"Ag"  },
-  // Crypto
-  BTC:    { bg:"#F7931A", fg:"#fff",    sym:null,  svg:"btc"     },
-  ETH:    { bg:"#627EEA", fg:"#fff",    sym:null,  svg:"eth"     },
 };
+// Crypto tile entries removed in samas-0.4.21 — Cohen doesn't operate crypto.
 
 function AssetLogo({ asset, size = 36, C }) {
-  const catColors = { Acciones:C.accent, CEDEAR:"#7C3AED", ETF:"#2563EB", Commodity:C.green, Crypto:"#F7931A" };
+  const catColors = { Acciones:C.accent, CEDEAR:"#7C3AED", ETF:"#2563EB", Commodity:C.green, Bono:"#06B6D4" };
   const col = catColors[asset.cat] || C.accent;
   const r = Math.round(size / 3);
   return (
@@ -1153,7 +1152,7 @@ function sendEmailNotification({ to, subject, body }) {
 // TICKER BANNER
 // ============================================================
 function TickerBanner({ C }) {
-  const items = ASSETS.filter(a => a.cat === "ETF" || a.cat === "Commodity" || a.cat === "Crypto");
+  const items = ASSETS.filter(a => a.cat === "ETF" || a.cat === "Commodity" || a.cat === "Bono");
   const all = [...items, ...items, ...items];
   // Same dark color as the rest of the chrome on native — header and
   // FXStrip use #0F0F0F too, so the top of the screen reads as one
@@ -2595,15 +2594,15 @@ const REPORTES = [
   { id:5, cat:"Fondos",      date:"Feb 2025", title:"Comparativa fondos comunes Q1 2025", summary:"Rendimientos, volatilidad y ratios de Sharpe de los principales FCIs del mercado argentino.", pages:20, download:"samas_fondos_q1_2025.pdf", highlight:false },
   { id:6, cat:"ON",          date:"Ene 2025", title:"Obligaciones negociables: oportunidades en el mercado primario", summary:"Pipeline de emisiones de ONs y analisis de spreads en el mercado secundario.", pages:16, download:"samas_on_2025.pdf", highlight:false },
   { id:7, cat:"Estrategia",  date:"Ene 2025", title:"Informe anual 2024 y outlook 2025", summary:"Resumen del año 2024 y proyecciones estrategicas para el 2025. El informe mas completo del equipo.", pages:48, download:"samas_anual_2024.pdf", highlight:false },
-  { id:8, cat:"Cripto",      date:"Dic 2024", title:"Bitcoin y el ecosistema cripto en 2025", summary:"Analisis del mercado cripto, adoption curves y oportunidades para inversores institucionales.", pages:22, download:"samas_cripto_2025.pdf", highlight:false },
+  { id:8, cat:"Renta Fija",  date:"Dic 2024", title:"Curva de bonos hard-dollar argentinos: setup 2025", summary:"AL30, GD30, Bopreal series. Análisis de carry y duration vs escenarios macro. Para perfiles conservadores.", pages:22, download:"samas_bonos_2025.pdf", highlight:false },
 ];
 
 function PageReportes({ C, lang }) {
   const t = useT(lang);
   const [filter, setFilter] = useState("Todos");
-  const cats = ["Todos","Estrategia","Renta Fija","Equities","Macro","Fondos","ON","Cripto"];
+  const cats = ["Todos","Estrategia","Renta Fija","Equities","Macro","Fondos","ON"];
   const filtered = filter === "Todos" ? REPORTES : REPORTES.filter(r => r.cat === filter);
-  const catColor = { "Estrategia":"#16C784","Renta Fija":"#2563EB","Equities":"#7C3AED","Macro":"#C9A84C","Fondos":"#16C784","ON":"#0891B2","Cripto":"#F7931A" };
+  const catColor = { "Estrategia":"#16C784","Renta Fija":"#2563EB","Equities":"#7C3AED","Macro":"#C9A84C","Fondos":"#16C784","ON":"#0891B2" };
   return (
     <div style={{ padding:"14px 14px 20px" }}>
       <div style={{ marginBottom:16 }}>
@@ -2922,7 +2921,7 @@ const TICKER_TO_CAT = (ticker) => {
   if (a.cat === "CEDEAR")    return "CEDEAR";
   if (a.cat === "ETF")       return "ETF";
   if (a.cat === "Commodity") return "ETF";   // commodity ETFs group with ETF
-  if (a.cat === "Crypto")    return "Crypto";
+  if (a.cat === "Bono")      return "Bono";
   return "Acciones";
 };
 function RebalanceHint({ holdings, plan, C }) {
@@ -3653,7 +3652,7 @@ function AssetPickerModal({ title = "Agregar activo", alreadyIn, onPick, onClose
   useEscapeKey(onClose);
   const [search, setSearch] = useState("");
   const [cat, setCat]       = useState("Todos");
-  const cats = ["Todos", "Acciones", "CEDEAR", "ETF", "Commodity", "Crypto"];
+  const cats = ["Todos", "Acciones", "CEDEAR", "ETF", "Commodity", "Bono"];
   const already = alreadyIn instanceof Set ? alreadyIn : new Set(alreadyIn || []);
   const q = search.trim().toLowerCase();
   const filtered = ASSETS.filter(a => {
@@ -3973,7 +3972,7 @@ function PageMercado({ onSelectAsset, C, showUSD, lang }) {
   const t = useT(lang);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("Todos");
-  const cats = ["Todos","Acciones","CEDEAR","ETF","Commodity","Crypto","Bonos"];
+  const cats = ["Todos","Acciones","CEDEAR","ETF","Commodity","Bonos"];
   // Unified list: ASSETS + BONOS mapped to look like assets
   const bondAssets = BONOS.map(b => ({
     ticker:    b.ticker,
@@ -4137,7 +4136,7 @@ function PageNoticias({ holdings, watchlists, onSelectAsset, C, lang }) {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value.replace(/[^a-zA-Z0-9.\-]/g, "").toUpperCase().slice(0, 15))}
-          placeholder="Buscar noticias por ticker (GGAL, AAPL, BTC...)"
+          placeholder="Buscar noticias por ticker (GGAL, AAPL, AL30…)"
           style={{
             flex: 1, background: "transparent", border: "none", outline: "none",
             color: C.text, fontFamily: "inherit", fontSize: 13, fontWeight: 600,
@@ -4409,7 +4408,7 @@ function OnboardingTutorial({ onClose, onComplete, setTab, setShowUSD, setShowPr
     },
     {
       title: "El ticker en vivo",
-      body: "Aca ves los precios mas importantes del mercado moviendose en tiempo real: ETFs, commodities y crypto.",
+      body: "Aca ves los precios mas importantes del mercado moviendose en tiempo real: ETFs, commodities y bonos.",
       target: { top:66, left:0, width:357, height:28 },
       tipSide: "below",
       tabTo: "portfolio",
@@ -4452,7 +4451,7 @@ function OnboardingTutorial({ onClose, onComplete, setTab, setShowUSD, setShowPr
     },
     {
       title: "Mercado",
-      body: "Aca encontras todas las acciones, CEDEARs, ETFs, bonos, commodities y crypto. Busca o filtra por categoria.",
+      body: "Aca encontras todas las acciones, CEDEARs, ETFs, bonos y commodities. Busca o filtra por categoria.",
       target: null,
       tabTo: "mercado",
       accent: "#16C784",
@@ -4587,13 +4586,13 @@ function DepositModal({ user, onClose, onSimulate, C }) {
   // sessions so the bank reference stays the same on repeat deposits.
   const ref = "SAMAS-" + (user?.email || "demo").split("@")[0].toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6).padEnd(6, "X");
 
+  // USDT/crypto deposit method removed in samas-0.4.21 — Cohen
+  // doesn't operate crypto rails.
   const methods = [
     { id: "transfer", label: "Transferencia bancaria", desc: "Acreditacion ~minutos · Sin comision",
       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M3 12h18"/><path d="M12 2l3 6H9l3-6z"/></svg> },
     { id: "mp",       label: "MercadoPago",            desc: "Instantaneo · 1.5% + IVA",
       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg> },
-    { id: "crypto",   label: "USDT (TRC-20)",          desc: "~10 min confirmacion · 0.5%",
-      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M8 10h8M8 14h8"/></svg> },
   ];
 
   const details = {
@@ -4608,11 +4607,6 @@ function DepositModal({ user, onClose, onSimulate, C }) {
       { label: "Link",       value: "mercadopago.com.ar/samas/" + ref.toLowerCase() },
       { label: "Alias MP",   value: "samas.wallet" },
       { label: "Referencia", value: ref, note: "Se agrega automaticamente al link" },
-    ],
-    crypto: [
-      { label: "Address",    value: "TR7NHqjeKQxGTCi8q8ZY4pL5SomeFakeAddress" },
-      { label: "Red",        value: "TRC-20 (solo USDT)" },
-      { label: "Memo / Tag", value: ref, note: "Obligatorio — sin este memo no podemos identificar tu deposito" },
     ],
   };
 
@@ -5953,7 +5947,7 @@ export default function SAMASApp() {
         }
       }
     } catch {}
-    return [{ id: "default", name: "Mi Watchlist", tickers: ["SPY","BTC","GGAL"] }];
+    return [{ id: "default", name: "Mi Watchlist", tickers: ["SPY","GLD","GGAL"] }];
   })());
   // Flattened set of tickers across ALL lists — consumed by AssetDetail
   // to decide whether to render a filled star. Derived, not stored.
@@ -6719,7 +6713,7 @@ export default function SAMASApp() {
       if (userId) saveBalance(userId, next).catch((e) => console.error("[balance] deposit save:", e));
       return next;
     });
-    const methodLabel = method === "transfer" ? "transferencia" : method === "mp" ? "MercadoPago" : "crypto";
+    const methodLabel = method === "transfer" ? "transferencia" : "MercadoPago";
     haptic("success");
     showToast(`$${fN(amount)} acreditados via ${methodLabel}`, C.green);
   };

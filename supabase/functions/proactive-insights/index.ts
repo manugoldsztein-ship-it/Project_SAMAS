@@ -70,8 +70,6 @@ const ASSETS: Record<string, { name: string; category: string; currency: string;
   YPF:   { name: "YPF",              category: "ACCION", currency: "ARS", price: 38500 },
   PAMP:  { name: "Pampa Energía",    category: "ACCION", currency: "ARS", price: 5820 },
   ALUA:  { name: "Aluar",            category: "ACCION", currency: "ARS", price: 1180 },
-  BTC:   { name: "Bitcoin",          category: "CRYPTO", currency: "USD", price: 67400 },
-  ETH:   { name: "Ethereum",         category: "CRYPTO", currency: "USD", price: 3580 },
   SPY:   { name: "S&P 500 ETF",      category: "ETF",    currency: "USD", price: 542.30 },
   QQQ:   { name: "Nasdaq-100 ETF",   category: "ETF",    currency: "USD", price: 478.20 },
   AL30:  { name: "Bonar 2030",       category: "BONO",   currency: "USD", price: 58.30 },

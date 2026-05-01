@@ -134,7 +134,7 @@ const ARG_RSS_FEEDS = [
   { source: "La Nación",      url: "https://servicios.lanacion.com.ar/herramientas/rss/categoria-id=347" },
 ];
 
-// Global RSS feeds — used for non-AR tickers (CEDEARs, ETFs, crypto,
+// Global RSS feeds — used for non-AR tickers (CEDEARs, ETFs,
 // commodities). CNBC and MarketWatch are the workhorses for US-listed
 // brand coverage; Bloomberg Línea is the LATAM Spanish arm of
 // Bloomberg and the only legitimately accessible Bloomberg-branded
@@ -172,8 +172,7 @@ const GLOBAL_KEYWORDS: Record<string, string[]> = {
   // on commodity-name keywords.
   OIL:    ["WTI", "crude oil", "oil prices"],
   COPPER: ["copper prices", "copper", "industrial metals"],
-  // Crypto.
-  BTC:    ["Bitcoin", "BTC", "crypto"],
+  // Crypto removed in samas-0.4.21 — Cohen doesn't operate it.
 };
 
 // ------------------------------------------------------------
@@ -752,7 +751,7 @@ serve(async (req: Request) => {
     //     fall back to Finnhub with a `.BA` suffix variant if no
     //     RSS hits (Finnhub does cover some Argentine securities under
     //     "TICKER.BA"). Last resort: bare ticker on Finnhub.
-    //   - GLOBAL ticker (CEDEARs, ETFs, crypto): pull CNBC / MarketWatch
+    //   - GLOBAL ticker (CEDEARs, ETFs, commodities): pull CNBC / MarketWatch
     //     / Bloomberg Línea AND Finnhub in parallel — both contribute,
     //     RSS gives the brand-name coverage Manuel asked for, Finnhub
     //     guarantees a baseline result. Dedup by URL afterwards.

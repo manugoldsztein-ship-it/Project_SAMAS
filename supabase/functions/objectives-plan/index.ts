@@ -67,6 +67,10 @@ const ANTHROPIC_MODEL =
 // Allocation presets per strategy. Sum to 100. Hand-tuned for AR
 // retail context (CEDEAR-heavy on growth, BONO-heavy on
 // conservadora). Categories match the rest of the app.
+//
+// CRYPTO removed in samas-0.4.21 — Cohen (broker of record) doesn't
+// operate crypto. Residual % redistributed into ETF / CEDEAR /
+// COMMOD so each strategy still sums to 100.
 type Allocation = { category: string; pctOfBook: number }[];
 const PRESETS: Record<string, Allocation> = {
   conservadora: [
@@ -74,24 +78,21 @@ const PRESETS: Record<string, Allocation> = {
     { category: "ETF",    pctOfBook: 25 },
     { category: "ACCION", pctOfBook: 10 },
     { category: "CEDEAR", pctOfBook: 10 },
-    { category: "CRYPTO", pctOfBook: 0  },
     { category: "COMMOD", pctOfBook: 5  },
   ],
   moderada: [
     { category: "BONO",   pctOfBook: 25 },
-    { category: "ETF",    pctOfBook: 20 },
+    { category: "ETF",    pctOfBook: 22 },
     { category: "ACCION", pctOfBook: 20 },
     { category: "CEDEAR", pctOfBook: 25 },
-    { category: "CRYPTO", pctOfBook: 5  },
-    { category: "COMMOD", pctOfBook: 5  },
+    { category: "COMMOD", pctOfBook: 8  },
   ],
   agresiva: [
     { category: "BONO",   pctOfBook: 5  },
-    { category: "ETF",    pctOfBook: 15 },
+    { category: "ETF",    pctOfBook: 20 },
     { category: "ACCION", pctOfBook: 15 },
-    { category: "CEDEAR", pctOfBook: 45 },
-    { category: "CRYPTO", pctOfBook: 15 },
-    { category: "COMMOD", pctOfBook: 5  },
+    { category: "CEDEAR", pctOfBook: 50 },
+    { category: "COMMOD", pctOfBook: 10 },
   ],
 };
 

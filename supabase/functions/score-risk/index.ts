@@ -4,7 +4,7 @@
 // Reads holdings, computes a deterministic 1-10 risk score per
 // position based on:
 //   - category baseline (BONO=2, ETF=4, CEDEAR=6, ACCION=7,
-//     COMMOD=6, CRYPTO=9)
+//     COMMOD=6)
 //   - volatility multiplier (per-ticker historical move %)
 //   - concentration penalty (positions > 30% of book add risk)
 //   - recent drawdown (negative gainPct vs avg cost)
@@ -62,8 +62,6 @@ const ASSETS: Record<string, { name: string; category: string; currency: string;
   GGAL: { name: "Grupo Galicia",    category: "ACCION", currency: "ARS", price: 4250,   volMult: 1.4 },
   YPF:  { name: "YPF",              category: "ACCION", currency: "ARS", price: 38500,  volMult: 1.5 },
   PAMP: { name: "Pampa Energía",    category: "ACCION", currency: "ARS", price: 5820,   volMult: 1.3 },
-  BTC:  { name: "Bitcoin",          category: "CRYPTO", currency: "USD", price: 92450,  volMult: 2.0 },
-  ETH:  { name: "Ethereum",         category: "CRYPTO", currency: "USD", price: 2845,   volMult: 2.2 },
   AL30: { name: "Bonar 2030",       category: "BONO",   currency: "USD", price: 56.70,  volMult: 0.8 },
   SPY:  { name: "S&P 500 ETF",      category: "ETF",    currency: "USD", price: 512.40, volMult: 0.7 },
   QQQ:  { name: "Nasdaq-100 ETF",   category: "ETF",    currency: "USD", price: 431.20, volMult: 1.0 },
@@ -82,7 +80,6 @@ const CATEGORY_BASELINE: Record<string, number> = {
   CEDEAR: 6,
   COMMOD: 6,
   ACCION: 7,
-  CRYPTO: 9,
 };
 
 function fetchTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
@@ -183,7 +180,7 @@ serve(async (req) => {
       const catLabels: Record<string, string> = {
         BONO: "bono soberano", ETF: "ETF",
         CEDEAR: "CEDEAR", ACCION: "acción argentina",
-        CRYPTO: "cripto", COMMOD: "commodity",
+        COMMOD: "commodity",
       };
       factors.push(`${catLabels[h.category] || h.category} (baseline ${baseline})`);
 

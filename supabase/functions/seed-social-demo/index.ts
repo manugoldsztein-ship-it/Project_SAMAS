@@ -57,7 +57,7 @@ const corsHeaders = {
 // ----------------------------------------------------------
 // Handles, display names, bios, and avatar palette pinned so the
 // demo looks the same every run. Bios skew toward the investor-
-// pitch crowd: students, retail traders, fixed-income, crypto,
+// pitch crowd: students, retail traders, fixed-income, fondos,
 // macro, fintech advisors. A few claim a university but with
 // gmail-style demo emails — so the profiles_social BEFORE INSERT
 // trigger leaves university_verified false. We do NOT want to
@@ -74,7 +74,7 @@ const SEED_USERS: SeedUser[] = [
   { handle: "luciainvierte",  displayName: "Lucía Pérez",         bio: "Estudiante UBA · Cartera diversificada con CEDEARs y bonos. DCA mensual.",  avatarColor: "#16C784" },
   { handle: "juan.merval",    displayName: "Juan Lopresti",       bio: "Trader retail · Long-only acciones argentinas. Sin apalancamiento.",          avatarColor: "#F59E0B" },
   { handle: "marti.bonos",    displayName: "Martina Aguilar",     bio: "Renta fija · GD30 / AL30 / Bopreal. Dolarización defensiva.",                avatarColor: "#3B82F6" },
-  { handle: "santi.cripto",   displayName: "Santiago Rodríguez",  bio: "BTC maxi · DCA semanal. Cold storage. Nada de shitcoins.",                   avatarColor: "#EC4899" },
+  { handle: "santi.fondos",   displayName: "Santiago Rodríguez",  bio: "Fondos comunes y plazos fijos UVA. Sin emoción, con disciplina.",            avatarColor: "#EC4899" },
   { handle: "fede.cedear",    displayName: "Federico Acuña",      bio: "CEDEARs > acciones AR. Dolarizo cartera vía AAPL / MSFT / SPY.",             avatarColor: "#8B5CF6" },
   { handle: "paula.fintech",  displayName: "Paula Vázquez",       bio: "Asesora financiera · Educación a clientes minoristas. CNV en proceso.",     avatarColor: "#06B6D4" },
   { handle: "diego.dolar",    displayName: "Diego Ortega",        bio: "Macro AR · Dólar, tasa, brecha. Sin recomendaciones, solo data.",            avatarColor: "#EF4444" },
@@ -119,13 +119,12 @@ const POSTS_BY_HANDLE: Record<string, SeedPost[]> = {
     { body: "Bopreal serie 1 vs GD30: prefiero el primero por la tasa fija y el calendario de pagos más cercano." },
     { body: "Dolarización defensiva: 60% bonos hard-dollar AR · 30% CEDEARs · 10% cash dólar MEP. Aburrido y funciona." },
   ],
-  "santi.cripto": [
-    { body: "BTC en 95k usd. DCA semanal sigue. No miro precios, miro reloj.", ticker: "BTC",
-      trade: { side: "buy", ticker: "BTC", qty: 0.02, price: 95200 } },
-    { body: "Recordatorio anual: si tu seed phrase está en una nota de Apple, no es tuya tu cripto." },
-    { body: "Hardware wallet + multisig. Es plata, tratala como plata." },
-    { body: "Compré más BTC en este dip. Same plan, same conviction.", ticker: "BTC",
-      trade: { side: "buy", ticker: "BTC", qty: 0.015, price: 92800 } },
+  "santi.fondos": [
+    { body: "FCI Money Market rindiendo 65% TNA. No es para ganar, es para no perder con la inflación. Cero magia.", },
+    { body: "Plazo fijo UVA + 10 días: la mejor herramienta para quien empieza. Tasa real positiva sin volatilidad." },
+    { body: "Sumé GLD para diversificar el ahorro en USD.", ticker: "GLD",
+      trade: { side: "buy", ticker: "GLD", qty: 5, price: 22850 } },
+    { body: "Mi regla: 30% renta fija ARS (FCI/PF UVA), 50% bonos hard-dollar, 20% CEDEARs. Aburrido, dormís de noche." },
   ],
   "fede.cedear": [
     { body: "$NVDA sigue siendo la única acción que me deja dormir tranquilo. Earnings la semana que viene.", ticker: "NVDA" },
@@ -232,8 +231,8 @@ const INTER_FOLLOWS: Array<[string, string]> = [
   ["juan.merval", "marti.bonos"],
   ["marti.bonos", "diego.dolar"],
   ["marti.bonos", "nico.yields"],
-  ["santi.cripto", "diego.dolar"],
-  ["santi.cripto", "fede.cedear"],
+  ["santi.fondos", "diego.dolar"],
+  ["santi.fondos", "fede.cedear"],
   ["fede.cedear", "valen.research"],
   ["fede.cedear", "maxi.options"],
   ["paula.fintech", "luciainvierte"],
@@ -284,7 +283,7 @@ const FOLLOWERS_OF_CALLER = [
 // bell. Skips silently if the caller has no posts yet.
 const LIKERS_OF_CALLER_POSTS = [
   "luciainvierte", "juan.merval", "paula.fintech",
-  "valen.research", "santi.cripto", "sofi.etf",
+  "valen.research", "santi.fondos", "sofi.etf",
 ];
 
 // DMs to the caller from a few seeded users — keeps the Mensajes

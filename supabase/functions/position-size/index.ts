@@ -11,7 +11,7 @@
 //     a) % of total book USD value
 //     b) % of available cash for the asset's currency
 //   Then divide by current price → suggested qty (floored to whole
-//   units for ACCION/CEDEAR/ETF/BONO, 4 decimals for CRYPTO).
+//   units for all categories — Cohen settles in integer units).
 //   Then nudge down if the resulting position would push the ticker
 //   above the concentration ceiling for that bucket.
 //
@@ -81,8 +81,6 @@ const ASSETS: Record<string, { name: string; category: string; currency: string;
   YPF:   { name: "YPF",              category: "ACCION", currency: "ARS", price: 38500 },
   PAMP:  { name: "Pampa Energía",    category: "ACCION", currency: "ARS", price: 5820 },
   ALUA:  { name: "Aluar",            category: "ACCION", currency: "ARS", price: 1180 },
-  BTC:   { name: "Bitcoin",          category: "CRYPTO", currency: "USD", price: 67400 },
-  ETH:   { name: "Ethereum",         category: "CRYPTO", currency: "USD", price: 3580 },
   SPY:   { name: "S&P 500 ETF",      category: "ETF",    currency: "USD", price: 542.30 },
   QQQ:   { name: "Nasdaq-100 ETF",   category: "ETF",    currency: "USD", price: 478.20 },
   AL30:  { name: "Bonar 2030",       category: "BONO",   currency: "USD", price: 58.30 },
@@ -93,8 +91,9 @@ const ARS_TO_USD = 1 / 1245;
 
 // Per-category risk weight — how much each unit "costs" against the
 // concentration ceiling. Higher = treat as more risky → suggest less.
+// CRYPTO removed in samas-0.4.21 (Cohen doesn't operate it).
 const CATEGORY_RISK: Record<string, number> = {
-  BONO: 0.4, ETF: 0.7, CEDEAR: 1.0, ACCION: 1.1, COMMOD: 1.2, CRYPTO: 1.5,
+  BONO: 0.4, ETF: 0.7, CEDEAR: 1.0, ACCION: 1.1, COMMOD: 1.2,
 };
 
 type Bucket = {
@@ -119,11 +118,7 @@ function fetchTimeout(url: string, init: RequestInit, timeoutMs: number): Promis
 
 function roundQty(qty: number, category: string): number {
   if (qty <= 0) return 0;
-  if (category === "CRYPTO") {
-    // 4 decimals for crypto. BTC/ETH/etc.
-    return Math.floor(qty * 10000) / 10000;
-  }
-  // Whole units for everything else.
+  // Whole units for everything (Cohen settles in integer units).
   return Math.floor(qty);
 }
 

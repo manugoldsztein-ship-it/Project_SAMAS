@@ -59,8 +59,6 @@ const ASSETS: Record<string, { name: string; category: string; currency: string;
   GGAL: { name: "Grupo Galicia",    category: "ACCION", currency: "ARS", price: 4250 },
   YPF:  { name: "YPF",              category: "ACCION", currency: "ARS", price: 38500 },
   PAMP: { name: "Pampa Energía",    category: "ACCION", currency: "ARS", price: 5820 },
-  BTC:  { name: "Bitcoin",          category: "CRYPTO", currency: "USD", price: 92450 },
-  ETH:  { name: "Ethereum",         category: "CRYPTO", currency: "USD", price: 2845 },
   AL30: { name: "Bonar 2030",       category: "BONO",   currency: "USD", price: 56.70 },
   SPY:  { name: "S&P 500 ETF",      category: "ETF",    currency: "USD", price: 512.40 },
   QQQ:  { name: "Nasdaq-100 ETF",   category: "ETF",    currency: "USD", price: 431.20 },

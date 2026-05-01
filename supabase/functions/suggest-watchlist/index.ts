@@ -2,7 +2,7 @@
 // suggest-watchlist — AI builds a watchlist around a theme
 // ============================================================
 // User types a theme ("AI infrastructure", "dividend stocks",
-// "petróleo argentino", "high beta cripto") and the function
+// "petróleo argentino", "bonos hard-dollar") and the function
 // returns:
 //   {
 //     name:    string,         // suggested watchlist title (≤30 chars)
@@ -13,7 +13,7 @@
 //
 // FALLBACK
 //   No API key → keyword-routed templated suggestions covering the
-//   most common themes (AI/tech, dividend, energy, crypto, ETF).
+//   most common themes (AI/tech, dividend, energy, ETF).
 //
 // HOW TO DEPLOY
 //   Mac Terminal: supabase functions deploy suggest-watchlist
@@ -57,8 +57,6 @@ const ASSETS: Record<string, { name: string; category: string; currency: string;
   GGAL: { name: "Grupo Galicia",    category: "ACCION", currency: "ARS" },
   YPF:  { name: "YPF",              category: "ACCION", currency: "ARS" },
   PAMP: { name: "Pampa Energía",    category: "ACCION", currency: "ARS" },
-  BTC:  { name: "Bitcoin",          category: "CRYPTO", currency: "USD" },
-  ETH:  { name: "Ethereum",         category: "CRYPTO", currency: "USD" },
   AL30: { name: "Bonar 2030",       category: "BONO",   currency: "USD" },
   SPY:  { name: "S&P 500 ETF",      category: "ETF",    currency: "USD" },
   QQQ:  { name: "Nasdaq-100 ETF",   category: "ETF",    currency: "USD" },
@@ -103,14 +101,9 @@ function templatedWatchlist(theme: string) {
       reason: "Posiciones grandes con historial de dividendos + bono soberano para piso de yield + ETF + oro como ancla.",
     };
   }
-  if (/(crypto|cripto|btc|eth)/.test(t)) {
-    return {
-      name: "Cripto",
-      color: "orange" as Color,
-      tickers: ["BTC", "ETH"],
-      reason: "Las dos crypto líderes por capitalización y liquidez en el universo de SAMAS.",
-    };
-  }
+  // crypto/cripto theme removed in samas-0.4.21 — Cohen doesn't
+  // operate crypto so we don't surface a watchlist for it. Falls
+  // through to default templated picks below if user types it.
   if (/(petroleo|petróleo|energ|oil|combust)/.test(t)) {
     return {
       name: "Energía",
@@ -228,7 +221,7 @@ serve(async (req) => {
       `- Solo usá tickers del universo de abajo. NO inventes tickers nuevos.`,
       `- Si el tema no calza con ningún ticker disponible, elegí los más cercanos y explicalo en "reason".`,
       `- Voseo (vos), profesional, cero hype.`,
-      `- Color razonable para el tema (verde para renta, ámbar para commodities/cripto, azul para tech, etc).`,
+      `- Color razonable para el tema (verde para renta, ámbar para commodities, azul para tech, etc).`,
       ``,
       `Universo permitido:`,
       JSON.stringify(universeJson, null, 2),

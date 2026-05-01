@@ -64,8 +64,6 @@ const ASSETS: Record<string, { name: string; category: string; }> = {
   GGAL: { name: "Grupo Galicia",    category: "ACCION" },
   YPF:  { name: "YPF",              category: "ACCION" },
   PAMP: { name: "Pampa Energía",    category: "ACCION" },
-  BTC:  { name: "Bitcoin",          category: "CRYPTO" },
-  ETH:  { name: "Ethereum",         category: "CRYPTO" },
   AL30: { name: "Bonar 2030",       category: "BONO" },
   SPY:  { name: "S&P 500 ETF",      category: "ETF" },
   QQQ:  { name: "Nasdaq-100 ETF",   category: "ETF" },

@@ -2,7 +2,7 @@
 // compare-benchmark — "am I beating the market?"
 // ============================================================
 // Computes the user's value-weighted portfolio gain% (vs avg cost)
-// and stacks it next to three benchmarks: Merval, S&P 500, Bitcoin
+// and stacks it next to three benchmarks: Merval, S&P 500, AL30
 // — for the same period (synthetic period = "since you bought" /
 // inception of the cartera).
 //
@@ -59,8 +59,6 @@ const ASSETS: Record<string, { name: string; category: string; currency: string;
   GGAL: { name: "Grupo Galicia",    category: "ACCION", currency: "ARS", price: 4250 },
   YPF:  { name: "YPF",              category: "ACCION", currency: "ARS", price: 38500 },
   PAMP: { name: "Pampa Energía",    category: "ACCION", currency: "ARS", price: 5820 },
-  BTC:  { name: "Bitcoin",          category: "CRYPTO", currency: "USD", price: 92450 },
-  ETH:  { name: "Ethereum",         category: "CRYPTO", currency: "USD", price: 2845 },
   AL30: { name: "Bonar 2030",       category: "BONO",   currency: "USD", price: 56.70 },
   SPY:  { name: "S&P 500 ETF",      category: "ETF",    currency: "USD", price: 512.40 },
   QQQ:  { name: "Nasdaq-100 ETF",   category: "ETF",    currency: "USD", price: 431.20 },
@@ -76,10 +74,13 @@ const ARS_TO_USD = 1 / 1245;
 // Deterministic synthetic benchmark returns (% over the same period
 // as the user's cartera since-inception). Hand-picked to be plausible
 // for "the last 6 months" of a 2026 demo. Update annually.
+// Bitcoin benchmark removed in samas-0.4.21 — Cohen doesn't
+// operate crypto. Replaced with AL30 (Bonar 2030) which is the
+// reference instrument every AR retail investor watches.
 const BENCHMARKS = [
   { id: "merval", name: "Merval (acciones AR)", gainPct:  18.5 },
   { id: "spx",    name: "S&P 500",                gainPct:  11.2 },
-  { id: "btc",    name: "Bitcoin",                gainPct:  24.7 },
+  { id: "al30",   name: "Bonar 2030 (AL30)",      gainPct:   8.4 },
 ];
 
 function fetchTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
@@ -93,7 +94,7 @@ function templatedVerdict(gainPct: number, beats: number[]): string {
   const beatCount = beats.filter(Boolean).length;
   const sign = gainPct >= 0 ? "+" : "";
   if (beatCount === 3) {
-    return `Cartera ${sign}${gainPct.toFixed(1)}% le gana al Merval, S&P y Bitcoin en el período. Buen mes para tu disciplina.`;
+    return `Cartera ${sign}${gainPct.toFixed(1)}% le gana al Merval, S&P y AL30 en el período. Buen mes para tu disciplina.`;
   }
   if (beatCount === 2) {
     return `Cartera ${sign}${gainPct.toFixed(1)}% supera a 2 de 3 benchmarks. Mantenete enfocado en la tesis.`;

@@ -268,7 +268,7 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true, la
       {/* ---------- sticky live ticker banner ----------
           Outside the scrollable region so it stays pinned at the top
           across all sub-tabs and through scroll. Filtered to ETFs +
-          commodities + cripto only (no individual stocks). Hidden when
+          commodities + bonos only (no individual stocks). Hidden when
           the user turns Pro mode off. */}
       {proMode && (
         <TickerBanner T={T} assets={assets} />
@@ -1388,7 +1388,7 @@ function AIWatchlistModal({ T, lang = "es", onClose, onSave }) {
     tr("watchlist.ai.starter.tech", lang),
     tr("watchlist.ai.starter.dividend", lang),
     tr("watchlist.ai.starter.energy_ar", lang),
-    tr("watchlist.ai.starter.crypto", lang),
+    tr("watchlist.ai.starter.bonos", lang),
   ];
 
   async function generate(t) {
@@ -3859,16 +3859,17 @@ function DoneScreen({ T, done, side, qty, asset, holding, onClose }) {
 // rolls smoothly via CSS animation.
 // ----------------------------------------------------------
 function TickerBanner({ T, assets }) {
-  // ETFs + commodities + cripto only — these are "the market" at a
-  // glance. We deliberately skip individual stocks (AAPL, TSLA, etc.)
-  // since those belong to Mercado/Top movers, not the macro snapshot.
+  // ETFs + commodities only — these are "the market" at a glance.
+  // Crypto removed in samas-0.4.21 (Cohen doesn't operate it). We
+  // deliberately skip individual stocks (AAPL, TSLA, etc.) since
+  // those belong to Mercado/Top movers, not the macro snapshot.
   const pick = useMemo(() => {
     if (!assets || assets.length === 0) return [];
-    const wanted = ["SPY", "QQQ", "IWM", "EWZ", "GLD", "SLV", "USO", "BTC", "ETH"];
+    const wanted = ["SPY", "QQQ", "IWM", "EWZ", "GLD", "SLV", "USO", "AL30"];
     const found = wanted.map((tk) => assets.find((a) => a.ticker === tk)).filter(Boolean);
     if (found.length) return found;
     // Fallback: filter by category if specific tickers aren't seeded.
-    return assets.filter((a) => ["ETF", "COMMOD", "CRYPTO"].includes(a.category));
+    return assets.filter((a) => ["ETF", "COMMOD", "BONO"].includes(a.category));
   }, [assets]);
 
   if (pick.length === 0) return null;
@@ -4137,8 +4138,7 @@ function SectorRotationCard({ T, lang = "es" }) {
     ACCION: "#7DD3A0",
     ETF:    "#60A5FA",
     BONO:   "#A78BFA",
-    CRYPTO: "#F59E0B",
-    COMMOD: T.textMute,
+    COMMOD: "#F59E0B",
   })[s] || T.textMute;
 
   const actionColor = (a) => a === "increase" ? T.accent : a === "trim" ? T.danger : T.textMute;
@@ -5655,23 +5655,18 @@ function FundamentalsCard({ T, asset, lang = "es" }) {
   const data = useMemo(() => {
     const rng = tickerSeed(asset.ticker, 7);
     const isCedearOrAccion = asset.category === "CEDEAR" || asset.category === "ACCION";
-    const isCrypto = asset.category === "CRYPTO";
     const isBono = asset.category === "BONO";
     const pe = isCedearOrAccion ? (10 + rng() * 30).toFixed(1) : "—";
     const eps = isCedearOrAccion
       ? `${asset.currency === "ARS" ? "$" : "US$"}${(asset.price / (15 + rng() * 20)).toFixed(2)}`
       : "—";
-    const sharesOut = isCrypto
-      ? 19_000_000 + rng() * 100_000_000  // crypto "supply" approximation
-      : 1e8 + rng() * 5e10;               // equity shares outstanding
+    const sharesOut = 1e8 + rng() * 5e10; // equity shares outstanding
     const mcap = asset.price * sharesOut;
     const divYield = isCedearOrAccion
       ? `${(rng() * 4).toFixed(2)}%`
       : isBono ? `${(8 + rng() * 6).toFixed(2)}%`
       : "—";
-    const vol = isCrypto
-      ? rng() * 5e10
-      : (1e6 + rng() * 5e7);
+    const vol = (1e6 + rng() * 5e7);
     const ccySym = asset.currency === "ARS" ? "$" : "US$";
     return [
       { label: tr("pro.asset.fund.pe",    lang), value: pe },
@@ -5720,7 +5715,7 @@ function FundamentalsCard({ T, asset, lang = "es" }) {
 // Three new visual cards that only render when proMode is on.
 // All three are pure-JS / inline-SVG with no external chart deps:
 //
-//   1. SectorDonut       — composition by category (CEDEAR / Cripto / …).
+//   1. SectorDonut       — composition by category (CEDEAR / Acciones / Bonos / …).
 //   2. RiskMetricsRow    — Beta · Volatilidad 30d · Sharpe.
 //   3. BenchmarkLine     — your cartera vs MERVAL or S&P 500 over 30d.
 //
@@ -5737,7 +5732,6 @@ function FundamentalsCard({ T, asset, lang = "es" }) {
 const SECTOR_COLORS = {
   CEDEAR: "#7C5CFF",
   ACCION: "#16C784",
-  CRYPTO: "#F59E0B",
   BONO:   "#06B6D4",
   ETF:    "#EC4899",
   COMMOD: "#A855F7",
@@ -5745,7 +5739,6 @@ const SECTOR_COLORS = {
 const SECTOR_LABEL_KEYS = {
   CEDEAR: "pro.sector.cedear",
   ACCION: "pro.sector.accion",
-  CRYPTO: "pro.sector.crypto",
   BONO:   "pro.sector.bono",
   ETF:    "pro.sector.etf",
   COMMOD: "pro.sector.commod",
@@ -5852,13 +5845,12 @@ function SectorDonut({ T, holdings, totalUsd, lang = "es" }) {
 // holdings + sector mix so they move with the user's portfolio.
 // ----------------------------------------------------------
 function RiskMetricsRow({ T, holdings, totalUsd, lang = "es" }) {
-  // Per-category risk parameters. Loosely calibrated: CRYPTO is
-  // very volatile + high beta, BONOs are low. Real values would come
-  // from a market-data provider.
+  // Per-category risk parameters. Loosely calibrated by historical
+  // monthly vol from public AR ALyC factsheets. Real values would
+  // come from a market-data provider when we go live.
   const RISK_PARAMS = {
     CEDEAR: { beta: 1.05, vol: 0.22 },
     ACCION: { beta: 1.20, vol: 0.34 },
-    CRYPTO: { beta: 1.85, vol: 0.78 },
     BONO:   { beta: 0.20, vol: 0.10 },
     ETF:    { beta: 1.00, vol: 0.15 },
     COMMOD: { beta: 0.65, vol: 0.20 },

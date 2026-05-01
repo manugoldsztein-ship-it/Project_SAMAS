@@ -47,10 +47,10 @@ const NEWS = [
     tickers: ["AL30", "GD30"], source: "Ámbito",
   },
   {
-    id: "n_3", category: "Cripto", at: NOW - 2 * HOUR,
-    title: "Bitcoin supera los $92.000 tras flujos de ETFs",
-    summary: "BlackRock IBIT registró su mayor ingreso semanal del año. Los analistas técnicos apuntan a un test de resistencia en $95k.",
-    tickers: ["BTC", "ETH"], source: "CoinDesk",
+    id: "n_3", category: "Renta Fija", at: NOW - 2 * HOUR,
+    title: "Bonos hard-dollar argentinos cierran en alza por sexta rueda",
+    summary: "AL30 y GD30 lideran las subas con +1.4% promedio. Los analistas atribuyen el flujo a expectativas de acuerdo con el FMI.",
+    tickers: ["AL30", "GD30"], source: "Cronista",
   },
   {
     id: "n_4", category: "Tech", at: NOW - 3 * HOUR,
@@ -75,8 +75,8 @@ const NEWS = [
 const TICKER_BAR = [
   { sym: "MERVAL", value: "1,847,250",  changePct:  1.20 },
   { sym: "S&P 500", value: "5,471.23",  changePct:  0.62 },
-  { sym: "BTC",    value: "92,450",     changePct:  0.92 },
   { sym: "MEP",    value: "1,245",      changePct:  0.40 },
+  { sym: "OFICIAL",value: "1,012",      changePct:  0.12 },
   { sym: "OIL",    value: "78.30",      changePct: -0.73 },
 ];
 
@@ -92,11 +92,11 @@ const TICKER_BAR = [
  * RSS for AR sources). We feed it the user's holdings + every ticker
  * across their watchlists, then bucket each article by ticker class:
  *
- *    BTC / ETH                   → Cripto
  *    GGAL / YPF / PAMP / BBAR... → Argentina
  *    AAPL / NVDA / MSFT / ...    → Tech
  *    USO / GLD / SLV / YPF       → Energía
  *    SPY / QQQ / IWM / EWZ       → Mercados
+ *    AL30 / GD30 / ...           → Renta Fija
  *    everything else              → Mercados
  *
  * If the Edge Function fails (no session, network down, demo mode) we
@@ -156,10 +156,10 @@ export async function getCategorizedNews({ category = "Todo", limit = 30 } = {})
 
   // No tickers (fresh demo account or lookup failed) → use a default
   // macro basket so the news feed is alive on first open. SPY / QQQ
-  // / BTC give a reasonable cross-section of US equities + crypto.
+  // / GLD give a reasonable cross-section of US equities + commodities.
   // The user's own holdings will replace this once they buy something.
   if (tickers.length === 0) {
-    tickers = ["SPY", "QQQ", "BTC"];
+    tickers = ["SPY", "QQQ", "GLD"];
   }
 
   let real = [];
@@ -227,14 +227,17 @@ async function mockFeed({ category, limit }) {
 
 // Bucket a ticker into the v2 News tab's category set. Hardcoded per
 // ticker class because the Edge Function doesn't return a category.
-const CRYPTO_TICKERS = new Set(["BTC", "ETH", "SOL", "ADA", "DOT", "MATIC"]);
-const AR_TICKERS = new Set(["GGAL", "YPF", "PAMP", "BBAR", "ALUA", "MIRG", "EDN", "TGSU2", "AL30", "GD30"]);
+// CRYPTO_TICKERS removed in samas-0.4.21 — Cohen doesn't operate
+// crypto, so we don't surface a Cripto category nor route any
+// ticker into one.
+const AR_TICKERS = new Set(["GGAL", "YPF", "PAMP", "BBAR", "ALUA", "MIRG", "EDN", "TGSU2"]);
+const RENTA_FIJA_TICKERS = new Set(["AL30", "GD30", "AL35", "GD35", "AE38", "AL29", "BPOA7", "BPOB7", "BPOC7", "BPOD7"]);
 const TECH_TICKERS = new Set(["AAPL", "NVDA", "TSLA", "MSFT", "GOOGL", "AMZN", "META", "NFLX"]);
 const ENERGY_TICKERS = new Set(["USO", "GLD", "SLV", "YPF", "PAMP", "EDN", "XOM", "CVX"]);
 const ETF_TICKERS = new Set(["SPY", "QQQ", "IWM", "EWZ", "DIA", "EFA"]);
 function bucketCategory(ticker) {
   const t = (ticker || "").toUpperCase();
-  if (CRYPTO_TICKERS.has(t)) return "Cripto";
+  if (RENTA_FIJA_TICKERS.has(t)) return "Renta Fija";
   if (AR_TICKERS.has(t))     return "Argentina";
   if (TECH_TICKERS.has(t))   return "Tech";
   if (ENERGY_TICKERS.has(t)) return "Energía";
@@ -246,7 +249,7 @@ function bucketCategory(ticker) {
  * searchNewsByTicker(query) — fetch fresh news from the Edge Function
  * for an arbitrary ticker the user typed in the search box. Same
  * route as the merged feed, but explicit per-ticker so users can
- * look up "NVDA" / "TSLA" / "BTC" without having to add them to a
+ * look up "NVDA" / "TSLA" / "GGAL" without having to add them to a
  * watchlist first. Falls back to mock filtering if the function
  * fails or the user has no session.
  */
@@ -266,7 +269,7 @@ export async function searchNewsByTicker(query) {
       if (exact) ticker = exact.ticker;
       else {
         // Name match — case-insensitive contains. "Nvidia" → NVDA,
-        // "Apple Inc" → AAPL, "tesla" → TSLA, "bitcoin" → BTC, etc.
+        // "Apple Inc" → AAPL, "tesla" → TSLA, "galicia" → GGAL, etc.
         const byName = assets.find((a) =>
           (a.name || "").toLowerCase().includes(raw.toLowerCase())
         );
@@ -331,7 +334,7 @@ export async function getNewsForTickers(tickers) {
 
 /**
  * getMarketTicker() — the small horizontal-scroll bar at the top of
- * the News tab (MERVAL / S&P / BTC / MEP / OIL).
+ * the News tab (MERVAL / S&P / MEP / OFICIAL / OIL).
  */
 export async function getMarketTicker() {
   await jitter(80, 200);

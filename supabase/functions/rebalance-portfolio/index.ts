@@ -2,7 +2,7 @@
 // rebalance-portfolio — AI-suggested rebalance actions
 // ============================================================
 // Reads the caller's holdings, computes their current category mix
-// (CEDEAR / ACCION / CRYPTO / BONO / ETF / COMMOD), compares to a
+// (CEDEAR / ACCION / BONO / ETF / COMMOD), compares to a
 // requested risk profile, and returns a list of concrete buy/sell
 // actions that would move the book toward the target.
 //
@@ -61,8 +61,6 @@ const ASSETS: Record<string, { name: string; category: string; currency: string;
   GGAL: { name: "Grupo Galicia",    category: "ACCION", currency: "ARS", price: 4250 },
   YPF:  { name: "YPF",              category: "ACCION", currency: "ARS", price: 38500 },
   PAMP: { name: "Pampa Energía",    category: "ACCION", currency: "ARS", price: 5820 },
-  BTC:  { name: "Bitcoin",          category: "CRYPTO", currency: "USD", price: 92450 },
-  ETH:  { name: "Ethereum",         category: "CRYPTO", currency: "USD", price: 2845 },
   AL30: { name: "Bonar 2030",       category: "BONO",   currency: "USD", price: 56.70 },
   SPY:  { name: "S&P 500 ETF",      category: "ETF",    currency: "USD", price: 512.40 },
   QQQ:  { name: "Nasdaq-100 ETF",   category: "ETF",    currency: "USD", price: 431.20 },
@@ -76,17 +74,18 @@ const ASSETS: Record<string, { name: string; category: string; currency: string;
 const ARS_TO_USD = 1 / 1245;
 
 // Target category mix per risk profile. Numbers are % of total book
-// in USD. Should sum to 100.
+// in USD. Should sum to 100. CRYPTO removed in samas-0.4.21 (Cohen
+// doesn't operate it) — residual % redistributed across CEDEAR /
+// ETF / COMMOD per profile.
 const PROFILE_TARGETS: Record<string, Record<string, number>> = {
-  conservative: { ETF: 35, BONO: 30, CEDEAR: 15, ACCION: 5,  COMMOD: 10, CRYPTO: 5 },
-  balanced:     { ETF: 30, BONO: 15, CEDEAR: 25, ACCION: 15, COMMOD: 10, CRYPTO: 5 },
-  aggressive:   { ETF: 15, BONO: 5,  CEDEAR: 35, ACCION: 20, COMMOD: 5,  CRYPTO: 20 },
+  conservative: { ETF: 35, BONO: 30, CEDEAR: 15, ACCION: 5,  COMMOD: 15 },
+  balanced:     { ETF: 30, BONO: 15, CEDEAR: 28, ACCION: 17, COMMOD: 10 },
+  aggressive:   { ETF: 20, BONO: 5,  CEDEAR: 50, ACCION: 20, COMMOD: 5  },
 };
 
 const CATEGORY_LABEL: Record<string, string> = {
   CEDEAR: "CEDEARs (acciones US)",
   ACCION: "acciones argentinas",
-  CRYPTO: "cripto",
   BONO:   "bonos",
   ETF:    "ETFs",
   COMMOD: "commodities",
@@ -97,7 +96,6 @@ const CATEGORY_LABEL: Record<string, string> = {
 const CATEGORY_DEFAULT_TICKER: Record<string, string> = {
   CEDEAR: "AAPL",
   ACCION: "GGAL",
-  CRYPTO: "BTC",
   BONO:   "AL30",
   ETF:    "SPY",
   COMMOD: "GLD",
@@ -161,11 +159,9 @@ function algorithmicActions(opts: {
       if (!meta) continue;
       const priceLocal = meta.price;
       const targetLocal = meta.currency === "ARS" ? g.gapUsd / ARS_TO_USD : g.gapUsd;
-      // Round qty to 2 decimals for crypto (BTC 0.05) or whole units
-      // for everything else.
-      const qty = meta.category === "CRYPTO"
-        ? Number((targetLocal / priceLocal).toFixed(4))
-        : Math.max(1, Math.round(targetLocal / priceLocal));
+      // Whole-unit qty (no fractional shares — Cohen settles in
+      // integer units for ACCION/CEDEAR/ETF/BONO/COMMOD).
+      const qty = Math.max(1, Math.round(targetLocal / priceLocal));
       if (qty <= 0) continue;
       actions.push({
         side: "buy", ticker, qty,
@@ -189,9 +185,7 @@ function algorithmicActions(opts: {
       const sellLocal = meta.currency === "ARS"
         ? Math.abs(g.gapUsd) / ARS_TO_USD
         : Math.abs(g.gapUsd);
-      let qty = meta.category === "CRYPTO"
-        ? Number((sellLocal / priceLocal).toFixed(4))
-        : Math.max(1, Math.round(sellLocal / priceLocal));
+      let qty = Math.max(1, Math.round(sellLocal / priceLocal));
       qty = Math.min(qty, top.qty);   // cap at owned qty
       if (qty <= 0) continue;
       actions.push({
