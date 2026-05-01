@@ -24,7 +24,7 @@ import { FONT, fmtMoney, fmtPct } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import {
   Avatar, ChromeBtn, Pill, SectionHead, Sparkline, SAMAS_SPARKS, Skeleton,
-  avatarPropsFor,
+  avatarPropsFor, DisclaimerStrip,
 } from "./shared.jsx";
 import { wallet as walletApi, card as cardApi, broker as brokerApi, notifications as notifApi } from "./api/index.js";
 import { rowToNotif } from "./api/notifications.js";
@@ -534,15 +534,28 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
         </div>
       )}
 
+      {/* ---------- Cash flow (samas-0.4.15: promoted to free) ----------
+          Manuel's father (financial advisor) flagged in our review
+          that flujo de fondos is a *fundamental* personal-finance
+          surface — every advisor opens with "where is your money
+          going?". Previously it was Pro-mode-only (samas-0.0.46);
+          now every user sees it as soon as they have a portfolio.
+          Position: right after portfolio peek, before AI cards, so
+          it's visible without scrolling past the AI section. The
+          other Pro Wallet cards (MonthPnL / Dividend / TaxYear) stay
+          gated under proMode below. */}
+      {portfolio && portfolio.totalUsd > 0 && (
+        <CashFlowBars T={T} portfolio={portfolio} lang={lang} />
+      )}
+
       {/* ---------- Pro Wallet dashboard (samas-0.0.46) ----------
-          Cash flow chart + month/dividend/tax cards. Only when Pro
-          mode is on AND the user has a portfolio (otherwise the
-          numbers would all be zero or empty). The 2-card row
-          (month P&L · dividend) sits flush, then the tax-year
-          card spans full width below. */}
+          Month/dividend/tax cards. Only when Pro mode is on AND
+          the user has a portfolio. The 2-card row (month P&L ·
+          dividend) sits flush, then the tax-year card spans full
+          width below. CashFlowBars was lifted out of this group in
+          0.4.15 (now free). */}
       {proMode && portfolio && portfolio.totalUsd > 0 && (
         <>
-          <CashFlowBars T={T} portfolio={portfolio} lang={lang} />
           <div style={{ display: "flex", gap: 8, margin: "12px 16px 0" }}>
             <MonthPnLCard T={T} portfolio={portfolio} lang={lang} />
             <DividendCard T={T} portfolio={portfolio} lang={lang} />
@@ -1180,9 +1193,21 @@ function DailyBriefCard({ T, lang = "es" }) {
           }} />
         </div>
       ) : data ? (
-        <div style={{
-          fontFamily: FONT.sans, fontSize: 13, color: T.text, lineHeight: 1.55,
-        }}>{data.brief}</div>
+        <>
+          <div style={{
+            fontFamily: FONT.sans, fontSize: 13, color: T.text, lineHeight: 1.55,
+          }}>{data.brief}</div>
+          {/* AI disclaimer (samas-0.4.15). Brief is generated from
+              live portfolio data — make it clear it's IA, not advice. */}
+          <div style={{
+            marginTop: 4, paddingTop: 8,
+            borderTop: `1px solid ${T.accent}22`,
+            fontFamily: FONT.sans, fontSize: 10, color: T.textMute,
+            lineHeight: 1.45,
+          }}>
+            {tr("common.ai_disclaimer_short", lang)}
+          </div>
+        </>
       ) : null}
     </div>
   );
@@ -1448,11 +1473,12 @@ function AIAnalysisCard({ T, lang = "es" }) {
                     }}>{result.suggestion}</div>
                   </div>
                 )}
-                <div style={{
-                  marginTop: 16, fontFamily: FONT.sans, fontSize: 10,
-                  color: T.textMute, textAlign: "center",
-                }}>
-                  {tr("wallet.ai.disclaimer", lang)}
+                {/* Disclaimer (samas-0.4.15) — upgraded from
+                    one-liner to the shared strip + stronger
+                    "no es asesoramiento" copy per Manuel's father's
+                    advisor feedback. */}
+                <div style={{ marginTop: 16 }}>
+                  <DisclaimerStrip T={T} variant="card" textKey="common.ai_disclaimer" lang={lang} />
                 </div>
               </div>
             )}

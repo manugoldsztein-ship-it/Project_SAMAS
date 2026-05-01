@@ -2827,6 +2827,18 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.15",
+    title: "Feedback de asesor financiero: disclaimers + return rates calibrados + Cashflow gratis",
+    bullets: [
+      "Manuel hizo un interview con su padre, asesor financiero, que dejó un feedback list con cosas críticas. Esta patch implementa las 3 más urgentes de la lista.",
+      "DISCLAIMERS — nuevo componente reusable DisclaimerStrip en shared.jsx. Montado en cada superficie que muestra rendimiento esperado o recomendación: Objetivos (card + preview wizard), Sector Rotation, AI Analysis sheet, Daily Brief. Copy explícito: 'Estimación informativa generada por IA a partir de datos históricos. No es asesoramiento financiero ni garantiza rentabilidad. Las inversiones tienen riesgo de pérdida.' Cubre tanto regulatorio (CNV no permite a no-licenciados dar recomendación) como expectativas del usuario.",
+      "RETURN RATES CALIBRADOS — el papá flagged que 6/10/14% (conservadora/moderada/agresiva) era fantasía. Bajado a 4/7/10% para escenario base. Más importante: ahora la Edge Function objectives-plan devuelve un *rango* (low/base/high) en vez de un punto único — conservadora 2-6%, moderada 4-10%, agresiva 5-15%. La UI de Objetivos muestra el monto base + el rango debajo en cada hito, y la asunción anual ('Retorno asumido: 4–10%, no garantía') al pie del card.",
+      "CASHFLOW PROMOTED — flujo de fondos era Pro-only (samas-0.0.46) gated bajo proMode. Ahora es gratis para todos los usuarios con portfolio. Posicionado más arriba en el render order (después del portfolio peek, antes de las cards de IA) — el papá insistió que cashflow es 'lo primero que mira un asesor'. Las otras cards Pro (MonthPnL/Dividend/TaxYear) siguen gated.",
+      "Edge Function objectives-plan re-deployada con la calibración + range output. El narrative prompt de Claude reforzado para nunca prometer rentabilidad y siempre hablar de 'escenario base' / 'rango de referencia'.",
+      "Items de la lista del papá deferidos por scope: Portafolio Hipotético 1:1 mercado (próximo patch), Premios Mensuales (bloqueado por revisión regulatoria — concursos en AR requieren Lotería Nacional + posiblemente CNV).",
+    ],
+  },
+  {
     version: "0.4.14",
     title: "Deposit polish + MP integration spec",
     bullets: [

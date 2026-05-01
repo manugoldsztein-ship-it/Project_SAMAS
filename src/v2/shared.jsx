@@ -542,6 +542,61 @@ export function useInFlight() {
 }
 
 // ----------------------------------------------------------
+// DisclaimerStrip (samas-0.4.15) — small "no es asesoramiento
+// financiero" line shown under any AI-generated number/recommendation.
+// ----------------------------------------------------------
+// Manuel's father (a financial advisor) flagged that every screen
+// surfacing expected returns / sector calls / portfolio analysis
+// needs an explicit "informativo, no es asesoramiento" line — both
+// for regulatory hygiene (CNV does not allow non-licensed parties to
+// give recomendación) and to manage user expectations on AI output.
+//
+// Variants:
+//   - "soft":  textMute strip, no border. Default.
+//   - "card":  inline card with a 1px border + tiny ⓘ glyph. Use
+//              under Objetivos / Sector Rotation where the
+//              recommendation IS the card body.
+//
+// Uses i18n key `common.ai_disclaimer` (or `_returns` for return-
+// rate-specific copy where that fits better).
+// ----------------------------------------------------------
+export function DisclaimerStrip({ T, variant = "soft", textKey = "common.ai_disclaimer", lang = "es", style }) {
+  const text = tr(textKey, lang);
+  if (variant === "card") {
+    return (
+      <div style={{
+        marginTop: 10,
+        padding: "8px 11px", borderRadius: 10,
+        background: T.bg, border: `1px solid ${T.border}`,
+        display: "flex", alignItems: "flex-start", gap: 8,
+        ...(style || {}),
+      }}>
+        <span style={{
+          flexShrink: 0, marginTop: 1,
+          width: 14, height: 14, borderRadius: 7,
+          background: T.textMute + "22", color: T.textMute,
+          fontFamily: FONT.mono, fontSize: 9, fontWeight: 800,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          lineHeight: 1,
+        }}>i</span>
+        <span style={{
+          fontFamily: FONT.sans, fontSize: 10, color: T.textMute,
+          lineHeight: 1.45, letterSpacing: 0.1,
+        }}>{text}</span>
+      </div>
+    );
+  }
+  return (
+    <div style={{
+      marginTop: 8,
+      fontFamily: FONT.sans, fontSize: 10, color: T.textMute,
+      lineHeight: 1.45, letterSpacing: 0.1, textAlign: "center",
+      ...(style || {}),
+    }}>{text}</div>
+  );
+}
+
+// ----------------------------------------------------------
 // Skeleton — shimmering placeholder block while data loads. Used by
 // News / Broker / Social to avoid a flash of "Cargando…" text.
 // Renders a div sized to the props and animates a light gradient

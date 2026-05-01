@@ -23,6 +23,7 @@ import { t as tr } from "../lib/i18n.js";
 import { objectivesPlan, saveObjective, getActiveObjective, deleteObjective } from "../lib/ai.js";
 import { isAIDisabled } from "../lib/aiConsent.js";
 import { hapticNative } from "../lib/native.js";
+import { DisclaimerStrip } from "./shared.jsx";
 
 // ----- Wallet card -----
 export function ObjetivosCard({ T, lang = "es" }) {
@@ -267,6 +268,11 @@ function ObjetivoCardActive({ T, lang, obj, onEdit, onDelete }) {
           cursor: "pointer",
         }}>{tr("objetivos.delete", lang)}</button>
       </div>
+
+      {/* Disclaimer — financial advisor (Manuel's father) flagged
+          that any AI-generated return projection needs an explicit
+          "no es asesoramiento" line. samas-0.4.15. */}
+      <DisclaimerStrip T={T} variant="card" textKey="common.ai_disclaimer_returns" lang={lang} />
     </div>
   );
 }
@@ -661,7 +667,13 @@ function ObjetivoPlanPreview({ T, lang, plan, horizonMonths }) {
         </div>
       )}
 
-      {/* Milestones */}
+      {/* Milestones — range version (samas-0.4.15). The Edge Function
+          returns expectedLow / expectedValue (base) / expectedHigh
+          using a calibrated return band. We render the BASE on the
+          right and a small "rango: low – high" line beneath so the
+          user understands the projection isn't a guarantee. Falls
+          back to the legacy single-number display for any cached/
+          older payload missing the new fields. */}
       {Array.isArray(plan.milestones) && plan.milestones.length > 0 && (
         <div style={{
           padding: 14, borderRadius: 14, marginBottom: 14,
@@ -672,20 +684,48 @@ function ObjetivoPlanPreview({ T, lang, plan, horizonMonths }) {
             color: T.textMute, letterSpacing: 0.6, textTransform: "uppercase",
             marginBottom: 10,
           }}>{tr("objetivos.preview.milestones_label", lang)}</div>
-          {plan.milestones.map((m, i) => (
-            <div key={i} style={{
-              display: "flex", justifyContent: "space-between",
-              padding: "6px 0",
-              borderTop: i === 0 ? "none" : `1px solid ${T.border}`,
-              fontFamily: FONT.mono, fontSize: 12,
-            }}>
-              <span style={{ color: T.textMute }}>{m.label} ({(m.atMonths/12).toFixed(1)}a)</span>
-              <span style={{ color: T.text, fontWeight: 700 }}>
-                {plan.monthlyAporte?.currency === "USD" ? "US$" : "$"}
-                {fmtMoney(m.expectedValue, plan.monthlyAporte?.currency || "USD")}
-              </span>
-            </div>
-          ))}
+          {plan.milestones.map((m, i) => {
+            const ccy = plan.monthlyAporte?.currency || "USD";
+            const ccyPrefix = ccy === "USD" ? "US$" : "$";
+            const hasRange = typeof m.expectedLow === "number"
+              && typeof m.expectedHigh === "number";
+            return (
+              <div key={i} style={{
+                padding: "8px 0",
+                borderTop: i === 0 ? "none" : `1px solid ${T.border}`,
+                fontFamily: FONT.mono, fontSize: 12,
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: T.textMute }}>{m.label} ({(m.atMonths/12).toFixed(1)}a)</span>
+                  <span style={{ color: T.text, fontWeight: 700 }}>
+                    {ccyPrefix}{fmtMoney(m.expectedValue, ccy)}
+                  </span>
+                </div>
+                {hasRange && (
+                  <div style={{
+                    marginTop: 2, fontFamily: FONT.mono, fontSize: 10,
+                    color: T.textMute, textAlign: "right",
+                  }}>
+                    {ccyPrefix}{fmtMoney(m.expectedLow, ccy)} – {ccyPrefix}{fmtMoney(m.expectedHigh, ccy)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <div style={{
+            marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.border}`,
+            fontFamily: FONT.sans, fontSize: 10, color: T.textMute,
+            lineHeight: 1.45,
+          }}>
+            {tr("objetivos.preview.range_hint", lang)}
+            {plan.annualReturn && (
+              <div style={{ marginTop: 4 }}>
+                {tr("objetivos.preview.return_assumption", lang, {
+                  pct: `${(plan.annualReturn.low * 100).toFixed(0)}–${(plan.annualReturn.high * 100).toFixed(0)}`,
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -697,6 +737,9 @@ function ObjetivoPlanPreview({ T, lang, plan, horizonMonths }) {
           fontFamily: FONT.sans, fontSize: 13, color: T.text, lineHeight: 1.55,
         }}>{plan.narrative}</div>
       )}
+
+      {/* Disclaimer (samas-0.4.15) */}
+      <DisclaimerStrip T={T} variant="card" textKey="common.ai_disclaimer" lang={lang} />
     </div>
   );
 }

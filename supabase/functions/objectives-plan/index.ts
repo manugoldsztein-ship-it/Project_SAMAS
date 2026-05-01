@@ -86,10 +86,23 @@ const PRESETS: Record<string, Allocation> = {
 
 // Annual return expectations per strategy (USD-equivalent). Used
 // to compute the monthly aporte needed to hit the target.
-const ANNUAL_RETURN: Record<string, number> = {
-  conservadora: 0.06,
-  moderada:     0.10,
-  agresiva:     0.14,
+//
+// CALIBRATION NOTE (samas-0.4.15) — Manuel's father (a financial
+// advisor) flagged the prior 6 / 10 / 14% as fantasy: a moderate
+// USD-balanced book in AR retail context is ~7% real expected
+// return long-term, agresiva stretches to ~10% USD only with
+// significant equity risk concentration. Conservadora dropped to
+// ~4% to reflect actual USD-fixed-income yields available to retail
+// (BONO + USD ETFs) without taking AR sovereign risk premium as
+// guaranteed.
+//
+// We expose the BASE rate to the PMT calculation, and a low/high
+// band to the milestones so the user sees a RANGE not a point
+// estimate. Range = base ± a strategy-specific spread.
+const ANNUAL_RETURN: Record<string, { low: number; base: number; high: number }> = {
+  conservadora: { low: 0.02, base: 0.04, high: 0.06 },
+  moderada:     { low: 0.04, base: 0.07, high: 0.10 },
+  agresiva:     { low: 0.05, base: 0.10, high: 0.15 },
 };
 
 function fetchTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
@@ -170,10 +183,19 @@ serve(async (req) => {
 
     const strategy = classifyStrategy(horizonMonths, targetCurrency || undefined);
     const allocation = PRESETS[strategy];
-    const annualReturn = ANNUAL_RETURN[strategy];
+    const annualReturnBand = ANNUAL_RETURN[strategy];
+    const annualReturn = annualReturnBand.base;
 
     let monthlyAporte: { amount: number; currency: string } | null = null;
-    let milestones: { atMonths: number; expectedValue: number; label: string }[] = [];
+    // Milestones now carry a low/base/high band — UI shows a range
+    // rather than a single fantasy number. samas-0.4.15.
+    let milestones: {
+      atMonths: number;
+      expectedValue: number;
+      expectedLow: number;
+      expectedHigh: number;
+      label: string;
+    }[] = [];
 
     if (targetAmount && targetCurrency) {
       const pmt = pmtForGoal(targetAmount, horizonMonths, annualReturn);
@@ -181,14 +203,21 @@ serve(async (req) => {
         amount: Math.round(pmt * 100) / 100,
         currency: targetCurrency,
       };
-      // Milestones at 25%, 50%, 75%, 100% of the horizon.
+      // Milestones at 25%, 50%, 75%, 100% of the horizon. Each
+      // checkpoint runs FV three times — once at the low end of the
+      // return band, once at base, once at high — so the UI can
+      // render a range chip instead of a single point estimate.
       const checkpoints = [0.25, 0.5, 0.75, 1.0];
       for (const c of checkpoints) {
         const m = Math.round(horizonMonths * c);
-        const fv = fvAtMonth(pmt, m, annualReturn);
+        const fvBase = fvAtMonth(pmt, m, annualReturnBand.base);
+        const fvLow  = fvAtMonth(pmt, m, annualReturnBand.low);
+        const fvHigh = fvAtMonth(pmt, m, annualReturnBand.high);
         milestones.push({
           atMonths: m,
-          expectedValue: Math.round(fv * 100) / 100,
+          expectedValue: Math.round(fvBase * 100) / 100,
+          expectedLow:   Math.round(fvLow  * 100) / 100,
+          expectedHigh:  Math.round(fvHigh * 100) / 100,
           label: c === 1.0 ? "Meta" : `${Math.round(c * 100)}%`,
         });
       }
@@ -201,7 +230,7 @@ serve(async (req) => {
         : strategy === "moderada" ? "moderada" : "agresiva";
       if (targetAmount && monthlyAporte) {
         const ccy = targetCurrency === "USD" ? "US$" : "$";
-        return `Tu meta de ${ccy}${targetAmount.toLocaleString("es-AR")} en ${horizonYears} años encaja en una estrategia ${sLabel}. Con ${ccy}${monthlyAporte.amount.toLocaleString("es-AR", { maximumFractionDigits: 0 })} por mes y un retorno esperado de ${(annualReturn * 100).toFixed(0)}% anual, llegás al objetivo.`;
+        return `Tu meta de ${ccy}${targetAmount.toLocaleString("es-AR")} en ${horizonYears} años encaja en una estrategia ${sLabel}. Con ${ccy}${monthlyAporte.amount.toLocaleString("es-AR", { maximumFractionDigits: 0 })} por mes y un retorno de referencia de ${(annualReturn * 100).toFixed(0)}% anual (escenario base), tendrías chances de alcanzar el objetivo. No es garantía.`;
       }
       return `Para una meta de ${horizonYears} años, una estrategia ${sLabel} es lo más razonable. Definí un monto objetivo cuando puedas para que SAMAS calcule cuánto invertir por mes.`;
     }
@@ -216,7 +245,7 @@ serve(async (req) => {
         targetAmount ? `Monto objetivo: ${targetCurrency} ${targetAmount.toLocaleString("es-AR")}` : `Sin monto objetivo definido`,
         `Estrategia clasificada: ${strategy}`,
         monthlyAporte ? `Aporte mensual sugerido: ${monthlyAporte.currency} ${monthlyAporte.amount.toLocaleString("es-AR", { maximumFractionDigits: 0 })}` : "",
-        `Retorno anual esperado para ${strategy}: ${(annualReturn * 100).toFixed(0)}%`,
+        `Retorno anual de referencia para ${strategy}: rango ${(annualReturnBand.low*100).toFixed(0)}–${(annualReturnBand.high*100).toFixed(0)}% (base ${(annualReturnBand.base*100).toFixed(0)}%)`,
         ``,
         `Devolvé un JSON con esta forma EXACTA, sin markdown:`,
         `{`,
@@ -226,8 +255,10 @@ serve(async (req) => {
         `Reglas:`,
         `- Voseo (vos), profesional, sereno. Cero hype.`,
         `- Mencioná concretamente: el horizonte, la estrategia, el aporte mensual si está calculado.`,
+        `- Si mencionás un retorno, hablá de "escenario base" o "rango de referencia", NUNCA de garantía.`,
         `- Si no hay monto objetivo, sugerí cómo definirlo (ej. "definí cuánto querés tener al final para calcular el aporte").`,
         `- No des recomendación de comprar/vender activos específicos.`,
+        `- No prometas resultados. Las inversiones tienen riesgo, mencionalo si encaja en la oración final.`,
       ].filter(Boolean).join("\n");
 
       try {
@@ -261,6 +292,9 @@ serve(async (req) => {
       monthlyAporte,
       milestones,
       narrative,
+      // Surface the assumption explicitly so the UI can show "asumimos
+      // X% anual de referencia, no garantía". samas-0.4.15.
+      annualReturn: annualReturnBand,
       generatedAt: new Date().toISOString(),
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {

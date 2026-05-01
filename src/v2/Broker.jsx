@@ -26,7 +26,7 @@ import React, { useState, useEffect, useCallback, useMemo, useContext } from "re
 import ReactDOM from "react-dom";
 import { FONT, fmtMoney, fmtPct } from "./theme.js";
 import { Ico } from "./icons.jsx";
-import { Pill, SectionHead, AssetSparkline, AssetRowSkeletonList, useShellEntryDone, useInFlight } from "./shared.jsx";
+import { Pill, SectionHead, AssetSparkline, AssetRowSkeletonList, useShellEntryDone, useInFlight, DisclaimerStrip } from "./shared.jsx";
 import { useLivePrice, LivePricesContext } from "./livePrices.jsx";
 import { broker as brokerApi, wallet as walletApi } from "./api/index.js";
 // The Objetivos wizard is shared with the legacy MobileApp UI. It
@@ -4285,12 +4285,10 @@ function SectorRotationCard({ T, lang = "es" }) {
             : tr("portafolio.rotation.analyze", lang)}
       </button>
 
-      <div style={{
-        marginTop: 8, fontFamily: FONT.sans, fontSize: 10,
-        color: T.textMute, textAlign: "right",
-      }}>
-        {tr("portafolio.rotation.disclaimer", lang)}
-      </div>
+      {/* Strengthened disclaimer (samas-0.4.15). Manuel's father —
+          a financial advisor — flagged that any sector tilt
+          recommendation needs an explicit "no es asesoramiento" line. */}
+      <DisclaimerStrip T={T} variant="card" textKey="common.ai_disclaimer" lang={lang} />
     </div>
   );
 }
