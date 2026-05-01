@@ -26,7 +26,7 @@ import React, { useState, useEffect, useCallback, useMemo, useContext } from "re
 import ReactDOM from "react-dom";
 import { FONT, fmtMoney, fmtPct } from "./theme.js";
 import { Ico } from "./icons.jsx";
-import { Pill, SectionHead, AssetSparkline, AssetRowSkeletonList, useShellEntryDone } from "./shared.jsx";
+import { Pill, SectionHead, AssetSparkline, AssetRowSkeletonList, useShellEntryDone, useInFlight } from "./shared.jsx";
 import { useLivePrice, LivePricesContext } from "./livePrices.jsx";
 import { broker as brokerApi, wallet as walletApi } from "./api/index.js";
 // The Objetivos wizard is shared with the legacy MobileApp UI. It
@@ -120,36 +120,47 @@ export function BrokerShell({ T, isNativeApp = false, onBack, proMode = true, la
     };
   }, []);
 
+  // In-flight ref coalesces concurrent refresh() calls (samas-0.4.5).
+  // Sub-tab switches + pull-to-refresh + post-trade refresh can all
+  // fire in the same tick; without this guard each call would run 7
+  // redundant API requests.
+  const brokerRefreshInFlight = React.useRef(null);
   const refresh = useCallback(async () => {
-    // Use allSettled so a single failed call (e.g. price_alerts table
-    // not yet migrated, FX endpoint down) doesn't blank the whole
-    // Broker shell. Each setter gets the resolved value or a sane
-    // default.
-    const results = await Promise.allSettled([
-      brokerApi.getPortfolio(),
-      brokerApi.getAssets(),
-      brokerApi.getWatchlists(),
-      brokerApi.getOrders({ status: "all" }),
-      brokerApi.getPriceAlerts(),
-      brokerApi.getStopLosses(),
-      brokerApi.getFx(),
-    ]);
-    const [pR, aR, wlR, oR, alR, stR, fR] = results;
-    const val = (r, fallback) => r.status === "fulfilled" ? r.value : fallback;
-    // Surface the rejected ones in the console so we still see real
-    // bugs while the UI keeps working.
-    results.forEach((r, i) => {
-      if (r.status === "rejected") {
-        console.warn(`[broker] load[${i}]:`, r.reason?.message || r.reason);
-      }
-    });
-    setPortfolio(val(pR, null));
-    setAssets(val(aR, []));
-    setWatchlists(val(wlR, []));
-    setOrders(val(oR, []));
-    setAlerts(val(alR, []));
-    setStops(val(stR, []));
-    setFx(val(fR, null));
+    if (brokerRefreshInFlight.current) return brokerRefreshInFlight.current;
+    const p = (async () => {
+      // Use allSettled so a single failed call (e.g. price_alerts table
+      // not yet migrated, FX endpoint down) doesn't blank the whole
+      // Broker shell. Each setter gets the resolved value or a sane
+      // default.
+      const results = await Promise.allSettled([
+        brokerApi.getPortfolio(),
+        brokerApi.getAssets(),
+        brokerApi.getWatchlists(),
+        brokerApi.getOrders({ status: "all" }),
+        brokerApi.getPriceAlerts(),
+        brokerApi.getStopLosses(),
+        brokerApi.getFx(),
+      ]);
+      const [pR, aR, wlR, oR, alR, stR, fR] = results;
+      const val = (r, fallback) => r.status === "fulfilled" ? r.value : fallback;
+      // Surface the rejected ones in the console so we still see real
+      // bugs while the UI keeps working.
+      results.forEach((r, i) => {
+        if (r.status === "rejected") {
+          console.warn(`[broker] load[${i}]:`, r.reason?.message || r.reason);
+        }
+      });
+      setPortfolio(val(pR, null));
+      setAssets(val(aR, []));
+      setWatchlists(val(wlR, []));
+      setOrders(val(oR, []));
+      setAlerts(val(alR, []));
+      setStops(val(stR, []));
+      setFx(val(fR, null));
+      brokerRefreshInFlight.current = null;
+    })();
+    brokerRefreshInFlight.current = p;
+    return p;
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -4091,6 +4102,9 @@ function SectorRotationCard({ T, lang = "es" }) {
   const [data, setData] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
   const [hidden, setHidden] = React.useState(false);
+  // Ref-based in-flight guard (samas-0.4.5) — busy state alone has
+  // a micro-race on rapid double-tap before setBusy lands.
+  const inFlight = useInFlight();
 
   const stances = [
     { id: "growth",    label: "growth"    },
@@ -4099,7 +4113,7 @@ function SectorRotationCard({ T, lang = "es" }) {
   ];
 
   async function analyze() {
-    if (busy) return;
+    if (!inFlight.acquire()) return;
     setBusy(true);
     try {
       const res = await sectorRotation(stance);
@@ -4110,6 +4124,7 @@ function SectorRotationCard({ T, lang = "es" }) {
       else hapticNative("error").catch(() => {});
     } finally {
       setBusy(false);
+      inFlight.release();
     }
   }
 
@@ -5288,6 +5303,9 @@ function ThesisCard({ T, ticker, lang = "es" }) {
   const [busy, setBusy] = useState(false);
   const [validation, setValidation] = useState(null);
   const [err, setErr] = useState(null);
+  // useInFlight must be called unconditionally — declared with the
+  // other hooks before the early-return guards below (samas-0.4.5).
+  const inFlight = useInFlight();
 
   useEffect(() => {
     let alive = true;
@@ -5301,7 +5319,7 @@ function ThesisCard({ T, ticker, lang = "es" }) {
   if (!thesis) return null; // no active thesis on this ticker
 
   async function validate() {
-    if (busy) return;
+    if (!inFlight.acquire()) return;
     setBusy(true);
     setErr(null);
     try {
@@ -5324,6 +5342,7 @@ function ThesisCard({ T, ticker, lang = "es" }) {
       }
     } finally {
       setBusy(false);
+      inFlight.release();
     }
   }
 

@@ -518,6 +518,30 @@ export function ChromeBtn({ T, children, onClick, dot, ...rest }) {
 }
 
 // ----------------------------------------------------------
+// useInFlight (samas-0.4.5) — prevents double-tap micro-races on
+// AI surfaces. Returns { acquire, release }. acquire() returns true
+// if no call is in flight + flips the flag; subsequent calls return
+// false until release() is called. Use in finally{} so errors don't
+// strand the flag.
+//
+// Why useRef vs useState: state updates are batched/async, so a
+// rapid double-tap can read busy=false in both handlers before the
+// first setBusy(true) lands. A ref mutation is synchronous —
+// second read sees true immediately.
+// ----------------------------------------------------------
+import { useRef, useCallback as _useCallback } from "react";
+export function useInFlight() {
+  const ref = useRef(false);
+  const acquire = _useCallback(() => {
+    if (ref.current) return false;
+    ref.current = true;
+    return true;
+  }, []);
+  const release = _useCallback(() => { ref.current = false; }, []);
+  return { acquire, release };
+}
+
+// ----------------------------------------------------------
 // Skeleton — shimmering placeholder block while data loads. Used by
 // News / Broker / Social to avoid a flash of "Cargando…" text.
 // Renders a div sized to the props and animates a light gradient

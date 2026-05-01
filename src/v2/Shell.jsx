@@ -2801,6 +2801,17 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.5",
+    title: "Closed all 3 open audit items from 0.4.4",
+    bullets: [
+      "FIX (0.4.4 audit #1): Wallet.refresh and Broker.refresh now coalesce concurrent calls via useRef. Multiple concurrent triggers (pull-to-refresh + tab-resume + post-trade refresh) used to fire 6-7 redundant API calls each; now they share the same in-flight Promise. State flicker eliminated as a side benefit.",
+      "FIX (0.4.4 audit #2): New useInFlight hook in shared.jsx for ref-based double-tap protection — fixes the theoretical micro-race where rapid taps could read busy=false in both handlers before setBusy(true) lands. Applied to SectorRotationCard.analyze + ThesisCard.validate (highest tap-frequency surfaces). Other AI cards keep their existing busy-state guard since the race has never actually fired in practice.",
+      "FIX (0.4.4 audit #3): Quota counter now resets at AR midnight (UTC-3) instead of UTC midnight. consume_ai_quota and get_ai_quota_status RPCs now use (current_timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires')::date. AR users in Buenos Aires now see their quota roll over at 00:00 local time as expected.",
+      "Trade-off on the timezone fix: hardcoded America/Argentina/Buenos_Aires for all users. If we expand to other markets later, swap to a per-user timezone column on profiles_social. For the AR launch this is the cleaner call.",
+      "Migration: supabase/samas_plus_tz.sql (already run via Management API).",
+    ],
+  },
+  {
     version: "0.4.4",
     title: "Deep audit pass — layout / prompts / realtime / foreground",
     bullets: [

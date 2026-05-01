@@ -127,21 +127,35 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
   }, []);
 
   // ----------- load everything in parallel -----------
+  // In-flight ref coalesces concurrent refresh() calls (samas-0.4.5).
+  // Pull-to-refresh + tab-resume + initial mount can fire in the same
+  // tick on iOS app foreground; without this guard each call would
+  // run 6 redundant API requests and the UI would briefly flicker
+  // through two near-identical state snapshots. Promise.all results
+  // are stored on the ref so multiple awaiters share the same fetch.
+  const walletRefreshInFlight = React.useRef(null);
   const refresh = useCallback(async () => {
-    try {
-      const [b, f, c, t, p, a] = await Promise.all([
-        walletApi.getBalance(),
-        brokerApi.getFx(),
-        cardApi.getCard(),
-        walletApi.getTransactions({ limit: 5 }),
-        brokerApi.getPortfolio(),
-        walletApi.getRecurringAporte(),
-      ]);
-      setBalance(b); setFx(f); setCard(c); setTxns(t); setPortfolio(p);
-      setAporte(a);
-    } catch (e) {
-      console.error("[wallet] load:", e);
-    }
+    if (walletRefreshInFlight.current) return walletRefreshInFlight.current;
+    const p = (async () => {
+      try {
+        const [b, f, c, t, p, a] = await Promise.all([
+          walletApi.getBalance(),
+          brokerApi.getFx(),
+          cardApi.getCard(),
+          walletApi.getTransactions({ limit: 5 }),
+          brokerApi.getPortfolio(),
+          walletApi.getRecurringAporte(),
+        ]);
+        setBalance(b); setFx(f); setCard(c); setTxns(t); setPortfolio(p);
+        setAporte(a);
+      } catch (e) {
+        console.error("[wallet] load:", e);
+      } finally {
+        walletRefreshInFlight.current = null;
+      }
+    })();
+    walletRefreshInFlight.current = p;
+    return p;
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
