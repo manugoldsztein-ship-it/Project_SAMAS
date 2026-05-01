@@ -275,6 +275,28 @@ export async function markRead(threadId) {
   return { ok: true };
 }
 
+/**
+ * deleteThread(threadId) — delete the entire conversation. The
+ * dm_messages cascade fires via FK so every message gets removed
+ * along with the thread row. RLS gates this to participants only.
+ *
+ * Symmetric semantics: if the peer also deletes their side later,
+ * both sides are clean; if only one side deletes, the peer's row
+ * is gone too (since dm_threads is a single shared row, not per-
+ * user). For "delete only my view" semantics we'd need a
+ * dm_thread_hides lookup table — future patch if requested.
+ *
+ * samas-0.3.9.
+ */
+export async function deleteThread(threadId) {
+  const { error } = await supabase
+    .from("dm_threads")
+    .delete()
+    .eq("id", threadId);
+  if (error) throw new Error(error.message);
+  return { ok: true };
+}
+
 // ----------------------------------------------------------
 // Realtime payload mapping helper — exported so subscribers in
 // the UI can convert raw INSERT payloads from supabase.channel

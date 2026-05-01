@@ -2239,10 +2239,53 @@ function ConversationView({ T, lang = "es", thread, onBack, onOpenProfile, onOpe
             fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, color: T.text,
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
           }}>{thread.peer.displayName}</div>
-          <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute }}>
-            @{(thread.peer.handle || "").replace(/^@/, "")}
+          <div style={{
+            fontFamily: FONT.sans, fontSize: 10, color: T.textMute,
+            display: "flex", alignItems: "center", gap: 4,
+          }}>
+            {/* Lock glyph + privacy line (samas-0.3.9). At-rest
+                encryption stamp; not E2E (Supabase server-side reads
+                possible). Honest framing — see docs/seguridad.md. */}
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            {tr("social.dm.privacy_line", lang)}
           </div>
         </div>
+        </button>
+        {/* Delete-conversation button (samas-0.3.9). Confirms then
+            deletes the dm_thread row — the cascade kills all
+            dm_messages. Symmetric: if the peer also deletes their
+            side, both sides are clean; if only one side deletes,
+            the peer still has their copy. */}
+        <button
+          onClick={async () => {
+            if (!confirm(tr("social.dm.delete_confirm", lang))) return;
+            try {
+              await messagesApi.deleteThread(thread.id);
+              if (onBack) onBack();
+            } catch (e) {
+              console.warn("[messages] deleteThread failed:", e);
+              alert(tr("social.dm.delete_error", lang));
+            }
+          }}
+          aria-label={tr("social.dm.delete_aria", lang)}
+          title={tr("social.dm.delete_aria", lang)}
+          style={{
+            width: 32, height: 32, borderRadius: 10,
+            background: T.bg, border: `1px solid ${T.border}`,
+            color: T.textMute, cursor: "pointer", padding: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+          }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            <path d="M10 11v6M14 11v6"/>
+          </svg>
         </button>
       </div>
 

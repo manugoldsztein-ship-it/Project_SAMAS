@@ -2735,6 +2735,17 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.3.9",
+    title: "DM privacy — delete conversation + at-rest stamp",
+    bullets: [
+      "Direct messages were flagged as a privacy gap in docs/seguridad.md (storage in plaintext on Supabase, no E2E encryption, no user-side delete). Full E2E is a multi-week project — this patch ships the achievable wins now.",
+      "ConversationView header now shows a small 🔒 + 'Cifrado en reposo' line under the peer name — honest framing (Supabase cifra at rest, but admins could read with service role; not E2E). Docs/seguridad.md is the source of truth, this is just the user-facing surface.",
+      "Trash icon on the right of the header → confirm dialog → deletes the dm_thread row. Cascade removes all dm_messages. Symmetric semantics: the peer still has their copy unless they also delete on their side. The dialog explains this honestly.",
+      "New SQL migration: supabase/social_messages_delete.sql adds two RLS DELETE policies that didn't exist before — dm_threads (any participant deletes) and dm_messages (author-only). Without these the client-side delete call would silently no-op against RLS.",
+      "Future scope (NOT in this patch): proper E2E with libsignal-style key exchange, per-user 'hide thread' table for asymmetric deletion, server-side message expiry. Tracked separately.",
+    ],
+  },
+  {
     version: "0.3.8",
     title: "Allocation bar on portfolio share — visual privacy framing",
     bullets: [
