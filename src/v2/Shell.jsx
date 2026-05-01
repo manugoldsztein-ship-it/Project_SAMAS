@@ -2801,6 +2801,18 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.4",
+    title: "Deep audit pass — layout / prompts / realtime / foreground",
+    bullets: [
+      "Four deep audits done. Two real fixes shipped, two clean reports, two known issues documented as future hardening (not blocking Cohen pitch). Full writeup in docs/audit-0.4.4.md.",
+      "FIX #1 (a11y): ChromeBtn (the round buttons in Wallet header) didn't forward aria-label/title props. The new ? Explain button had its aria-label silently ignored. Now spreads ...rest into the underlying <button>.",
+      "FIX #2 (layout): Wallet header gap tightened from 8px to 6px. With 4 buttons (theme + Search + ? + Bell) the row was 184px, tight on iPhone SE (320px wide). New 178px reads cleaner on every screen.",
+      "Audit 2 (AI prompts): all 18 LLM-calling Edge Functions have try/catch around JSON.parse, fence stripping, templated fallbacks, sane token budgets (300-1200), timeouts (10-18s) inside 60s wall. Clean.",
+      "Audit 3 (realtime): all 7 channel creations (notifications-bell, notifications-inbox, social-feed, dm-threads, dm-thread, replies, ticker-feed) have matching removeChannel in cleanup + correct effect deps. No leaks.",
+      "Audit 4 (foreground races): App.jsx price-poll properly pauses/resumes. usePullToRefresh has refreshing guard. AI surfaces have busy guards. Open: Wallet.refresh + Broker.refresh have no in-flight guard — concurrent refreshes cause redundant API calls but no state corruption. Documented for future hardening.",
+    ],
+  },
+  {
     version: "0.4.3",
     title: "Tap-to-explain on bolded terms + bug audit pass",
     bullets: [

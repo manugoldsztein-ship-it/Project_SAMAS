@@ -493,9 +493,13 @@ export function SectionHead({ T, title, action, onAction }) {
 // Optional `dot` prop adds a small accent ping in the corner — we use
 // it for the bell when there are unread notifications.
 // ----------------------------------------------------------
-export function ChromeBtn({ T, children, onClick, dot }) {
+export function ChromeBtn({ T, children, onClick, dot, ...rest }) {
+  // Spread `rest` so callers can pass aria-label / title / etc. without
+  // the wrapper silently dropping them. samas-0.4.4 caught this when
+  // the new "?" Explain button in Wallet header had its aria-label
+  // ignored.
   return (
-    <button onClick={onClick} style={{
+    <button onClick={onClick} {...rest} style={{
       width: 40, height: 40, borderRadius: 12, background: T.surface,
       border: `1px solid ${T.border}`, color: T.text, cursor: "pointer",
       display: "flex", alignItems: "center", justifyContent: "center",

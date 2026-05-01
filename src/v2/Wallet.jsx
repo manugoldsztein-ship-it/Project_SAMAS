@@ -183,7 +183,13 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
             <div style={{ fontFamily: FONT.sans, fontSize: 16, fontWeight: 700, color: T.text }}>{userName}</div>
           </div>
         </button>
-        <div style={{ display: "flex", gap: 8 }}>
+        {/* Header buttons. Tightened from 8→6 gap (samas-0.4.4) so
+            4 buttons (theme + Search + ? + Bell) at 40px each fit
+            comfortably alongside the avatar+greeting on iPhone SE
+            (320px) — 4×40 + 3×6 = 178px right column, 134px left =
+            312px, fits in 280px usable. Was 184px right column on
+            8px gap — overflowed. */}
+        <div style={{ display: "flex", gap: 6 }}>
           {onToggleDark && (
             <ChromeBtn T={T} onClick={onToggleDark}>
               {isDark ? <Ico.Sun size={18}/> : <Ico.Moon size={18}/>}
