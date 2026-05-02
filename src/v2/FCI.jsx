@@ -33,6 +33,7 @@ import ReactDOM from "react-dom";
 import { FONT, fmtMoney } from "./theme.js";
 import { t as tr } from "../lib/i18n.js";
 import { hapticNative } from "../lib/native.js";
+import { useDragToDismiss } from "./useDragToDismiss.js";
 import { Skeleton } from "./shared.jsx";
 import { broker as brokerApi } from "./api/index.js";
 
@@ -249,6 +250,7 @@ function FCIPickerSheet({ T, lang, assets, onClose, onSelectAsset }) {
 
   // Sort by risk level so beginner-safe options appear first.
   const sorted = [...(assets || [])].sort((a, b) => (a.riskLevel || 0) - (b.riskLevel || 0));
+  const dtd = useDragToDismiss(onClose);
 
   return ReactDOM.createPortal(
     <div
@@ -259,12 +261,13 @@ function FCIPickerSheet({ T, lang, assets, onClose, onSelectAsset }) {
         display: "flex", alignItems: "flex-end", justifyContent: "center",
       }}
     >
-      <div style={{
+      <div ref={dtd.ref} {...dtd.dragHandlers} style={{
         width: "100%", maxWidth: 540, maxHeight: "92dvh",
         background: T.bgElev || T.bg, color: T.text,
         borderTopLeftRadius: 28, borderTopRightRadius: 28,
         border: `1px solid ${T.border}`, borderBottom: "none",
         display: "flex", flexDirection: "column", overflow: "hidden",
+        ...dtd.dragStyle,
       }}>
         <div style={{ display: "flex", justifyContent: "center", paddingTop: 12 }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: T.border }}/>

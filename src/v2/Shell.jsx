@@ -16,6 +16,7 @@ import React, { useState, useEffect, useMemo, Suspense, lazy } from "react";
 import ReactDOM from "react-dom";
 import { SAMAS_THEME, FONT } from "./theme.js";
 import { SamasTabBar, Avatar, avatarPropsFor, AVATAR_PALETTE } from "./shared.jsx";
+import { useDragToDismiss } from "./useDragToDismiss.js";
 import { social as socialApi } from "./api/index.js";
 import { WalletPage } from "./Wallet.jsx";
 // Code-split the heavy tabs and the 2FA enrollment so they don't
@@ -762,13 +763,16 @@ function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus
     isDark: true,
   }), [T]);
 
+  // Drag-to-dismiss (samas-0.4.46) — drag down hace dismiss tipo iOS.
+  const dtd = useDragToDismiss(onClose);
+
   return (
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
       position: "fixed", inset: 0, zIndex: 100,
       background: "rgba(0,0,0,0.6)",
       display: "flex", alignItems: "flex-end", justifyContent: "center",
     }}>
-      <div style={{
+      <div ref={dtd.ref} {...dtd.dragHandlers} style={{
         width: "100%", maxWidth: 540, maxHeight: "92dvh",
         background: T.bgElev, color: T.text,
         borderTopLeftRadius: 28, borderTopRightRadius: 28,
@@ -776,8 +780,9 @@ function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus
         padding: "20px 20px",
         paddingBottom: isNativeApp ? "calc(env(safe-area-inset-bottom) + 24px)" : 24,
         overflowY: "auto",
+        ...dtd.dragStyle,
       }}>
-        {/* Drag handle */}
+        {/* Drag handle (visual + funcional desde 0.4.46) */}
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: T.border }}/>
         </div>
@@ -1866,6 +1871,7 @@ function EditProfileSheet({ T, lang = "es", onClose }) {
   const [avatarColor, setAvatarColor] = useState("#16C784");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const dtd = useDragToDismiss(onClose);
   const [handleStatus, setHandleStatus] = useState(null); // 'checking' | 'available' | 'taken' | 'invalid' | null
 
   // Initial load — populate state from the existing social profile.
@@ -1953,13 +1959,14 @@ function EditProfileSheet({ T, lang = "es", onClose }) {
       background: "rgba(0,0,0,0.7)",
       display: "flex", alignItems: "flex-end", justifyContent: "center",
     }}>
-      <div style={{
+      <div ref={dtd.ref} {...dtd.dragHandlers} style={{
         width: "100%", maxWidth: 540, maxHeight: "92dvh",
         background: T.bgElev, color: T.text,
         borderTopLeftRadius: 22, borderTopRightRadius: 22,
         border: `1px solid ${T.border}`, borderBottom: "none",
         display: "flex", flexDirection: "column",
         animation: "samas-sheet-up 220ms cubic-bezier(.2,.8,.2,1)",
+        ...dtd.dragStyle,
       }}>
         <style>{`
           @keyframes samas-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
@@ -2165,6 +2172,7 @@ const PRO_FEATURE_KEYS = [
 ];
 
 function ProUpsellModal({ T, lang = "es", isPro, onActivate, onClose }) {
+  const dtd = useDragToDismiss(onClose);
   return (
     <div
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
@@ -2174,14 +2182,15 @@ function ProUpsellModal({ T, lang = "es", isPro, onActivate, onClose }) {
         display: "flex", alignItems: "flex-end", justifyContent: "center",
       }}
     >
-      <div style={{
+      <div ref={dtd.ref} {...dtd.dragHandlers} style={{
         width: "100%", maxWidth: 540, maxHeight: "92dvh",
         background: T.bgElev || T.bg, color: T.text,
         borderTopLeftRadius: 28, borderTopRightRadius: 28,
         border: `1px solid ${T.border}`, borderBottom: "none",
         display: "flex", flexDirection: "column", overflow: "hidden",
+        ...dtd.dragStyle,
       }}>
-        {/* Drag handle */}
+        {/* Drag handle (funcional desde 0.4.46) */}
         <div style={{ display: "flex", justifyContent: "center", paddingTop: 12 }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: T.border }}/>
         </div>
@@ -2314,6 +2323,7 @@ function ProUpsellModal({ T, lang = "es", isPro, onActivate, onClose }) {
 function ProPricingSheet({ T, lang = "es", onSubscribe, onClose }) {
   const [plan, setPlan] = useState("annual"); // "monthly" | "annual"
   const [busy, setBusy] = useState(false);
+  const dtd = useDragToDismiss(onClose);
 
   async function handleSubscribe() {
     if (busy) return;
@@ -2411,14 +2421,15 @@ function ProPricingSheet({ T, lang = "es", onSubscribe, onClose }) {
         display: "flex", alignItems: "flex-end", justifyContent: "center",
       }}
     >
-      <div style={{
+      <div ref={dtd.ref} {...dtd.dragHandlers} style={{
         width: "100%", maxWidth: 540, maxHeight: "92dvh",
         background: T.bgElev || T.bg, color: T.text,
         borderTopLeftRadius: 28, borderTopRightRadius: 28,
         border: `1px solid ${T.border}`, borderBottom: "none",
         display: "flex", flexDirection: "column", overflow: "hidden",
+        ...dtd.dragStyle,
       }}>
-        {/* Drag handle */}
+        {/* Drag handle (funcional desde 0.4.46) */}
         <div style={{ display: "flex", justifyContent: "center", paddingTop: 12 }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: T.border }}/>
         </div>
@@ -2986,6 +2997,22 @@ function AIConsentGate({ T, lang = "es" }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.4.46",
+    title: "Drag-to-dismiss en sheets — drag down para cerrar tipo iOS",
+    bullets: [
+      "Manuel pidió: 'deberia poder hacer drag down menus para sacarlos de la pantalla'. Las sheets tenían el grabber visual (la rayita gris arriba) pero no era funcional — solo se cerraban con el botón X o tap-on-backdrop. iOS users esperan poder arrastrar la sheet hacia abajo desde cualquier punto.",
+      "NUEVO HOOK src/v2/useDragToDismiss.js — track touchstart/move/end. Solo arrastra hacia abajo cuando el container está scrolled-to-top (sino sería scroll normal). Threshold 120px de drag para dismissear, sino snap-back con transition 220ms ease-out. Match al timing de la sheet-up animation.",
+      "APLICADO a 7 sheets bottom-sheet style:",
+      "- SettingsSheet (Shell.jsx) — la que Manuel mostró en screenshot",
+      "- ProUpsellModal + ProPricingSheet (Shell.jsx) — flow de Plus",
+      "- EditProfileSheet (Shell.jsx) — editar perfil",
+      "- FCIPickerSheet (FCI.jsx)",
+      "- ExplainTermSheet (ExplainTerm.jsx)",
+      "- StressTestSheet (StressTest.jsx) + JournalSheet (Journal.jsx) + HipoteticoSheet (Hipotetico.jsx)",
+      "DEJADAS afuera — LegalSheet + ChangelogSheet son modales centrados (no bottom sheets), drag-down no aplica.",
+    ],
+  },
   {
     version: "0.4.44",
     title: "Fix bug 'column id does not exist' al activar SAMAS Plus",

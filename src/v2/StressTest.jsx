@@ -33,6 +33,7 @@ import { FONT, fmtMoney } from "./theme.js";
 import { t as tr } from "../lib/i18n.js";
 import { hapticNative } from "../lib/native.js";
 import { DisclaimerStrip } from "./shared.jsx";
+import { useDragToDismiss } from "./useDragToDismiss.js";
 
 // Category-level peak-to-trough drawdowns (in % of value lost) for
 // each historical event. Sources: public market data, S&P / MSCI
@@ -178,6 +179,7 @@ function StressTestSheet({ T, lang, portfolio, onClose }) {
   );
 
   if (typeof document === "undefined") return null;
+  const dtd = useDragToDismiss(onClose);
 
   return ReactDOM.createPortal(
     <div
@@ -188,12 +190,13 @@ function StressTestSheet({ T, lang, portfolio, onClose }) {
         display: "flex", alignItems: "flex-end", justifyContent: "center",
       }}
     >
-      <div style={{
+      <div ref={dtd.ref} {...dtd.dragHandlers} style={{
         width: "100%", maxWidth: 540, maxHeight: "92dvh",
         background: T.bgElev || T.bg, color: T.text,
         borderTopLeftRadius: 28, borderTopRightRadius: 28,
         border: `1px solid ${T.border}`, borderBottom: "none",
         display: "flex", flexDirection: "column", overflow: "hidden",
+        ...dtd.dragStyle,
       }}>
         <div style={{ display: "flex", justifyContent: "center", paddingTop: 12 }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: T.border }}/>

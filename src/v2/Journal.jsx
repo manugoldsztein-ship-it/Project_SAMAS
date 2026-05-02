@@ -17,6 +17,7 @@ import ReactDOM from "react-dom";
 import { FONT, fmtMoney } from "./theme.js";
 import { t as tr } from "../lib/i18n.js";
 import { hapticNative } from "../lib/native.js";
+import { useDragToDismiss } from "./useDragToDismiss.js";
 import { Skeleton, DisclaimerStrip } from "./shared.jsx";
 import { journalRecap, journalReflect } from "../lib/ai.js";
 import { listJournal } from "../lib/journal.js";
@@ -243,6 +244,7 @@ function JournalSheet({ T, lang, onClose }) {
   }
 
   if (typeof document === "undefined") return null;
+  const dtd = useDragToDismiss(onClose);
 
   return ReactDOM.createPortal(
     <div
@@ -253,12 +255,13 @@ function JournalSheet({ T, lang, onClose }) {
         display: "flex", alignItems: "flex-end", justifyContent: "center",
       }}
     >
-      <div style={{
+      <div ref={dtd.ref} {...dtd.dragHandlers} style={{
         width: "100%", maxWidth: 540, maxHeight: "92dvh",
         background: T.bgElev || T.bg, color: T.text,
         borderTopLeftRadius: 28, borderTopRightRadius: 28,
         border: `1px solid ${T.border}`, borderBottom: "none",
         display: "flex", flexDirection: "column", overflow: "hidden",
+        ...dtd.dragStyle,
       }}>
         <div style={{ display: "flex", justifyContent: "center", paddingTop: 12 }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: T.border }}/>

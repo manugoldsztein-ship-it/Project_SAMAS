@@ -40,6 +40,7 @@ import ReactDOM from "react-dom";
 import { FONT, fmtMoney } from "./theme.js";
 import { t as tr } from "../lib/i18n.js";
 import { hapticNative } from "../lib/native.js";
+import { useDragToDismiss } from "./useDragToDismiss.js";
 import { DisclaimerStrip } from "./shared.jsx";
 
 // Same calibration as supabase/functions/objectives-plan/index.ts
@@ -218,6 +219,7 @@ function HipoteticoSheet({ T, lang, onClose }) {
     moderada:     T.accent,
     agresiva:     "#F59E0B",
   })[s] || T.accent;
+  const dtd = useDragToDismiss(onClose);
 
   return ReactDOM.createPortal(
     <div
@@ -228,14 +230,15 @@ function HipoteticoSheet({ T, lang, onClose }) {
         display: "flex", alignItems: "flex-end", justifyContent: "center",
       }}
     >
-      <div style={{
+      <div ref={dtd.ref} {...dtd.dragHandlers} style={{
         width: "100%", maxWidth: 540, maxHeight: "92dvh",
         background: T.bgElev || T.bg, color: T.text,
         borderTopLeftRadius: 28, borderTopRightRadius: 28,
         border: `1px solid ${T.border}`, borderBottom: "none",
         display: "flex", flexDirection: "column", overflow: "hidden",
+        ...dtd.dragStyle,
       }}>
-        {/* Drag handle */}
+        {/* Drag handle (funcional desde 0.4.46) */}
         <div style={{ display: "flex", justifyContent: "center", paddingTop: 12 }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: T.border }}/>
         </div>
