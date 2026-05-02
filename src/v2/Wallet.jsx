@@ -26,6 +26,7 @@ import {
   Avatar, ChromeBtn, Pill, SectionHead, Sparkline, SAMAS_SPARKS, Skeleton,
   avatarPropsFor, DisclaimerStrip,
 } from "./shared.jsx";
+import { arsToUva, fmtUva, uvaVsHistoryMessage, periodLabel } from "../lib/uva.js";
 import { wallet as walletApi, card as cardApi, broker as brokerApi, notifications as notifApi } from "./api/index.js";
 import { rowToNotif } from "./api/notifications.js";
 import { supabase } from "../lib/supabase.js";
@@ -211,8 +212,19 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
   const userName = user?.name?.split(" ")[0] || "Usuario";
   const userInitials = user?.initials || "??";
   const avatarColor = user?.avatarColor || "oklch(0.78 0.16 145)";
+  // UVA derived from current ARS balance (samas-0.4.26). When ccy
+  // is "UVA", we show the user's nominal ARS in inflation-indexed
+  // units. The hero card also surfaces a "vs 6 meses atrás" line
+  // so the user immediately sees how much real value they've lost
+  // by sitting in nominal pesos.
   const balanceValue = balance
-    ? (ccy === "ARS" ? balance.ars : balance.usd)
+    ? (ccy === "ARS" ? balance.ars
+       : ccy === "USD" ? balance.usd
+       : ccy === "UVA" ? arsToUva(balance.ars)
+       : balance.ars)
+    : null;
+  const uvaCompare = ccy === "UVA" && balance?.ars > 0
+    ? uvaVsHistoryMessage(balance.ars, "m6")
     : null;
 
   return (
@@ -316,7 +328,10 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
               background: T.bg, border: `1px solid ${T.border}`,
               borderRadius: 999,
             }}>
-              {["ARS", "USD"].map(c => (
+              {/* UVA added in samas-0.4.26 — third unit alongside
+                  ARS / USD. Shows the user's value in inflation-
+                  indexed units. Argentine ALyC differentiator. */}
+              {["ARS", "USD", "UVA"].map(c => (
                 <button key={c} onClick={() => setCcy(c)} style={{
                   padding: "5px 12px", borderRadius: 999, border: "none", cursor: "pointer",
                   background: ccy === c ? T.accent : "transparent",
@@ -344,7 +359,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
             <span style={{
               fontFamily: FONT.display, fontSize: 13, color: T.textMute, fontWeight: 600,
             }}>
-              {ccy === "ARS" ? "$" : "US$"}
+              {ccy === "ARS" ? "$" : ccy === "USD" ? "US$" : ""}
             </span>
             <span style={{
               fontFamily: FONT.display, fontSize: 40, fontWeight: 700, color: T.text,
@@ -353,12 +368,39 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
               {balanceValue == null
                 ? "—"
                 : balanceVisible
-                  ? fmtMoney(balanceValue, ccy)
+                  ? (ccy === "UVA" ? fmtUva(balanceValue) : fmtMoney(balanceValue, ccy))
                   : "••••••"}
             </span>
+            {ccy === "UVA" && (
+              <span style={{
+                fontFamily: FONT.mono, fontSize: 12, color: T.textMute, fontWeight: 600,
+                marginLeft: 4,
+              }}>UVA</span>
+            )}
           </div>
 
-          {portfolio && (
+          {/* UVA-specific historical comparison (samas-0.4.26).
+              Tells the user how much real purchasing power they've
+              lost by holding nominal pesos. Fades in on mode switch
+              instead of stacking on top of the regular delta line. */}
+          {ccy === "UVA" && uvaCompare && balanceVisible && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{
+                fontFamily: FONT.mono, fontSize: 12, fontWeight: 600,
+                color: uvaCompare.lossPct < 0 ? T.danger : T.accent,
+                padding: "3px 8px", borderRadius: 6,
+                background: uvaCompare.lossPct < 0 ? T.dangerSoft : T.accentSoft,
+                whiteSpace: "nowrap",
+              }}>
+                {uvaCompare.lossPct >= 0 ? "↑" : "↓"} {Math.abs(uvaCompare.lossPct).toFixed(1)}%
+              </span>
+              <span style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute }}>
+                {tr("wallet.uva.vs_history", lang, { period: periodLabel(uvaCompare.period) })}
+              </span>
+            </div>
+          )}
+
+          {ccy !== "UVA" && portfolio && (
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{
                 fontFamily: FONT.mono, fontSize: 12, fontWeight: 600,

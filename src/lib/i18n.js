@@ -240,6 +240,9 @@ const V2 = {
     "settings.logout_cancel":     "Cancelar",
     "settings.logout_yes":        "Sí, salir",
 
+    "wallet.uva.vs_history":      "real, vs últimos {period}",
+    "wallet.uva.explain":         "UVA: unidad ajustada por inflación (BCRA). Usala para ver cuánto vale tu plata en términos reales.",
+
     "settings.demo.section":      "Demo",
     "settings.demo.seed":         "Cargar cuenta demo",
     "settings.demo.seed_sub":     "Holdings + balance + historia 30 días",
@@ -987,6 +990,9 @@ const V2 = {
     "settings.logout_confirm_sub":"You'll need to enter your PIN again to come back in.",
     "settings.logout_cancel":     "Cancel",
     "settings.logout_yes":        "Yes, sign out",
+
+    "wallet.uva.vs_history":      "real, vs last {period}",
+    "wallet.uva.explain":         "UVA: BCRA's inflation-indexed unit. Use it to see what your money is worth in real terms.",
 
     "settings.demo.section":      "Demo",
     "settings.demo.seed":         "Load demo account",

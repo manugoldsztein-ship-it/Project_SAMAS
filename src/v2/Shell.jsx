@@ -2976,6 +2976,18 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.26",
+    title: "UVA toggle — el broker AR único que muestra valores en términos reales",
+    bullets: [
+      "Argentina es el único país donde 'tu balance subió 50%' puede significar que perdiste plata. UVA (Unidad de Valor Adquisitivo del BCRA, ajustada por inflación) es el unit-of-account que TODO asesor financiero AR usa para hablar de retornos reales con un cliente. Cero brokers retail lo exponen nativamente. Esta patch lo agrega como tercera unidad en el Wallet hero.",
+      "PICKER — el chip ARS / USD del balance card ahora es ARS / USD / UVA. Tap UVA → la cifra grande se renderea en UVAs (ej. '709 UVA' en vez de '$1.587.760') y debajo aparece la línea KILLER: '↓ 11.6% real, vs últimos 6 meses'. Eso es lo que ningún broker te dice — cuánta plata REAL perdiste por sentarte en pesos nominales.",
+      "MOTOR — nuevo módulo src/lib/uva.js: arsToUva(), fmtUva(), uvaVsHistoryMessage(). UVA_NOW + UVA_HISTORY hardcodeados pinned a la fecha demo (2026-05-01). En producción, Edge Function que fetcha BCRA daily + cachea en una tabla fx_rates — la UI no cambia.",
+      "VISUAL — la línea de comparación es color-coded: rojo si perdiste real-value (típico para alguien holding ARS), verde si ganaste. Trae el tema del riesgo inflacionario al frente de la app — donde corresponde, no escondido.",
+      "i18n: 2 keys nuevas (wallet.uva.vs_history + wallet.uva.explain) en es + en. Otras locales fall-back a es.",
+      "PITCH — esto es CNV-pitch-territory: regulators están pidiendo hace años que apps retail muestren rendimientos en términos reales. SAMAS es el primero. Cohen va a verlo y ENTENDER en 5 segundos qué significa para sus clientes asesorados.",
+    ],
+  },
+  {
     version: "0.4.25",
     title: "Loading skeletons sweep — kill bare 'Cargando…' text en boot + MFA",
     bullets: [
