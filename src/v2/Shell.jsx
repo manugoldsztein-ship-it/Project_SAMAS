@@ -2976,6 +2976,32 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.33",
+    title: "Lite/Pro split — métricas y herramientas asesor-class detrás del Pro toggle",
+    bullets: [
+      "Rolan (asesor de Manuel) revisó la app y recomendó: 'Saca el cash flow [del Lite]. Saca todas las metricas. Lite = Cocos-clone con AI + education.' Manuel: 'Todo esto para la version UI Lite, el UI Pro no se toca.' Esta patch ejecuta esa segmentación.",
+      "GATED behind proMode (visible sólo en Pro mode):",
+      "- CashFlowBars (estaba free desde 0.4.15 por feedback del padre, vuelve a Pro)",
+      "- HipoteticoCard (backtest tool — concepto avanzado)",
+      "- StressTestCard (drawdown histórico — asesor-class)",
+      "- BenchmarkCompareCard ('le ganás al mercado?' — métrica)",
+      "- EarningsWatchCard (próximos earnings — métrica)",
+      "- QuarterlyReviewCard (resumen 90 días — métrica)",
+      "- JournalCard (Win rate, P/L — métrica)",
+      "- UVA toggle del balance picker (concepto avanzado)",
+      "STAYS in Lite (visible para todos):",
+      "- DailyBriefCard (narrativa AI)",
+      "- AIAnalysisCard (análisis simple)",
+      "- BehaviorCard (anti-overtrading nudge — protege al beginner)",
+      "- ObjetivosCard (goal wizard beginner-friendly)",
+      "- AIChatCard (Q&A natural)",
+      "- Aporte mensual",
+      "DEFENSIVE: si el user estaba en UVA (Pro) y desactiva Pro, el chip 'UVA' desaparece pero el ccy queda colgado — useEffect resetea automáticamente a USD para que el balance display vuelva a algo válido.",
+      "SETTINGS COPY actualizada: el subtitle del Modo Pro toggle ahora explica explícitamente qué se desbloquea ('Cashflow, métricas, stress test, hipotético, journal, UVA y más herramientas asesor-class. Lite muestra balance + AI + objetivos').",
+      "FOLLOWUP — 0.4.34 traería el FCI module (front-page card 'Mis FCI' con 4-5 funds curados) + Education prominente (Tutorials hub linkeado). Ese tiene scope mayor — necesita decisiones de qué FCIs específicos mockear y si Lite esconde el broker individual completo. Pendiente para post-pitch.",
+    ],
+  },
+  {
     version: "0.4.32",
     title: "Sentry error tracking — sabemos cuándo crashea la app",
     bullets: [

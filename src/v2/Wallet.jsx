@@ -91,6 +91,12 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
 
   // ----------- UI state -----------
   const [ccy, setCcy] = useState("ARS");
+  // samas-0.4.33: si el user estaba en UVA (Pro) y desactiva Pro, el
+  // chip "UVA" desaparece pero el ccy queda colgado. Reset a USD
+  // automáticamente para que el balance display vuelva a algo válido.
+  useEffect(() => {
+    if (!proMode && ccy === "UVA") setCcy("USD");
+  }, [proMode, ccy]);
   const [activeModal, setActiveModal] = useState(null); // "deposit" | "withdraw" | "card" | "aporte" | "inbox" | "txns_all" | null
   // AI master switch state (samas-0.4.11) — drives whether the ?
   // Explain button + AI cards render. Listens for the
@@ -333,8 +339,10 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
             }}>
               {/* UVA added in samas-0.4.26 — third unit alongside
                   ARS / USD. Shows the user's value in inflation-
-                  indexed units. Argentine ALyC differentiator. */}
-              {["ARS", "USD", "UVA"].map(c => (
+                  indexed units. Argentine ALyC differentiator.
+                  samas-0.4.33: solo visible en Pro mode. Per Rolan,
+                  el Lite es Cocos-clone simple — no metric toggles. */}
+              {(proMode ? ["ARS", "USD", "UVA"] : ["ARS", "USD"]).map(c => (
                 <button key={c} onClick={() => setCcy(c)} style={{
                   padding: "5px 12px", borderRadius: 999, border: "none", cursor: "pointer",
                   background: ccy === c ? T.accent : "transparent",
@@ -580,26 +588,20 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
         </div>
       )}
 
-      {/* ---------- Cash flow (samas-0.4.15: promoted to free) ----------
-          Manuel's father (financial advisor) flagged in our review
-          that flujo de fondos is a *fundamental* personal-finance
-          surface — every advisor opens with "where is your money
-          going?". Previously it was Pro-mode-only (samas-0.0.46);
-          now every user sees it as soon as they have a portfolio.
-          Position: right after portfolio peek, before AI cards, so
-          it's visible without scrolling past the AI section. The
-          other Pro Wallet cards (MonthPnL / Dividend / TaxYear) stay
-          gated under proMode below. */}
-      {portfolio && portfolio.totalUsd > 0 && (
+      {/* ---------- Cash flow (samas-0.4.15 → 0.4.33: re-gated Pro) ----------
+          Originalmente lo había promovido a Lite por feedback del padre
+          de Manuel. Rolan (asesor de Manuel) revisó la app entera y
+          recomendó: "Saca el cash flow [del Lite]. Saca todas las
+          metricas. Lite = Cocos-clone con AI + education." Tiene
+          razón sobre el target: un usuario Lite que recién empieza
+          no entiende un cashflow chart, lo abruma. Pro mode lo sigue
+          mostrando para los que sí entienden el valor. */}
+      {proMode && portfolio && portfolio.totalUsd > 0 && (
         <CashFlowBars T={T} portfolio={portfolio} lang={lang} />
       )}
 
       {/* ---------- Pro Wallet dashboard (samas-0.0.46) ----------
-          Month/dividend/tax cards. Only when Pro mode is on AND
-          the user has a portfolio. The 2-card row (month P&L ·
-          dividend) sits flush, then the tax-year card spans full
-          width below. CashFlowBars was lifted out of this group in
-          0.4.15 (now free). */}
+          Month/dividend/tax cards. Pro-only desde siempre. */}
       {proMode && portfolio && portfolio.totalUsd > 0 && (
         <>
           <div style={{ display: "flex", gap: 8, margin: "12px 16px 0" }}>
@@ -610,48 +612,52 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
         </>
       )}
 
-      {/* ---------- AI portfolio analysis (samas-0.0.83) ----------
-          Only shown when there's a non-empty portfolio. Tap → calls
-          the analyze-portfolio Edge Function (Claude Haiku) and shows
-          the response in a sheet. Sits between portfolio peek and
-          aporte so it's reachable without scrolling on most screens. */}
+      {/* ---------- AI cards LITE-FRIENDLY (samas-0.4.33) ----------
+          Cards de IA narrativas / beginner-friendly que se quedan en
+          Lite porque no son métricas pesadas — son lectura simple
+          o asistencia conversacional. Aporte mensual estilo Cocos. */}
       {!aiDisabled && portfolio && portfolio.totalUsd > 0 && (
         <>
           <AIAnalysisCard T={T} lang={lang} />
+          {/* Behavior watch (0.4.28) — anti-overtrading nudge. Stays
+              in Lite porque protege al beginner de sí mismo, exactly
+              el target audience del Lite. */}
+          <BehaviorCard T={T} lang={lang} />
+          {/* Objetivos con IA — goal wizard. Beginner-friendly. */}
+          <ObjetivosCard T={T} lang={lang} />
+          {/* Preguntale a SAMAS — multi-turn Q&A. Beginner-friendly. */}
+          <AIChatCard T={T} lang={lang} />
+        </>
+      )}
+
+      {/* ---------- AI cards PRO-ONLY (samas-0.4.33) ----------
+          Cards con métricas / análisis avanzado / herramientas
+          asesor-class. Per Rolan: "Saca todas las metricas" del Lite.
+          Estos van detrás del proMode toggle. */}
+      {proMode && !aiDisabled && portfolio && portfolio.totalUsd > 0 && (
+        <>
           {/* Benchmark compare — "am I beating the market?" (0.1.7). */}
           <BenchmarkCompareCard T={T} lang={lang} />
           {/* Earnings watch — upcoming reports for held tickers (0.1.8). */}
           <EarningsWatchCard T={T} lang={lang} />
           {/* Quarterly review — 90-day narrative summary (0.2.4). */}
           <QuarterlyReviewCard T={T} lang={lang} />
-          {/* Behavior watch (samas-0.4.28) — overtrading / revenge /
-              FOMO / panic detector. The "broker que te protege de
-              vos mismo" feature. Inverts the Robinhood model. */}
-          <BehaviorCard T={T} lang={lang} />
-          {/* Trade Journal (samas-0.4.29) — recap de los últimos 90
-              días con batting average, P/L realizado, narrativa AI
-              y la lesson clave. Tap → sheet con la lista completa
-              + per-trade reflection on demand. */}
+          {/* Trade Journal (0.4.29) — métricas de trading (win rate,
+              P/L). Pro-only por ser asesor-class. */}
           <JournalCard T={T} lang={lang} />
-          {/* Objetivos con IA — goal wizard + progress card (0.4.12). */}
-          <ObjetivosCard T={T} lang={lang} />
-          {/* Preguntale a SAMAS — multi-turn chat (samas-0.0.89). */}
-          <AIChatCard T={T} lang={lang} />
         </>
       )}
 
-      {/* Portafolio Hipotético (samas-0.4.22) — historical backtest
-          tool. NOT gated on aiDisabled because it's deterministic
-          (compound growth + seeded variance, no LLM call). Available
-          to every user, regardless of portfolio state, since the
-          tool is conceptual ("what if I had invested $X"). */}
-      <HipoteticoCard T={T} lang={lang} />
+      {/* Portafolio Hipotético (0.4.22) — backtest tool. Pro desde
+          0.4.33 — calcula returns con bands, es métrica pesada que
+          confunde al beginner. */}
+      {proMode && <HipoteticoCard T={T} lang={lang} />}
 
-      {/* Stress test histórico (samas-0.4.27). Asks "¿cómo aguantó
-          esta cartera durante COVID / 2008 / corralito?". Hidden
-          when the user has no portfolio — there's nothing to
-          stress against. Card auto-shows once they trade. */}
-      <StressTestCard T={T} lang={lang} portfolio={portfolio} />
+      {/* Stress test histórico (0.4.27) — pregunta "cómo aguantó tu
+          cartera el corralito". Pro desde 0.4.33 — concepto avanzado,
+          el beginner no tiene base mental para entender drawdowns
+          históricos. */}
+      {proMode && <StressTestCard T={T} lang={lang} portfolio={portfolio} />}
 
       {/* ---------- aporte mensual ---------- */}
       <div style={{ margin: "28px 16px 0" }}>

@@ -37,7 +37,7 @@ const V2 = {
     "settings.section.account":    "Cuenta",
 
     "settings.pro_mode":          "Modo Pro",
-    "settings.pro_mode_sub":      "Banner en vivo, distribución y top movers",
+    "settings.pro_mode_sub":      "Cashflow, métricas, stress test, hipotético, journal, UVA y más herramientas asesor-class. Lite (default) muestra balance + AI + objetivos.",
     "settings.plus.title":            "SAMAS Plus",
     "settings.plus.active":           "Activo",
     "settings.plus.active_sub":       "IA ilimitada · US$5/mes · renueva automáticamente",
@@ -883,7 +883,7 @@ const V2 = {
     "ai_tour.c4.body":  "Proactive insights, narrated monthly + quarterly reviews, earnings alerts and relevant news — all personalized to your holdings.",
     "ai_tour.c5.title": "5 free AI queries per day",
     "ai_tour.c5.body":  "For deep questions and unlimited chat with SAMAS, activate Plus for US$5/mo. Cancel anytime.",
-    "settings.pro_mode_sub":      "Live banner, allocation and top movers",
+    "settings.pro_mode_sub":      "Cashflow, metrics, stress test, hypothetical, journal, UVA and more advisor-class tools. Lite (default) shows balance + AI + goals.",
 
     // Pro portfolio dashboard (samas-0.0.42)
     "pro.sector.title":           "Sector breakdown",
