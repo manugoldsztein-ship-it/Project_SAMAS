@@ -2987,6 +2987,20 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.43",
+    title: "Lite Broker > Cartera limpio — 3 cards más detrás de Pro",
+    bullets: [
+      "Manuel mandó screenshot del Lite Broker > Cartera con tres cards tachadas: el banner de objetivo ('$10M en 10 años'), 'Riesgo por activo (IA)' y 'Rotación Sectorial · IA'. Pidió: gatealas detrás de Pro.",
+      "GATED behind Pro (ya no aparecen en Lite Broker > Cartera):",
+      "- AIPlanCard ('$X en Y años · Tocá para revisar o ajustar') — el goal banner. Lite ya tiene ObjetivosCard en el Wallet en primera plana, tener el mismo banner repetido en Invertir era ruido.",
+      "- RiskProfileCard ('RIESGO POR ACTIVO (IA)' · score 1-10 por posición) — métrica avanzada que confunde al beginner. Behavior watch en el Wallet ya cubre la protección que un Lite user necesita.",
+      "- SectorRotationCard ('ROTACIÓN SECTORIAL · IA' · Crecimiento/Equilibrado/Defensivo) — tactical, asesor-grade.",
+      "DEJADO EN LITE — RebalanceCard ('Rebalancear cartera con IA · Acciones concretas para acercar tu mix al perfil que elijas'). Manuel explícitamente la dejó sin tachar. Es el AI-action más concreto y beginner-friendly del Broker.",
+      "Lite Broker > Cartera ahora tiene SOLO: header + Cartera summary + holdings + RebalanceCard + tab nav. Cero distracción.",
+      "Pro mode usuarios siguen viendo todo. Cero cambio para Pro.",
+    ],
+  },
+  {
     version: "0.4.42",
     title: "Anonimizar al proveedor de IA en strings user-facing",
     bullets: [

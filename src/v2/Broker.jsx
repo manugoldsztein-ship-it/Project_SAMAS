@@ -537,20 +537,33 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
       {/* AI Plan card — links to the goal-planning wizard. Always
           shown so the user can find the wizard regardless of mode.
           When the user already has a saved plan, the card morphs into
-          a summary of their strategy + target. */}
-      <AIPlanCard T={T} onOpen={onOpenAIPlan} savedPlan={savedPlan} lang={lang} />
+          a summary of their strategy + target.
+          PRO-ONLY desde 0.4.43 — Manuel marcó este banner con X en la
+          screenshot del Lite Broker > Cartera. Rationale: el Lite ya
+          tiene ObjetivosCard en el Wallet (primera plana). Repetir el
+          banner acá adentro de Invertir es ruido. Lite users que
+          quieran ajustar su goal lo hacen desde Wallet. */}
+      {proMode && (
+        <AIPlanCard T={T} onOpen={onOpenAIPlan} savedPlan={savedPlan} lang={lang} />
+      )}
 
       {/* AI Rebalance card (samas-0.1.4) — only when there's a
           non-empty portfolio (rebalancing an empty book is moot).
           Tap → opens the rebalance sheet with profile selector +
-          proposed buy/sell actions. */}
+          proposed buy/sell actions.
+          DEJADO EN LITE — Manuel explícitamente lo dejó sin tachar
+          en la screenshot. Es el AI-action más útil para un beginner
+          ("¿qué cambio para acercarme al perfil que elegí?"). */}
       {portfolio.holdings.length > 0 && (
         <RebalanceCard T={T} lang={lang} onRefresh={() => onSelectAsset && onSelectAsset(null)} />
       )}
 
       {/* AI Risk Profile (samas-0.1.9) — per-position 1-10 risk
-          score + AI-refined reason. Auto-loads, expandable rows. */}
-      {portfolio.holdings.length > 0 && (
+          score + AI-refined reason. Auto-loads, expandable rows.
+          PRO-ONLY desde 0.4.43 — métrica avanzada (score 1-10 por
+          activo) que confunde al beginner. El Lite ya tiene
+          BehaviorCard en el Wallet para protección anti-overtrading. */}
+      {proMode && portfolio.holdings.length > 0 && (
         <RiskProfileCard T={T} lang={lang} />
       )}
 
@@ -558,8 +571,10 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
           suggestions. User-initiated card with stance selector
           (growth / balanced / defensive); tap "Analizar" → IA
           returns a summary + 2-3 actionable tilts comparing current
-          mix vs target mix for the chosen stance. */}
-      {portfolio.holdings.length > 0 && (
+          mix vs target mix for the chosen stance.
+          PRO-ONLY desde 0.4.43 — tactical, asesor-grade. El Lite ya
+          tiene Rebalance arriba para acción de cartera. */}
+      {proMode && portfolio.holdings.length > 0 && (
         <SectorRotationCard T={T} lang={lang} />
       )}
 
