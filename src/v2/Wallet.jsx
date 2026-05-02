@@ -38,6 +38,7 @@ import { analyzePortfolio, chatPortfolio, dailyBrief, compareBenchmark, earnings
 import { isAIDisabled } from "../lib/aiConsent.js";
 import { ObjetivosCard } from "./Objetivos.jsx";
 import { HipoteticoCard } from "./Hipotetico.jsx";
+import { StressTestCard } from "./StressTest.jsx";
 import { AIQuotaPill } from "./AIQuotaPill.jsx";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { hapticNative } from "../lib/native.js";
@@ -634,6 +635,12 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
           to every user, regardless of portfolio state, since the
           tool is conceptual ("what if I had invested $X"). */}
       <HipoteticoCard T={T} lang={lang} />
+
+      {/* Stress test histórico (samas-0.4.27). Asks "¿cómo aguantó
+          esta cartera durante COVID / 2008 / corralito?". Hidden
+          when the user has no portfolio — there's nothing to
+          stress against. Card auto-shows once they trade. */}
+      <StressTestCard T={T} lang={lang} portfolio={portfolio} />
 
       {/* ---------- aporte mensual ---------- */}
       <div style={{ margin: "28px 16px 0" }}>

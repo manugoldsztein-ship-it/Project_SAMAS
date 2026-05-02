@@ -2976,6 +2976,19 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.27",
+    title: "Stress test histórico — '¿cómo aguantó esto en COVID / 2008 / corralito?'",
+    bullets: [
+      "Todo asesor financiero AR senior abre meetings con esta pregunta. Cero brokers retail lo exponen. SAMAS lo hace una card de un tap en Wallet.",
+      "NUEVA SUPERFICIE — src/v2/StressTest.jsx con StressTestCard + StressTestSheet. Card en Wallet justo después de Hipotético, sólo visible cuando el usuario tiene portfolio (no hay nada que stress-testear contra cero). Tap → bottom sheet con scenario picker + resultado live.",
+      "ESCENARIOS — 4 eventos pinned a la memoria colectiva AR retail: COVID 2020 (Feb-Mar), GFC 2008 (Sep-Oct), Devaluación Macri 2018 (Ago-Sep), Corralito 2001 (Dic-Ene). Cada uno con drawdowns hardcodeados POR CATEGORÍA (CEDEAR / ACCION / BONO / ETF / COMMOD) sourced de public market data, redondeados a puntos porcentuales enteros.",
+      "MOTOR — applyScenario(): para cada escenario, tomá el % del portfolio en cada categoría × el drawdown de esa categoría → suma weighted = drawdown esperado del portfolio. Honest about the simplification (no factor model, no correlation matrix) — la metodología está completa en el archivo. Categorías sin shock pricing en el escenario fallback a 0.",
+      "OUTPUT — Hero number en rojo grande mostrando el drawdown estimado (-X.X%) + valor inicial vs valor en el peor momento + duration del evento. Debajo, breakdown por categoría sorted por contribución absoluta al pain (donde se sintió más el golpe). Más abajo, una nota educativa específica del escenario (qué pasó, por qué cada categoría reaccionó como reaccionó). Disclaimer fuerte al pie.",
+      "PITCH — Cohen va a entender en 3 segundos. Los asesores AR tradicionales le venden ESTO MISMO a clientes high-net-worth pero a mano, en Excel, sentados en una reunión. SAMAS lo hace en un tap, en cualquier momento, para cualquier usuario. Es el feature más asesor-class de la app entera.",
+      "i18n: 17 keys nuevas (stress.* family) en es + en. Otras locales fall-back a es.",
+    ],
+  },
+  {
     version: "0.4.26",
     title: "UVA toggle — el broker AR único que muestra valores en términos reales",
     bullets: [
