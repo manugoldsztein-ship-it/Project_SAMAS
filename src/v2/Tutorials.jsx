@@ -355,85 +355,94 @@ function ModuleSection({ T, lang, moduleId, moduleIndex, tutorials, completedSet
         </div>
       </div>
 
-      {/* Path — vertical zigzag of tutorial nodes */}
-      <div style={{ position: "relative" }}>
+      {/* Path — vertical zigzag of tutorial nodes (samas-0.4.38)
+          Reescrito desde 0.4.35: el layout original usaba absolute
+          positioning para caption + XP, lo que causaba que los
+          textos se montaran sobre el siguiente node. Ahora cada
+          row es flex-column en static flow (button + title + xp
+          stacked), con el zigzag offset aplicado a través de un
+          wrapper con transform. La conexión entre nodes es una
+          línea SVG-equivalente positioned absolutely en el row
+          container. */}
+      <div style={{ position: "relative", padding: "0 16px" }}>
         {tutorials.map((tut, i) => {
           const isCompleted = completedSet.has(tut.id);
-          // Find the "next up" tutorial (first non-completed). It
-          // gets the bigger-pulse styling to hint at progression.
+          // "Next up" = first non-completed. Pulse-glow animation.
           const isNextUp = !isCompleted &&
             tutorials.slice(0, i).every((t) => completedSet.has(t.id));
-          // Zigzag: even rows left-of-center, odd rows right-of-center.
-          // Creates the visual "path" that reads top-down.
+          // Zigzag offset alterna izquierda/derecha de centro.
           const offset = i % 2 === 0 ? -28 : 28;
+          // Row height: button 76 + gap 8 + caption ~32 (dos líneas)
+          // + gap 4 + XP ~12 + bottom padding 24 = ~156px.
+          const ROW_HEIGHT = 156;
           return (
             <div key={tut.id} style={{
-              display: "flex", justifyContent: "center",
-              padding: "10px 0",
               position: "relative",
+              height: ROW_HEIGHT,
             }}>
-              {/* Connector line to next node — only when not the last */}
+              {/* Connector line to next node — sits behind the
+                  button. Spans from the bottom of this button down
+                  to the top of the next button. */}
               {i < tutorials.length - 1 && (
                 <div style={{
                   position: "absolute",
-                  top: 70, left: "50%", width: 2, height: 28,
+                  top: 76 + 4,                // just below this button
+                  height: ROW_HEIGHT - 76 - 4,
+                  left: "50%", width: 2, marginLeft: -1,
                   background: isCompleted ? T.accent : T.border,
-                  marginLeft: -1,
                   zIndex: 0,
+                  opacity: 0.7,
                 }}/>
               )}
-              <button
-                onClick={() => onOpen(tut.id)}
-                style={{
-                  position: "relative",
-                  transform: `translateX(${offset}px)`,
-                  width: 76, height: 76, borderRadius: "50%",
-                  background: isCompleted ? T.accent : (isNextUp ? T.accentSoft : T.surface),
-                  border: `3px solid ${isCompleted ? T.accent : (isNextUp ? T.accent : T.border)}`,
-                  color: isCompleted ? T.accentInk : T.text,
-                  cursor: "pointer", padding: 0,
-                  display: "flex", flexDirection: "column",
-                  alignItems: "center", justifyContent: "center",
-                  fontFamily: "inherit",
-                  // Subtle pulse for the next-up node (Duolingo does this).
-                  animation: isNextUp ? "samas-pulse 2s ease-in-out infinite" : "none",
-                  zIndex: 1,
-                  // Drop shadow for depth.
-                  boxShadow: isNextUp
-                    ? `0 4px 12px ${T.accent}55`
-                    : "0 2px 6px rgba(0,0,0,0.2)",
-                }}
-              >
-                <span style={{ fontSize: 26, lineHeight: 1 }}>
-                  {isCompleted ? "✓" : tut.glyph}
-                </span>
-              </button>
-              {/* Tutorial title — small caption below the node, offset same direction */}
+              {/* Stacked column: button + title + XP. The whole
+                  stack is offset horizontally for the zigzag —
+                  caption + XP follow the button so they never
+                  collide with the next row's content. */}
               <div style={{
                 position: "absolute",
-                top: 80, left: "50%",
-                transform: `translateX(calc(-50% + ${offset}px))`,
-                fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
-                color: isCompleted ? T.accent : T.text,
-                textAlign: "center",
-                width: 120,
-                pointerEvents: "none",
-              }}>{tut.title}</div>
-              {/* XP badge */}
-              <div style={{
-                position: "absolute",
-                top: 100, left: "50%",
-                transform: `translateX(calc(-50% + ${offset}px))`,
-                fontFamily: FONT.mono, fontSize: 9, fontWeight: 700,
-                color: T.textMute,
-                pointerEvents: "none",
-              }}>+{tut.xp || 10} XP</div>
+                left: `calc(50% + ${offset}px)`,
+                top: 0,
+                transform: "translateX(-50%)",
+                display: "flex", flexDirection: "column", alignItems: "center",
+                gap: 6,
+                zIndex: 1,
+                width: 140,
+              }}>
+                <button
+                  onClick={() => onOpen(tut.id)}
+                  style={{
+                    width: 76, height: 76, borderRadius: "50%",
+                    background: isCompleted ? T.accent : (isNextUp ? T.accentSoft : T.surface),
+                    border: `3px solid ${isCompleted ? T.accent : (isNextUp ? T.accent : T.border)}`,
+                    color: isCompleted ? T.accentInk : T.text,
+                    cursor: "pointer", padding: 0,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontFamily: "inherit",
+                    animation: isNextUp ? "samas-pulse 2s ease-in-out infinite" : "none",
+                    boxShadow: isNextUp
+                      ? `0 4px 12px ${T.accent}55`
+                      : "0 2px 6px rgba(0,0,0,0.2)",
+                    flexShrink: 0,
+                  }}
+                >
+                  <span style={{ fontSize: 26, lineHeight: 1 }}>
+                    {isCompleted ? "✓" : tut.glyph}
+                  </span>
+                </button>
+                <div style={{
+                  fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+                  color: isCompleted ? T.accent : T.text,
+                  textAlign: "center",
+                  lineHeight: 1.3,
+                }}>{tut.title}</div>
+                <div style={{
+                  fontFamily: FONT.mono, fontSize: 9, fontWeight: 700,
+                  color: T.textMute,
+                }}>+{tut.xp || 10} XP</div>
+              </div>
             </div>
           );
         })}
-        {/* Spacer at the bottom of the module so the next module's
-            header has breathing room from the zigzag's caption. */}
-        <div style={{ height: 50 }}/>
       </div>
     </div>
   );
