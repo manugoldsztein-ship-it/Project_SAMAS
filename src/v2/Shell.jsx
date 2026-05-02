@@ -2998,6 +2998,19 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.51",
+    title: "Fix path Tutoriales — zigzag visible + texto completed muted",
+    bullets: [
+      "Manuel: 'esto de tutoriales esta malisimo'. Screenshot del path Duolingo-style con tres problemas: (a) zigzag offset chico (-28/+28) que NO se notaba, (b) texto verde brillante en TODOS los completed (chillón, competía con highlight del nextUp), (c) connector recto sin alinearse con nodes.",
+      "FIX:",
+      "- Zigzag drástico (-64/+64) — ahora sí lee como path Duolingo, con nodes que claramente alternan izquierda/derecha.",
+      "- Title color: completed → T.textMute (no compite visualmente con nextUp), nextUp → T.accent (highlighted), otros → T.text.",
+      "- Botón completed con opacity 0.78 — lee 'esto ya lo hiciste' sin chillar.",
+      "- Connector más sutil (opacity 0.5 completed / 0.35 pending).",
+      "- ROW_HEIGHT 168 (era 156) — más breathing room para que el title del próximo no esté pegado al anterior.",
+    ],
+  },
+  {
     version: "0.4.50",
     title: "AporteModal → bottom sheet — keyboard ya no tapa el form",
     bullets: [

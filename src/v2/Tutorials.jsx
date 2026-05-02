@@ -356,56 +356,55 @@ function ModuleSection({ T, lang, moduleId, moduleIndex, tutorials, completedSet
         </div>
       </div>
 
-      {/* Path — vertical zigzag of tutorial nodes (samas-0.4.38)
-          Reescrito desde 0.4.35: el layout original usaba absolute
-          positioning para caption + XP, lo que causaba que los
-          textos se montaran sobre el siguiente node. Ahora cada
-          row es flex-column en static flow (button + title + xp
-          stacked), con el zigzag offset aplicado a través de un
-          wrapper con transform. La conexión entre nodes es una
-          línea SVG-equivalente positioned absolutely en el row
-          container. */}
+      {/* Path — Duolingo-style zigzag (rewritten 0.4.51)
+          Antes: zigzag offset chico (-28/+28) que NO se notaba +
+          texto verde brillante en TODOS los completed (lee a chillón) +
+          conector recto que iba por el medio sin alinear con nodes.
+          Ahora: zigzag drástico (-64/+64) que sí lee como path,
+          texto muted para completed (no compite con el highlight
+          del nextUp), conector continuo subtle. */}
       <div style={{ position: "relative", padding: "0 16px" }}>
         {tutorials.map((tut, i) => {
           const isCompleted = completedSet.has(tut.id);
-          // "Next up" = first non-completed. Pulse-glow animation.
           const isNextUp = !isCompleted &&
             tutorials.slice(0, i).every((t) => completedSet.has(t.id));
-          // Zigzag offset alterna izquierda/derecha de centro.
-          const offset = i % 2 === 0 ? -28 : 28;
-          // Row height: button 76 + gap 8 + caption ~32 (dos líneas)
-          // + gap 4 + XP ~12 + bottom padding 24 = ~156px.
-          const ROW_HEIGHT = 156;
+          // Zigzag — más drástico para que se note de verdad.
+          const offset = i % 2 === 0 ? -64 : 64;
+          // Cada row tiene altura suficiente para button + title +
+          // XP sin que el title del próximo se monte. 168px da
+          // breathing room.
+          const ROW_HEIGHT = 168;
+          // Color del title: completed → muted (no compite),
+          // nextUp → accent (highlight), otros → text.
+          const titleColor = isCompleted
+            ? T.textMute
+            : (isNextUp ? T.accent : T.text);
           return (
             <div key={tut.id} style={{
               position: "relative",
               height: ROW_HEIGHT,
             }}>
-              {/* Connector line to next node — sits behind the
-                  button. Spans from the bottom of this button down
-                  to the top of the next button. */}
+              {/* Connector — línea sutil que va por el centro. Como
+                  los nodes zigzaguean, el connector pasa "detrás"
+                  de cada uno. Visualmente lee como un camino. */}
               {i < tutorials.length - 1 && (
                 <div style={{
                   position: "absolute",
-                  top: 76 + 4,                // just below this button
-                  height: ROW_HEIGHT - 76 - 4,
+                  top: 76,
+                  height: ROW_HEIGHT - 76,
                   left: "50%", width: 2, marginLeft: -1,
                   background: isCompleted ? T.accent : T.border,
                   zIndex: 0,
-                  opacity: 0.7,
+                  opacity: isCompleted ? 0.5 : 0.35,
                 }}/>
               )}
-              {/* Stacked column: button + title + XP. The whole
-                  stack is offset horizontally for the zigzag —
-                  caption + XP follow the button so they never
-                  collide with the next row's content. */}
               <div style={{
                 position: "absolute",
                 left: `calc(50% + ${offset}px)`,
                 top: 0,
                 transform: "translateX(-50%)",
                 display: "flex", flexDirection: "column", alignItems: "center",
-                gap: 6,
+                gap: 8,
                 zIndex: 1,
                 width: 140,
               }}>
@@ -424,6 +423,9 @@ function ModuleSection({ T, lang, moduleId, moduleIndex, tutorials, completedSet
                       ? `0 4px 12px ${T.accent}55`
                       : "0 2px 6px rgba(0,0,0,0.2)",
                     flexShrink: 0,
+                    // Tone-down completed: opacity ligero para que
+                    // se sienta "ya pasó esto" sin desaparecer.
+                    opacity: isCompleted ? 0.78 : 1,
                   }}
                 >
                   <span style={{ fontSize: 26, lineHeight: 1 }}>
@@ -432,7 +434,7 @@ function ModuleSection({ T, lang, moduleId, moduleIndex, tutorials, completedSet
                 </button>
                 <div style={{
                   fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
-                  color: isCompleted ? T.accent : T.text,
+                  color: titleColor,
                   textAlign: "center",
                   lineHeight: 1.3,
                 }}>{tut.title}</div>
