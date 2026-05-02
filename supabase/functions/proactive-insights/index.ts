@@ -78,6 +78,11 @@ const ASSETS: Record<string, { name: string; category: string; currency: string;
   SPY:   { name: "S&P 500 ETF",      category: "ETF",    currency: "USD", price: 542.30 },
   QQQ:   { name: "Nasdaq-100 ETF",   category: "ETF",    currency: "USD", price: 478.20 },
   AL30:  { name: "Bonar 2030",       category: "BONO",   currency: "USD", price: 58.30 },
+  MMARS:  { name: "SAMAS Money Market ARS", category: "FCI", currency: "ARS", price: 100.42 },
+  MMUSD:  { name: "SAMAS Money Market USD", category: "FCI", currency: "USD", price: 102.18 },
+  RFAR:  { name: "SAMAS Renta Fija", category: "FCI", currency: "USD", price: 105.83 },
+  MIXTO:  { name: "SAMAS Mixta", category: "FCI", currency: "USD", price: 112.4 },
+  EQUITY:  { name: "SAMAS Renta Variable", category: "FCI", currency: "USD", price: 128.95 },
   GD30:  { name: "Global 2030",      category: "BONO",   currency: "USD", price: 56.10 },
 };
 

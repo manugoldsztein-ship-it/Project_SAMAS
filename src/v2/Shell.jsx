@@ -2976,6 +2976,26 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.34",
+    title: "FCI module — Fondos Comunes de Inversión front-and-center estilo Cocos",
+    bullets: [
+      "Manuel: 'todo' (los 5 FCIs sugeridos) + 'no debería poder seguir invirtiendo' (broker individual queda visible). Esta patch agrega el layer de fondos comunes que Rolan recomendó como primera plana del Lite, sin esconder el broker.",
+      "5 NEW FCIs en src/v2/api/broker.js + 18 Edge Functions ASSETS tables (mecánico via /tmp/add_fci.py):",
+      "- MMARS (Money Market ARS, TNA 68%, riesgo 1)",
+      "- MMUSD (Money Market USD, TNA 4%, riesgo 1)",
+      "- RFAR (Renta Fija, TNA 8% USD, riesgo 2)",
+      "- MIXTO (Mixta, 40% bonos / 30% AR / 30% CEDEAR, TNA 11%, riesgo 3)",
+      "- EQUITY (Renta Variable, CEDEARs + AR equity, TNA 14%, riesgo 4)",
+      "Cada uno category='FCI' + nuevos campos fundType + tnaPct + riskLevel.",
+      "NEW src/v2/FCI.jsx — FCICard (Wallet front-page) + FCIPickerSheet. Card muestra 'Mis fondos' con el total invertido en USD + lista de holdings con TNA visible. Empty-state: CTA 'Empezá con un fondo común · una sola decisión'. Tap el header action → bottom sheet con los 5 fondos sorted por riesgo (1→4), cada row con risk badge + fundType + currency + TNA grande.",
+      "MOUNT: en Wallet entre el portfolio peek y el CashFlow (Pro). Visible para TODOS los users (Lite y Pro) — Rolan lo quería primera plana en Lite, pero no hay razón para esconderlo en Pro.",
+      "DEEP-LINK: tap un FCI en el picker → emit samas:open-asset event con el ticker → Shell switchea a broker tab → Broker drainea el briefcase y abre AssetSheet con la flow de compra existente. Cero código nuevo de buy flow — reusa el placeOrder que ya tenés.",
+      "MERCADO: el chip 'FCI' aparece automáticamente en los filter chips porque MercadoView derive las categorías del asset universe. Tap → sólo los 5 fondos.",
+      "i18n: 17 keys nuevas (fci.section.* + fci.empty.* + fci.picker.* + fci.risk.* + fci.type.* + tna_label) en es + en. Otras locales fall-back a es.",
+      "FOLLOWUP 0.4.35: Education Duolingo-style. Tutorials hub revamp con visual progress + completion states + streaks + un Wallet card 'Education' prominente.",
+    ],
+  },
+  {
     version: "0.4.33",
     title: "Lite/Pro split — métricas y herramientas asesor-class detrás del Pro toggle",
     bullets: [

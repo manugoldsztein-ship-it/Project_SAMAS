@@ -41,6 +41,7 @@ import { HipoteticoCard } from "./Hipotetico.jsx";
 import { StressTestCard } from "./StressTest.jsx";
 import { BehaviorCard } from "./Behavior.jsx";
 import { JournalCard } from "./Journal.jsx";
+import { FCICard } from "./FCI.jsx";
 import { AIQuotaPill } from "./AIQuotaPill.jsx";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { hapticNative } from "../lib/native.js";
@@ -587,6 +588,28 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
           </div>
         </div>
       )}
+
+      {/* Mis FCI (samas-0.4.34) — Cocos-clone fund layer per Rolan's
+          spec. Front-and-center en Lite, sigue visible en Pro. Tap
+          en un fondo: emit samas:open-asset event que el Shell
+          escucha + switchea a broker tab + el broker drainea el
+          pending briefcase y abre el AssetSheet. */}
+      <FCICard
+        T={T} lang={lang}
+        onSelectAsset={(asset) => {
+          if (!asset?.ticker) return;
+          try {
+            localStorage.setItem(
+              "samas_pending_open_asset",
+              JSON.stringify({ ticker: asset.ticker, ts: Date.now() }),
+            );
+          } catch (_e) { /* ignore */ }
+          window.dispatchEvent(new CustomEvent("samas:open-asset", {
+            detail: { ticker: asset.ticker },
+          }));
+          if (onTab) onTab("broker");
+        }}
+      />
 
       {/* ---------- Cash flow (samas-0.4.15 → 0.4.33: re-gated Pro) ----------
           Originalmente lo había promovido a Lite por feedback del padre

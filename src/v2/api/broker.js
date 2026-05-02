@@ -100,6 +100,16 @@ const ASSETS = [
   { ticker: "MARA", name: "Marathon Digital",category: "CEDEAR", currency: "USD", price:  18.20, changePct: -1.20, logo: "https://logo.clearbit.com/mara.com",          cryptoExposure: true },
   { ticker: "RIOT", name: "Riot Platforms",  category: "CEDEAR", currency: "USD", price:  11.85, changePct: -0.80, logo: "https://logo.clearbit.com/riotplatforms.com", cryptoExposure: true },
   { ticker: "AL30", name: "Bonar 2030",      category: "BONO",   currency: "USD", price: 56.70,  changePct:  0.40, logo: null },
+  // FCI lineup (samas-0.4.34) — Cocos-clone money market + fixed
+  // income + mixed + equity. Each fund has tnaPct (annualized yield)
+  // visible to the user, riskLevel 1-5, and fundType for filter
+  // grouping. Beginner-friendly default layer in Lite mode per
+  // Rolan's recommendation.
+  { ticker: "MMARS",  name: "SAMAS Money Market ARS",  category: "FCI",    currency: "ARS", price: 100.42, changePct:  0.18, fundType: "money_market",  tnaPct: 68, riskLevel: 1, logo: null },
+  { ticker: "MMUSD",  name: "SAMAS Money Market USD",  category: "FCI",    currency: "USD", price: 102.18, changePct:  0.01, fundType: "money_market",  tnaPct:  4, riskLevel: 1, logo: null },
+  { ticker: "RFAR",   name: "SAMAS Renta Fija",        category: "FCI",    currency: "USD", price: 105.83, changePct:  0.04, fundType: "fixed_income",  tnaPct:  8, riskLevel: 2, logo: null },
+  { ticker: "MIXTO",  name: "SAMAS Mixta",             category: "FCI",    currency: "USD", price: 112.40, changePct:  0.32, fundType: "mixed",         tnaPct: 11, riskLevel: 3, logo: null },
+  { ticker: "EQUITY", name: "SAMAS Renta Variable",    category: "FCI",    currency: "USD", price: 128.95, changePct:  0.84, fundType: "equity",        tnaPct: 14, riskLevel: 4, logo: null },
   { ticker: "SPY",  name: "S&P 500 ETF",     category: "ETF",    currency: "USD", price: 512.40, changePct:  0.62, logo: "https://logo.clearbit.com/ssga.com" },
   { ticker: "QQQ",  name: "Nasdaq-100 ETF",  category: "ETF",    currency: "USD", price: 431.20, changePct:  0.88, logo: "https://logo.clearbit.com/invesco.com" },
   { ticker: "IWM",  name: "Russell 2000 ETF",category: "ETF",    currency: "USD", price: 218.65, changePct: -0.34, logo: "https://logo.clearbit.com/ishares.com" },
