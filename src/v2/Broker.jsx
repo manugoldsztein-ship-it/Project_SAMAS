@@ -600,6 +600,11 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
 // ----------------------------------------------------------
 function MercadoView({ T, assets, onSelectAsset, proMode = false, lang = "es" }) {
   const ALL = tr("market.filter.all", lang);
+  // Virtual category for crypto-exposure CEDEARs (IBIT, COIN, MSTR,
+  // MARA, RIOT). Sits in the chip list as a sibling of CEDEAR /
+  // ACCION / etc. but filters by the cryptoExposure flag instead
+  // of the underlying category. samas-0.4.31.
+  const CRYPTO_EXPOSURE = tr("market.filter.crypto_exposure", lang);
   const [cat, setCat] = useState(ALL);
   const [query, setQuery] = useState("");
   const [showCompare, setShowCompare] = useState(false);
@@ -610,8 +615,13 @@ function MercadoView({ T, assets, onSelectAsset, proMode = false, lang = "es" })
   const [view, setView] = useState("list");
   const cats = useMemo(() => {
     const s = new Set(assets.map((a) => a.category));
-    return [ALL, ...Array.from(s)];
-  }, [assets, ALL]);
+    const out = [ALL, ...Array.from(s)];
+    // Append the crypto-exposure virtual chip if any asset carries
+    // the flag. Hidden when the universe doesn't have any crypto-
+    // adjacent picks.
+    if (assets.some((a) => a.cryptoExposure)) out.push(CRYPTO_EXPOSURE);
+    return out;
+  }, [assets, ALL, CRYPTO_EXPOSURE]);
 
   // Search matches ticker OR name (case-insensitive). Then category
   // narrows further. Order matters: search first so the user can find
@@ -625,9 +635,10 @@ function MercadoView({ T, assets, onSelectAsset, proMode = false, lang = "es" })
         (a.name || "").toLowerCase().includes(q)
       );
     }
-    if (cat !== ALL) rows = rows.filter((a) => a.category === cat);
+    if (cat === CRYPTO_EXPOSURE) rows = rows.filter((a) => a.cryptoExposure);
+    else if (cat !== ALL) rows = rows.filter((a) => a.category === cat);
     return rows;
-  }, [assets, cat, query]);
+  }, [assets, cat, query, ALL, CRYPTO_EXPOSURE]);
 
   if (assets.length === 0) return <div style={{ paddingTop: 12 }}><AssetRowSkeletonList T={T} count={6} /></div>;
 

@@ -63,6 +63,11 @@ const ASSETS: Record<string, { name: string; category: string; currency: string;
   GGAL: { name: "Grupo Galicia",    category: "ACCION", currency: "ARS", price: 4250 },
   YPF:  { name: "YPF",              category: "ACCION", currency: "ARS", price: 38500 },
   PAMP: { name: "Pampa Energía",    category: "ACCION", currency: "ARS", price: 5820 },
+  IBIT:  { name: "iShares Bitcoin Trust", category: "CEDEAR", currency: "USD", price: 62.4 },
+  COIN:  { name: "Coinbase", category: "CEDEAR", currency: "USD", price: 247.3 },
+  MSTR:  { name: "MicroStrategy", category: "CEDEAR", currency: "USD", price: 358.4 },
+  MARA:  { name: "Marathon Digital", category: "CEDEAR", currency: "USD", price: 18.2 },
+  RIOT:  { name: "Riot Platforms", category: "CEDEAR", currency: "USD", price: 11.85 },
 };
 
 const ARS_TO_USD = 1 / 1245;

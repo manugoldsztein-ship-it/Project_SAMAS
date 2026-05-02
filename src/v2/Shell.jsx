@@ -2976,6 +2976,19 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.31",
+    title: "Exposición cripto vía CEDEARs — sin que Cohen tenga que operar crypto",
+    bullets: [
+      "Manuel: '¿hay alguna alternativa para que el usuario tenga exposición a crypto sin que Cohen lo opere?'. Sí — vía CEDEARs y ETFs regulados que dan el mismo upside sin custodia crypto. Esta patch los integra al asset universe.",
+      "5 NEW TICKERS — IBIT (iShares Bitcoin Trust ETF, BTC físico vía spot ETF), COIN (Coinbase, exposure al negocio de exchange crypto), MSTR (MicroStrategy, ~250k BTC en treasury), MARA + RIOT (Bitcoin miners). Todos category='CEDEAR' (que es lo que técnicamente son) con un nuevo flag cryptoExposure: true que el frontend usa para agruparlos virtualmente.",
+      "ASSET UNIVERSE — agregados a src/v2/api/broker.js + 18 Edge Functions ASSETS tables via script Python (analyze-asset, analyze-portfolio, chat-portfolio, daily-brief, draft-post, etc.). Cada Edge Function ahora puede analizar/scoreear estos tickers como cualquier otro CEDEAR. Logos via clearbit (coinbase.com, microstrategy.com, mara.com, riotplatforms.com, ishares.com).",
+      "MERCADO FILTER — nuevo chip 'Exposición cripto' en MercadoView. Sibling de los chips de category (CEDEAR / ACCION / ETF / BONO / COMMOD) pero filtra por el flag cryptoExposure. Sólo aparece cuando el universe tiene al menos un asset con el flag — futureproof si saltás cripto-CEDEARs adelante.",
+      "PITCH a Cohen: 'No competimos con Lemon / Buenbit / Ripio en custodia crypto. Ofrecemos lo que un asesor financiero le diría a un cliente que quiere exposure a Bitcoin sin custodia: comprá MSTR o IBIT. Mismo upside, instrumento regulado, settles dentro del rail Cohen.' Tres caminos en uno: (1) cripto exposure real para el usuario (2) cero friction nuevo en la pipeline de Cohen (3) compliance CNV completa.",
+      "DISCLAIMER honesto sobre IBIT: spot Bitcoin ETFs como CEDEARs en BYMA depende de listings que pueden o no estar disponibles en cualquier momento — al día de la pitch hay que verificar con Cohen qué está efectivamente listado. COIN/MSTR/MARA/RIOT son CEDEARs estables hace años, probables seguros. La SUPERFICIE funciona idéntico independiente de cuál subset esté disponible.",
+      "i18n: 1 key nueva (market.filter.crypto_exposure) en es + en. Otras locales fall-back a es.",
+    ],
+  },
+  {
     version: "0.4.30",
     title: "Posiciones SIEMPRE debajo del valor de cartera",
     bullets: [

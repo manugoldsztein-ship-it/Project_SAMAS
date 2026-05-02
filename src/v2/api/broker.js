@@ -87,9 +87,18 @@ const ASSETS = [
   { ticker: "GGAL", name: "Grupo Galicia",   category: "ACCION", currency: "ARS", price: 4250,   changePct: -2.10, logo: "https://logo.clearbit.com/galiciaseguros.com.ar" },
   { ticker: "YPF",  name: "YPF",             category: "ACCION", currency: "ARS", price: 38500,  changePct:  3.45, logo: "https://logo.clearbit.com/ypf.com" },
   { ticker: "PAMP", name: "Pampa Energía",   category: "ACCION", currency: "ARS", price: 5820,   changePct:  0.92, logo: "https://logo.clearbit.com/pampaenergia.com" },
-  // Crypto removed in samas-0.4.21 — Cohen (broker of record for the
-  // pitch) doesn't operate crypto. Kept the BONO/ETF/COMMOD lineup
-  // which is fully Cohen-coverable.
+  // Crypto-exposure via CEDEARs (samas-0.4.31) — Cohen doesn't
+  // operate crypto custody, but DOES operate any US-listed equity
+  // / ETF that gives the same exposure. These 5 are all CEDEARs
+  // already (or plausibly listable) and let users get "Bitcoin
+  // exposure" through a regulated rail. The cryptoExposure flag
+  // lets the Mercado filter chip group them as a virtual category
+  // without breaking the underlying CEDEAR taxonomy.
+  { ticker: "IBIT", name: "iShares Bitcoin Trust ETF", category: "CEDEAR", currency: "USD", price:  62.40, changePct:  0.90, logo: "https://logo.clearbit.com/ishares.com",       cryptoExposure: true },
+  { ticker: "COIN", name: "Coinbase",        category: "CEDEAR", currency: "USD", price: 247.30, changePct:  2.80, logo: "https://logo.clearbit.com/coinbase.com",      cryptoExposure: true },
+  { ticker: "MSTR", name: "MicroStrategy",   category: "CEDEAR", currency: "USD", price: 358.40, changePct:  3.40, logo: "https://logo.clearbit.com/microstrategy.com", cryptoExposure: true },
+  { ticker: "MARA", name: "Marathon Digital",category: "CEDEAR", currency: "USD", price:  18.20, changePct: -1.20, logo: "https://logo.clearbit.com/mara.com",          cryptoExposure: true },
+  { ticker: "RIOT", name: "Riot Platforms",  category: "CEDEAR", currency: "USD", price:  11.85, changePct: -0.80, logo: "https://logo.clearbit.com/riotplatforms.com", cryptoExposure: true },
   { ticker: "AL30", name: "Bonar 2030",      category: "BONO",   currency: "USD", price: 56.70,  changePct:  0.40, logo: null },
   { ticker: "SPY",  name: "S&P 500 ETF",     category: "ETF",    currency: "USD", price: 512.40, changePct:  0.62, logo: "https://logo.clearbit.com/ssga.com" },
   { ticker: "QQQ",  name: "Nasdaq-100 ETF",  category: "ETF",    currency: "USD", price: 431.20, changePct:  0.88, logo: "https://logo.clearbit.com/invesco.com" },
