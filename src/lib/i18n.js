@@ -265,6 +265,10 @@ const V2 = {
     "stress.disclaimer":            "Estimación basada en drawdowns públicos por categoría. No considera correlaciones intra-categoría ni el comportamiento específico de cada activo. Es una herramienta educativa, no una predicción.",
     "stress.close":                 "Cerrar",
 
+    "behavior.section.title":       "Tu disciplina esta semana",
+    "behavior.ok.title":             "Disciplina sólida",
+    "behavior.ok.sub":               "Sin patrones de overtrading, FOMO ni revenge en tus operaciones recientes. Buen mes.",
+
     "settings.demo.section":      "Demo",
     "settings.demo.seed":         "Cargar cuenta demo",
     "settings.demo.seed_sub":     "Holdings + balance + historia 30 días",
@@ -1037,6 +1041,10 @@ const V2 = {
     "stress.note.corralito":        "Banking restrictions + default + asymmetric pesofication. AR's worst modern-era scenario. USD bonds lost up to 70%; AR equities lost 2/3 in USD.",
     "stress.disclaimer":            "Estimate based on public category-level drawdowns. Doesn't account for intra-category correlations or asset-specific behavior. Educational tool, not a prediction.",
     "stress.close":                 "Close",
+
+    "behavior.section.title":       "Your discipline this week",
+    "behavior.ok.title":             "Solid discipline",
+    "behavior.ok.sub":               "No signs of overtrading, FOMO or revenge trading in your recent activity. Good month.",
 
     "settings.demo.section":      "Demo",
     "settings.demo.seed":         "Load demo account",

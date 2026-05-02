@@ -907,6 +907,40 @@ export async function draftPost() {
  * Falls back to a templated insight server-side if the Anthropic
  * key isn't set, so the demo always returns a 200 with content.
  */
+/**
+ * behaviorWatch() — POST /functions/v1/behavior-watch (samas-0.4.28)
+ *
+ * Detects toxic trading patterns over the user's last 90 days of
+ * transactions: overtrading, revenge, FOMO, panic, drift. Returns
+ * 0+ alerts with empathetic AI-refined messages.
+ *
+ * USER-INITIATED — fires when the BehaviorCard renders on Wallet.
+ * Quota-gated so a non-Plus user gets 5/day.
+ *
+ * Returns:
+ *   {
+ *     alerts: [{ pattern, severity, reason, message, suggestion }],
+ *     generatedAt: string,
+ *   }
+ */
+export async function behaviorWatch() {
+  await gateOnConsent();
+  await gateOnQuota();
+  const { data, error } = await supabase.functions.invoke("behavior-watch", {
+    body: {},
+  });
+  if (error) {
+    let detail = "";
+    try {
+      const body = await error?.context?.json?.();
+      if (body?.error) detail = `: ${body.error}`;
+    } catch (_) { /* fall through */ }
+    throw new Error(`Behavior watch falló${detail || ": " + (error.message || "error desconocido")}`);
+  }
+  if (data?.error) throw new Error(`Behavior watch falló: ${data.error}`);
+  return data;
+}
+
 // analyzeAsset consumes quota — deep AI analysis on a single asset,
 // triggered by user tapping "Análisis IA" in the AssetSheet.
 export async function analyzeAsset(ticker) {

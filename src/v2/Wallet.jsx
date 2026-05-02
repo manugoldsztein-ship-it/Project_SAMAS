@@ -39,6 +39,7 @@ import { isAIDisabled } from "../lib/aiConsent.js";
 import { ObjetivosCard } from "./Objetivos.jsx";
 import { HipoteticoCard } from "./Hipotetico.jsx";
 import { StressTestCard } from "./StressTest.jsx";
+import { BehaviorCard } from "./Behavior.jsx";
 import { AIQuotaPill } from "./AIQuotaPill.jsx";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { hapticNative } from "../lib/native.js";
@@ -622,6 +623,10 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
           <EarningsWatchCard T={T} lang={lang} />
           {/* Quarterly review — 90-day narrative summary (0.2.4). */}
           <QuarterlyReviewCard T={T} lang={lang} />
+          {/* Behavior watch (samas-0.4.28) — overtrading / revenge /
+              FOMO / panic detector. The "broker que te protege de
+              vos mismo" feature. Inverts the Robinhood model. */}
+          <BehaviorCard T={T} lang={lang} />
           {/* Objetivos con IA — goal wizard + progress card (0.4.12). */}
           <ObjetivosCard T={T} lang={lang} />
           {/* Preguntale a SAMAS — multi-turn chat (samas-0.0.89). */}

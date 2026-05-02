@@ -2976,6 +2976,19 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.28",
+    title: "Mood-aware AI — el broker que te protege de vos mismo",
+    bullets: [
+      "Manuel pidió esto explícitamente: 'broker AR que te detecta los patrones tóxicos en vez de monetizarlos'. Robinhood / Cocos / IOL viven de overtrading; SAMAS detecta cuando el usuario está en revenge mode, FOMO mode o panic mode y le dice frenar. Story de pitch nuclear.",
+      "NEW Edge Function — supabase/functions/behavior-watch: lee las últimas 90 días de transactions del user via RLS. detectPatterns() rule-based detecta 5 patterns: overtrading (>12 ops/7d), revenge (sell→buy <60min en otro ticker, 2+ veces en 14d), FOMO (3+ tickers nuevos en 7d), panic (3+ ventas en un día), drift (zero activity, kind nudge). Cada alerta tiene severity low/medium/high.",
+      "AI REFINEMENT — Claude Haiku (opcional, env-gated) reescribe el message empático por pattern. Si el ANTHROPIC_API_KEY está unset, fallback a templated messages que ya son honestos. Tono mandado en el prompt: 'profesional pero cercano (vos), sereno, sin hype, sin sermones'.",
+      "NEW Wallet card — src/v2/Behavior.jsx: 'Tu disciplina esta semana'. Mounted entre Quarterly Review y Objetivos. Empático, no punitivo. Cuando hay 0 alerts → small green card 'Disciplina sólida' (positive reinforcement matters as much as warnings). Skeleton mientras carga, hidden silenciosamente si AI denegada / quota agotada.",
+      "CACHEADO ~1h en localStorage para no quemar quota cada tab-switch. Severity color-coded: low=neutral, medium=ámbar, high=rojo. Cada alert muestra un sugerencia concreta en pill ('✓ Pausa de 24h antes de la próxima operación', '✓ Esperá una hora antes de la próxima compra').",
+      "PITCH para Cohen: 'Robinhood y demás profitan de que su usuario opere más. Nosotros profitamos cuando el usuario se mantiene disciplinado y aporta consistentemente. Esta card hace explícito ese alignment.' Behavioral finance angle, regulatory-friendly, no AR/US broker tiene equivalente.",
+      "i18n: 3 keys nuevas (behavior.section.title + behavior.ok.title + .sub) en es + en. Pattern labels (Overtrading / Revenge / FOMO / Pánico / Inactividad) hardcoded en la card por simplicidad.",
+    ],
+  },
+  {
     version: "0.4.27",
     title: "Stress test histórico — '¿cómo aguantó esto en COVID / 2008 / corralito?'",
     bullets: [
