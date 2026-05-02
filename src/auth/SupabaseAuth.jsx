@@ -22,6 +22,7 @@
 import { useEffect, useState } from "react";
 import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "../lib/supabase";
 import { CaptchaWidget, isCaptchaEnabled } from "../lib/hcaptcha.jsx";
+import { setUserContext, clearUserContext } from "../lib/errorTracking.js";
 
 // 0.1.5 — Capacitor detection. When running inside the iOS WebView
 // we need to: (1) open OAuth in the system Safari (not the WebView,
@@ -159,6 +160,12 @@ export function useSupabaseSession() {
         if (!alive) return;
         setSession(data?.session || null);
         await loadProfile(data?.session || null);
+        // samas-0.4.32: feed Sentry the user-id so crashes can be
+        // correlated to a specific user. Email is hashed inside
+        // setUserContext — Sentry never sees the PII.
+        if (data?.session?.user) {
+          setUserContext(data.session.user).catch(() => {});
+        }
       } catch (err) {
         console.error("[SAMAS] getSession threw:", err);
       } finally {
@@ -171,10 +178,16 @@ export function useSupabaseSession() {
 
     let unsubscribe = () => {};
     try {
-      const { data: sub } = supabase.auth.onAuthStateChange(async (_evt, s) => {
+      const { data: sub } = supabase.auth.onAuthStateChange(async (evt, s) => {
         if (!alive) return;
         setSession(s);
         await loadProfile(s);
+        // samas-0.4.32: keep Sentry user context in sync with auth.
+        if (evt === "SIGNED_OUT" || !s?.user) {
+          clearUserContext();
+        } else if (s?.user) {
+          setUserContext(s.user).catch(() => {});
+        }
       });
       unsubscribe = () => sub.subscription.unsubscribe();
     } catch (err) {

@@ -2976,6 +2976,19 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.32",
+    title: "Sentry error tracking — sabemos cuándo crashea la app",
+    bullets: [
+      "Manuel pidió error tracking pre-pitch. Sin esto, cuando la app crashea en el iPhone de un dev de Cohen te enterás cuando te lo cuenta (o nunca). El RootBoundary captura React errors pero no los envía. JS errors dentro del WebView son invisibles para Xcode.",
+      "FIXED — instalado @sentry/react v8 + nuevo módulo src/lib/errorTracking.js: initErrorTracking() / captureException() / captureMessage() / setUserContext() / clearUserContext() / addBreadcrumb(). Feature-flagged en VITE_SENTRY_DSN — cuando la env no está seteada, Sentry no inicializa y todos los helpers son no-op (dev / web preview no quema quota).",
+      "WIRING — initErrorTracking() corre en main.jsx ANTES de cualquier otra boot logic, así un crash temprano se reporta. RootBoundary.componentDidCatch ahora también shippea a Sentry con componentStack (la React tree path que crasheó — invaluable para diagnosis). useSupabaseSession setea/clearea user context en cada cambio de auth state.",
+      "PRIVACY DEFENSIVE — el user context guarda { id, email_redacted } donde email_redacted es un SHA-256 hash truncado del email. Sentry nunca ve la PII. beforeSend() también purga keys que matchean /password|token|secret|otp|cbu|cuit|dni|cuil/i de cualquier event extras/tags/contexts (defense in depth) y elimina headers Authorization/Cookie por si algún error capture los incluye.",
+      "REPLAY EXPLÍCITAMENTE NO ENABLED — Sentry Session Replay graba mutaciones del DOM, lo que leakearía balances + ticker positions a Sentry. Stack traces son suficientes para nuestro scope.",
+      "TESTING — una vez seteado VITE_SENTRY_DSN, abrís devtools y corrés window.__samas_sentry_test_crash() para verificar el wiring. El error tagged aparece en sentry.io en ~1 segundo.",
+      "ENABLEMENT (cuando lo actives): (1) Cuenta en sentry.io, project React, copiás el DSN. (2) echo VITE_SENTRY_DSN=https://abc123@... >> .env. (3) Optional: VITE_SENTRY_ENV=production y VITE_SENTRY_RELEASE=samas-0.4.32. (4) Rebuild. Free tier hasta ~5k events/mes — sobra para tu volumen actual.",
+    ],
+  },
+  {
     version: "0.4.31",
     title: "Exposición cripto vía CEDEARs — sin que Cohen tenga que operar crypto",
     bullets: [

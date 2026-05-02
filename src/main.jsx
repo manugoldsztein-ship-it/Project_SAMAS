@@ -3,6 +3,12 @@ import { createRoot } from "react-dom/client";
 import SAMASApp from "./App.jsx";
 import { initNative } from "./lib/native.js";
 import { initDynamicType } from "./lib/dynamicType.jsx";
+import { initErrorTracking, captureException } from "./lib/errorTracking.js";
+
+// Initialize Sentry FIRST — before anything else can throw. samas-0.4.32.
+// No-op when VITE_SENTRY_DSN is unset (default for dev / web preview).
+// See src/lib/errorTracking.js for setup instructions.
+initErrorTracking();
 
 // Boot Capacitor integrations as soon as the script loads. No-op on
 // the web — only does work when running inside the iOS/Android wrap.
@@ -45,6 +51,12 @@ class RootBoundary extends React.Component {
   }
   componentDidCatch(error, info) {
     console.error("[SAMAS] Root render error:", error, info);
+    // Ship to Sentry too (samas-0.4.32). componentStack is the React
+    // tree path that crashed — invaluable for diagnosis.
+    captureException(error, {
+      componentStack: info?.componentStack || null,
+      where: "RootBoundary",
+    });
   }
   render() {
     if (this.state.error) {
