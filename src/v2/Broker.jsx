@@ -5317,7 +5317,7 @@ function fmtCompactNumber(n) {
 //
 // Deliberately NOT pro-gated — AI is the demo differentiator;
 // Cohen should see this on every asset they tap. Templated server
-// fallback keeps the demo working without an Anthropic key.
+// fallback keeps the demo working without an AI provider key.
 // ============================================================
 const ASSET_INSIGHT_CACHE = new Map(); // ticker → response
 

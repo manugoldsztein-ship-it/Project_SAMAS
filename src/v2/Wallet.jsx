@@ -1384,7 +1384,7 @@ function DailyBriefCard({ T, lang = "es" }) {
 
 // ============================================================
 // AIAnalysisCard (samas-0.0.83) — entry point + result sheet for
-// the analyze-portfolio Edge Function (Claude Haiku).
+// the analyze-portfolio Edge Function (the LLM).
 // ============================================================
 // Two states:
 //   - idle: a CTA card with the SAMAS logo + "Análisis IA" label.
@@ -1944,7 +1944,7 @@ function EarningsWatchCard({ T, lang = "es" }) {
 // ============================================================
 // QuarterlyReviewCard (samas-0.2.4) — narrative 90-day review
 // ============================================================
-// Card on the Wallet → tap → opens a sheet with a Claude-written
+// Card on the Wallet → tap → opens a sheet with a AI-written
 // 3-4 paragraph review of the user's last 90 days. Auto-loads the
 // headline + key stat (return %) on the card so the user sees the
 // hook before tapping. Lazy-loads the full narrative on sheet open
@@ -2066,7 +2066,7 @@ function QuarterlyReviewCard({ T, lang = "es" }) {
 // ============================================================
 // QuarterlyReviewSheet — full narrative + stats
 // ============================================================
-// Bottom sheet that renders the Claude-written markdown review
+// Bottom sheet that renders the AI-written markdown review
 // plus a stat strip (winners / losers / activity). Markdown is
 // rendered with a tiny in-house parser since pulling in a full
 // react-markdown dependency for 4 paragraphs of h2 + p is overkill.
@@ -2289,7 +2289,7 @@ function QuarterlyReviewSheet({ T, lang = "es", data, onClose }) {
 // ============================================================
 // Card on the Wallet tab → tap → opens a chat sheet with message
 // bubbles. User types, presses Send → server reads holdings via
-// JWT-scoped RLS, prepends a system prompt, calls Claude Haiku
+// JWT-scoped RLS, prepends a system prompt, calls the LLM
 // with the conversation history, returns reply. Templated server-
 // side fallback when ANTHROPIC_API_KEY isn't set.
 // ============================================================

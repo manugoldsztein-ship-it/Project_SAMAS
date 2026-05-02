@@ -166,7 +166,7 @@ export function handleAIError(e) {
  * analyzePortfolio() — POST /functions/v1/analyze-portfolio
  *
  * Server reads the caller's holdings (via JWT-scoped RLS), passes
- * them to Claude Haiku, returns:
+ * them to the LLM, returns:
  *   {
  *     headline:      string,        // one-line summary
  *     bullets:       string[],      // ~3 observations
@@ -245,7 +245,7 @@ export async function chatPortfolio({ messages }) {
  *   }
  *
  * Falls back to a deterministic heuristic verdict on the same shape
- * when the Anthropic key isn't set.
+ * when the AI provider key isn't set.
  */
 // tradeCoach is FREE for both tiers (safety feature — runs at order
 // confirmation, paywalling protection looks predatory).
@@ -274,7 +274,7 @@ export async function tradeCoach({ ticker, side, qty, price }) {
  *
  * Server reads holdings, computes deterministic 1-10 risk score per
  * ticker (category baseline + volatility + concentration + drawdown),
- * asks Claude Haiku to refine the per-ticker reasons. Tickers + scores
+ * asks the LLM to refine the per-ticker reasons. Tickers + scores
  * stay deterministic so the LLM can't hallucinate them.
  *
  * Returns:
@@ -305,7 +305,7 @@ export async function scoreRisk() {
  * quarterlyReview() — POST /functions/v1/quarterly-review
  *
  * Server reads holdings + orders for the trailing 90 days, computes
- * winners / losers / activity stats / sector mix, and asks Claude
+ * winners / losers / activity stats / sector mix, and asks the LLM
  * to write a 3-4 paragraph markdown narrative + a 1-line headline.
  * Templated fallback when no API key (uses the same numbers, just
  * skeleton prose).
@@ -371,7 +371,7 @@ export async function explainTerm({ term, context } = {}) {
  *
  * Server takes the user's goal + horizon and returns a structured
  * plan: strategy classification + asset allocation + monthly aporte
- * (if a target is set) + milestones + Claude-written narrative.
+ * (if a target is set) + milestones + AI-written narrative.
  *
  * USER-INITIATED → consumes quota.
  */
@@ -446,7 +446,7 @@ export async function deleteObjective(id) {
  *
  * Server reads holdings, computes sector mix (CEDEAR / ACCION / ETF
  * / BONO / CRYPTO / COMMOD), compares against the chosen macro
- * stance (growth / balanced / defensive), returns deltas + a Claude-
+ * stance (growth / balanced / defensive), returns deltas + a the LLM-
  * written summary + 2-3 actionable tilts.
  *
  * Distinct from rebalancePortfolio: this is sector-level macro
@@ -479,7 +479,7 @@ export async function sectorRotation(stance = "balanced") {
  * validateThesis({ thesisId | ticker }) — POST /functions/v1/validate-thesis
  *
  * Server reads the user's active thesis for the ticker (or by id),
- * pulls current asset state + cost basis + recent news, asks Claude
+ * pulls current asset state + cost basis + recent news, asks the LLM
  * to render a verdict ('holds' | 'weakened' | 'broken') with a
  * 1-2 sentence reason and an accionable suggestion. Caches the
  * verdict on the theses row so the AssetSheet can render the last
@@ -549,7 +549,7 @@ export async function getActiveThesis(ticker) {
  *     generatedAt: string,
  *   }
  *
- * Numbers stay deterministic; Claude refines each rationale.
+ * Numbers stay deterministic; the LLM refines each rationale.
  * Templated fallback when no API key.
  */
 export async function positionSize({ ticker, side = "buy" }) {
@@ -573,7 +573,7 @@ export async function positionSize({ ticker, side = "buy" }) {
  * newsDigest() — POST /functions/v1/news-digest
  *
  * Server reads holdings, pulls cached articles for the top 5
- * weighted tickers, asks Claude to write a 2-3 sentence digest
+ * weighted tickers, asks the LLM to write a 2-3 sentence digest
  * naming concrete headlines + impact. Returns:
  *   {
  *     digest: string,
@@ -677,7 +677,7 @@ export async function earningsWatch() {
  *
  * Server reads holdings, computes value-weighted portfolio gain%,
  * compares to deterministic benchmark returns (Merval / S&P / BTC),
- * asks Claude Haiku for a 1-2 sentence verdict.
+ * asks the LLM for a 1-2 sentence verdict.
  *
  * Returns:
  *   {
@@ -711,7 +711,7 @@ export async function compareBenchmark() {
  * dailyBrief() — POST /functions/v1/daily-brief
  *
  * Server reads the user's holdings, computes book total + weighted
- * day delta + top mover, and asks Claude Haiku for a "good morning"
+ * day delta + top mover, and asks the LLM for a "good morning"
  * 2-3 sentence brief that headlines the Wallet on every app open.
  *
  * Returns:
@@ -762,7 +762,7 @@ export async function dailyBrief() {
  *   }
  *
  * Server runs a deterministic algorithmic rebalance; when the
- * Anthropic key is set, Claude refines the rationale on each
+ * AI provider key is set, the LLM refines the rationale on each
  * action without changing tickers or quantities.
  */
 // rebalancePortfolio consumes quota — heavyweight tap-to-run.
@@ -790,7 +790,7 @@ export async function rebalancePortfolio(profile = "balanced") {
 /**
  * suggestWatchlist(theme) — POST /functions/v1/suggest-watchlist
  *
- * Asks Claude Haiku to build a watchlist around a user-supplied
+ * Asks the LLM to build a watchlist around a user-supplied
  * theme. Returns:
  *   {
  *     name:    string,                                       // ≤30 chars
@@ -800,7 +800,7 @@ export async function rebalancePortfolio(profile = "balanced") {
  *     generatedAt: string,
  *   }
  *
- * Server-side fallback uses keyword routing when the Anthropic key
+ * Server-side fallback uses keyword routing when the AI provider key
  * isn't set, so the demo always returns a sensible suggestion.
  */
 // suggestWatchlist consumes quota — user types a theme + taps generate.
@@ -827,7 +827,7 @@ export async function suggestWatchlist(theme) {
  * explainNews({ title, summary, tickers }) — POST /functions/v1/explain-news
  *
  * Server reads the user's holdings, computes the intersection with
- * the article's tickers, and asks Claude Haiku for a 2-3 sentence
+ * the article's tickers, and asks the LLM for a 2-3 sentence
  * explanation of how the article relates to the user's portfolio.
  *
  * Returns:
@@ -839,7 +839,7 @@ export async function suggestWatchlist(theme) {
  *   }
  *
  * Falls back to a templated explanation server-side when the
- * Anthropic key isn't set, so the demo always returns something.
+ * AI provider key isn't set, so the demo always returns something.
  */
 // explainNews consumes quota — per-article tap.
 export async function explainNews({ title, summary, tickers, source }) {
@@ -864,12 +864,12 @@ export async function explainNews({ title, summary, tickers, source }) {
  * draftPost() — POST /functions/v1/draft-post
  *
  * Server reads the caller's holdings + last few trade transactions
- * via JWT-scoped RLS, asks Claude Haiku to draft a SHORT social post
+ * via JWT-scoped RLS, asks the LLM to draft a SHORT social post
  * (max ~220 chars), returns:
  *   { draft: string, ticker?: string }
  *
  * Falls back to a templated draft built from real portfolio data
- * when the Anthropic key isn't set, so the demo always returns
+ * when the AI provider key isn't set, so the demo always returns
  * something usable.
  */
 // draftPost consumes quota — composer assistance is user-initiated.
@@ -895,7 +895,7 @@ export async function draftPost() {
  * analyzeAsset(ticker) — POST /functions/v1/analyze-asset
  *
  * Server reads asset metadata for the requested ticker, passes it
- * to Claude Haiku, returns:
+ * to the LLM, returns:
  *   {
  *     headline:    string,
  *     bullets:     string[],   // ~3 observations
@@ -904,7 +904,7 @@ export async function draftPost() {
  *     generatedAt: string,
  *   }
  *
- * Falls back to a templated insight server-side if the Anthropic
+ * Falls back to a templated insight server-side if the the AI provider
  * key isn't set, so the demo always returns a 200 with content.
  */
 /**

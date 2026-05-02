@@ -21,8 +21,8 @@ diferenciadores que ningún broker AR tiene nativos.
 Y 14 funciones de IA más: análisis de cartera, brief diario, rotación
 sectorial, sugerencia de tamaño de posición, validación de tesis,
 resumen de noticias, comparación contra benchmarks. Todas tienen un
-fallback determinístico, así que si Anthropic está caído, la app
-sigue funcionando con respuestas pre-calculadas.
+fallback determinístico, así que si el proveedor de IA está caído,
+la app sigue funcionando con respuestas pre-calculadas.
 
 ---
 
@@ -30,7 +30,7 @@ sigue funcionando con respuestas pre-calculadas.
 
 - **Frontend**: React 18 + Capacitor 8, single-codebase iOS, native UX (haptics, biometrics, push notifications, Dynamic Type del slider de iOS).
 - **Backend**: Supabase (Postgres + RLS audited + 30 Edge Functions + Realtime). Security pass completo: rate limiting, input validation, security headers, secret scan limpio. Documento auditable: `docs/security-audit.md`.
-- **AI**: Anthropic Claude Haiku 4.5 vía Edge Functions con quota tier (5/día gratis, ilimitado en SAMAS Plus US$5/mes).
+- **AI**: proveedor de IA externo vía Edge Functions con quota tier (5/día gratis, ilimitado en SAMAS Plus US$5/mes). Toda key vive del lado servidor; la app cliente nunca la ve.
 - **Cumplimiento Apple**: account deletion + data export funcionando, Privacy Manifest completo (Guideline 5.1.1(v)).
 - **Cripto exposure**: vía CEDEARs Cohen-coverable (IBIT / COIN / MSTR / MARA / RIOT). Sin custodia crypto, cero PSAV registration.
 

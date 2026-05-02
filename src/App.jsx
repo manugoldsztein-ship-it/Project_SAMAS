@@ -10,8 +10,8 @@ import { createPortal } from "react-dom";
 const ObjectivesWizard = lazy(() => import("./ai/ObjectivesWizard.jsx").then((m) => ({ default: m.ObjectivesWizard })));
 import { InfoBadge } from "./ai/glossary.jsx";
 import {
-  loadAnthropicKey, saveAnthropicKey,
-  loadAnthropicModel, saveAnthropicModel,
+  loadAiKey, saveAiKey,
+  loadAiModel, saveAiModel,
   DEFAULT_MODEL as ANTHROPIC_DEFAULT_MODEL,
 } from "./ai/client.js";
 // Real auth: Supabase session + signup/login/verify-WhatsApp flow.
@@ -5297,7 +5297,7 @@ function ProfileSheet({ displayUser, uiMode, onChangeUiMode, onResetAccount, onR
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.textLt} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
 
-        {/* BYOK API sections (Finnhub, Anthropic, EmailJS) removed —
+        {/* BYOK API sections (Finnhub, the AI provider, EmailJS) removed —
             moving those integrations to the backend so users don't
             have to bring their own keys. Will come back as a read-
             only status row when the server wrapper is in place. */}
@@ -5985,10 +5985,10 @@ export default function SAMASApp() {
   const [appShell, setAppShell] = usePersistedState("samas_app_shell", "principal");
   const [finnhubKey, setFinnhubKey]   = useState(() => loadKey());
   const [emailjsCfg, setEmailjsCfg]   = useState(() => loadEmailjsConfig());
-  // Anthropic (Claude) — BYOK. Same pattern as Finnhub: localStorage-backed,
+  // the AI provider (the LLM) — BYOK. Same pattern as Finnhub: localStorage-backed,
   // user pastes their own key in the Profile sheet.
-  const [anthropicKey, setAnthropicKey] = useState(() => loadAnthropicKey());
-  const [anthropicModel, setAnthropicModelState] = useState(() => loadAnthropicModel());
+  const [anthropicKey, setAnthropicKey] = useState(() => loadAiKey());
+  const [anthropicModel, setAnthropicModelState] = useState(() => loadAiModel());
 
   const C = makeTheme(isDark);
 
@@ -5999,8 +5999,8 @@ export default function SAMASApp() {
   // Persist the key whenever it changes
   useEffect(() => { saveKey(finnhubKey); }, [finnhubKey]);
   useEffect(() => { saveEmailjsConfig(emailjsCfg); }, [emailjsCfg]);
-  useEffect(() => { saveAnthropicKey(anthropicKey); }, [anthropicKey]);
-  useEffect(() => { saveAnthropicModel(anthropicModel); }, [anthropicModel]);
+  useEffect(() => { saveAiKey(anthropicKey); }, [anthropicKey]);
+  useEffect(() => { saveAiModel(anthropicModel); }, [anthropicModel]);
   const setAnthropicModel = (m) => setAnthropicModelState(m || ANTHROPIC_DEFAULT_MODEL);
 
   const [showShortcuts, setShowShortcuts] = useState(false);

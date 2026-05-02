@@ -98,7 +98,7 @@ audit can't catch from code alone:
    stale period).
 2. **Edge Function cold start after low traffic** — first call
    after >15min idle takes longer. The 12s timeout is enough
-   margin, but watch the p99 latency on the Anthropic dashboard.
+   margin, but watch the p99 latency on the AI provider dashboard.
 3. **Quota counter reset edge case** — `consume_ai_quota` uses
    `current_date` (UTC). A user in Buenos Aires (UTC-3) will see
    their quota reset at 21:00 local time, not midnight. Confusing

@@ -3,7 +3,7 @@
 // app (samas-0.0.98).
 // ============================================================
 // Apple's privacy stance + plain decency say users should know
-// their portfolio data is being sent to Anthropic when they tap
+// their portfolio data is being sent to the AI provider when they tap
 // any AI feature. This module:
 //
 //   1. Tracks consent in localStorage (samas_ai_consent_v1).
@@ -71,7 +71,7 @@ export function revokeAIConsent() {
 // AI DISABLED — global off-switch (samas-0.4.11)
 // ============================================================
 // Distinct from consent. Consent is "did you agree to share data
-// with Anthropic"; disabled is "I want NO AI features, period".
+// with the AI provider"; disabled is "I want NO AI features, period".
 // A user can consent and later flip this on without re-prompting.
 //
 // When isAIDisabled() returns true:

@@ -836,7 +836,7 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
   }
 
   // AI-drafted post (samas-0.0.88). Reads the caller's holdings +
-  // last few trade transactions on the server, asks Claude Haiku to
+  // last few trade transactions on the server, asks the LLM to
   // produce a short social-style post draft, fills the textarea
   // with the result. If textarea has user content already, we ask
   // for confirmation before overwriting (cheap window.confirm — UI
@@ -1334,7 +1334,7 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
                     from the caller's recent activity. Compact icon-
                     only (sparkles glyph) to keep the toolbar from
                     getting crowded; tap fills the textarea with a
-                    Claude-generated draft. */}
+                    AI-generated draft. */}
                 <button
                   onClick={suggestPost}
                   disabled={busy || suggesting}

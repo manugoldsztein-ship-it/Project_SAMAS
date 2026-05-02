@@ -10,7 +10,7 @@
 |---|---|---|
 | Hardcoded secrets in source | ✅ CLEAN | Source scan in 0.4.16. Zero hits across `src/`, `supabase/functions/`, SQL migrations, iOS native, capacitor config. Only public publishable key in `src/lib/supabase.js` (intentional, RLS-protected). |
 | Service role key exposure | ✅ CLEAN | Used only inside Edge Functions via `Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")`. Never imported into the frontend bundle. |
-| Anthropic / Twilio / 3rd-party keys | ✅ CLEAN | All read from `Deno.env.get(...)` in Edge Functions. Set via Supabase Dashboard → Edge Functions → Manage Secrets. |
+| AI / Twilio / 3rd-party keys | ✅ CLEAN | All read from `Deno.env.get(...)` in Edge Functions. Set via Supabase Dashboard → Edge Functions → Manage Secrets. |
 | `.env` in `.gitignore` | ✅ YES | Plus `.env.local`. No `.env*` files tracked. |
 | RLS on every user-data table | ✅ YES | Audited: `profiles`, `profiles_social`, `transactions`, `accounts`, `holdings`, `orders`, `wallet_credits`, `recurring_aportes`, `objectives`, `notifications`, `dm_threads`, `dm_messages`, `posts`, `replies`, `likes`, `follows`, `reports`, `theses`, `otp_codes`, `mp_processed_payments`, `rate_limits`. |
 | Edge Function JWT auth | ✅ YES (28/30) | Two intentional exceptions: `check-price-alerts` and `process-recurring-aportes` are cron-triggered with no user context — JWT-less by design, hardened by being uncallable from the public anon key (cron uses service_role internally). |
@@ -20,7 +20,7 @@
 | Input sanitization | ✅ DONE (0.4.17) | `sanitizeString(field, maxLen)` applied at every body field on the new helper-using paths. Pre-existing `.slice(0, N)` calls coexist as belt-and-suspenders. |
 | MFA (TOTP) | ✅ AVAILABLE | `src/auth/Mfa.jsx`. User-opt-in via Settings. |
 | Phone OTP via WhatsApp | ✅ HARDENED (0.4.16) | Rate-limited 5/15min, hash-stored (SHA-256), 10-min expiry, 5 wrong-attempts cap per code. |
-| Encryption in transit | ✅ TLS | Supabase + Twilio + Anthropic all HTTPS. Capacitor enforces ATS on iOS. |
+| Encryption in transit | ✅ TLS | Supabase + Twilio + AI provider all HTTPS. Capacitor enforces ATS on iOS. |
 | Encryption at rest | ✅ Supabase | Postgres at-rest encryption is on by default on Supabase. |
 | Account deletion + data export | ✅ DONE | Apple Guideline 5.1.1(v). `delete-user-account` and `export-user-data` Edge Functions. |
 | Privacy manifest (App Store) | ✅ DONE (0.3.0) | `ios/App/App/PrivacyInfo.xcprivacy`. |
@@ -33,7 +33,7 @@ What we're defending against (in rough priority):
 
 1. **Unauthorized access to another user's data** (RLS bypass). The most damaging failure for a fintech.
 2. **Auth abuse** — OTP spam, credential stuffing, brute-force.
-3. **AI-quota exhaustion** — a logged-in attacker burning the Anthropic budget.
+3. **AI-quota exhaustion** — a logged-in attacker burning the AI provider budget.
 4. **Data exfiltration** — leaking PII (phone, email, holdings) via misconfigured endpoint.
 5. **DoS** — flooding Edge Functions to take the app down.
 
@@ -195,17 +195,17 @@ Full source: `supabase/rate_limits.sql`.
 
 | # | Action | Patch | Owner | Status |
 |---|---|---|---|---|
-| 1 | Secret scan source | 0.4.16 | Claude | ✅ Done |
-| 2 | Auth route rate limit (5/15min) | 0.4.16 | Claude | ✅ Done |
-| 3 | Body-size + JSON validation helpers | 0.4.16 | Claude | ✅ Done |
-| 4 | Apply rate limit to 21 AI Edge Functions | 0.4.17 | Claude | ✅ Done |
-| 5 | Apply to 3 admin/data Edge Functions | 0.4.17 | Claude | ✅ Done |
-| 6 | Apply to send-push (1 util) | 0.4.17 | Claude | ✅ Done |
-| 7 | Apply body-validation to 12 input-taking Edge Functions | 0.4.17 | Claude | ✅ Done |
-| 8 | Add `gc_rate_limits()` to daily cron | 0.4.18 | Claude | ✅ Done |
-| 9 | Security headers on Edge Function responses | 0.4.18 | Claude | ✅ Done |
-| 10 | hCaptcha scaffolding on signup + login | 0.4.19 | Claude | ✅ Shipped (dark) |
-| 11 | Constant-time OTP comparison | 0.4.19 | Claude | ✅ Done |
+| 1 | Secret scan source | 0.4.16 | SAMAS team | ✅ Done |
+| 2 | Auth route rate limit (5/15min) | 0.4.16 | SAMAS team | ✅ Done |
+| 3 | Body-size + JSON validation helpers | 0.4.16 | SAMAS team | ✅ Done |
+| 4 | Apply rate limit to 21 AI Edge Functions | 0.4.17 | SAMAS team | ✅ Done |
+| 5 | Apply to 3 admin/data Edge Functions | 0.4.17 | SAMAS team | ✅ Done |
+| 6 | Apply to send-push (1 util) | 0.4.17 | SAMAS team | ✅ Done |
+| 7 | Apply body-validation to 12 input-taking Edge Functions | 0.4.17 | SAMAS team | ✅ Done |
+| 8 | Add `gc_rate_limits()` to daily cron | 0.4.18 | SAMAS team | ✅ Done |
+| 9 | Security headers on Edge Function responses | 0.4.18 | SAMAS team | ✅ Done |
+| 10 | hCaptcha scaffolding on signup + login | 0.4.19 | SAMAS team | ✅ Shipped (dark) |
+| 11 | Constant-time OTP comparison | 0.4.19 | SAMAS team | ✅ Done |
 
 **Security pass complete.** Items 1-11 done across 0.4.16 → 0.4.19. The hCaptcha scaffold is feature-flagged off by default (no abuse signal today) — flip on by setting `VITE_HCAPTCHA_SITEKEY` + Supabase Dashboard config when needed.
 

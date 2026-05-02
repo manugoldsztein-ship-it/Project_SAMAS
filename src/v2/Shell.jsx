@@ -2871,7 +2871,7 @@ function ChangelogSheet({ T, lang = "es", onClose }) {
 // Global listener for the samas:ai-consent-request event fired by
 // lib/aiConsent.js whenever an AI call is about to leave the app
 // without prior consent. Mounts a portal modal explaining what gets
-// sent (portfolio data → Anthropic Claude, no training, etc.) and
+// sent (portfolio data → the AI provider, no training, etc.) and
 // captures the user's accept / reject. Resolves the in-flight
 // Promise via grantAIConsent() or denyAIConsent().
 // ============================================================
@@ -2986,6 +2986,17 @@ function AIConsentGate({ T, lang = "es" }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.4.42",
+    title: "Anonimizar al proveedor de IA en strings user-facing",
+    bullets: [
+      "Manuel pidió: 'remove all mention of Claude'. Pre-pitch hygiene — Cohen no necesita saber qué LLM hay debajo, lo que importa son las features.",
+      "i18n strings (es + en): wallet.ai.sheet.kicker / wallet.chat.sheet.kicker / ai_consent.body / ai_consent.bullet_provider / ai_consent.bullet_no_training / onb.s4.body — 'Powered by Claude' / 'Anthropic Claude' reemplazados por 'IA' / 'proveedor de IA externo'. 12 strings tocados.",
+      "Pitch docs: cohen-leave-behind.md, security-audit.md, seguridad.md, audit-0.4.4.md — todas las menciones eliminadas. README rewrite a v2 (BYOK legacy fuera).",
+      "CHANGELOG entries (renderean en Novedades): sweep Python sobre src/v2/Shell.jsx + src/v2/*.jsx + src/lib/ai.js — 107 reemplazos en 10 archivos. 'Claude Haiku' / 'Claude' / 'Anthropic' → 'el proveedor de IA' / 'el LLM'.",
+      "Lo que NO toqué: env vars en supabase/functions/* (renombrarlos requiere rename del secret en Supabase Dashboard — operacional, no código). El legacy src/ai/client.js queda con la URL del provider en código dead-code (BYOK panel removido), no afecta a producción.",
+    ],
+  },
   {
     version: "0.4.41",
     title: "Discoverability hint Lite → Pro al pie del Wallet",
@@ -3169,7 +3180,7 @@ const CHANGELOG = [
       "Asesores institucionales TODOS llevan trade journals; brokers retail los esconden detrás de exports de Excel. SAMAS lo expone primera-fila. La feature reusa la captura de tesis del 0.3.3 + extiende con outcome tracking + reflexión IA.",
       "NEW SQL — supabase/trade_journal.sql: tabla per-trade con thesis_at_entry, reflection (AI-generated post-close), outcome (open/gain/loss/flat), realized_usd, occurred_at, closed_at. RLS scoped a auth.uid() en read/insert/update/delete. Aplicada via Management API.",
       "NEW lib/journal.js: recordBuyJournal() en cada BUY filled con la tesis del confirm step. closeJournalOnSell() en cada SELL filled hace match FIFO contra entries open del mismo ticker, computa realized P/L (con conversion ARS→USD via fixed MEP) y sets outcome (gain/loss/flat con threshold ±2%). Best-effort, errors no bloquean el trade.",
-      "NEW Edge Function — supabase/functions/journal-recap: dos modos. mode='recap' agrega los últimos 90 días en stats (closed, wins, losses, batting avg, total realized P/L) + Claude-generated narrative + headline + lesson clave. mode='reflect' + journal_id genera reflexión per-trade y la persiste. Templated fallback cuando no hay API key.",
+      "NEW Edge Function — supabase/functions/journal-recap: dos modos. mode='recap' agrega los últimos 90 días en stats (closed, wins, losses, batting avg, total realized P/L) + AI-generated narrative + headline + lesson clave. mode='reflect' + journal_id genera reflexión per-trade y la persiste. Templated fallback cuando no hay API key.",
       "NEW Wallet card — src/v2/Journal.jsx: 'Diario de trading' entre Behavior y Objetivos. Stats strip (Win rate · P/L realizado) + headline + narrativa AI + lesson en card accent. Empty-state distinto cuando hay 0 trades cerrados ('Tu diario está vacío'). Tap → bottom sheet con la lista completa de entries (más recientes primero), cada una con ticker + outcome chip color-coded + tesis original + reflexión AI on demand.",
       "WIRED en Broker.jsx confirm step: después del saveThesis existente, ahora también recordBuyJournal() en BUY o closeJournalOnSell() en SELL. Si la trade no fillea (limit order pending), el journal queda fuera — sólo trades ejecutadas.",
       "PITCH: 'el primer broker que te ayuda a aprender de tus propios errores'. Cohen va a entender en 3 segundos — sus clientes operan y mueren aprendiendo lo mismo 50 veces. Esta card hace explícito el ciclo tesis → trade → outcome → lesson.",
@@ -3182,7 +3193,7 @@ const CHANGELOG = [
     bullets: [
       "Manuel pidió esto explícitamente: 'broker AR que te detecta los patrones tóxicos en vez de monetizarlos'. Robinhood / Cocos / IOL viven de overtrading; SAMAS detecta cuando el usuario está en revenge mode, FOMO mode o panic mode y le dice frenar. Story de pitch nuclear.",
       "NEW Edge Function — supabase/functions/behavior-watch: lee las últimas 90 días de transactions del user via RLS. detectPatterns() rule-based detecta 5 patterns: overtrading (>12 ops/7d), revenge (sell→buy <60min en otro ticker, 2+ veces en 14d), FOMO (3+ tickers nuevos en 7d), panic (3+ ventas en un día), drift (zero activity, kind nudge). Cada alerta tiene severity low/medium/high.",
-      "AI REFINEMENT — Claude Haiku (opcional, env-gated) reescribe el message empático por pattern. Si el ANTHROPIC_API_KEY está unset, fallback a templated messages que ya son honestos. Tono mandado en el prompt: 'profesional pero cercano (vos), sereno, sin hype, sin sermones'.",
+      "AI REFINEMENT — the LLM (opcional, env-gated) reescribe el message empático por pattern. Si el ANTHROPIC_API_KEY está unset, fallback a templated messages que ya son honestos. Tono mandado en el prompt: 'profesional pero cercano (vos), sereno, sin hype, sin sermones'.",
       "NEW Wallet card — src/v2/Behavior.jsx: 'Tu disciplina esta semana'. Mounted entre Quarterly Review y Objetivos. Empático, no punitivo. Cuando hay 0 alerts → small green card 'Disciplina sólida' (positive reinforcement matters as much as warnings). Skeleton mientras carga, hidden silenciosamente si AI denegada / quota agotada.",
       "CACHEADO ~1h en localStorage para no quemar quota cada tab-switch. Severity color-coded: low=neutral, medium=ámbar, high=rojo. Cada alert muestra un sugerencia concreta en pill ('✓ Pausa de 24h antes de la próxima operación', '✓ Esperá una hora antes de la próxima compra').",
       "PITCH para Cohen: 'Robinhood y demás profitan de que su usuario opere más. Nosotros profitamos cuando el usuario se mantiene disciplinado y aporta consistentemente. Esta card hace explícito ese alignment.' Behavioral finance angle, regulatory-friendly, no AR/US broker tiene equivalente.",
@@ -3332,7 +3343,7 @@ const CHANGELOG = [
     title: "Security audit + rate limit infra + auth route hardening",
     bullets: [
       "Manuel pidió full security pass. Esta patch ataca infraestructura + las rutas críticas de auth. Sweep mecánico al resto de las Edge Functions queda para 0.4.17.",
-      "SECRET SCAN — corrido sobre src/ supabase/functions/ supabase/*.sql ios/ capacitor.config.json. CERO hits de keys hardcodeadas (Anthropic / MP / service_role / JWT / AWS / Stripe / passwords). Único token visible en el bundle es la publishable key de Supabase en src/lib/supabase.js, que es PÚBLICA por diseño — RLS protege los datos. Documentado en el audit.",
+      "SECRET SCAN — corrido sobre src/ supabase/functions/ supabase/*.sql ios/ capacitor.config.json. CERO hits de keys hardcodeadas (the AI provider / MP / service_role / JWT / AWS / Stripe / passwords). Único token visible en el bundle es la publishable key de Supabase en src/lib/supabase.js, que es PÚBLICA por diseño — RLS protege los datos. Documentado en el audit.",
       "RATE LIMIT INFRA — nueva tabla public.rate_limits + RPC consume_rate_limit(bucket, limit, window_s) que devuelve {allowed, count, retry_after}. RLS deny-all desde clientes; sólo el service_role la lee/escribe vía la RPC SECURITY DEFINER. Sliding window por count(*) sobre hit_at >= now() - window. TTL diario via gc_rate_limits().",
       "SHARED HELPERS — supabase/functions/_shared/rate-limit.ts (consumeRateLimit + presets RATE_LIMITS.AUTH/AI/STD/ADMIN + getRequestIp + buildBucket + rateLimit429) y _shared/validate.ts (readJsonBody con 32KB cap, sanitizeString, sanitizeInt, ValidationError → response). Disponibles para que cada Edge Function aplique el patrón uniformemente.",
       "AUTH ROUTES HARDENED — send-otp + verify-otp ahora rate-limited 5 attempts / 15 min, con bucket DOBLE: per-user-id (frena al usuario logueado spammeando) + per-IP (frena al atacante ciclando cuentas desde una sola fuente). Body size cap 32KB. Todos los inputs sanitizados via sanitizeString. Las protecciones existentes (10-min OTP expiry, SHA-256 hash, MAX_ATTEMPTS=5 wrong codes) se mantienen.",
@@ -3348,7 +3359,7 @@ const CHANGELOG = [
       "DISCLAIMERS — nuevo componente reusable DisclaimerStrip en shared.jsx. Montado en cada superficie que muestra rendimiento esperado o recomendación: Objetivos (card + preview wizard), Sector Rotation, AI Analysis sheet, Daily Brief. Copy explícito: 'Estimación informativa generada por IA a partir de datos históricos. No es asesoramiento financiero ni garantiza rentabilidad. Las inversiones tienen riesgo de pérdida.' Cubre tanto regulatorio (CNV no permite a no-licenciados dar recomendación) como expectativas del usuario.",
       "RETURN RATES CALIBRADOS — el papá flagged que 6/10/14% (conservadora/moderada/agresiva) era fantasía. Bajado a 4/7/10% para escenario base. Más importante: ahora la Edge Function objectives-plan devuelve un *rango* (low/base/high) en vez de un punto único — conservadora 2-6%, moderada 4-10%, agresiva 5-15%. La UI de Objetivos muestra el monto base + el rango debajo en cada hito, y la asunción anual ('Retorno asumido: 4–10%, no garantía') al pie del card.",
       "CASHFLOW PROMOTED — flujo de fondos era Pro-only (samas-0.0.46) gated bajo proMode. Ahora es gratis para todos los usuarios con portfolio. Posicionado más arriba en el render order (después del portfolio peek, antes de las cards de IA) — el papá insistió que cashflow es 'lo primero que mira un asesor'. Las otras cards Pro (MonthPnL/Dividend/TaxYear) siguen gated.",
-      "Edge Function objectives-plan re-deployada con la calibración + range output. El narrative prompt de Claude reforzado para nunca prometer rentabilidad y siempre hablar de 'escenario base' / 'rango de referencia'.",
+      "Edge Function objectives-plan re-deployada con la calibración + range output. El narrative prompt de the LLM reforzado para nunca prometer rentabilidad y siempre hablar de 'escenario base' / 'rango de referencia'.",
       "Items de la lista del papá deferidos por scope: Portafolio Hipotético 1:1 mercado (próximo patch), Premios Mensuales (bloqueado por revisión regulatoria — concursos en AR requieren Lotería Nacional + posiblemente CNV).",
     ],
   },
@@ -3379,10 +3390,10 @@ const CHANGELOG = [
     version: "0.4.12",
     title: "Objetivos rebuilt with IA — Wallet card + 3-step wizard",
     bullets: [
-      "Per Manuel: 'rearmar el tema de objetivos con IA'. Replaced the legacy ObjectivesWizard (670 lines, BYOK Anthropic key, localStorage-only persistence) with a fresh v2 implementation: Wallet card + 3-step wizard + Edge Function + Supabase persistence.",
-      "New ObjetivosCard on Wallet (between Quarterly Review and AI Chat). Empty state shows a tappable accent-tinted CTA. Active state shows: goal text + horizon + target amount + strategy chip (conservadora/moderada/agresiva color-coded) + sector allocation strip with category tags + monthly aporte hint + Claude-written narrative + Edit/Eliminar buttons.",
+      "Per Manuel: 'rearmar el tema de objetivos con IA'. Replaced the legacy ObjectivesWizard (670 lines, BYOK AI provider key, localStorage-only persistence) with a fresh v2 implementation: Wallet card + 3-step wizard + Edge Function + Supabase persistence.",
+      "New ObjetivosCard on Wallet (between Quarterly Review and AI Chat). Empty state shows a tappable accent-tinted CTA. Active state shows: goal text + horizon + target amount + strategy chip (conservadora/moderada/agresiva color-coded) + sector allocation strip with category tags + monthly aporte hint + AI-written narrative + Edit/Eliminar buttons.",
       "New ObjetivosWizard sheet, 3 steps: (1) goal description with 6 preset chips for quick fill (Departamento / Jubilación / Viaje / Auto / Educación / Reserva); (2) horizon picker (1/3/5/10/20 años) + optional target amount + currency; (3) generated plan preview with strategy classification, allocation breakdown bars, monthly aporte, milestones at 25/50/75/100% of horizon, narrative.",
-      "New objectives-plan Edge Function. Strategy classified deterministically by horizon (< 24mo conservadora, 24-72mo moderada, > 72mo agresiva) with a USD-short-term bump-down rule. Allocation presets per strategy (BONO-heavy on conservadora, CEDEAR-heavy on agresiva). PMT formula computes monthly aporte needed to hit the target at the strategy's expected annual return (6/10/14%). Milestones via FV-of-annuity. Claude only refines the narrative; numbers stay deterministic.",
+      "New objectives-plan Edge Function. Strategy classified deterministically by horizon (< 24mo conservadora, 24-72mo moderada, > 72mo agresiva) with a USD-short-term bump-down rule. Allocation presets per strategy (BONO-heavy on conservadora, CEDEAR-heavy on agresiva). PMT formula computes monthly aporte needed to hit the target at the strategy's expected annual return (6/10/14%). Milestones via FV-of-annuity. the LLM only refines the narrative; numbers stay deterministic.",
       "New `objectives` table in Supabase with RLS + auto-archive trigger (one active per user). Plan stored as jsonb so the schema can evolve. Migration: supabase/objectives.sql, applied via Management API.",
       "USER-INITIATED → consumes one quota credit per Generar Plan tap. Hidden when AI is disabled (via 0.4.11 master switch).",
       "Legacy ObjectivesWizard in BrokerShell stays in place for backward compat — users with a localStorage-saved plan still see it on Portafolio. Cleanup of the duplicate entry point is a future patch.",
@@ -3450,7 +3461,7 @@ const CHANGELOG = [
     title: "Dead UI sweep — removed inert Search button + 4 unused imports",
     bullets: [
       "Manuel called out: 'Search button on the main menu does nothing'. Confirmed — the ChromeBtn with Ico.Search in the Wallet header had no onClick across 70+ patches. Removed. The ? Explain button (0.4.2) is the actual go-to-find-something surface now.",
-      "Removed 3 unused named imports: testAnthropic in App.jsx, initialsOf in Shell.jsx, genId in v2/api/broker.js. Caught by a grep-driven scan across src/.",
+      "Removed 3 unused named imports: testAi in App.jsx, initialsOf in Shell.jsx, genId in v2/api/broker.js. Caught by a grep-driven scan across src/.",
       "Removed dead Placeholder component in Shell.jsx — defined as 'Próximamente' fallback for unwired tabs but never instantiated since all 4 tabs (Wallet, Invertir, Social, News) went live with real components.",
       "Wallet header now: theme toggle + ? Explain + Bell. Three buttons, all functional. iPhone SE math now comfortable: 3×40 + 2×6 = 132px right column, leaves room.",
     ],
@@ -3495,7 +3506,7 @@ const CHANGELOG = [
     bullets: [
       "Companion to the Tutorials hub. New ? button in the Wallet header (between Search and Bell) opens a global modal with a text input — type any financial term, tap Explicar, IA returns a 2-3 sentence definition in plain AR-Spanish + a concrete example + 0-3 related terms you can tap to chain into.",
       "Why a typed input vs. long-press text selection: on iOS WebView the system Look Up menu always wins on long-press, can't reliably hijack selection. Typed input is more discoverable, works inside any tab, and lets users ask about terms they heard on TV / Twitter / WhatsApp — not just terms that appear inside the app.",
-      "New explain-term Edge Function. Templated glossary covers ~25 of the most common AR-retail terms (CEDEAR, MEP, CCL, ALyC, CNV, idóneo, stop-loss, orden mercado/límite, BYMA, MERVAL, drawdown, P/E, Sharpe, beta, volatilidad, AFIP, impuesto cedular, tax-loss, spread, GGAL, etc.) so the demo works without an API key. Claude refines / handles unknowns when the key is set.",
+      "New explain-term Edge Function. Templated glossary covers ~25 of the most common AR-retail terms (CEDEAR, MEP, CCL, ALyC, CNV, idóneo, stop-loss, orden mercado/límite, BYMA, MERVAL, drawdown, P/E, Sharpe, beta, volatilidad, AFIP, impuesto cedular, tax-loss, spread, GGAL, etc.) so the demo works without an API key. the LLM refines / handles unknowns when the key is set.",
       "Recent terms persist (samas_explain_recent in localStorage, last 8 unique). Tap a chip to re-look-up. Suggestion chips (CEDEAR, MEP, Stop-loss, Idóneo CNV, Drawdown, Sharpe, Tax-loss) shown when input is empty + no recent history — discoverability hint for first-time users.",
       "Wired via global window event samas:explain-term so any other component can dispatch it later (e.g. a long-press gesture on a tooltip in a future patch could open the modal pre-filled).",
       "USER-INITIATED → consumes one quota credit per explain. 20 AI surfaces total now.",
@@ -3519,7 +3530,7 @@ const CHANGELOG = [
       "Lands on Portafolio between Risk Score and the Pro distribución bar. User picks a macro stance (Crecimiento / Equilibrado / Defensivo) → tap 'Analizar mi mix' → IA returns a summary + 2-3 actionable tilt suggestions comparing current sector mix to the target mix for that stance.",
       "Distinct from RebalanceCard (0.1.4): rebalance is order-level ('buy 12 NVDA, sell 200 GGAL'), rotation is direction-only ('you're light tech, consider tech'). They complement: rotation tells you WHERE to look, rebalance tells you HOW to execute when you've decided.",
       "Visual: per-sector dual-bar showing current % vs. target %. Sector palette matches the portfolio share allocation bar (0.3.8) so the visual language stays consistent. Stance presets: growth (45/10/15/5/20/5 CEDEAR/ACCION/ETF/BONO/CRYPTO/COMMOD), balanced (30/20/20/15/10/5), defensive (15/25/10/35/5/10).",
-      "Server-side targets are deterministic; Claude only refines the rationale + suggestion language. Numbers don't drift from the LLM call. Templated fallback when no API key.",
+      "Server-side targets are deterministic; the LLM only refines the rationale + suggestion language. Numbers don't drift from the LLM call. Templated fallback when no API key.",
       "USER-INITIATED → consumes one quota credit per analyze. Hides silently on consent denied / quota hit (modal already showed UI).",
       "19 AI surfaces total. Closes the macro-direction gap that Rebalance left open.",
     ],
@@ -3590,7 +3601,7 @@ const CHANGELOG = [
     bullets: [
       "Eighteenth AI surface. At the BUY confirmation step, an optional 'Tu tesis (opcional)' textarea lets the user write 1-2 sentences explaining why they're buying. Saved to public.theses on confirm. Doesn't block anything — confirm without writing and you get the same flow as before.",
       "On the AssetSheet for tickers where the user has an active thesis, a new ThesisCard renders below AI Insight. Shows the original text in italics + 'hace Nd' age + 'Validar con IA' button. Tap → calls validate-thesis Edge Function (consumes quota), returns verdict ('holds' / 'weakened' / 'broken') with a 1-2 sentence reason and an actionable suggestion. Verdict cached on the row so re-opening the AssetSheet shows the last verdict instantly without re-running the LLM.",
-      "Edge Function reads the thesis text + current asset price + cost basis + recent cached news + days since written, and asks Claude to render the verdict. Templated fallback when no API key uses pure price-move thresholds (>+5% holds / -5..-15% weakened / <-15% broken).",
+      "Edge Function reads the thesis text + current asset price + cost basis + recent cached news + days since written, and asks the LLM to render the verdict. Templated fallback when no API key uses pure price-move thresholds (>+5% holds / -5..-15% weakened / <-15% broken).",
       "DB migration: supabase/theses.sql. New table with status enum (active / closed / invalidated) + RLS + an after-insert trigger that auto-archives any prior active thesis on the same (user, ticker) so the 'current thesis' lookup stays clean.",
       "Sells don't (yet) get a 'why I'm selling' log — keeps the BUY flow as the main journaling moment. Could expand later with a sell-side post-mortem flow.",
       "18 AI surfaces total. Novel concept — no AR broker has anything like 'write your thesis, AI validates it later'. Demo angle: 'watch me commit to a buy with one sentence; in 30 days I'll know if I was right'.",
@@ -3611,8 +3622,8 @@ const CHANGELOG = [
     version: "0.3.1",
     title: "AI News Digest — 17th AI surface fills out the News tab",
     bullets: [
-      "Lands at the top of the News tab between the marquee ticker bar and the search input. Auto-loads on tab open with a 2-3 sentence Claude-written digest of headlines from the user's top 5 weighted holdings, plus the underlying article rows that the digest references. Tap any headline → opens the article in the browser.",
-      "New news-digest Edge Function. Reads holdings → sorts by USD value → picks top 5 tickers → reads cached articles from public.articles for those tickers → asks Claude to synthesize 2-3 sentences naming concrete headlines + impact. Numbers / tickers / URLs pass through unchanged; LLM only writes the synthesis.",
+      "Lands at the top of the News tab between the marquee ticker bar and the search input. Auto-loads on tab open with a 2-3 sentence AI-written digest of headlines from the user's top 5 weighted holdings, plus the underlying article rows that the digest references. Tap any headline → opens the article in the browser.",
+      "New news-digest Edge Function. Reads holdings → sorts by USD value → picks top 5 tickers → reads cached articles from public.articles for those tickers → asks the LLM to synthesize 2-3 sentences naming concrete headlines + impact. Numbers / tickers / URLs pass through unchanged; LLM only writes the synthesis.",
       "FREE for both tiers — auto-loaded surface, no quota consumed. Same model as Daily Brief, Earnings Watch, Compare Benchmark, Risk Score, Quarterly Review.",
       "Hides silently when: user has no holdings, no cached articles for those tickers, AI fails, or consent denied. The card only appears when there's something useful to say.",
       "17 AI surfaces total now. Closes the gap on 'the News tab isn't doing much' from the punch list.",
@@ -3683,10 +3694,10 @@ const CHANGELOG = [
   },
   {
     version: "0.2.4",
-    title: "AI Quarterly Review — Claude narrates your last 90 days",
+    title: "AI Quarterly Review — narrative recap of your last 90 days",
     bullets: [
-      "Sixteenth AI surface lands on Wallet between Earnings Watch and Preguntale a SAMAS. Pure narrative — no tap targets, no decisions to make. Card shows a 1-line headline + the quarter's return %; tap → bottom sheet with a 3-4 paragraph Claude-written review in plain Spanish, with sections: 'Tu trimestre en una mirada', 'Lo que se movió', 'Actividad', 'Hacia adelante'.",
-      "New quarterly-review Edge Function. Reads holdings (current snapshot) + orders (last 90 days, executed only) and computes deterministic stats: value-weighted return %, top 3 winners, top 3 losers, trade count, most-operated ticker, new positions opened, positions closed, sector mix. Stats sent to Claude as authority; the LLM only writes the prose — numbers can't drift.",
+      "Sixteenth AI surface lands on Wallet between Earnings Watch and Preguntale a SAMAS. Pure narrative — no tap targets, no decisions to make. Card shows a 1-line headline + the quarter's return %; tap → bottom sheet with a 3-4 paragraph AI-written review in plain Spanish, with sections: 'Tu trimestre en una mirada', 'Lo que se movió', 'Actividad', 'Hacia adelante'.",
+      "New quarterly-review Edge Function. Reads holdings (current snapshot) + orders (last 90 days, executed only) and computes deterministic stats: value-weighted return %, top 3 winners, top 3 losers, trade count, most-operated ticker, new positions opened, positions closed, sector mix. Stats sent to the LLM as authority; the LLM only writes the prose — numbers can't drift.",
       "Sheet renders the markdown narrative with a tiny in-house h2/p parser (no react-markdown dep — 4 paragraphs of structure don't justify the bundle weight). Stats strip on top: trade count + most-operated ticker. Winners/losers row with green/red chips per ticker.",
       "Templated fallback writes the same skeleton prose with the same numbers when ANTHROPIC_API_KEY isn't set, so the Cohen demo doesn't break before the budget approval. Hides silently when the user has no positions.",
       "16 AI surfaces total. Killer demo line: 'open Wallet, scroll down, IA writes you a private-banker-quality review of your last 3 months in plain Spanish.'",
@@ -3697,7 +3708,7 @@ const CHANGELOG = [
     title: "AI Position Sizing — Conservador / Estándar / Agresivo at the qty input",
     bullets: [
       "Fifteenth AI surface fills the empty slot in the trade flow. Trade Coach already runs at the confirmation step (0.0.95); now there's an AI sizer at the qty INPUT step — fires before the user types a number, gives them three deterministic suggestions to pick from with one tap.",
-      "New position-size Edge Function. For BUY: three buckets (conservador / estándar / agresivo) computed from caps on % of book + % of cash + a concentration ceiling per bucket (10/20/35%). Conservative bucket also gets a category-risk dampener so a CRYPTO conservative is smaller than a BONO conservative for the same %. For SELL: three take-fractions (un tercio / la mitad / cerrar posición). Numbers stay deterministic; Claude refines the per-bucket rationale.",
+      "New position-size Edge Function. For BUY: three buckets (conservador / estándar / agresivo) computed from caps on % of book + % of cash + a concentration ceiling per bucket (10/20/35%). Conservative bucket also gets a category-risk dampener so a CRYPTO conservative is smaller than a BONO conservative for the same %. For SELL: three take-fractions (un tercio / la mitad / cerrar posición). Numbers stay deterministic; the LLM refines the per-bucket rationale.",
       "Tap a chip → setQtyStr autofills the qty input, then user can edit or proceed to Review as usual. Hides silently when AI errors, consent denied, or balance is below the minimum to buy 1 unit at any bucket.",
       "15 AI surfaces total. Filling out the AI story along the entire trade flow: Position size at qty entry → Trade Coach at confirmation → Done screen.",
     ],
@@ -3716,18 +3727,18 @@ const CHANGELOG = [
     title: "AI Proactive Notifications — SAMAS pings you when something matters",
     bullets: [
       "Fourteenth AI surface — different shape than the others. Instead of a card you tap, this one writes proactive notifications to your inbox + sends a push when actionable signals fire on your portfolio. Open the bell icon → tap \"Generar\" → IA scans your holdings, generates up to 5 fresh insights, drops them into the inbox via realtime so you see them slide in.",
-      "Five signal types, all deterministic: concentration (>30% in one ticker), big drawdown (-15% from cost), big gain (+30% from cost), earnings within 0-2 days, and cash-drag for under-built portfolios. Each insight gets a Claude-refined title + body; numbers stay deterministic. 24h dedupe per signal+ticker so re-running doesn't spam you.",
+      "Five signal types, all deterministic: concentration (>30% in one ticker), big drawdown (-15% from cost), big gain (+30% from cost), earnings within 0-2 days, and cash-drag for under-built portfolios. Each insight gets a AI-refined title + body; numbers stay deterministic. 24h dedupe per signal+ticker so re-running doesn't spam you.",
       "Tapping a ticker insight in the inbox deep-links into Invest tab → AssetSheet for that ticker (re-uses the samas:harvest-sell channel from 0.2.0). New \"insight\" notification kind has a sparkle icon + accent tint to read distinctly from social/price/aporte rows.",
       "Push notification sent best-effort: 1 insight = full title+body push; multiple = compact \"N nuevos insights\" combined ping (lock screen stays clean). Cron-scheduling for daily auto-runs is wired but off by default — flip it on with a pg_cron migration once we have ANTHROPIC_API_KEY in production.",
-      "14 AI surfaces total. Cohen pitch: open the app → bell shows a red dot → there's already a Claude-written insight waiting about your biggest position.",
+      "14 AI surfaces total. Cohen pitch: open the app → bell shows a red dot → there's already a AI-written insight waiting about your biggest position.",
     ],
   },
   {
     version: "0.2.0",
     title: "AI Tax-loss harvester — crystalize losses, save on impuesto cedular",
     bullets: [
-      "Thirteenth AI surface lands on Wallet between Earnings Watch and Preguntale a SAMAS. Reads holdings → finds positions in unrealized loss → estimates how much impuesto cedular (15% on USD-sourced gains) you can offset by harvesting them this fiscal year. Headline shows the total estimated tax savings in green; per-position rows expand to a Claude-written reason and a \"Vender X ahora\" deep-link that switches to Invest tab + opens the AssetSheet pre-loaded for that ticker.",
-      "New tax-loss-harvest Edge Function. Mirrors the deterministic realized-YTD seed used by Pro Wallet's TaxYearCard so the offset target lines up with what the user already sees there. Numbers stay deterministic; Claude refines summary + per-row reasons. Templated fallback when no API key.",
+      "Thirteenth AI surface lands on Wallet between Earnings Watch and Preguntale a SAMAS. Reads holdings → finds positions in unrealized loss → estimates how much impuesto cedular (15% on USD-sourced gains) you can offset by harvesting them this fiscal year. Headline shows the total estimated tax savings in green; per-position rows expand to a AI-written reason and a \"Vender X ahora\" deep-link that switches to Invest tab + opens the AssetSheet pre-loaded for that ticker.",
+      "New tax-loss-harvest Edge Function. Mirrors the deterministic realized-YTD seed used by Pro Wallet's TaxYearCard so the offset target lines up with what the user already sees there. Numbers stay deterministic; the LLM refines summary + per-row reasons. Templated fallback when no API key.",
       "New cross-shell handoff: samas:harvest-sell event + samas_pending_harvest_sell briefcase. BrokerShell drains it once `assets` is loaded and pops the AssetSheet, same pattern as share-trade / share-watchlist / open-profile.",
       "Hides silently if no losers, AI errors, or consent denied. 13 AI surfaces total now.",
     ],
@@ -3737,7 +3748,7 @@ const CHANGELOG = [
     title: "AI Risk Score per holding — 1-10 chips on Portafolio",
     bullets: [
       "Twelfth AI surface lands on Portafolio between Rebalanceo IA and the Pro dashboard. Each held ticker gets a 1-10 risk score with a color-coded chip (green ≤3, amber ≤6, red ≥7), level label (bajo / medio / alto), and an AI-refined reason explaining what's driving the score. Tap any row to expand the reason inline.",
-      "New score-risk Edge Function. Score is fully deterministic, computed server-side from: category baseline (BONO=2, ETF=4, CEDEAR=6, COMMOD=6, ACCION=7, CRYPTO=9), per-ticker volatility multiplier, concentration penalty (>40% adds 2, >25% adds 1), and drawdown bump (-15%+ adds 1). Claude Haiku only refines the human-language reasons; the numbers themselves can't hallucinate.",
+      "New score-risk Edge Function. Score is fully deterministic, computed server-side from: category baseline (BONO=2, ETF=4, CEDEAR=6, COMMOD=6, ACCION=7, CRYPTO=9), per-ticker volatility multiplier, concentration penalty (>40% adds 2, >25% adds 1), and drawdown bump (-15%+ adds 1). the LLM only refines the human-language reasons; the numbers themselves can't hallucinate.",
       "Sorted highest-risk first so the most concentrated / volatile positions surface immediately. Hides silently if AI consent is denied or the call errors — Portafolio never breaks behind a flaky AI panel.",
       "12 AI surfaces total now.",
     ],
@@ -3748,7 +3759,7 @@ const CHANGELOG = [
     bullets: [
       "Eleventh AI surface lands on Wallet between Benchmark Compare and Preguntale a SAMAS. Shows up to 3 closest upcoming earnings for tickers you hold (rest behind a \"Ver N más\" toggle). Each row: countdown chip (color-coded by proximity — red ≤1 day, amber ≤7 days, gray otherwise), ticker + name, AI commentary on position-impact, and \"X% del book · US$Y\" footer.",
       "New earnings-watch Edge Function. Per-ticker deterministic offsets (AAPL 4d, NVDA 12d, TSLA 7d, MSFT 28d, GGAL 18d, YPF 22d, etc.) — synthetic for the prototype but stable across the demo. Per-ticker historical post-earnings move % (NVDA ±7.8%, TSLA ±9.5%, etc.) feeds the AI note.",
-      "Templated note rotates 5 angles (today / tomorrow / high-pct concentration / small position / generic) so consecutive items read distinctly. Claude refines each note + the summary; tickers/dates/numbers stay deterministic so the LLM can't hallucinate dates.",
+      "Templated note rotates 5 angles (today / tomorrow / high-pct concentration / small position / generic) so consecutive items read distinctly. the LLM refines each note + the summary; tickers/dates/numbers stay deterministic so the LLM can't hallucinate dates.",
       "Hides silently when no held ticker has earnings in 30 days OR the AI errors. 11 AI surfaces total now.",
     ],
   },
@@ -3767,7 +3778,7 @@ const CHANGELOG = [
     title: "AI Daily Brief on Wallet — every open shows a fresh take",
     bullets: [
       "Ninth AI surface lands at the very TOP of the Wallet (above the balance card). Auto-loads on every Wallet mount, with a localStorage cache keyed by user + UTC date so we re-fetch at most once per calendar day. Refresh button next to the gain pill forces a manual re-call.",
-      "New daily-brief Edge Function. Reads holdings → computes book total + value-weighted gain% + top mover (held ticker with biggest abs day move). Asks Claude Haiku for a 2-3 sentence \"buen día\" brief that covers state of the cartera, top mover impact, and one \"qué mirar hoy\" line. Templated server-side fallback uses real numbers + sentence skeletons.",
+      "New daily-brief Edge Function. Reads holdings → computes book total + value-weighted gain% + top mover (held ticker with biggest abs day move). Asks the LLM for a 2-3 sentence \"buen día\" brief that covers state of the cartera, top mover impact, and one \"qué mirar hoy\" line. Templated server-side fallback uses real numbers + sentence skeletons.",
       "Subtle accent-tinted gradient card. Sparkles icon + \"BRIEF DIARIO IA\" kicker + gain% chip on the right. Skeleton shimmer while loading. Hides silently if AI errors so the wallet never loads behind a flaky AI banner.",
       "9 AI surfaces total now. Cohen pitch: open the app → AI talks to you about your portfolio before you tap anything.",
     ],
@@ -3787,7 +3798,7 @@ const CHANGELOG = [
     title: "AI Rebalancing Assistant — concrete trades, one tap to execute",
     bullets: [
       "Eighth AI surface lands on the Portafolio view. New green-bordered \"Rebalancear cartera con IA\" card under the AI Plan card. Tap → sheet opens with a 3-way profile selector (Conservador / Equilibrado / Agresivo). Pick one → AI computes the gap between your current category mix and the target weights for that profile, returns concrete buy/sell actions with quantities + per-action rationale.",
-      "New rebalance-portfolio Edge Function. Always runs a deterministic algorithmic rebalance first (works without Anthropic key) — Claude refines the rationale on each action without changing tickers or quantities, so the demo can't hallucinate a trade we wouldn't safely place.",
+      "New rebalance-portfolio Edge Function. Always runs a deterministic algorithmic rebalance first (works without AI provider key) — the LLM refines the rationale on each action without changing tickers or quantities, so the demo can't hallucinate a trade we wouldn't safely place.",
       "Each proposed action is a checkbox row — uncheck anything you don't want. \"Ejecutar operaciones seleccionadas\" loops through brokerApi.placeOrder. Per-action ✓ / × shows live as orders fire. On full success the sheet auto-closes and the portfolio refreshes.",
       "8 AI surfaces total: portfolio analysis, chat, asset insight, trade coach, post helper, news explainer, watchlist creator, rebalance — plus consent gate, EXIF strip, re-auth, AI revoke toggle.",
     ],
@@ -3808,7 +3819,7 @@ const CHANGELOG = [
     bullets: [
       "Tightened all 4 slide bodies to one short sentence each (was 1-2 long sentences). iOS-onboarding feel.",
       "Slide 2 headline went from \"Invertí desde la app\" to \"Invertí con coach IA\" — leads with the differentiator. Body now mentions the trade coach reviewing each order against your portfolio before confirm.",
-      "Slide 4 retitled \"Tu asistente IA\" (was \"Plan personalizado con IA\" — outdated since 0.1.0 added 6 more AI surfaces). Body now lists the actual capabilities: análisis, post drafts, watchlists temáticas, chat con tu cartera. \"Powered by Claude\" attribution. Icon swapped from concentric rings to the sparkles glyph used everywhere else.",
+      "Slide 4 retitled \"Tu asistente IA\" (was \"Plan personalizado con IA\" — outdated since 0.1.0 added 6 more AI surfaces). Body now lists the actual capabilities: análisis, post drafts, watchlists temáticas, chat con tu cartera. \"Powered by the LLM\" attribution. Icon swapped from concentric rings to the sparkles glyph used everywhere else.",
       "New \"Cargar datos demo\" secondary CTA on the last slide. Tap → seedDemoAccount() runs (3 watchlists + 7 holdings + cash + ledger), page reloads onto a populated app instead of empty states. Built for Cohen demo opens.",
     ],
   },
@@ -3825,7 +3836,7 @@ const CHANGELOG = [
     version: "0.1.0",
     title: "Milestone: AI Watchlist Creator + 7 AI surfaces total",
     bullets: [
-      "Marking 0.1.0 as the AI-features milestone. Seventh AI surface lands on the Watchlist tab. New ✦ IA pill next to + Nueva opens a sheet where you type a theme — \"dividendos altos\", \"IA\", \"petróleo argentino\", \"cripto\" — and Claude Haiku assembles a watchlist with name + color tag + 5-8 tickers from the SAMAS universe + a 1-2 sentence rationale. Edit any field before saving.",
+      "Marking 0.1.0 as the AI-features milestone. Seventh AI surface lands on the Watchlist tab. New ✦ IA pill next to + Nueva opens a sheet where you type a theme — \"dividendos altos\", \"IA\", \"petróleo argentino\", \"cripto\" — and the LLM assembles a watchlist with name + color tag + 5-8 tickers from the SAMAS universe + a 1-2 sentence rationale. Edit any field before saving.",
       "New suggest-watchlist Edge Function. Server VALIDATES that returned tickers belong to the SAMAS universe (drops hallucinated symbols) and the color belongs to WL_COLORS. Templated keyword-routed fallback for tech/dividend/crypto/energy/ARG/ETF/commod themes.",
       "Total AI surfaces: portfolio analysis (Wallet) · multi-turn portfolio chat (Wallet) · per-asset insight (AssetSheet) · trade coach (order confirm) · post draft helper (Social compose) · news \"why does this matter\" (News) · watchlist creator (Watchlist) — plus the consent gate, EXIF stripping, and re-auth from 0.0.98. Demo-ready for Cohen.",
     ],
@@ -3834,7 +3845,7 @@ const CHANGELOG = [
     version: "0.0.99",
     title: "AI on news — \"¿Por qué me importa?\" on every article",
     bullets: [
-      "Sixth AI surface lands on the News tab. Every article now has a \"¿Por qué me importa?\" expand row at the bottom. Tap → calls a new explain-news Edge Function that takes the article + reads your holdings via JWT-scoped RLS, asks Claude Haiku for a 2-3 sentence explanation of how this story relates to YOUR specific portfolio.",
+      "Sixth AI surface lands on the News tab. Every article now has a \"¿Por qué me importa?\" expand row at the bottom. Tap → calls a new explain-news Edge Function that takes the article + reads your holdings via JWT-scoped RLS, asks the LLM for a 2-3 sentence explanation of how this story relates to YOUR specific portfolio.",
       "When the article references a ticker you actually own, an accent-tinted hits chip ($NVDA · $AAPL etc.) appears and the AI explanation is direct: \"Tu posición en $NVDA podría verse afectada por X.\" When you don't own anything mentioned, the AI explains correlation/sector context honestly instead of forcing relevance.",
       "Templated server-side fallback when ANTHROPIC_API_KEY isn't set — picks a sensible explanation based on whether any article tickers intersect held tickers. Rotates: direct match / related sector / no exposure.",
       "NewsCard refactored from a button to a div+role=button so the AI tap-row can stop event propagation cleanly without nested-button HTML. Tapping anywhere else on the card still opens the article URL in Safari.",
@@ -3844,7 +3855,7 @@ const CHANGELOG = [
     version: "0.0.98",
     title: "Privacy + safety trio — AI consent, EXIF strip, withdraw re-auth",
     bullets: [
-      "AI consent gate: first time you tap any AI feature (Análisis IA, Coach IA, Preguntale a SAMAS, Sugerime un post, asset insight, trade coach), a one-time disclosure modal explains your portfolio data goes to Anthropic Claude, no training, can be turned off in Settings. Acepto persists per-device. Rechazar lets you keep using the app non-AI.",
+      "AI consent gate: first time you tap any AI feature (Análisis IA, Coach IA, Preguntale a SAMAS, Sugerime un post, asset insight, trade coach), a one-time disclosure modal explains your portfolio data goes to the AI provider, no training, can be turned off in Settings. Acepto persists per-device. Rechazar lets you keep using the app non-AI.",
       "EXIF stripping on uploaded post images: every photo gets re-encoded through a canvas (createImageBitmap with imageOrientation=from-image so iPhone portrait shots stay upright) before reaching Supabase Storage. Drops GPS coordinates, camera model, all metadata. Also clamps long side to 2048px so we don't store 12MP originals.",
       "Re-auth gate before two destructive flows: outbound withdrawals (Wallet → Enviar) and account deletion (Settings → Borrar mi cuenta) now require your password again, even inside an authenticated session. Even if the device is unlocked or a session leaks, the attacker still needs the password to push these through. Wrong password shows inline error without ever calling the destructive endpoint.",
     ],
@@ -3872,7 +3883,7 @@ const CHANGELOG = [
     bullets: [
       "New AI surface: every order's confirmation step now shows a Coach IA card above the Cancelar / Confirmar buttons. Auto-fires when the modal opens. Reads the user's holdings via JWT-scoped RLS, weighs the pending trade against the existing book, returns a verdict (Va / Atención / Revisar) + a one-line headline + a reason.",
       "Coach catches things like: \"$NVDA llegaría al 47% de tu cartera — concentración alta\", \"Estás cerrando 100% de tu posición en $YPF, asegurate que cambió la tesis\", \"Tu exposición a CEDEARs pasaría a 73%, mucho peso en una categoría\". Doesn't recommend buy/sell directly, just flags structural risk + sanity.",
-      "New analyze-coach Edge Function (Claude Haiku, JWT-scoped, templated heuristic fallback). Heuristic verdict uses real concentration math + sector mix so the demo works without an Anthropic key.",
+      "New analyze-coach Edge Function (the LLM, JWT-scoped, templated heuristic fallback). Heuristic verdict uses real concentration math + sector mix so the demo works without an AI provider key.",
       "If the AI errors, the Coach card silently hides — never blocks the trade flow. Cohen demo: tap any asset → buy 100 NVDA → confirmation shows AI weighing in before the user taps Confirmar.",
     ],
   },
@@ -3927,7 +3938,7 @@ const CHANGELOG = [
     title: "Preguntale a SAMAS — multi-turn AI chat about your portfolio",
     bullets: [
       "New \"Preguntale a SAMAS\" card on Wallet (right under Análisis IA). Tap → 92vh chat sheet slides up. Type a question, hit Send, get an answer that has YOUR portfolio in context. Multi-turn — keep going, follow-ups respect previous turns. Empty state has 3 starter prompts (diversification / performance / next move) so the user can demo without thinking up a question.",
-      "Edge Function: supabase/functions/chat-portfolio/index.ts. Reads holdings via JWT-scoped RLS, builds a Spanish system prompt with a JSON dump of the user's positions + value-weighted gain%, sends the trimmed conversation history (last 12 turns) to Claude Haiku with the system prompt. 600 max_tokens for crisp 2-4 sentence replies.",
+      "Edge Function: supabase/functions/chat-portfolio/index.ts. Reads holdings via JWT-scoped RLS, builds a Spanish system prompt with a JSON dump of the user's positions + value-weighted gain%, sends the trimmed conversation history (last 12 turns) to the LLM with the system prompt. 600 max_tokens for crisp 2-4 sentence replies.",
       "Templated server-side fallback when ANTHROPIC_API_KEY isn't set — keyword matching against the latest user message (concentración / diversificar / vender / comprar / etc.) plus real portfolio facts. Demoable today, no key required.",
       "UI niceties: thinking dots while waiting, auto-scroll to newest message, Enter sends + Shift+Enter newline, conversation persists across close+reopen until you tap Nueva.",
     ],
@@ -3936,7 +3947,7 @@ const CHANGELOG = [
     version: "0.0.88",
     title: "AI compose helper — \"Sugerime un post\"",
     bullets: [
-      "New ✦ button in the compose toolbar (left of Compartir cartera). Tap → server reads your holdings + last 3 trades via JWT-scoped RLS, asks Claude Haiku to draft a short social-style post (220 char cap) referencing one of your real positions, fills the textarea. Spinner inside the button while it thinks.",
+      "New ✦ button in the compose toolbar (left of Compartir cartera). Tap → server reads your holdings + last 3 trades via JWT-scoped RLS, asks the LLM to draft a short social-style post (220 char cap) referencing one of your real positions, fills the textarea. Spinner inside the button while it thinks.",
       "Edge Function: supabase/functions/draft-post/index.ts. Templated fallback when ANTHROPIC_API_KEY isn't set picks your most recent trade or top holding and fills one of several sentence templates with real numbers (gain%, % of book, ticker name) — sounds like a real person before we wire the LLM.",
       "If you've already typed something in the textarea, we ask before overwriting. Otherwise the draft fills directly + focuses + auto-expands the compose so you can tweak before posting.",
     ],
@@ -3964,7 +3975,7 @@ const CHANGELOG = [
     title: "AI insight on every asset — tap a ticker, get a take",
     bullets: [
       "Tap any asset (NVDA / GGAL / AAPL / BTC / etc.) → the detail sheet now has an \"Análisis IA\" section. Tap to generate a one-line headline + 3 short bullets (fundamentals / news / valuation) + a thesis statement + a sentiment chip (Alcista / Neutral / Bajista).",
-      "New analyze-asset Edge Function (twin of analyze-portfolio): takes a ticker, calls Claude Haiku, returns the structured response. Server-side templated fallback uses a curated per-ticker thesis library when ANTHROPIC_API_KEY isn't set — AAPL / NVDA / TSLA / GGAL / YPF / etc. each have their own pre-written take so the demo feels real before we wire the real LLM.",
+      "New analyze-asset Edge Function (twin of analyze-portfolio): takes a ticker, calls the LLM, returns the structured response. Server-side templated fallback uses a curated per-ticker thesis library when ANTHROPIC_API_KEY isn't set — AAPL / NVDA / TSLA / GGAL / YPF / etc. each have their own pre-written take so the demo feels real before we wire the real LLM.",
       "Insights cached per-ticker per-session: re-opening the same asset's sheet doesn't burn another LLM call. Switching to a different ticker resets the panel cleanly.",
       "Visible to every user (not Pro-gated) — AI is the differentiator, Cohen needs to see this on every tap.",
     ],
@@ -3975,14 +3986,14 @@ const CHANGELOG = [
     bullets: [
       "Root-cause fix for the recurring \"bottom nav covers content / sheets\" bug. The samas-tab-fade animation (added in 0.0.81) used translate3d(0,4px,0) for a subtle slide; on iOS WebKit that promotes the wrapper to a persistent compositing layer that behaves like a stacking context, so children with position:fixed couldn't escape past the floating nav at zIndex 40. Switched to opacity-only animation — no transform, no trap. Fixes the AI sheet covering issue Manuel hit, plus any other in-page modal that was subtly being layered wrong.",
       "Belt-and-braces: AI analysis sheet is now portaled to document.body via React.createPortal. Even if some descendant adds a transform later, the sheet renders against the document root and z-index 100 wins.",
-      "AI portfolio analysis works without an Anthropic key. The Edge Function detects the missing ANTHROPIC_API_KEY and falls back to a templated analysis built from the caller's actual portfolio data (concentration / win-loss split / sector mix). Shape-identical to the LLM response so the UI doesn't branch. Once you set the secret post-Cohen, real Claude responses replace the templates with zero code change.",
+      "AI portfolio analysis works without an AI provider key. The Edge Function detects the missing ANTHROPIC_API_KEY and falls back to a templated analysis built from the caller's actual portfolio data (concentration / win-loss split / sector mix). Shape-identical to the LLM response so the UI doesn't branch. Once you set the secret post-Cohen, real the LLM responses replace the templates with zero code change.",
     ],
   },
   {
     version: "0.0.83",
     title: "AI portfolio analysis + compose layout fix",
     bullets: [
-      "First real AI feature lands on Wallet: \"Análisis IA\" card. Tap → calls a new analyze-portfolio Edge Function that reads your holdings (RLS-scoped via JWT), passes them to Claude Haiku, and returns a one-line headline + 3 observations + concrete suggestion + concentration callout. Sheet animates up from the bottom with a thinking spinner, then renders the structured response. Result is cached for the session — re-tapping reopens without burning another LLM call.",
+      "First real AI feature lands on Wallet: \"Análisis IA\" card. Tap → calls a new analyze-portfolio Edge Function that reads your holdings (RLS-scoped via JWT), passes them to the LLM, and returns a one-line headline + 3 observations + concrete suggestion + concentration callout. Sheet animates up from the bottom with a thinking spinner, then renders the structured response. Result is cached for the session — re-tapping reopens without burning another LLM call.",
       "Edge Function: supabase/functions/analyze-portfolio/index.ts. Self-contained with the asset universe inline so it doesn't depend on the client bundle. Strict JSON-out prompt with hard length caps. ANTHROPIC_API_KEY env (already used by fetch-news) doubles as the auth here.",
       "Compose layout fix (the \"too much space, not centered\" thing): when there's a portfolio / trade / image attached, the textarea no longer expands to 7 rows on focus — stays at 3 so the attachment card sits flush with the placeholder. The huge dead-space-above-the-card visual went away.",
       "Promoted samas-sheet-up + samas-spin + samas-fade-in keyframes to the global Shell stylesheet so any sheet/spinner anywhere can rely on them (was previously scoped to specific component mount-times).",
@@ -4087,7 +4098,7 @@ const CHANGELOG = [
     version: "0.0.72",
     title: "AI Plan: real \"thinking\" moment + haptics",
     bullets: [
-      "Without an Anthropic API key, the wizard's mock plan was returning instantly — skeleton flashed for one frame, plan snapped in. Felt fake. Added a deliberate 4-stage delay (~1.4s total) with rotating labels: Analizando → Calculando → Construyendo → Finalizando. Real-API path fires the same stages around the actual network call so the UX is consistent in either mode.",
+      "Without an the AI provider API key, the wizard's mock plan was returning instantly — skeleton flashed for one frame, plan snapped in. Felt fake. Added a deliberate 4-stage delay (~1.4s total) with rotating labels: Analizando → Calculando → Construyendo → Finalizando. Real-API path fires the same stages around the actual network call so the UX is consistent in either mode.",
       "Light haptic on Generar (synchronous, inside gesture context) + success haptic on plan ready + error haptic on rejection. Same pattern as the trade flow.",
       "PlanSkeleton header re-mounts via key={stage} so each stage label cross-fades in via the existing samas-fade class instead of snapping.",
     ],

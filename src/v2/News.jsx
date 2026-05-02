@@ -215,7 +215,7 @@ export function NewsPage({ T, lang = "es" }) {
 
       {/* AI News Digest (samas-0.3.1) — auto-loaded summary of the
           headlines that matter for the user's holdings, written by
-          Claude. Sits between the ticker bar and search so the user
+          the LLM. Sits between the ticker bar and search so the user
           sees personalized signal before scrolling the generic feed. */}
       <NewsDigestCard T={T} lang={lang} />
 

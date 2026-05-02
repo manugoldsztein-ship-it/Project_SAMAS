@@ -1,9 +1,9 @@
 // ============================================================
-// SAMAS AI CLIENT — Anthropic (Claude)
+// SAMAS AI CLIENT — the AI provider (the LLM)
 // ============================================================
 // Mirrors the existing Finnhub / EmailJS pattern: the user pastes their own
-// Anthropic API key into the Profile sheet, we persist it in localStorage,
-// and we call the Anthropic API *directly from the browser* using the
+// the AI provider API key into the Profile sheet, we persist it in localStorage,
+// and we call the the AI provider API *directly from the browser* using the
 // anthropic-dangerous-direct-browser-access header.
 //
 // Why browser-direct and not a server route?
@@ -25,53 +25,53 @@ const ENDPOINT_STORAGE = "samas_anthropic_endpoint"; // optional user override
 export const DEFAULT_MODEL = "claude-sonnet-4-6";
 export const DEFAULT_ENDPOINT = "https://api.anthropic.com/v1/messages";
 
-export function loadAnthropicKey() {
+export function loadAiKey() {
   try { return typeof localStorage !== "undefined" ? localStorage.getItem(KEY_STORAGE) : null; }
   catch { return null; }
 }
-export function saveAnthropicKey(k) {
+export function saveAiKey(k) {
   try {
     if (k) localStorage.setItem(KEY_STORAGE, k);
     else localStorage.removeItem(KEY_STORAGE);
   } catch {}
 }
 
-export function loadAnthropicModel() {
+export function loadAiModel() {
   try { return (typeof localStorage !== "undefined" && localStorage.getItem(MODEL_STORAGE)) || DEFAULT_MODEL; }
   catch { return DEFAULT_MODEL; }
 }
-export function saveAnthropicModel(m) {
+export function saveAiModel(m) {
   try {
     if (m && m !== DEFAULT_MODEL) localStorage.setItem(MODEL_STORAGE, m);
     else localStorage.removeItem(MODEL_STORAGE);
   } catch {}
 }
 
-export function loadAnthropicEndpoint() {
+export function loadAiEndpoint() {
   try { return (typeof localStorage !== "undefined" && localStorage.getItem(ENDPOINT_STORAGE)) || DEFAULT_ENDPOINT; }
   catch { return DEFAULT_ENDPOINT; }
 }
-export function saveAnthropicEndpoint(url) {
+export function saveAiEndpoint(url) {
   try {
     if (url && url !== DEFAULT_ENDPOINT) localStorage.setItem(ENDPOINT_STORAGE, url);
     else localStorage.removeItem(ENDPOINT_STORAGE);
   } catch {}
 }
 
-export function hasAnthropicKey() {
-  return Boolean(loadAnthropicKey());
+export function hasAiKey() {
+  return Boolean(loadAiKey());
 }
 
 // --- core fetch wrapper ----------------------------------------------------
 
 async function callAnthropic({ system, messages, maxTokens = 800, model }) {
-  const apiKey = loadAnthropicKey();
+  const apiKey = loadAiKey();
   if (!apiKey) {
     throw new Error("NO_KEY");
   }
-  const url = loadAnthropicEndpoint();
+  const url = loadAiEndpoint();
   const body = {
-    model: model || loadAnthropicModel(),
+    model: model || loadAiModel(),
     max_tokens: maxTokens,
     system,
     messages,
@@ -82,7 +82,7 @@ async function callAnthropic({ system, messages, maxTokens = 800, model }) {
       "Content-Type": "application/json",
       "x-api-key": apiKey,
       "anthropic-version": "2023-06-01",
-      // Anthropic requires this explicit opt-in header for direct browser calls.
+      // the AI provider requires this explicit opt-in header for direct browser calls.
       "anthropic-dangerous-direct-browser-access": "true",
     },
     body: JSON.stringify(body),
@@ -90,7 +90,7 @@ async function callAnthropic({ system, messages, maxTokens = 800, model }) {
   if (!res.ok) {
     let detail = "";
     try { detail = (await res.text()).slice(0, 300); } catch {}
-    throw new Error(`Anthropic ${res.status}${detail ? ` — ${detail}` : ""}`);
+    throw new Error(`the AI provider ${res.status}${detail ? ` — ${detail}` : ""}`);
   }
   const data = await res.json();
   const text = (data.content || [])
@@ -101,7 +101,7 @@ async function callAnthropic({ system, messages, maxTokens = 800, model }) {
 }
 
 // Quick health check — used by the "Probar" button in ProfileSheet.
-export async function testAnthropic() {
+export async function testAi() {
   const reply = await callAnthropic({
     system: "You are a health-check responder. Reply with exactly: OK",
     messages: [{ role: "user", content: "ping" }],
@@ -201,7 +201,7 @@ export function pmtForGoal(target, years, annualRate) {
 
 /**
  * Strategy picker. Input = monthly income/expenses/goal/horizon. The
- * compound-interest projections are computed here and passed to Claude,
+ * compound-interest projections are computed here and passed to the LLM,
  * which picks the strategy and explains why.
  */
 export async function callObjectives(profile, opts = {}) {
@@ -229,7 +229,7 @@ export async function callObjectives(profile, opts = {}) {
   const onStage = typeof opts.onStage === "function" ? opts.onStage : () => {};
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  if (!hasAnthropicKey()) {
+  if (!hasAiKey()) {
     // Demo path: deliberate staged delay so the wizard FEELS like
     // it's running an AI even when no key is configured. Without
     // this, the skeleton flashes for one frame and the plan snaps
@@ -248,7 +248,7 @@ export async function callObjectives(profile, opts = {}) {
   }
   // Real-API path. We fire the same stages around the actual
   // network call so the wizard's "thinking" UX is consistent
-  // whether or not we're in demo mode. Real Claude calls take
+  // whether or not we're in demo mode. Real the LLM calls take
   // 1-3s anyway so the stage rotation lines up with reality.
   onStage("analyzing");
   await sleep(150);
@@ -273,7 +273,7 @@ export async function callObjectives(profile, opts = {}) {
 export async function callExpenseParser(text) {
   const input = (text || "").trim();
   if (!input) return { total: 0, currency: "ARS", categories: [], notes: "Texto vacio." };
-  if (!hasAnthropicKey()) return mockExpenseParse(input);
+  if (!hasAiKey()) return mockExpenseParse(input);
   const raw = await callAnthropic({
     system: EXPENSE_PARSER_SYSTEM,
     messages: [{ role: "user", content: "Parsea este resumen:\n\n" + input.slice(0, 8000) }],

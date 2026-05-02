@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { callObjectives, fvAnnuity, pmtForGoal, hasAnthropicKey } from "./client.js";
+import { callObjectives, fvAnnuity, pmtForGoal, hasAiKey } from "./client.js";
 import { InfoBadge } from "./glossary.jsx";
 import { hapticNative } from "../lib/native.js";
 
@@ -153,8 +153,8 @@ export function ObjectivesWizard({ onClose, onSave, savedPlan, C }) {
           </div>
           <div style={{ flex:1 }}>
             <div style={{ fontWeight:700, fontSize:14, color:C.text }}>Objetivos con IA</div>
-            <div style={{ fontSize:10, color:hasAnthropicKey()?C.green:C.gold, fontWeight:600 }}>
-              {hasAnthropicKey() ? "SAMAS IA · en vivo" : "Modo demo (sin API key)"}
+            <div style={{ fontSize:10, color:hasAiKey()?C.green:C.gold, fontWeight:600 }}>
+              {hasAiKey() ? "SAMAS IA · en vivo" : "Modo demo (sin API key)"}
             </div>
           </div>
           {step === 1 && (

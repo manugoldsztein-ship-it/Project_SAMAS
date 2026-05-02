@@ -12,7 +12,7 @@ está implementada técnicamente, y quién es responsable. La columna
 - **Supabase** = proveedor de Postgres + Auth + Edge Functions + Storage
 - **Apple** = proveedor de plataforma iOS / APNs
 - **Broker** = ALyC (Cohen u otro) una vez integrado. Hoy todo está mockeado en cliente.
-- **Anthropic** = proveedor de las llamadas LLM (Claude Haiku) en las funciones IA
+- **AI provider** = proveedor externo de las llamadas LLM en las funciones IA
 
 ---
 
@@ -64,7 +64,7 @@ está implementada técnicamente, y quién es responsable. La columna
 | HTTPS cliente ↔ Supabase | Supabase | ✅ Forzado, TLS 1.2+ |
 | WSS Realtime (postgres_changes) | Supabase | ✅ |
 | Capacitor WebView | Apple + SAMAS | ✅ El bundle se sirve desde el bundle de la app, no desde un origen remoto. |
-| Llamadas a Anthropic (IA) | SAMAS | ✅ Server-to-server desde Edge Function. La key NO viaja al cliente. |
+| Llamadas al proveedor de IA | SAMAS | ✅ Server-to-server desde Edge Function. La key NO viaja al cliente. |
 | Llamadas a Finnhub (precios) | SAMAS | ✅ Server-to-server. Key en env de Edge Function. |
 
 ---
@@ -125,9 +125,9 @@ está implementada técnicamente, y quién es responsable. La columna
 | Secreto | Dónde vive | Quién rota | Estado |
 |---|---|---|---|
 | `SUPABASE_ANON_KEY` | En el bundle del cliente (es público por diseño) | Supabase | ✅ |
-| `SUPABASE_SERVICE_ROLE_KEY` | Env de cada Edge Function | SAMAS | ⚠️ **Pendiente rotación** — leak previo en transcript de Claude. |
-| Password de la DB | Supabase Dashboard | SAMAS | ⚠️ **Pendiente rotación** — leak previo en transcript de Claude. |
-| `ANTHROPIC_API_KEY` | Env de Edge Functions IA | SAMAS | ⚠️ Pendiente: setear en producción cuando Cohen apruebe presupuesto. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Env de cada Edge Function | SAMAS | ⚠️ **Pendiente rotación** — leak previo en transcript de dev session. |
+| Password de la DB | Supabase Dashboard | SAMAS | ⚠️ **Pendiente rotación** — leak previo en transcript de dev session. |
+| `AI_API_KEY` | Env de Edge Functions IA | SAMAS | ⚠️ Pendiente: setear en producción cuando Cohen apruebe presupuesto. |
 | `FINNHUB_API_KEY` | Env de Edge Function `check-price-alerts` | SAMAS | ✅ |
 | Apple Developer cert (build) | macOS Keychain del developer | SAMAS | ✅ |
 | Push notification cert (APNs) | Pendiente emitir | SAMAS | ❌ |
