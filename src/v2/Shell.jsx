@@ -2987,6 +2987,17 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.44",
+    title: "Fix bug 'column id does not exist' al activar SAMAS Plus",
+    bullets: [
+      "Manuel reportó error 'No pude activar Plus: Plus activation falló: column \"id\" does not exist' al tap Suscribirme en el pricing sheet. Bug de schema en las RPCs.",
+      "ROOT CAUSE — las 4 RPCs (activate_plus, cancel_plus, consume_ai_quota, get_ai_quota_status) queryaban `where id = v_user_id` sobre profiles_social, pero esa tabla usa `user_id` como primary key (no `id`). Esto rompía cualquier flow de Plus + cualquier consume de quota.",
+      "Imposible que esto haya andado nunca. Probablemente la activación de Plus jamás se testó end-to-end contra DB real desde 0.2.6 — el flow de Plus se mockeaba en cliente.",
+      "FIX — corregido en 4 archivos SQL: samas_plus.sql, samas_plus_cancel.sql, samas_plus_tz.sql. Y nuevo archivo consolidado samas_plus_id_fix.sql que Manuel tiene que correr en Supabase SQL editor para deployar el fix al DB en vivo (los SQL en el repo no se aplican solos).",
+      "Después de correr el SQL, el flow de Plus va end-to-end: tap Suscribirme → activate_plus() flippea is_plus=true → AIQuotaPill desaparece, IA queda ilimitada.",
+    ],
+  },
+  {
     version: "0.4.43",
     title: "Lite Broker > Cartera limpio — 3 cards más detrás de Pro",
     bullets: [

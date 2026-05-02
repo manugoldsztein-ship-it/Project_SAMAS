@@ -26,7 +26,7 @@ begin
   end if;
   update public.profiles_social
      set is_plus = false, plus_activated_at = null
-   where id = v_user_id;
+   where user_id = v_user_id;
   return json_build_object('is_plus', false);
 end;
 $$;

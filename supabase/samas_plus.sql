@@ -87,7 +87,7 @@ begin
   -- Plus check
   select is_plus into v_is_plus
   from public.profiles_social
-  where id = v_user_id;
+  where user_id = v_user_id;
 
   if coalesce(v_is_plus, false) then
     return json_build_object(
@@ -144,7 +144,7 @@ begin
   end if;
   update public.profiles_social
      set is_plus = true, plus_activated_at = now()
-   where id = v_user_id;
+   where user_id = v_user_id;
   return json_build_object('is_plus', true);
 end;
 $$;
@@ -171,7 +171,7 @@ begin
 
   select is_plus into v_is_plus
   from public.profiles_social
-  where id = v_user_id;
+  where user_id = v_user_id;
 
   if coalesce(v_is_plus, false) then
     return json_build_object('is_plus', true, 'count', 0, 'limit', null);
