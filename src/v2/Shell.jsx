@@ -2998,6 +2998,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.47",
+    title: "Skeleton loaders — Objetivos + Benchmark cards ya no flashean vacío",
+    bullets: [
+      "Manuel pidió: 'Skeleton loaders'. Audit del Wallet — la mayoría de cards (Behavior, Journal, EarningsWatch, QuarterlyReview, AIChat, etc.) ya tenían skeletons properly desde 0.3.4 / 0.4.x. 2 quedaban con placeholders peludos.",
+      "OBJETIVOS — Mientras carga el activeObjective, mostraba un div pelado de height: 80 (rectángulo gris vacío). Ahora muestra skeleton shaped con el icon box (44×44) + 2 lines de texto, matcheando el shape de ObjetivoCardActive. Transition de loading → loaded ahora reads como 'la card se llena' en vez de 'rect vacío → contenido'.",
+      "BENCHMARK COMPARE — La card mostraba el chrome (icons + labels) durante el loading con valores '…' / '—' pelados, leyendo a vacío. Ahora durante busy && !data renderea 3 rows de skeleton (icon + 2 lines + pill), idéntico shape al loaded state. Si la AI consent es declinada o no hay positions, la card se hide silently como antes.",
+      "Audit final: el resto de cards del Wallet (Behavior, Journal, Earnings, Quarterly, DailyBrief, AIChat, FCI, Education) tienen skeletons inline de patches anteriores. Mercado / Portfolio / Watchlist usan AssetRowSkeletonList. News usa skeleton card stack. Social usa PostCardSkeleton.",
+    ],
+  },
+  {
     version: "0.4.46",
     title: "Drag-to-dismiss en sheets — drag down para cerrar tipo iOS",
     bullets: [

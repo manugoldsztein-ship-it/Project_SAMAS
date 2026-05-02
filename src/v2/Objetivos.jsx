@@ -23,7 +23,7 @@ import { t as tr } from "../lib/i18n.js";
 import { objectivesPlan, saveObjective, getActiveObjective, deleteObjective } from "../lib/ai.js";
 import { isAIDisabled } from "../lib/aiConsent.js";
 import { hapticNative } from "../lib/native.js";
-import { DisclaimerStrip } from "./shared.jsx";
+import { DisclaimerStrip, Skeleton } from "./shared.jsx";
 
 // ----- Wallet card -----
 export function ObjetivosCard({ T, lang = "es" }) {
@@ -56,11 +56,19 @@ export function ObjetivosCard({ T, lang = "es" }) {
       <div style={{ margin: "20px 16px 0" }}>
         <SectionTitle T={T}>{tr("objetivos.section.title", lang)}</SectionTitle>
         {loading ? (
+          // 0.4.47 — placeholder pelado reemplazado por skeleton shaped
+          // como ObjetivoCardActive (icon + título + sub).
           <div style={{
             marginTop: 12, padding: 16, borderRadius: 22,
             background: T.surface, border: `1px solid ${T.border}`,
-            height: 80,
-          }}/>
+            display: "flex", alignItems: "center", gap: 14,
+          }}>
+            <Skeleton T={T} width={44} height={44} borderRadius={12} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <Skeleton T={T} width="60%" height={14} marginBottom={8} />
+              <Skeleton T={T} width="85%" height={12} />
+            </div>
+          </div>
         ) : obj ? (
           <ObjetivoCardActive
             T={T} lang={lang} obj={obj}

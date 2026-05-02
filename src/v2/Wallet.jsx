@@ -1688,6 +1688,35 @@ function BenchmarkCompareCard({ T, lang = "es" }) {
 
   if (hidden) return null;
 
+  // 0.4.47 — full skeleton mientras busy + sin data, en vez de
+  // mostrar el chrome de la card con "…" / "—" (lee a vacío).
+  if (busy && !data) {
+    return (
+      <div style={{ margin: "20px 16px 0" }}>
+        <SectionHead T={T} title={tr("wallet.benchmark.title", lang)} />
+        <div style={{
+          marginTop: 12, padding: 16, borderRadius: 22,
+          background: T.surface, border: `1px solid ${T.border}`,
+        }}>
+          {[0, 1, 2].map((i) => (
+            <div key={i} style={{
+              display: "flex", alignItems: "center", gap: 12,
+              padding: "10px 0",
+              borderBottom: i < 2 ? `1px solid ${T.border}` : "none",
+            }}>
+              <Skeleton T={T} width={28} height={28} borderRadius={8} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Skeleton T={T} width="50%" height={12} marginBottom={6} />
+                <Skeleton T={T} width="35%" height={10} />
+              </div>
+              <Skeleton T={T} width={56} height={16} borderRadius={6} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   const portfolioGain = data?.portfolio?.gainPct;
   const portfolioColor = portfolioGain == null ? T.textMute
     : portfolioGain >= 0 ? T.accent : T.danger;
@@ -1728,11 +1757,9 @@ function BenchmarkCompareCard({ T, lang = "es" }) {
             fontFamily: FONT.mono, fontSize: 16, fontWeight: 800,
             color: portfolioColor, fontVariantNumeric: "tabular-nums",
           }}>
-            {busy && !data ? "…" : (
-              portfolioGain != null
-                ? `${portfolioGain >= 0 ? "+" : ""}${portfolioGain.toFixed(1)}%`
-                : "—"
-            )}
+            {portfolioGain != null
+              ? `${portfolioGain >= 0 ? "+" : ""}${portfolioGain.toFixed(1)}%`
+              : "—"}
           </div>
         </div>
 
