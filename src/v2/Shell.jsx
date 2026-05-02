@@ -2976,6 +2976,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.30",
+    title: "Posiciones SIEMPRE debajo del valor de cartera",
+    bullets: [
+      "Manuel señaló: 'abajo del valor de la cartera siempre tienen que estar las posiciones, no importa que UI estás usando'. Antes la lista de holdings estaba enterrada debajo de 4-7 cards de IA / Pro (AIPlan, Rebalance, Risk, Sector, Distribución, SectorDonut, RiskMetrics, Benchmark) — el usuario tenía que scrollear bastante para ver lo que ya tenía comprado.",
+      "Movido el bloque de holdings (SectionHead + map de AssetRows) directamente después del portfolio summary card en PortafolioView. Todas las cards de IA/Pro shifted abajo de las posiciones — no se pierden, sólo dejan de bloquear lo más importante.",
+      "Esta es la regla de UX que sigue todo broker AR/US senior: lo que el usuario YA TIENE va primero, las recomendaciones / insights / IA cards van DESPUÉS. SAMAS ahora respeta el principio.",
+    ],
+  },
+  {
     version: "0.4.29",
     title: "Trade Journal automático — el primer broker AR que te ayuda a aprender de tus trades",
     bullets: [

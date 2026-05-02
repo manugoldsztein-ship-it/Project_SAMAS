@@ -494,6 +494,46 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
         </div>
       </div>
 
+      {/* Holdings (samas-0.4.30) — moved to right after the
+          portfolio summary card per user feedback. Manuel: "abajo
+          del valor de la cartera siempre tienen que estar las
+          posiciones, no importa que UI estas usando". The IA /
+          Pro density cards (AIPlan, Rebalance, Risk, Sector, etc.)
+          all shifted below the holdings list. */}
+      <div style={{ margin: "16px 16px 8px" }}>
+        <SectionHead T={T} title={tr("broker.holdings_title", lang)} action={tr("broker.assets_count", lang, { n: portfolio.holdings.length })} />
+      </div>
+      {portfolio.holdings.length === 0 ? (
+        <Empty T={T}
+          icon={<Ico.Briefcase size={26}/>}
+          title="Aún no tenés posiciones"
+          subtitle="Comprá tu primer activo desde Mercado y empezá a construir tu cartera."
+          ctaLabel="Ir a Mercado"
+          onCta={onGoToMercado}
+        />
+      ) : (
+        <div style={{ margin: "0 16px 16px" }}>
+          {portfolio.holdings.map((h, i) => {
+            const meta = assets.find((a) => a.ticker === h.ticker) || {};
+            const enriched = { ...meta, ...h };
+            const name = meta.name || h.ticker;
+            return (
+              <AssetRow
+                key={h.ticker}
+                T={T}
+                asset={enriched}
+                subline={`${name} · ${h.qty} u`}
+                liveMultiplier={h.qty}
+                rightBottom={fmtPct(h.gainPct)}
+                rightBottomColor={h.gainPct >= 0 ? T.accent : T.danger}
+                isLast={i === portfolio.holdings.length - 1}
+                onClick={() => onSelectAsset(enriched)}
+              />
+            );
+          })}
+        </div>
+      )}
+
       {/* AI Plan card — links to the goal-planning wizard. Always
           shown so the user can find the wizard regardless of mode.
           When the user already has a saved plan, the card morphs into
@@ -545,49 +585,9 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
         <BenchmarkLine T={T} holdings={portfolio.holdings} totalUsd={portfolio.totalUsd} lang={lang} />
       )}
 
-      {/* holdings */}
-      <div style={{ margin: "0 16px 16px" }}>
-        <SectionHead T={T} title={tr("broker.holdings_title", lang)} action={tr("broker.assets_count", lang, { n: portfolio.holdings.length })} />
-      </div>
-      {portfolio.holdings.length === 0 ? (
-        <Empty T={T}
-          icon={<Ico.Briefcase size={26}/>}
-          title="Aún no tenés posiciones"
-          subtitle="Comprá tu primer activo desde Mercado y empezá a construir tu cartera."
-          ctaLabel="Ir a Mercado"
-          onCta={onGoToMercado}
-        />
-      ) : (
-        <div style={{ margin: "0 16px" }}>
-          {portfolio.holdings.map((h, i) => {
-            // Holdings carry only { ticker, qty, avg, value, gainPct,
-            // currency }. We need the asset metadata (name, logo,
-            // category) to render the row identically to Mercado /
-            // Watchlist — so denormalize against `assets` here. The
-            // enriched object also flows into AssetSheet via
-            // onSelectAsset, so opening a holding lands on a sheet
-            // with the same name + logo as opening from Mercado.
-            const meta = assets.find((a) => a.ticker === h.ticker) || {};
-            const enriched = { ...meta, ...h };
-            const name = meta.name || h.ticker;
-            return (
-              <AssetRow
-                key={h.ticker}
-                T={T}
-                asset={enriched}
-                subline={`${name} · ${h.qty} u`}
-                liveMultiplier={h.qty}
-                rightBottom={fmtPct(h.gainPct)}
-                rightBottomColor={h.gainPct >= 0 ? T.accent : T.danger}
-                isLast={i === portfolio.holdings.length - 1}
-                onClick={() => onSelectAsset(enriched)}
-              />
-            );
-          })}
-        </div>
-      )}
-
-      {/* Top / bottom movers across the whole asset universe. Pro only. */}
+      {/* Top / bottom movers across the whole asset universe. Pro only.
+          (Holdings list moved up to right after the portfolio summary
+          card in samas-0.4.30 per Manuel's feedback.) */}
       {proMode && assets.length > 0 && (
         <TopMovers T={T} assets={assets} onSelectAsset={onSelectAsset} />
       )}
