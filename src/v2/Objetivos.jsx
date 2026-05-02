@@ -24,6 +24,7 @@ import { objectivesPlan, saveObjective, getActiveObjective, deleteObjective } fr
 import { isAIDisabled } from "../lib/aiConsent.js";
 import { hapticNative } from "../lib/native.js";
 import { DisclaimerStrip, Skeleton } from "./shared.jsx";
+import { useDragToDismiss } from "./useDragToDismiss.js";
 
 // ----- Wallet card -----
 export function ObjetivosCard({ T, lang = "es" }) {
@@ -312,6 +313,7 @@ function ObjetivosWizard({ T, lang, existing, onClose, onSaved }) {
   const [plan, setPlan] = useState(existing?.plan || null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const dtd = useDragToDismiss(onClose);
 
   async function generatePlan() {
     if (!goal.trim() || !horizonMonths) {
@@ -374,12 +376,13 @@ function ObjetivosWizard({ T, lang, existing, onClose, onSaved }) {
         display: "flex", alignItems: "flex-end", justifyContent: "center",
       }}
     >
-      <div style={{
+      <div ref={dtd.ref} style={{
         width: "100%", maxWidth: 540, maxHeight: "92dvh",
         background: T.bgElev || T.bg, color: T.text,
         borderTopLeftRadius: 28, borderTopRightRadius: 28,
         border: `1px solid ${T.border}`, borderBottom: "none",
         display: "flex", flexDirection: "column", overflow: "hidden",
+        ...dtd.dragStyle,
       }}>
         {/* Drag handle */}
         <div style={{ display: "flex", justifyContent: "center", paddingTop: 12 }}>

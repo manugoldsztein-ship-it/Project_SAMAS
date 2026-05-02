@@ -27,6 +27,7 @@ import ReactDOM from "react-dom";
 import { FONT, fmtMoney, fmtPct } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import { Pill, SectionHead, AssetSparkline, AssetRowSkeletonList, useShellEntryDone, useInFlight, DisclaimerStrip } from "./shared.jsx";
+import { useDragToDismiss } from "./useDragToDismiss.js";
 import { useLivePrice, LivePricesContext } from "./livePrices.jsx";
 import { broker as brokerApi, wallet as walletApi } from "./api/index.js";
 // The Objetivos wizard is shared with the legacy MobileApp UI. It
@@ -792,6 +793,7 @@ function MercadoView({ T, assets, onSelectAsset, proMode = false, lang = "es" })
 function CompareSheet({ T, assets, onClose }) {
   const [picked, setPicked] = useState([]);
   const [query, setQuery] = useState("");
+  const dtd = useDragToDismiss(onClose);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -826,12 +828,13 @@ function CompareSheet({ T, assets, onClose }) {
       background: "rgba(0,0,0,0.65)",
       display: "flex", alignItems: "flex-end", justifyContent: "center",
     }}>
-      <div style={{
+      <div ref={dtd.ref} style={{
         width: "100%", maxWidth: 540, maxHeight: "90dvh",
         background: T.bgElev, color: T.text,
         borderTopLeftRadius: 28, borderTopRightRadius: 28,
         border: `1px solid ${T.border}`, borderBottom: "none",
         display: "flex", flexDirection: "column", overflow: "hidden",
+        ...dtd.dragStyle,
       }}>
         {/* Header */}
         <div style={{
@@ -1408,6 +1411,7 @@ function AIWatchlistModal({ T, lang = "es", onClose, onSave }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [savingBusy, setSavingBusy] = useState(false);
+  const dtd = useDragToDismiss(onClose);
 
   // Suggestion chips for empty-state inspiration. Tap to fill the
   // theme input + auto-submit so the user sees "Cohen demo" at work.
@@ -1477,13 +1481,14 @@ function AIWatchlistModal({ T, lang = "es", onClose, onSave }) {
         animation: "samas-fade-in 160ms ease-out",
       }}
     >
-      <div style={{
+      <div ref={dtd.ref} style={{
         width: "100%", maxWidth: 540, maxHeight: "90vh",
         background: T.bgElev || T.bg, color: T.text,
         borderTopLeftRadius: 24, borderTopRightRadius: 24,
         border: `1px solid ${T.border}`, borderBottom: "none",
         display: "flex", flexDirection: "column", overflow: "hidden",
         animation: "samas-sheet-up 220ms ease-out",
+        ...dtd.dragStyle,
       }}>
         {/* Header */}
         <div style={{

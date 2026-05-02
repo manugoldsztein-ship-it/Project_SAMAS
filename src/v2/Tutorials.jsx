@@ -24,6 +24,7 @@ import ReactDOM from "react-dom";
 import { FONT } from "./theme.js";
 import { t as tr } from "../lib/i18n.js";
 import { TUTORIALS } from "./tutorialsData.js";
+import { useDragToDismiss } from "./useDragToDismiss.js";
 import { completeTutorial, getEducationStats } from "../lib/education.js";
 
 const READ_KEY = "samas_tutorials_read";
@@ -450,6 +451,7 @@ function ModuleSection({ T, lang, moduleId, moduleIndex, tutorials, completedSet
 
 // ----- Detail: bottom sheet rendering the markdown body -----
 function TutorialDetail({ T, lang = "es", tutorial, onClose }) {
+  const dtd = useDragToDismiss(onClose);
   if (!tutorial) return null;
   return (
     <div
@@ -460,12 +462,13 @@ function TutorialDetail({ T, lang = "es", tutorial, onClose }) {
         display: "flex", alignItems: "flex-end", justifyContent: "center",
       }}
     >
-      <div style={{
+      <div ref={dtd.ref} style={{
         width: "100%", maxWidth: 540, maxHeight: "92dvh",
         background: T.bgElev || T.bg, color: T.text,
         borderTopLeftRadius: 28, borderTopRightRadius: 28,
         border: `1px solid ${T.border}`, borderBottom: "none",
         display: "flex", flexDirection: "column", overflow: "hidden",
+        ...dtd.dragStyle,
       }}>
         {/* Drag handle */}
         <div style={{ display: "flex", justifyContent: "center", paddingTop: 12 }}>

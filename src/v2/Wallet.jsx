@@ -46,6 +46,7 @@ import { EducationCard } from "./Education.jsx";
 import { AIQuotaPill } from "./AIQuotaPill.jsx";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { hapticNative } from "../lib/native.js";
+import { useDragToDismiss } from "./useDragToDismiss.js";
 
 export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark, onOpenSettings, onOpenTutorials, proMode = false, isPlus = false, onOpenProUpsell, lang = "es" }) {
   // ----------- data state -----------
@@ -2099,6 +2100,7 @@ function QuarterlyReviewCard({ T, lang = "es" }) {
 // react-markdown dependency for 4 paragraphs of h2 + p is overkill.
 function QuarterlyReviewSheet({ T, lang = "es", data, onClose }) {
   const stats = data?.stats || {};
+  const dtd = useDragToDismiss(onClose);
   // Tiny markdown → React renderer. Handles ## h2 and paragraphs.
   // Bolds anything between ** **. $TICKER stays plain.
   function renderMarkdown(md) {
@@ -2160,12 +2162,13 @@ function QuarterlyReviewSheet({ T, lang = "es", data, onClose }) {
         display: "flex", alignItems: "flex-end", justifyContent: "center",
       }}
     >
-      <div style={{
+      <div ref={dtd.ref} style={{
         width: "100%", maxWidth: 540, maxHeight: "92dvh",
         background: T.bgElev || T.bg, color: T.text,
         borderTopLeftRadius: 28, borderTopRightRadius: 28,
         border: `1px solid ${T.border}`, borderBottom: "none",
         display: "flex", flexDirection: "column", overflow: "hidden",
+        ...dtd.dragStyle,
       }}>
         {/* Drag handle */}
         <div style={{ display: "flex", justifyContent: "center", paddingTop: 12 }}>
@@ -2664,6 +2667,7 @@ function ChatBubble({ T, role, content, thinking = false }) {
 function NotificationsInbox({ T, lang = "es", onClose }) {
   const [items, setItems] = useState(null); // null=loading, [] = empty
   const [busy, setBusy] = useState(false);
+  const dtd = useDragToDismiss(onClose);
   // Proactive insights generator (samas-0.2.1). Tap → calls the
   // proactive-insights Edge Function, which writes notif rows the
   // realtime subscription below picks up automatically.
@@ -2768,7 +2772,7 @@ function NotificationsInbox({ T, lang = "es", onClose }) {
       background: "rgba(0,0,0,0.6)",
       display: "flex", alignItems: "flex-end", justifyContent: "center",
     }}>
-      <div style={{
+      <div ref={dtd.ref} style={{
         width: "100%", maxWidth: 540, maxHeight: "92dvh",
         // Min height so the sheet feels like a proper bottom sheet
         // even when the inbox is empty / loading. Without this, the
@@ -2783,6 +2787,7 @@ function NotificationsInbox({ T, lang = "es", onClose }) {
         border: `1px solid ${T.border}`, borderBottom: "none",
         display: "flex", flexDirection: "column",
         overflow: "hidden",
+        ...dtd.dragStyle,
       }}>
         {/* Drag handle */}
         <div style={{ display: "flex", justifyContent: "center", paddingTop: 14 }}>
@@ -3415,6 +3420,7 @@ function CardPreview({ T, card, onClick }) {
 // and renders them grouped by day (Hoy / Ayer / DD MMM).
 function TxnsAllSheet({ T, lang = "es", balanceVisible, onClose }) {
   const [items, setItems] = useState(null); // null=loading, [] = empty
+  const dtd = useDragToDismiss(onClose);
   useEffect(() => {
     let alive = true;
     walletApi.getTransactions({ limit: 200 })
@@ -3454,13 +3460,14 @@ function TxnsAllSheet({ T, lang = "es", balanceVisible, onClose }) {
       background: "rgba(0,0,0,0.6)",
       display: "flex", alignItems: "flex-end", justifyContent: "center",
     }}>
-      <div style={{
+      <div ref={dtd.ref} style={{
         width: "100%", maxWidth: 540, maxHeight: "92dvh",
         minHeight: "60dvh",
         background: T.bgElev, color: T.text,
         borderTopLeftRadius: 28, borderTopRightRadius: 28,
         border: `1px solid ${T.border}`, borderBottom: "none",
         display: "flex", flexDirection: "column", overflow: "hidden",
+        ...dtd.dragStyle,
       }}>
         {/* Drag handle */}
         <div style={{ display: "flex", justifyContent: "center", paddingTop: 14 }}>
@@ -3599,18 +3606,20 @@ function TxnRow({ t, T, isLast, visible }) {
 // ============================================================
 
 function ModalShell({ T, title, onClose, children }) {
+  const dtd = useDragToDismiss(onClose);
   return (
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
       position: "fixed", inset: 0, zIndex: 100,
       background: "rgba(0,0,0,0.6)",
       display: "flex", alignItems: "flex-end", justifyContent: "center",
     }}>
-      <div style={{
+      <div ref={dtd.ref} style={{
         width: "100%", maxWidth: 540, maxHeight: "92%",
         background: T.bgElev, color: T.text,
         borderTopLeftRadius: 28, borderTopRightRadius: 28,
         border: `1px solid ${T.border}`, borderBottom: "none",
         display: "flex", flexDirection: "column", overflow: "hidden",
+        ...dtd.dragStyle,
       }}>
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",

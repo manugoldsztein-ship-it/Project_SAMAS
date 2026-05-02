@@ -2998,6 +2998,33 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.49",
+    title: "Drag-to-dismiss sweep — 10 sheets más cubiertas",
+    bullets: [
+      "Manuel: 'works but only for the main settings menu, it should work anywhere'. Las 9 sheets del 0.4.46 se quedaron cortas — había muchas más sheets que el user toca a diario sin drag-to-dismiss.",
+      "SWEEP — apliqué useDragToDismiss a 10 sheets más:",
+      "- ModalShell (Wallet.jsx) — wrapper de Deposit + Withdraw + CardDetails. 3 modales que heredan drag-to-dismiss en una sola change.",
+      "- TxnsAllSheet (Wallet.jsx) — vista 'Ver todo' de movimientos.",
+      "- NotificationsInbox (Wallet.jsx) — el bell icon.",
+      "- QuarterlyReviewSheet (Wallet.jsx) — la review de los 90 días en Pro.",
+      "- TutorialDetail (Tutorials.jsx) — markdown del tutorial individual.",
+      "- ObjetivosWizard (Objetivos.jsx) — wizard 3-step de plan personalizado.",
+      "- CompareSheet (Broker.jsx) — comparador de activos.",
+      "- AIWatchlistModal (Broker.jsx) — generador de watchlists con IA.",
+      "DEJADAS afuera — AssetSheet (Broker, tiene su propia closing animation que conflictaba con dragStyle), AporteModal + sheets inline secundarias (color picker, export-data sheet) por ser modales centrados o lugares que requieren refactor más invasivo.",
+      "Total drag-to-dismiss: 19 sheets vivas en el 0.4.49.",
+    ],
+  },
+  {
+    version: "0.4.48",
+    title: "Fix drag-to-dismiss — non-passive touchmove listener",
+    bullets: [
+      "Manuel reportó: drag-down no cerraba sheets en iPhone (solo SettingsSheet andaba en algunos casos).",
+      "ROOT CAUSE — React's onTouchMove es passive listener por default en iOS. Con passive no podés preventDefault, entonces el browser interpreta tu drag como scroll vertical y nunca te entrega el touchmove. El handler nunca recibía los eventos.",
+      "FIX — refactor del hook a useEffect con addEventListener directo + { passive: false } en touchmove. Ahora podemos preventDefault cuando el user dragea intencionalmente. Scroll normal sigue funcionando porque solo preventDefault'amos cuando deltaY > RESIST + scrollTop === 0.",
+    ],
+  },
+  {
     version: "0.4.47",
     title: "Skeleton loaders — Objetivos + Benchmark cards ya no flashean vacío",
     bullets: [
