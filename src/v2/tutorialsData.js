@@ -22,6 +22,8 @@
 export const TUTORIALS = [
   {
     id: "first_trade",
+    module: "fundamentals",
+    xp: 10,
     glyph: "🛒",
     title: "Cómo hacer tu primera operación",
     subtitle: "Comprar un activo en SAMAS, paso a paso.",
@@ -45,6 +47,8 @@ Tocá **Confirmar compra**. Si la operación es a mercado, queda ejecutada al to
   },
   {
     id: "samas_plus",
+    module: "strategy",
+    xp: 10,
     glyph: "✦",
     title: "Qué es SAMAS Plus",
     subtitle: "El plan pago de SAMAS — qué incluye y cuándo conviene.",
@@ -76,6 +80,8 @@ Mismo lugar: Configuración → fila **SAMAS Plus** → **Cancelar**. Volvés a 
   },
   {
     id: "risk_score",
+    module: "fundamentals",
+    xp: 10,
     glyph: "📈",
     title: "Cómo leer el Riesgo por activo",
     subtitle: "Score 1-10, qué significan los colores y de dónde sale.",
@@ -110,6 +116,8 @@ Cada fila se expande con una explicación en castellano de por qué tiene ese sc
   },
   {
     id: "cedear_basics",
+    module: "fundamentals",
+    xp: 10,
     glyph: "🌎",
     title: "Qué es un CEDEAR",
     subtitle: "El instrumento más usado por retail argentino para invertir en acciones del exterior.",
@@ -147,6 +155,8 @@ El ratio NO te perjudica — el precio del CEDEAR ya está ajustado. Pero te pue
   },
   {
     id: "thesis_tracker",
+    module: "strategy",
+    xp: 15,
     glyph: "📋",
     title: "Cómo escribir una tesis de inversión",
     subtitle: "El campo opcional al confirmar una compra que SAMAS puede validar más adelante.",
@@ -190,6 +200,8 @@ Es journaling-meets-validación, y según nuestro relevamiento ningún broker ar
   },
   {
     id: "share_privacy",
+    module: "strategy",
+    xp: 10,
     glyph: "🔒",
     title: "Privacidad cuando compartís tu cartera",
     subtitle: "Qué se ve y qué NO se ve cuando publicás un trade o tu portafolio en el feed social.",

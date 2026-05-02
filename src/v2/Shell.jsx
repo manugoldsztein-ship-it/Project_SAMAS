@@ -292,6 +292,7 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
             isDark={isDark}
             onToggleDark={onToggleDark}
             onOpenSettings={() => setShowSettings(true)}
+            onOpenTutorials={() => setShowTutorials(true)}
             proMode={proMode}
             isPlus={isPlus}
             onOpenProUpsell={() => setShowProUpsell(true)}
@@ -424,6 +425,15 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
         @keyframes samas-fade-in {
           from { opacity: 0; }
           to   { opacity: 1; }
+        }
+        /* samas-0.4.35 — Duolingo-style "next up" pulse for the
+           tutorial node ready to be tapped. Pulses the accent glow
+           via box-shadow instead of transform scale to avoid
+           conflicting with the zigzag's translateX offset. 2s loop
+           matches the Duolingo cadence. */
+        @keyframes samas-pulse {
+          0%, 100% { box-shadow: 0 4px 12px rgba(22, 199, 132, 0.30), 0 0 0 0 rgba(22, 199, 132, 0.20); }
+          50%      { box-shadow: 0 4px 24px rgba(22, 199, 132, 0.55), 0 0 0 6px rgba(22, 199, 132, 0.18); }
         }
       `}</style>
 
@@ -2975,6 +2985,25 @@ function AIConsentGate({ T, lang = "es" }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.4.35",
+    title: "Education Duolingo-style — XP, streak, path zigzag",
+    bullets: [
+      "Manuel pidió Education estilo Duolingo. La Tutorials hub que existía desde 0.4.1 era una lista plana con 'leído' chip — funcional pero no engaging. Esta patch la rebuilds gamified.",
+      "NEW src/lib/education.js — getProgress() + getStreak() + completeTutorial() + getEducationStats(). State persistido en localStorage: samas_tutorials_v2 ({ completed: id→date, totalXp }) y samas_streak_v2 ({ current, longest, lastDay }). Streak auto-decay: si lastDay >1 día atrás, current → 0 (mismo flow que Duolingo).",
+      "NEW src/v2/Education.jsx (EducationCard) — Wallet front-page card. Empty state: '📚 Empezá tu primer tutorial · 6 lecciones cortas'. Con progreso: progress bar + stats line ('3/6 · ⭐ 30 XP · 🔥 5'). Tap → abre TutorialsHub. Auto-refresca via window 'focus' event para reflejar el progreso post-tutorial sin tener que re-mount.",
+      "REVAMPED Tutorials.jsx — TutorialsHub ahora es Duolingo-style:",
+      "- Header con stats pills (🔥 streak · ⭐ XP · ✓ N/total)",
+      "- Tutoriales agrupados por module ('Fundamentos' [3] + 'Estrategia' [3])",
+      "- Cada module: header con number badge + progress bar + module title",
+      "- Path zigzag vertical: cada tutorial es un círculo de 76px, alternando left-of-center / right-of-center, conectado al siguiente con una línea (verde si completado, gris si pendiente). Estados: completed (verde solid + ✓), next-up (accent border + pulse glow animation), other (surface + border)",
+      "- Animation samas-pulse: box-shadow accent glow 2s loop en el next-up node — match visual a Duolingo, no rompe el offset zigzag",
+      "- Caption + XP badge debajo de cada nodo",
+      "TUTORIAL DATA — agregé module ('fundamentals' | 'strategy') + xp (10 default, 15 para thesis_tracker) a cada uno de los 6 tutoriales en src/v2/tutorialsData.js.",
+      "COMPLETION FLOW: cuando el user abre un tutorial → markRead (legacy compat) + completeTutorial(id, xp) → award XP + bump streak (only first completion of the day, idempotent re-opens). Stats re-read on next render.",
+      "i18n: 9 keys nuevas (education.* + tutorials.stats.* + tutorials.module.*) en es + en. Otras locales fall-back a es.",
+    ],
+  },
   {
     version: "0.4.34",
     title: "FCI module — Fondos Comunes de Inversión front-and-center estilo Cocos",

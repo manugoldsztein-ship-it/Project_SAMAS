@@ -19,11 +19,12 @@
 // don't gate anything on read state.
 // ============================================================
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import ReactDOM from "react-dom";
 import { FONT } from "./theme.js";
 import { t as tr } from "../lib/i18n.js";
 import { TUTORIALS } from "./tutorialsData.js";
+import { completeTutorial, getEducationStats } from "../lib/education.js";
 
 const READ_KEY = "samas_tutorials_read";
 
@@ -140,6 +141,15 @@ function splitBold(text, T, lang) {
 export function TutorialsHub({ T, lang = "es", onClose }) {
   const [readSet, setReadSet] = useState(() => getRead());
   const [openId, setOpenId] = useState(null);
+  // samas-0.4.35: bumped on completeTutorial to force a re-read of
+  // education stats. Lighter than threading through state from the
+  // detail sheet.
+  const [progressTick, setProgressTick] = useState(0);
+  const stats = useMemo(
+    () => getEducationStats(TUTORIALS),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [progressTick],
+  );
 
   function open(id) {
     setOpenId(id);
@@ -149,7 +159,27 @@ export function TutorialsHub({ T, lang = "es", onClose }) {
       next.add(id);
       setReadSet(next);
     }
+    // Tutorial counts as completed on first open. Awards XP +
+    // bumps streak. Idempotent — re-opening doesn't double-count.
+    const tut = TUTORIALS.find((t) => t.id === id);
+    if (tut) {
+      completeTutorial(id, tut.xp || 10);
+      setProgressTick((n) => n + 1);
+    }
   }
+
+  // Group tutorials by module — Duolingo-style "lessons" within a
+  // "course". Order preserves the order from tutorialsData.js so a
+  // change in the canonical list reorders the path automatically.
+  const modules = useMemo(() => {
+    const out = new Map();
+    for (const t of TUTORIALS) {
+      const m = t.module || "fundamentals";
+      if (!out.has(m)) out.set(m, []);
+      out.get(m).push(t);
+    }
+    return Array.from(out.entries()); // [["fundamentals", [...]], ["strategy", [...]]]
+  }, []);
 
   if (typeof document === "undefined") return null;
 
@@ -161,14 +191,14 @@ export function TutorialsHub({ T, lang = "es", onClose }) {
       paddingTop: "calc(env(safe-area-inset-top) + 8px)",
       paddingBottom: "calc(env(safe-area-inset-bottom) + 8px)",
     }}>
-      {/* Header */}
+      {/* Header — Duolingo-style top bar with back + stats. */}
       <div style={{
         display: "flex", alignItems: "center", gap: 10,
-        padding: "12px 16px",
+        padding: "12px 16px 16px",
         borderBottom: `1px solid ${T.border}`,
       }}>
         <button onClick={onClose} aria-label={tr("tutorials.back", lang)} style={{
-          width: 32, height: 32, borderRadius: 10,
+          width: 32, height: 32, borderRadius: 10, flexShrink: 0,
           background: T.surface, border: `1px solid ${T.border}`,
           color: T.text, cursor: "pointer", padding: 0,
           display: "flex", alignItems: "center", justifyContent: "center",
@@ -190,58 +220,48 @@ export function TutorialsHub({ T, lang = "es", onClose }) {
         </div>
       </div>
 
-      {/* List */}
+      {/* Stats row — 🔥 streak + ⭐ XP + ✓ progress */}
+      <div style={{
+        display: "flex", gap: 8,
+        padding: "12px 16px 0",
+      }}>
+        <StatPill T={T}
+          icon="🔥"
+          value={stats.streakCurrent}
+          label={tr("tutorials.stats.streak", lang)}
+          color="#F59E0B"
+        />
+        <StatPill T={T}
+          icon="⭐"
+          value={stats.totalXp}
+          label="XP"
+          color={T.accent}
+        />
+        <StatPill T={T}
+          icon="✓"
+          value={`${stats.completed}/${stats.total}`}
+          label={tr("tutorials.stats.completed", lang)}
+          color={T.accent}
+        />
+      </div>
+
+      {/* Path — modules with zigzag tutorial nodes, Duolingo-style. */}
       <div style={{
         flex: 1, overflowY: "auto",
-        padding: "12px 16px 24px",
+        padding: "16px 0 80px",
       }}>
-        {TUTORIALS.map((tut) => {
-          const isRead = readSet.has(tut.id);
-          return (
-            <button
-              key={tut.id}
-              onClick={() => open(tut.id)}
-              style={{
-                width: "100%", marginBottom: 10, padding: "14px 16px",
-                borderRadius: 18, cursor: "pointer", textAlign: "left",
-                background: T.surface, border: `1px solid ${T.border}`,
-                display: "flex", alignItems: "center", gap: 14,
-              }}
-            >
-              <div style={{
-                width: 44, height: 44, flexShrink: 0, borderRadius: 12,
-                background: T.accentSoft,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 22,
-              }}>{tut.glyph}</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  display: "flex", alignItems: "center", gap: 6,
-                  fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, color: T.text,
-                  marginBottom: 3,
-                }}>
-                  <span style={{ flex: 1, minWidth: 0 }}>{tut.title}</span>
-                  {isRead && (
-                    <span style={{
-                      fontFamily: FONT.mono, fontSize: 9, fontWeight: 800,
-                      padding: "2px 7px", borderRadius: 999,
-                      background: T.accent, color: T.accentInk,
-                      letterSpacing: 0.4, textTransform: "uppercase",
-                    }}>{tr("tutorials.read_chip", lang)}</span>
-                  )}
-                </div>
-                <div style={{
-                  fontFamily: FONT.sans, fontSize: 12, color: T.textMute,
-                  lineHeight: 1.4,
-                }}>{tut.subtitle}</div>
-              </div>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute}
-                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                <polyline points="9 18 15 12 9 6"/>
-              </svg>
-            </button>
-          );
-        })}
+        {modules.map(([moduleId, tutorials], modIdx) => (
+          <ModuleSection
+            key={moduleId}
+            T={T}
+            lang={lang}
+            moduleId={moduleId}
+            moduleIndex={modIdx}
+            tutorials={tutorials}
+            completedSet={stats.completedSet}
+            onOpen={open}
+          />
+        ))}
       </div>
 
       {/* Detail sheet (when an item is tapped) */}
@@ -255,6 +275,167 @@ export function TutorialsHub({ T, lang = "es", onClose }) {
       )}
     </div>,
     document.body,
+  );
+}
+
+// ----- Duolingo-style helpers (samas-0.4.35) -----
+
+function StatPill({ T, icon, value, label, color }) {
+  return (
+    <div style={{
+      flex: 1, padding: "8px 10px", borderRadius: 12,
+      background: T.surface, border: `1px solid ${T.border}`,
+      display: "flex", alignItems: "center", gap: 8,
+    }}>
+      <span style={{ fontSize: 16, lineHeight: 1 }}>{icon}</span>
+      <div style={{ minWidth: 0 }}>
+        <div style={{
+          fontFamily: FONT.mono, fontSize: 14, fontWeight: 800,
+          color: color || T.text, lineHeight: 1.1,
+        }}>{value}</div>
+        <div style={{
+          fontFamily: FONT.sans, fontSize: 9, color: T.textMute,
+          letterSpacing: 0.5, textTransform: "uppercase", marginTop: 2,
+        }}>{label}</div>
+      </div>
+    </div>
+  );
+}
+
+function ModuleSection({ T, lang, moduleId, moduleIndex, tutorials, completedSet, onOpen }) {
+  const moduleLabel = tr(`tutorials.module.${moduleId}`, lang);
+  const completed = tutorials.filter((t) => completedSet.has(t.id)).length;
+  const total = tutorials.length;
+  // Module unlocks when the previous module is fully completed (or
+  // it's the first module). Locked modules show greyed out + lock
+  // icon, can be tapped to see preview but tutorials inside don't
+  // award XP until unlocked.
+  // For the prototype we keep all modules unlocked so the user can
+  // explore freely — Duolingo gating is nice but requires more
+  // content to feel meaningful. Add gating in 0.5+ if user feedback
+  // wants it.
+  const locked = false;
+
+  return (
+    <div style={{ marginBottom: 28 }}>
+      {/* Module header */}
+      <div style={{
+        margin: "0 16px 12px",
+        padding: "10px 14px",
+        background: T.surface, border: `1px solid ${T.border}`,
+        borderRadius: 14,
+        display: "flex", alignItems: "center", gap: 10,
+      }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: 8,
+          background: locked ? T.bg : T.accent,
+          color: locked ? T.textMute : T.accentInk,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontFamily: FONT.mono, fontSize: 12, fontWeight: 800,
+        }}>{moduleIndex + 1}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontFamily: FONT.sans, fontSize: 13, fontWeight: 800, color: T.text,
+          }}>{moduleLabel}</div>
+          <div style={{
+            fontFamily: FONT.mono, fontSize: 10, color: T.textMute, marginTop: 2,
+          }}>{completed}/{total} · {tr("tutorials.module.lessons", lang)}</div>
+        </div>
+        {/* Module progress bar */}
+        <div style={{
+          width: 60, height: 6, borderRadius: 3, flexShrink: 0,
+          background: T.bg, overflow: "hidden",
+        }}>
+          <div style={{
+            width: `${total > 0 ? (completed / total) * 100 : 0}%`,
+            height: "100%",
+            background: T.accent,
+            transition: "width 200ms",
+          }}/>
+        </div>
+      </div>
+
+      {/* Path — vertical zigzag of tutorial nodes */}
+      <div style={{ position: "relative" }}>
+        {tutorials.map((tut, i) => {
+          const isCompleted = completedSet.has(tut.id);
+          // Find the "next up" tutorial (first non-completed). It
+          // gets the bigger-pulse styling to hint at progression.
+          const isNextUp = !isCompleted &&
+            tutorials.slice(0, i).every((t) => completedSet.has(t.id));
+          // Zigzag: even rows left-of-center, odd rows right-of-center.
+          // Creates the visual "path" that reads top-down.
+          const offset = i % 2 === 0 ? -28 : 28;
+          return (
+            <div key={tut.id} style={{
+              display: "flex", justifyContent: "center",
+              padding: "10px 0",
+              position: "relative",
+            }}>
+              {/* Connector line to next node — only when not the last */}
+              {i < tutorials.length - 1 && (
+                <div style={{
+                  position: "absolute",
+                  top: 70, left: "50%", width: 2, height: 28,
+                  background: isCompleted ? T.accent : T.border,
+                  marginLeft: -1,
+                  zIndex: 0,
+                }}/>
+              )}
+              <button
+                onClick={() => onOpen(tut.id)}
+                style={{
+                  position: "relative",
+                  transform: `translateX(${offset}px)`,
+                  width: 76, height: 76, borderRadius: "50%",
+                  background: isCompleted ? T.accent : (isNextUp ? T.accentSoft : T.surface),
+                  border: `3px solid ${isCompleted ? T.accent : (isNextUp ? T.accent : T.border)}`,
+                  color: isCompleted ? T.accentInk : T.text,
+                  cursor: "pointer", padding: 0,
+                  display: "flex", flexDirection: "column",
+                  alignItems: "center", justifyContent: "center",
+                  fontFamily: "inherit",
+                  // Subtle pulse for the next-up node (Duolingo does this).
+                  animation: isNextUp ? "samas-pulse 2s ease-in-out infinite" : "none",
+                  zIndex: 1,
+                  // Drop shadow for depth.
+                  boxShadow: isNextUp
+                    ? `0 4px 12px ${T.accent}55`
+                    : "0 2px 6px rgba(0,0,0,0.2)",
+                }}
+              >
+                <span style={{ fontSize: 26, lineHeight: 1 }}>
+                  {isCompleted ? "✓" : tut.glyph}
+                </span>
+              </button>
+              {/* Tutorial title — small caption below the node, offset same direction */}
+              <div style={{
+                position: "absolute",
+                top: 80, left: "50%",
+                transform: `translateX(calc(-50% + ${offset}px))`,
+                fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+                color: isCompleted ? T.accent : T.text,
+                textAlign: "center",
+                width: 120,
+                pointerEvents: "none",
+              }}>{tut.title}</div>
+              {/* XP badge */}
+              <div style={{
+                position: "absolute",
+                top: 100, left: "50%",
+                transform: `translateX(calc(-50% + ${offset}px))`,
+                fontFamily: FONT.mono, fontSize: 9, fontWeight: 700,
+                color: T.textMute,
+                pointerEvents: "none",
+              }}>+{tut.xp || 10} XP</div>
+            </div>
+          );
+        })}
+        {/* Spacer at the bottom of the module so the next module's
+            header has breathing room from the zigzag's caption. */}
+        <div style={{ height: 50 }}/>
+      </div>
+    </div>
   );
 }
 

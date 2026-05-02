@@ -42,11 +42,12 @@ import { StressTestCard } from "./StressTest.jsx";
 import { BehaviorCard } from "./Behavior.jsx";
 import { JournalCard } from "./Journal.jsx";
 import { FCICard } from "./FCI.jsx";
+import { EducationCard } from "./Education.jsx";
 import { AIQuotaPill } from "./AIQuotaPill.jsx";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { hapticNative } from "../lib/native.js";
 
-export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark, onOpenSettings, proMode = false, isPlus = false, onOpenProUpsell, lang = "es" }) {
+export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark, onOpenSettings, onOpenTutorials, proMode = false, isPlus = false, onOpenProUpsell, lang = "es" }) {
   // ----------- data state -----------
   const [balance, setBalance] = useState(null);
   const [fx, setFx] = useState(null);
@@ -610,6 +611,14 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
           if (onTab) onTab("broker");
         }}
       />
+
+      {/* Education (samas-0.4.35) — Duolingo-style entry point a la
+          Tutorials hub. Per Rolan's spec, education en primera
+          plana del Lite. Visible para todos. Stats live (XP +
+          streak + completed/total) preview el progreso del user. */}
+      {onOpenTutorials && (
+        <EducationCard T={T} lang={lang} onOpen={onOpenTutorials} />
+      )}
 
       {/* ---------- Cash flow (samas-0.4.15 → 0.4.33: re-gated Pro) ----------
           Originalmente lo había promovido a Lite por feedback del padre

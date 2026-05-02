@@ -264,6 +264,16 @@ const V2 = {
     "fci.type.mixed":             "Mixto",
     "fci.type.equity":            "Renta Variable",
 
+    "education.section.title":    "Aprendé",
+    "education.cta.fresh_title":  "Empezá tu primer tutorial",
+    "education.cta.fresh_sub":    "6 lecciones cortas para entender SAMAS y los fundamentos de inversión.",
+    "education.cta.continue_title":"Seguí aprendiendo",
+    "tutorials.stats.streak":     "Racha",
+    "tutorials.stats.completed":  "Completados",
+    "tutorials.module.fundamentals": "Fundamentos",
+    "tutorials.module.strategy":  "Estrategia",
+    "tutorials.module.lessons":   "lecciones",
+
     "stress.section.title":        "Resistencia",
     "stress.cta.title":            "Stress test histórico",
     "stress.cta.sub":              "¿Cómo aguantó esta cartera el COVID, 2008, el corralito?",
@@ -1082,6 +1092,16 @@ const V2 = {
     "fci.type.fixed_income":      "Fixed Income",
     "fci.type.mixed":             "Mixed",
     "fci.type.equity":            "Equity",
+
+    "education.section.title":    "Learn",
+    "education.cta.fresh_title":  "Start your first tutorial",
+    "education.cta.fresh_sub":    "6 short lessons to understand SAMAS and investing fundamentals.",
+    "education.cta.continue_title":"Keep learning",
+    "tutorials.stats.streak":     "Streak",
+    "tutorials.stats.completed":  "Completed",
+    "tutorials.module.fundamentals": "Fundamentals",
+    "tutorials.module.strategy":  "Strategy",
+    "tutorials.module.lessons":   "lessons",
 
     "stress.section.title":        "Resilience",
     "stress.cta.title":            "Historical stress test",
