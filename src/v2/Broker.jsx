@@ -40,6 +40,7 @@ import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { toast } from "./toast.jsx";
 import { t as tr } from "../lib/i18n.js";
 import { analyzeAsset, tradeCoach, suggestWatchlist, rebalancePortfolio, scoreRisk, positionSize, saveThesis, getActiveThesis, validateThesis, sectorRotation } from "../lib/ai.js";
+import { recordBuyJournal, closeJournalOnSell } from "../lib/journal.js";
 
 // Sub-tabs metadata — drives both the bottom nav and the content
 // switch in the top-level <BrokerShell/> render.
@@ -2330,6 +2331,27 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
           await saveThesis({ ticker: asset.ticker, text: thesisText });
         } catch (e) {
           console.warn("[broker] saveThesis failed:", e?.message);
+        }
+      }
+      // Trade Journal entry (samas-0.4.29). BUY → record a new
+      // open entry. SELL → close matching open entries FIFO and
+      // compute realized P/L. Both best-effort: errors won't block
+      // the trade.
+      if (r.status === "filled") {
+        if (confirm.side === "buy") {
+          recordBuyJournal({
+            ticker: asset.ticker,
+            qty: confirm.qty,
+            price: r.fillPrice ?? confirm.price ?? asset.price,
+            thesisText,
+          }).catch(() => {});
+        } else if (confirm.side === "sell") {
+          closeJournalOnSell({
+            ticker: asset.ticker,
+            sellQty: confirm.qty,
+            sellPrice: r.fillPrice ?? confirm.price ?? asset.price,
+            currency: asset.currency,
+          }).catch(() => {});
         }
       }
       setThesisText("");

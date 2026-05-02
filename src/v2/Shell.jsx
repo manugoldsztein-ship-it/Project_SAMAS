@@ -2976,6 +2976,20 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.29",
+    title: "Trade Journal automático — el primer broker AR que te ayuda a aprender de tus trades",
+    bullets: [
+      "Asesores institucionales TODOS llevan trade journals; brokers retail los esconden detrás de exports de Excel. SAMAS lo expone primera-fila. La feature reusa la captura de tesis del 0.3.3 + extiende con outcome tracking + reflexión IA.",
+      "NEW SQL — supabase/trade_journal.sql: tabla per-trade con thesis_at_entry, reflection (AI-generated post-close), outcome (open/gain/loss/flat), realized_usd, occurred_at, closed_at. RLS scoped a auth.uid() en read/insert/update/delete. Aplicada via Management API.",
+      "NEW lib/journal.js: recordBuyJournal() en cada BUY filled con la tesis del confirm step. closeJournalOnSell() en cada SELL filled hace match FIFO contra entries open del mismo ticker, computa realized P/L (con conversion ARS→USD via fixed MEP) y sets outcome (gain/loss/flat con threshold ±2%). Best-effort, errors no bloquean el trade.",
+      "NEW Edge Function — supabase/functions/journal-recap: dos modos. mode='recap' agrega los últimos 90 días en stats (closed, wins, losses, batting avg, total realized P/L) + Claude-generated narrative + headline + lesson clave. mode='reflect' + journal_id genera reflexión per-trade y la persiste. Templated fallback cuando no hay API key.",
+      "NEW Wallet card — src/v2/Journal.jsx: 'Diario de trading' entre Behavior y Objetivos. Stats strip (Win rate · P/L realizado) + headline + narrativa AI + lesson en card accent. Empty-state distinto cuando hay 0 trades cerrados ('Tu diario está vacío'). Tap → bottom sheet con la lista completa de entries (más recientes primero), cada una con ticker + outcome chip color-coded + tesis original + reflexión AI on demand.",
+      "WIRED en Broker.jsx confirm step: después del saveThesis existente, ahora también recordBuyJournal() en BUY o closeJournalOnSell() en SELL. Si la trade no fillea (limit order pending), el journal queda fuera — sólo trades ejecutadas.",
+      "PITCH: 'el primer broker que te ayuda a aprender de tus propios errores'. Cohen va a entender en 3 segundos — sus clientes operan y mueren aprendiendo lo mismo 50 veces. Esta card hace explícito el ciclo tesis → trade → outcome → lesson.",
+      "i18n: 17 keys nuevas (journal.* family) en es + en. Otras locales fall-back a es.",
+    ],
+  },
+  {
     version: "0.4.28",
     title: "Mood-aware AI — el broker que te protege de vos mismo",
     bullets: [

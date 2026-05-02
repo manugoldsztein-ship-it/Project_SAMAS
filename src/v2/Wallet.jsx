@@ -40,6 +40,7 @@ import { ObjetivosCard } from "./Objetivos.jsx";
 import { HipoteticoCard } from "./Hipotetico.jsx";
 import { StressTestCard } from "./StressTest.jsx";
 import { BehaviorCard } from "./Behavior.jsx";
+import { JournalCard } from "./Journal.jsx";
 import { AIQuotaPill } from "./AIQuotaPill.jsx";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { hapticNative } from "../lib/native.js";
@@ -627,6 +628,11 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
               FOMO / panic detector. The "broker que te protege de
               vos mismo" feature. Inverts the Robinhood model. */}
           <BehaviorCard T={T} lang={lang} />
+          {/* Trade Journal (samas-0.4.29) — recap de los últimos 90
+              días con batting average, P/L realizado, narrativa AI
+              y la lesson clave. Tap → sheet con la lista completa
+              + per-trade reflection on demand. */}
+          <JournalCard T={T} lang={lang} />
           {/* Objetivos con IA — goal wizard + progress card (0.4.12). */}
           <ObjetivosCard T={T} lang={lang} />
           {/* Preguntale a SAMAS — multi-turn chat (samas-0.0.89). */}

@@ -941,6 +941,41 @@ export async function behaviorWatch() {
   return data;
 }
 
+/**
+ * journalRecap() — POST /functions/v1/journal-recap (samas-0.4.29)
+ *
+ * Aggregates the user's trade_journal entries (last 90 days) into
+ * a recap with batting average, top wins/losses, AI narrative, and
+ * a single concrete lesson. Quota-gated.
+ */
+export async function journalRecap() {
+  await gateOnConsent();
+  await gateOnQuota();
+  const { data, error } = await supabase.functions.invoke("journal-recap", {
+    body: { mode: "recap" },
+  });
+  if (error) throw new Error(`Journal recap falló: ${error.message || ""}`);
+  if (data?.error) throw new Error(`Journal recap falló: ${data.error}`);
+  return data;
+}
+
+/**
+ * journalReflect(journalId) — POST /functions/v1/journal-recap with
+ * mode="reflect". AI-generates a per-trade reflection and persists
+ * it on the trade_journal row.
+ */
+export async function journalReflect(journalId) {
+  if (!journalId) throw new Error("journalId requerido.");
+  await gateOnConsent();
+  await gateOnQuota();
+  const { data, error } = await supabase.functions.invoke("journal-recap", {
+    body: { mode: "reflect", journal_id: journalId },
+  });
+  if (error) throw new Error(`Reflection falló: ${error.message || ""}`);
+  if (data?.error) throw new Error(`Reflection falló: ${data.error}`);
+  return data;
+}
+
 // analyzeAsset consumes quota — deep AI analysis on a single asset,
 // triggered by user tapping "Análisis IA" in the AssetSheet.
 export async function analyzeAsset(ticker) {
