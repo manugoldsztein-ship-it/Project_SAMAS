@@ -796,6 +796,49 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
         </div>
       </div>
 
+      {/* ---------- Lite → Pro discoverability hint (samas-0.4.41) ----------
+          Lite es default, y Settings está al pie. Para un user nuevo
+          (incluyendo Cohen reps en el demo), no hay forma fácil de
+          enterarse que existe un Modo Pro con flujo de fondos, métricas,
+          stress test, journal, hipotético, UVA. Esta tira chiquita al
+          pie del Wallet hace explícita esa puerta — tap abre Settings,
+          donde el segmented control de UI activa los espera. */}
+      {!proMode && onOpenSettings && (
+        <div style={{ margin: "28px 16px 0" }}>
+          <button
+            onClick={onOpenSettings}
+            style={{
+              width: "100%", padding: "14px 16px", borderRadius: 18,
+              background: T.surface, border: `1px solid ${T.border}`,
+              display: "flex", alignItems: "center", gap: 12, cursor: "pointer",
+              textAlign: "left",
+            }}
+          >
+            <div style={{
+              width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+              background: T.accentSoft, color: T.accent,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontFamily: FONT.display, fontSize: 11, fontWeight: 800,
+              letterSpacing: 0.4,
+            }}>
+              PRO
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text }}>
+                {tr("wallet.lite_hint.title", lang)}
+              </div>
+              <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2, lineHeight: 1.4 }}>
+                {tr("wallet.lite_hint.body", lang)}
+              </div>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute}
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* ---------- settings entry ---------- */}
       {onOpenSettings && (
         <div style={{ margin: "28px 16px 0" }}>

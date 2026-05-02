@@ -2987,6 +2987,17 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.41",
+    title: "Discoverability hint Lite → Pro al pie del Wallet",
+    bullets: [
+      "Followup del 0.4.37 (Lite/Pro mode más claro). El chip en el header dice si estás en Lite, pero un user nuevo (sobre todo Cohen reps abriendo el demo) no tiene forma fácil de descubrir QUÉ desbloquea el modo Pro. La única puerta era Settings, y Settings está al pie del Wallet sin pista.",
+      "NEW HINT — tira al pie del Wallet (entre Movimientos y Ajustes) que renderea SOLO en Lite. Diseño: badge 'PRO' verde a la izquierda + título 'Hay más en Modo Pro' + body de una línea enumerando las 6 features Pro (flujo de fondos, métricas, stress test, hipotético, journal, UVA). Tap → abre Settings, donde el segmented control LITE/PRO los espera.",
+      "Pro mode usuarios no ven la tira. Layout intacto.",
+      "i18n: 2 keys nuevas (wallet.lite_hint.title + .body) en es + en.",
+      "Followup pre-pitch: discoverability del Pro mode era el agujero más obvio para Cohen — abren la app en Lite (default) y nunca enteran que existe un nivel asesor-grade.",
+    ],
+  },
+  {
     version: "0.4.40",
     title: "De-buzzword: limpiar copy 'asesor-class', 'retail-tech', 'pipeline'",
     bullets: [
