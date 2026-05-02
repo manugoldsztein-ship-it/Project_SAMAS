@@ -46,7 +46,12 @@ export function EducationCard({ T, lang = "es", onOpen }) {
         onClick={() => { hapticNative("tap").catch(() => {}); onOpen && onOpen(); }}
         style={{
           width: "100%", padding: 16, borderRadius: 22,
-          background: `linear-gradient(135deg, ${T.accent}22 0%, ${T.surface} 80%)`,
+          // samas-0.4.36: switched from ${T.accent}22 (8-digit hex
+          // alpha) to T.accentSoft, which is the canonical soft-
+          // accent color in the theme. The 8-digit hex was rendering
+          // washed-out on iOS WKWebView and breaking text contrast
+          // (Manuel reported via screenshot). Matches FCI card style.
+          background: `linear-gradient(135deg, ${T.accentSoft} 0%, ${T.surface} 80%)`,
           border: `1px solid ${T.accent}55`,
           display: "flex", alignItems: "center", gap: 14,
           cursor: "pointer", textAlign: "left",
