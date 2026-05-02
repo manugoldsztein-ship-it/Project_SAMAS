@@ -842,13 +842,14 @@ function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus
           />
         )}
 
-        {/* Pro view density toggle row (free in both tiers). */}
-        <SettingsToggle
-          T={T}
-          title={tr("settings.pro_mode", lang)}
-          subtitle={tr("settings.pro_mode_sub", lang)}
-          value={proMode}
-          onChange={setProMode}
+        {/* UI mode picker (samas-0.4.37) — Lite vs Pro segmented
+            control. Manuel pidió: "tiene que ser mas claro si estas
+            usando la lite vs la pro". Antes era un toggle binario
+            con label "Modo Pro" — el usuario tenía que mirar el
+            toggle ON/OFF e inferir; ahora ve los DOS labels lado-a-
+            lado y el activo está highlighted. */}
+        <UIModeSegmented
+          T={T} lang={lang} proMode={proMode} setProMode={setProMode}
         />
 
         {/* Dark mode row */}
@@ -2986,6 +2987,30 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.37",
+    title: "Lite/Pro más claro — chip visible + segmented control + 2 cards más detrás de Pro",
+    bullets: [
+      "Manuel marcó con X dos cards en el Wallet Lite (FCI 'Empezá con un fondo común' + 'Análisis con IA') y dijo: 'Tiene que ser mas claro si estas usando la lite vs la pro'. Esta patch ataca las dos cosas.",
+      "GATED behind Pro (ya no aparecen en Lite Wallet):",
+      "- FCICard ('Mis fondos / Empezá con un fondo común') — sigue accesible vía Invertir → Mercado → filter chip 'FCI'",
+      "- AIAnalysisCard ('Inteligencia / Análisis con IA') — el Lite mantiene AI Chat para preguntar lo mismo de forma natural, más beginner-friendly",
+      "VISIBLE MODE INDICATOR — chip 'LITE' o 'PRO' en el Wallet header al lado de 'Hola, [user]'. Pro: pill verde solid + accentInk text. Lite: outlined gris. Manuel ahora ve a primera vista en qué modo está.",
+      "SETTINGS — el toggle binario 'Modo Pro' fue reemplazado por un segmented control 'LITE | PRO' donde ambas opciones están visibles lado-a-lado. Subtitle dinámico que cambia según cuál esté activa.",
+      "Resultado: Lite Wallet ahora tiene SOLO: balance + Mi cartera + Aprendé + Tu disciplina + Objetivos + AI Chat + Aporte. Cero distracciones.",
+      "i18n: 5 keys nuevas (settings.ui_mode.* family) en es + en.",
+    ],
+  },
+  {
+    version: "0.4.36",
+    title: "fix Education card contrast — gradient accent22 → accentSoft",
+    bullets: [
+      "Manuel reportó via screenshot que el Education card del Wallet renderea con texto blanco invisible sobre fondo verde claro.",
+      "El gradient ${T.accent}22 (8-digit hex con alpha 0x22) está siendo computed wrong por WKWebView en iOS, terminando como un fondo casi blanco.",
+      "Fix: switch a T.accentSoft (canonical theme color que ya usan FCI / Behavior / ExplainTerm / Journal).",
+      "Visualmente consistente ahora con el resto del Wallet.",
+    ],
+  },
+  {
     version: "0.4.35",
     title: "Education Duolingo-style — XP, streak, path zigzag",
     bullets: [
@@ -4429,6 +4454,66 @@ function AIDisabledToggle({ T, lang = "es" }) {
         }}/>
       </div>
     </button>
+  );
+}
+
+// ----------------------------------------------------------
+// UIModeSegmented (samas-0.4.37) — Lite vs Pro segmented control.
+// ----------------------------------------------------------
+// Replaces the binary "Modo Pro" toggle. Shows BOTH options side-
+// by-side with the active one highlighted. The currently-active
+// pill matches the chip rendered in the Wallet header so the user
+// has a consistent visual language for the mode they're in.
+//
+// Subtitle changes per active mode so the user understands what
+// each option includes.
+// ----------------------------------------------------------
+function UIModeSegmented({ T, lang, proMode, setProMode }) {
+  const subtitle = proMode
+    ? tr("settings.ui_mode.sub_pro", lang)
+    : tr("settings.ui_mode.sub_lite", lang);
+  return (
+    <div style={{
+      width: "100%", padding: 14, borderRadius: 14, marginBottom: 8,
+      background: T.surface, border: `1px solid ${T.border}`,
+    }}>
+      <div style={{
+        display: "flex", alignItems: "baseline", justifyContent: "space-between",
+        marginBottom: 10,
+      }}>
+        <div style={{
+          fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, color: T.text,
+        }}>{tr("settings.ui_mode.title", lang)}</div>
+      </div>
+      {/* Two-pill segmented control */}
+      <div style={{
+        display: "flex", gap: 4, padding: 4,
+        background: T.bg, borderRadius: 12,
+        marginBottom: 10,
+      }}>
+        {[
+          { id: "lite", label: tr("settings.ui_mode.lite", lang), active: !proMode },
+          { id: "pro",  label: tr("settings.ui_mode.pro",  lang), active:  proMode },
+        ].map((opt) => (
+          <button key={opt.id}
+            onClick={() => setProMode(opt.id === "pro")}
+            style={{
+              flex: 1, padding: "9px 12px", borderRadius: 10,
+              background: opt.active ? T.accent : "transparent",
+              border: "none",
+              color: opt.active ? T.accentInk : T.textMute,
+              fontFamily: FONT.sans, fontSize: 13, fontWeight: 800,
+              cursor: "pointer",
+              letterSpacing: 0.5, textTransform: "uppercase",
+            }}>
+            {opt.label}
+          </button>
+        ))}
+      </div>
+      <div style={{
+        fontFamily: FONT.sans, fontSize: 11, color: T.textMute, lineHeight: 1.5,
+      }}>{subtitle}</div>
+    </div>
   );
 }
 

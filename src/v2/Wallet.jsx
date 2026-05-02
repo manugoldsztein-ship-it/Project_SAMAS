@@ -259,7 +259,23 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
         >
           <Avatar color={avatarColor} initials={userInitials} size={42} />
           <div>
-            <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute }}>{tr("greeting_prefix", lang)}</div>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 6,
+              fontFamily: FONT.sans, fontSize: 12, color: T.textMute,
+            }}>
+              <span>{tr("greeting_prefix", lang)}</span>
+              {/* samas-0.4.37: Mode chip. Manuel pidió que sea visible
+                  qué UI mode está activo. Tap el avatar (que ya abre
+                  Settings) lleva a switchearlo. */}
+              <span style={{
+                padding: "1px 6px", borderRadius: 999,
+                background: proMode ? T.accent : T.bg,
+                color: proMode ? T.accentInk : T.textMute,
+                border: proMode ? "none" : `1px solid ${T.border}`,
+                fontFamily: FONT.mono, fontSize: 9, fontWeight: 800,
+                letterSpacing: 0.6, textTransform: "uppercase",
+              }}>{proMode ? "PRO" : "LITE"}</span>
+            </div>
             <div style={{ fontFamily: FONT.sans, fontSize: 16, fontWeight: 700, color: T.text }}>{userName}</div>
           </div>
         </button>
@@ -590,27 +606,30 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
         </div>
       )}
 
-      {/* Mis FCI (samas-0.4.34) — Cocos-clone fund layer per Rolan's
-          spec. Front-and-center en Lite, sigue visible en Pro. Tap
-          en un fondo: emit samas:open-asset event que el Shell
-          escucha + switchea a broker tab + el broker drainea el
-          pending briefcase y abre el AssetSheet. */}
-      <FCICard
-        T={T} lang={lang}
-        onSelectAsset={(asset) => {
-          if (!asset?.ticker) return;
-          try {
-            localStorage.setItem(
-              "samas_pending_open_asset",
-              JSON.stringify({ ticker: asset.ticker, ts: Date.now() }),
-            );
-          } catch (_e) { /* ignore */ }
-          window.dispatchEvent(new CustomEvent("samas:open-asset", {
-            detail: { ticker: asset.ticker },
-          }));
-          if (onTab) onTab("broker");
-        }}
-      />
+      {/* Mis FCI (samas-0.4.34 → 0.4.37: gated to Pro).
+          Inicialmente lo había puesto en primera plana del Lite por
+          la spec de Rolan, pero Manuel revisó la UI y decidió que el
+          Lite Wallet va con menos cards (balance + cartera + Aprendé
+          + disciplina + Objetivos + AI Chat + Aporte). FCI sigue
+          accesible vía Invertir → Mercado → filter chip "FCI". */}
+      {proMode && (
+        <FCICard
+          T={T} lang={lang}
+          onSelectAsset={(asset) => {
+            if (!asset?.ticker) return;
+            try {
+              localStorage.setItem(
+                "samas_pending_open_asset",
+                JSON.stringify({ ticker: asset.ticker, ts: Date.now() }),
+              );
+            } catch (_e) { /* ignore */ }
+            window.dispatchEvent(new CustomEvent("samas:open-asset", {
+              detail: { ticker: asset.ticker },
+            }));
+            if (onTab) onTab("broker");
+          }}
+        />
+      )}
 
       {/* Education (samas-0.4.35) — Duolingo-style entry point a la
           Tutorials hub. Per Rolan's spec, education en primera
@@ -644,13 +663,13 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
         </>
       )}
 
-      {/* ---------- AI cards LITE-FRIENDLY (samas-0.4.33) ----------
-          Cards de IA narrativas / beginner-friendly que se quedan en
-          Lite porque no son métricas pesadas — son lectura simple
-          o asistencia conversacional. Aporte mensual estilo Cocos. */}
+      {/* ---------- AI cards LITE-FRIENDLY (samas-0.4.33 → 0.4.37) ----------
+          Cards de IA narrativas / beginner-friendly. Manuel quitó
+          AIAnalysisCard de Lite en 0.4.37 — la lectura "headline + 3
+          bullets + suggestion" es overkill para un beginner que ya
+          tiene AIChatCard para preguntar lo mismo de forma natural. */}
       {!aiDisabled && portfolio && portfolio.totalUsd > 0 && (
         <>
-          <AIAnalysisCard T={T} lang={lang} />
           {/* Behavior watch (0.4.28) — anti-overtrading nudge. Stays
               in Lite porque protege al beginner de sí mismo, exactly
               el target audience del Lite. */}
@@ -662,12 +681,13 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
         </>
       )}
 
-      {/* ---------- AI cards PRO-ONLY (samas-0.4.33) ----------
+      {/* ---------- AI cards PRO-ONLY (samas-0.4.33 → 0.4.37) ----------
           Cards con métricas / análisis avanzado / herramientas
           asesor-class. Per Rolan: "Saca todas las metricas" del Lite.
-          Estos van detrás del proMode toggle. */}
+          AIAnalysisCard movido aquí en 0.4.37. */}
       {proMode && !aiDisabled && portfolio && portfolio.totalUsd > 0 && (
         <>
+          <AIAnalysisCard T={T} lang={lang} />
           {/* Benchmark compare — "am I beating the market?" (0.1.7). */}
           <BenchmarkCompareCard T={T} lang={lang} />
           {/* Earnings watch — upcoming reports for held tickers (0.1.8). */}

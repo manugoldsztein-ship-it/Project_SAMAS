@@ -38,6 +38,11 @@ const V2 = {
 
     "settings.pro_mode":          "Modo Pro",
     "settings.pro_mode_sub":      "Cashflow, métricas, stress test, hipotético, journal, UVA y más herramientas asesor-class. Lite (default) muestra balance + AI + objetivos.",
+    "settings.ui_mode.title":     "UI activa",
+    "settings.ui_mode.lite":      "Lite",
+    "settings.ui_mode.pro":       "Pro",
+    "settings.ui_mode.sub_lite":  "Vista simple: balance, cartera, objetivos, AI Chat y aporte mensual. Ideal para empezar.",
+    "settings.ui_mode.sub_pro":   "Todo lo de Lite + cashflow, métricas, stress test, hipotético, journal, UVA, FCI front-page, análisis IA y más herramientas asesor-class.",
     "settings.plus.title":            "SAMAS Plus",
     "settings.plus.active":           "Activo",
     "settings.plus.active_sub":       "IA ilimitada · US$5/mes · renueva automáticamente",
@@ -915,6 +920,11 @@ const V2 = {
     "ai_tour.c5.title": "5 free AI queries per day",
     "ai_tour.c5.body":  "For deep questions and unlimited chat with SAMAS, activate Plus for US$5/mo. Cancel anytime.",
     "settings.pro_mode_sub":      "Cashflow, metrics, stress test, hypothetical, journal, UVA and more advisor-class tools. Lite (default) shows balance + AI + goals.",
+    "settings.ui_mode.title":     "Active UI",
+    "settings.ui_mode.lite":      "Lite",
+    "settings.ui_mode.pro":       "Pro",
+    "settings.ui_mode.sub_lite":  "Simple view: balance, portfolio, goals, AI Chat and monthly contribution. Ideal to start.",
+    "settings.ui_mode.sub_pro":   "Everything in Lite + cashflow, metrics, stress test, hypothetical, journal, UVA, FCI front-page, AI analysis and more advisor-class tools.",
 
     // Pro portfolio dashboard (samas-0.0.42)
     "pro.sector.title":           "Sector breakdown",
