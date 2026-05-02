@@ -132,7 +132,7 @@ export function AITour({ T, lang = "es", onDone }) {
       }}>
         <div style={{
           width: 140, height: 140, borderRadius: 36,
-          background: `linear-gradient(135deg, ${T.accentSoft} 0%, ${T.surface} 100%)`,
+          background: T.surface,
           border: `1px solid ${T.accent}55`,
           display: "flex", alignItems: "center", justifyContent: "center",
           fontSize: 64, marginBottom: 32,

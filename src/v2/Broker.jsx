@@ -440,7 +440,7 @@ function PortafolioView({ T, portfolio, assets, fx, ccy, setCcy, onSelectAsset, 
       {/* portfolio summary card */}
       <div style={{
         margin: "16px", padding: 22, borderRadius: 24,
-        background: `linear-gradient(155deg, ${T.surfaceHi} 0%, ${T.surface} 60%)`,
+        background: T.surface,
         border: `1px solid ${T.border}`, position: "relative", overflow: "hidden",
       }}>
         <div style={{
@@ -1569,7 +1569,7 @@ function AIWatchlistModal({ T, lang = "es", onClose, onSave }) {
             <>
               <div style={{
                 marginTop: 14, padding: 14, borderRadius: 14,
-                background: `linear-gradient(135deg, ${T.accentSoft}, transparent 80%)`,
+                background: T.accentSoft,
                 border: `1.5px solid ${T.accent}`,
               }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
@@ -4807,7 +4807,7 @@ function AIPlanCard({ T, onOpen, savedPlan, lang = "es" }) {
       margin: "16px",
       padding: 16,
       borderRadius: 22,
-      background: `linear-gradient(135deg, ${T.accentSoft} 0%, ${T.surface} 70%)`,
+      background: T.surface,
       border: `1px solid ${T.accent}33`,
       display: "flex", alignItems: "center", gap: 14,
       cursor: "pointer",
@@ -5584,7 +5584,7 @@ function AssetAIInsight({ T, ticker, lang = "es" }) {
           onClick={run}
           style={{
             width: "100%", padding: "12px 14px", borderRadius: 12,
-            background: `linear-gradient(135deg, ${T.accentSoft} 0%, transparent 80%)`,
+            background: T.accentSoft,
             border: `1px solid ${T.accent}55`,
             color: T.text, cursor: "pointer", textAlign: "left",
             fontFamily: FONT.sans, fontSize: 13, fontWeight: 600,
@@ -5659,7 +5659,7 @@ function AssetAIInsight({ T, ticker, lang = "es" }) {
           {data.thesis && (
             <div style={{
               padding: "10px 12px", borderRadius: 12,
-              background: `linear-gradient(135deg, ${T.accentSoft}, transparent 80%)`,
+              background: T.accentSoft,
               border: `1.5px solid ${T.accent}`,
             }}>
               <div style={{

@@ -657,7 +657,7 @@ function NewsDigestCard({ T, lang = "es" }) {
     <div style={{ padding: "16px 16px 8px" }}>
       <div style={{
         padding: 14, borderRadius: 18,
-        background: `linear-gradient(135deg, ${T.accentSoft} 0%, ${T.surface} 70%)`,
+        background: T.surface,
         border: `1px solid ${T.accent}55`,
       }}>
         <div style={{

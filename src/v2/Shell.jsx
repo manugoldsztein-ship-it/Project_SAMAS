@@ -1130,7 +1130,7 @@ function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus
           }}
           style={{
             width: "100%", padding: "14px 16px", borderRadius: 14, marginBottom: 8,
-            background: `linear-gradient(135deg, ${T.accent} 0%, ${T.accentSoft} 100%)`,
+            background: T.accent,
             border: `1.5px solid ${T.accent}`,
             color: T.accentInk,
             display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -2191,7 +2191,7 @@ function ProUpsellModal({ T, lang = "es", isPro, onActivate, onClose }) {
             premium" tone before the user reads anything. */}
         <div style={{
           padding: "16px 22px 14px",
-          background: `linear-gradient(180deg, ${T.accentSoft} 0%, transparent 100%)`,
+          background: "transparent",
         }}>
           <div style={{
             display: "inline-flex", alignItems: "center", gap: 6,
@@ -2426,7 +2426,7 @@ function ProPricingSheet({ T, lang = "es", onSubscribe, onClose }) {
         {/* Header */}
         <div style={{
           padding: "16px 22px 14px",
-          background: `linear-gradient(180deg, ${T.accentSoft} 0%, transparent 100%)`,
+          background: "transparent",
         }}>
           <div style={{
             display: "inline-flex", alignItems: "center", gap: 6,
@@ -2460,7 +2460,7 @@ function ProPricingSheet({ T, lang = "es", onSubscribe, onClose }) {
               they're signing up for. */}
           <div style={{
             padding: "12px 14px", borderRadius: 14,
-            background: `linear-gradient(135deg, ${T.accent} 0%, ${T.accentSoft} 100%)`,
+            background: T.accent,
             color: T.accentInk,
             display: "flex", alignItems: "center", gap: 12,
           }}>
@@ -2986,6 +2986,28 @@ function AIConsentGate({ T, lang = "es" }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.4.39",
+    title: "De-vibe-code: removidos 33 gradients + glow orb del Wallet hero",
+    bullets: [
+      "Manuel pegó un thread de Peter (peterstewiestartup) sobre cómo identificar landing pages 'AI-generated'. Los 5 anti-patterns: gradients y glassmorphism, buzzwords copy, feature cards genéricas, tipografía inconsistente, elementos fake. Manuel: 'we also need to make it look less like it was vibe coded'.",
+      "AUDIT — 50 instancias de linear-gradient en JSX. La mayoría era el mismo pattern repetido en cada CTA card: 'linear-gradient(135deg, accentSoft 0%, surface 80%)'. Firma clara de generación automática.",
+      "FLATTENED via 2 sweeps Python: 33 gradient backgrounds removidos en 12 archivos. Reemplazados por T.surface flat o T.accentSoft según contexto.",
+      "GLOW ORB removido del Wallet balance hero — el círculo verde absolute-positioned con blur(40px) era el offender más visible. Ahora la card es flat T.surface con un solo border accent.",
+      "PRESERVED — gradients funcionales: skeleton shimmer animations, heatmap red→gray→green del Mercado Pro, sparkline SVG defs (chart styling estándar).",
+      "Quedan 17 gradients en total — todos justificados por función.",
+      "Followup 0.4.40: audit del copy buzzwords (force multiplier / asesor-class / moat) en pitch docs + i18n.",
+    ],
+  },
+  {
+    version: "0.4.38",
+    title: "Fix Tutorials path layout — caption + XP no overlap",
+    bullets: [
+      "Manuel reportó via screenshot que el path Duolingo-style tenía los captions montándose sobre el siguiente node.",
+      "Root cause: usaba absolute positioning sobre row container de ~96px de alto.",
+      "Fix: row con height fijo 156px + wrapper absoluto con flex-column adentro (button + title + XP stacked en static flow).",
+    ],
+  },
   {
     version: "0.4.37",
     title: "Lite/Pro más claro — chip visible + segmented control + 2 cards más detrás de Pro",

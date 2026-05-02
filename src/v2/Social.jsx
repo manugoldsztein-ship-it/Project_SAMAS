@@ -1448,7 +1448,7 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
             // user sees on first open.
             <div style={{
               marginTop: 8, padding: "24px 20px", borderRadius: 18,
-              background: `linear-gradient(180deg, ${T.accentSoft} 0%, ${T.surface} 100%)`,
+              background: T.surface,
               border: `1px solid ${T.border}`,
               textAlign: "center",
             }}>
@@ -1505,7 +1505,7 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
             // the primary action.
             <div style={{
               marginTop: 8, padding: "24px 20px", borderRadius: 18,
-              background: `linear-gradient(180deg, ${T.accentSoft} 0%, ${T.surface} 100%)`,
+              background: T.surface,
               border: `1px solid ${T.border}`,
               textAlign: "center",
             }}>
@@ -3530,7 +3530,7 @@ function PortfolioPostCard({ T, payload, lang = "es", onRemove, onOpenTicker }) 
     }}>
       <div style={{
         padding: "12px 14px",
-        background: `linear-gradient(135deg, ${T.accentSoft}, transparent 70%)`,
+        background: T.accentSoft,
         borderBottom: `1px solid ${T.border}`,
         display: "flex", alignItems: "center", gap: 10,
       }}>

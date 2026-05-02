@@ -134,7 +134,7 @@ export function ExplainTermSheet({ T, lang = "es", onClose, initialTerm = "" }) 
         {/* Header */}
         <div style={{
           padding: "12px 22px 12px",
-          background: `linear-gradient(180deg, ${T.accentSoft} 0%, transparent 100%)`,
+          background: "transparent",
           display: "flex", alignItems: "center", gap: 12,
         }}>
           <div style={{

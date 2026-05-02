@@ -333,18 +333,18 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
         <DailyBriefCard T={T} lang={lang} />
       )}
 
-      {/* ---------- balance card ---------- */}
+      {/* ---------- balance card (samas-0.4.39: flat-style) ----------
+          Manuel: "tiene que dejar de parecer vibe-coded". Removí el
+          gradient + glow orb que tenía esta card. Ahora es flat
+          T.surface con un solo border accent — el balance es el
+          número más importante de la pantalla, no necesita efectos
+          decorativos para llamar la atención. */}
       <div style={{
         margin: "24px 16px 0", padding: 24, borderRadius: 28,
-        background: `linear-gradient(155deg, ${T.surfaceHi} 0%, ${T.surface} 60%)`,
+        background: T.surface,
         border: `1px solid ${T.border}`,
         position: "relative", overflow: "hidden",
       }}>
-        <div style={{
-          position: "absolute", top: -80, right: -60, width: 220, height: 220,
-          borderRadius: "50%", background: T.accent, opacity: 0.10, filter: "blur(40px)",
-        }}/>
-
         <div style={{ position: "relative", zIndex: 1 }}>
           <div style={{
             display: "flex", justifyContent: "space-between", alignItems: "center",
@@ -484,7 +484,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
             margin: "16px 16px 0", padding: "14px 16px",
             borderRadius: 18, cursor: "pointer", textAlign: "left",
             width: "calc(100% - 32px)",
-            background: `linear-gradient(135deg, ${T.accentSoft} 0%, ${T.surface} 80%)`,
+            background: T.surface,
             border: `1px solid ${T.border}`,
             color: T.text,
           }}
@@ -718,7 +718,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
           onClick={() => setActiveModal("aporte")}
           style={{
             width: "100%", marginTop: 12, padding: 16, borderRadius: 22,
-            background: aporte ? `linear-gradient(135deg, ${T.accentSoft} 0%, ${T.surface} 70%)` : T.surface,
+            background: aporte ? T.accentSoft : T.surface,
             border: `1px solid ${aporte ? T.accent + "55" : T.border}`,
             display: "flex", alignItems: "center", gap: 14, cursor: "pointer",
             textAlign: "left",
@@ -1243,7 +1243,7 @@ function DailyBriefCard({ T, lang = "es" }) {
   return (
     <div style={{
       margin: "16px 16px 0", padding: 16, borderRadius: 22,
-      background: `linear-gradient(135deg, ${T.accentSoft} 0%, ${T.surface} 70%)`,
+      background: T.surface,
       border: `1px solid ${T.accent}55`,
       display: "flex", flexDirection: "column", gap: 10,
     }}>
@@ -1397,7 +1397,7 @@ function AIAnalysisCard({ T, lang = "es" }) {
             // Accent-tinted gradient — visually distinct from the
             // other Wallet cards so the "AI" affordance reads
             // immediately, even before the user reads the label.
-            background: `linear-gradient(135deg, ${T.accentSoft} 0%, ${T.surface} 70%)`,
+            background: T.surface,
             border: `1px solid ${T.accent}55`,
             display: "flex", alignItems: "center", gap: 14, cursor: busy ? "default" : "pointer",
             textAlign: "left",
@@ -1586,7 +1586,7 @@ function AIAnalysisCard({ T, lang = "es" }) {
                 {result.suggestion && (
                   <div style={{
                     padding: "14px 14px", borderRadius: 14,
-                    background: `linear-gradient(135deg, ${T.accentSoft}, transparent 80%)`,
+                    background: T.accentSoft,
                     border: `1.5px solid ${T.accent}`,
                   }}>
                     <div style={{
@@ -2105,7 +2105,7 @@ function QuarterlyReviewSheet({ T, lang = "es", data, onClose }) {
         {/* Header — accent gradient */}
         <div style={{
           padding: "14px 22px 16px",
-          background: `linear-gradient(180deg, ${T.accentSoft} 0%, transparent 100%)`,
+          background: "transparent",
         }}>
           <div style={{
             display: "inline-flex", alignItems: "center", gap: 6,
@@ -3296,7 +3296,7 @@ function CardPreview({ T, card, onClick }) {
     <button onClick={onClick} style={{
       position: "relative",
       width: "100%", marginTop: 12, padding: 18, borderRadius: 22,
-      background: `linear-gradient(135deg, ${T.accentDim} 0%, ${T.surfaceHi} 100%)`,
+      background: T.surfaceHi,
       border: `1px solid ${T.border}`,
       display: "flex", flexDirection: "column", gap: 28,
       cursor: "pointer", color: T.text, textAlign: "left",
@@ -3808,7 +3808,7 @@ function CardDetailsModal({ T, lang = "es", card, onClose, onCardChange }) {
     <ModalShell T={T} title={tr("card.title", lang)} onClose={onClose}>
       <div style={{
         padding: 22, borderRadius: 18,
-        background: `linear-gradient(135deg, ${T.accentDim} 0%, ${T.surfaceHi} 100%)`,
+        background: T.surfaceHi,
         border: `1px solid ${T.border}`,
         display: "flex", flexDirection: "column", gap: 32, marginBottom: 20,
       }}>

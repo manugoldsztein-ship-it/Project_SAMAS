@@ -475,7 +475,7 @@ function TutorialDetail({ T, lang = "es", tutorial, onClose }) {
         {/* Header */}
         <div style={{
           padding: "12px 22px 14px",
-          background: `linear-gradient(180deg, ${T.accentSoft} 0%, transparent 100%)`,
+          background: "transparent",
           display: "flex", alignItems: "center", gap: 12,
         }}>
           <div style={{

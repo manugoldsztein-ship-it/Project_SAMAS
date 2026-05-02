@@ -51,7 +51,7 @@ export function EducationCard({ T, lang = "es", onOpen }) {
           // accent color in the theme. The 8-digit hex was rendering
           // washed-out on iOS WKWebView and breaking text contrast
           // (Manuel reported via screenshot). Matches FCI card style.
-          background: `linear-gradient(135deg, ${T.accentSoft} 0%, ${T.surface} 80%)`,
+          background: T.surface,
           border: `1px solid ${T.accent}55`,
           display: "flex", alignItems: "center", gap: 14,
           cursor: "pointer", textAlign: "left",

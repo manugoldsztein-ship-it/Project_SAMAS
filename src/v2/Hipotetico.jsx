@@ -155,7 +155,7 @@ export function HipoteticoCard({ T, lang = "es" }) {
           style={{
             marginTop: 12, padding: 16, borderRadius: 22,
             width: "100%", textAlign: "left", cursor: "pointer",
-            background: `linear-gradient(135deg, ${T.accentSoft} 0%, ${T.surface} 80%)`,
+            background: T.surface,
             border: `1px solid ${T.accent}55`,
             display: "flex", alignItems: "center", gap: 14,
             fontFamily: "inherit",
@@ -243,7 +243,7 @@ function HipoteticoSheet({ T, lang, onClose }) {
         {/* Header */}
         <div style={{
           padding: "12px 22px 10px",
-          background: `linear-gradient(180deg, ${T.accentSoft} 0%, transparent 100%)`,
+          background: "transparent",
         }}>
           <div style={{
             fontFamily: FONT.mono, fontSize: 10, fontWeight: 700,

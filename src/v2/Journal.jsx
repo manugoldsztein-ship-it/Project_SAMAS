@@ -265,7 +265,7 @@ function JournalSheet({ T, lang, onClose }) {
         </div>
         <div style={{
           padding: "12px 22px 10px",
-          background: `linear-gradient(180deg, ${T.accentSoft} 0%, transparent 100%)`,
+          background: "transparent",
         }}>
           <div style={{
             fontFamily: FONT.mono, fontSize: 10, fontWeight: 700,
