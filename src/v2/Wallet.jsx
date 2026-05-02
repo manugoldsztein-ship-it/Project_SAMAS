@@ -3172,6 +3172,7 @@ function AporteModal({ T, lang = "es", aporte, onClose, onDone }) {
   const [day, setDay] = useState(aporte?.dayOfMonth || 1);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const dtd = useDragToDismiss(onClose);
 
   async function save() {
     setErr(null);
@@ -3198,15 +3199,24 @@ function AporteModal({ T, lang = "es", aporte, onClose, onDone }) {
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
       position: "fixed", inset: 0, zIndex: 100,
       background: "rgba(0,0,0,0.6)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      padding: 16,
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
     }}>
-      <div style={{
-        width: "100%", maxWidth: 480,
+      {/* 0.4.50 — convertido de centered modal a bottom sheet:
+          (a) keyboard ya no tapa parte del form (la sheet sube cuando abre keyboard)
+          (b) drag-to-dismiss now applies. */}
+      <div ref={dtd.ref} style={{
+        width: "100%", maxWidth: 540, maxHeight: "92dvh",
         background: T.bgElev, color: T.text,
-        borderRadius: 22, border: `1px solid ${T.border}`,
-        padding: 20,
+        borderTopLeftRadius: 28, borderTopRightRadius: 28,
+        border: `1px solid ${T.border}`, borderBottom: "none",
+        padding: "12px 20px calc(env(safe-area-inset-bottom) + 20px)",
+        overflowY: "auto",
+        ...dtd.dragStyle,
       }}>
+        {/* Drag handle */}
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: T.border }}/>
+        </div>
         <div style={{ fontFamily: FONT.display, fontSize: 20, fontWeight: 700, color: T.text, marginBottom: 4 }}>
           Aporte mensual
         </div>

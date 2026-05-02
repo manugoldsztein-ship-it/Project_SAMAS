@@ -2998,6 +2998,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.50",
+    title: "AporteModal → bottom sheet — keyboard ya no tapa el form",
+    bullets: [
+      "Manuel mostró screenshot del Aporte Mensual con el keyboard arriba — el modal estaba centrado y el keyboard tapaba la mitad inferior (DÍA DEL MES quedaba apenas visible). Drag-down tampoco aplicaba (era modal centrado).",
+      "FIX — convertido AporteModal de centered modal a bottom sheet: alignItems flex-end + borderTopLeftRadius 28 + drag handle. Cuando abre keyboard la sheet se acomoda arriba de él (no tapa).",
+      "BONUS — drag-to-dismiss ahora también funciona ahí. Total 20 sheets con drag.",
+    ],
+  },
+  {
     version: "0.4.49",
     title: "Drag-to-dismiss sweep — 10 sheets más cubiertas",
     bullets: [
