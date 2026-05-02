@@ -2987,6 +2987,25 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.40",
+    title: "De-buzzword: limpiar copy 'asesor-class', 'retail-tech', 'pipeline'",
+    bullets: [
+      "Followup del 0.4.39 (de-vibe-code visuals). Peter mencionaba que las landing pages AI-generated también se reconocen por el copy ('revolutionize', 'empower', 'cutting-edge', etc.). Hice un audit del nuestro.",
+      "i18n strings (USER-FACING):",
+      "- settings.pro_mode_sub: 'herramientas asesor-class' → 'flujo de fondos, métricas, stress test, simulación hipotética, diario de trading y UVA'",
+      "- settings.ui_mode.sub_pro: mismo cleanup",
+      "Reemplacé 'Cashflow' (anglicismo) por 'flujo de fondos' (español plain).",
+      "Pitch doc (docs/cohen-leave-behind.md):",
+      "- 'Front-end retail-tech para Cohen' → 'App iOS de inversiones para Cohen'",
+      "- 'Mood-aware AI (anti-overtrading)' → 'Detector de patrones tóxicos' con bullet plain explicando cuándo dispara",
+      "- 'Pipeline de 19 AI surfaces' → '19 features de IA'",
+      "- 'Frontend iOS production-ready' → 'App iOS terminada'",
+      "- 'Velocidad: 100+ patches shipped en 6 meses solo' → '100+ commits en 6 meses, hechos por una persona' (más concreto)",
+      "- 'templated fallbacks deterministicos' → 'fallback determinístico ... respuestas pre-calculadas' (sin fluff)",
+      "Lo que NO toqué — los nombres propios de features (Mood-aware AI / Trade Journal / Backtest) tienen identidad de marca y vale conservarlos. Los CHANGELOG entries tampoco — son record histórico, no marketing.",
+    ],
+  },
+  {
     version: "0.4.39",
     title: "De-vibe-code: removidos 33 gradients + glow orb del Wallet hero",
     bullets: [
