@@ -2998,6 +2998,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.53",
+    title: "Pre-pitch hygiene — sweep final del provider del LLM en Novedades",
+    bullets: [
+      "Al sweep del 0.4.42 se le escaparon entries que aún nombraban el provider del LLM en la pantalla Novedades. Cohen scrolleando el changelog veía el provider name. Mal.",
+      "FIX — 12 strings en Shell.jsx CHANGELOG limpiadas: el env var key name del provider → 'la API key del LLM' en 9 entries (0.4.x AI features), y la entry 0.4.42 reescrita para que no se mencione el provider literal mientras describe que se removió.",
+      "Comment en src/lib/uva.js que referenciaba el agent context file ahora dice 'project notes' — neutral.",
+      "src/ai/client.js DEFAULT_MODEL queda intacto (es el model id que se manda a la API — funcional, no user-visible).",
+    ],
+  },
+  {
     version: "0.4.52",
     title: "Promote FCI a principiantes — segundo paso del Welcome",
     bullets: [
@@ -3111,10 +3121,10 @@ const CHANGELOG = [
     version: "0.4.42",
     title: "Anonimizar al proveedor de IA en strings user-facing",
     bullets: [
-      "Manuel pidió: 'remove all mention of Claude'. Pre-pitch hygiene — Cohen no necesita saber qué LLM hay debajo, lo que importa son las features.",
-      "i18n strings (es + en): wallet.ai.sheet.kicker / wallet.chat.sheet.kicker / ai_consent.body / ai_consent.bullet_provider / ai_consent.bullet_no_training / onb.s4.body — 'Powered by Claude' / 'Anthropic Claude' reemplazados por 'IA' / 'proveedor de IA externo'. 12 strings tocados.",
+      "Pre-pitch hygiene — el proveedor de IA no se nombra más en strings user-facing. Cohen no necesita saber qué LLM hay debajo, lo que importa son las features.",
+      "i18n strings (es + en): wallet.ai.sheet.kicker / wallet.chat.sheet.kicker / ai_consent.body / ai_consent.bullet_provider / ai_consent.bullet_no_training / onb.s4.body — strings con el nombre del provider reemplazados por 'IA' / 'proveedor de IA externo'. 12 strings tocados.",
       "Pitch docs: cohen-leave-behind.md, security-audit.md, seguridad.md, audit-0.4.4.md — todas las menciones eliminadas. README rewrite a v2 (BYOK legacy fuera).",
-      "CHANGELOG entries (renderean en Novedades): sweep Python sobre src/v2/Shell.jsx + src/v2/*.jsx + src/lib/ai.js — 107 reemplazos en 10 archivos. 'Claude Haiku' / 'Claude' / 'Anthropic' → 'el proveedor de IA' / 'el LLM'.",
+      "CHANGELOG entries (renderean en Novedades): sweep Python sobre src/v2/Shell.jsx + src/v2/*.jsx + src/lib/ai.js — 107 reemplazos en 10 archivos. Menciones del provider del LLM → 'el proveedor de IA' / 'el LLM'.",
       "Lo que NO toqué: env vars en supabase/functions/* (renombrarlos requiere rename del secret en Supabase Dashboard — operacional, no código). El legacy src/ai/client.js queda con la URL del provider en código dead-code (BYOK panel removido), no afecta a producción.",
     ],
   },
@@ -3314,7 +3324,7 @@ const CHANGELOG = [
     bullets: [
       "Manuel pidió esto explícitamente: 'broker AR que te detecta los patrones tóxicos en vez de monetizarlos'. Robinhood / Cocos / IOL viven de overtrading; SAMAS detecta cuando el usuario está en revenge mode, FOMO mode o panic mode y le dice frenar. Story de pitch nuclear.",
       "NEW Edge Function — supabase/functions/behavior-watch: lee las últimas 90 días de transactions del user via RLS. detectPatterns() rule-based detecta 5 patterns: overtrading (>12 ops/7d), revenge (sell→buy <60min en otro ticker, 2+ veces en 14d), FOMO (3+ tickers nuevos en 7d), panic (3+ ventas en un día), drift (zero activity, kind nudge). Cada alerta tiene severity low/medium/high.",
-      "AI REFINEMENT — the LLM (opcional, env-gated) reescribe el message empático por pattern. Si el ANTHROPIC_API_KEY está unset, fallback a templated messages que ya son honestos. Tono mandado en el prompt: 'profesional pero cercano (vos), sereno, sin hype, sin sermones'.",
+      "AI REFINEMENT — the LLM (opcional, env-gated) reescribe el message empático por pattern. Si la API key del LLM está unset, fallback a templated messages que ya son honestos. Tono mandado en el prompt: 'profesional pero cercano (vos), sereno, sin hype, sin sermones'.",
       "NEW Wallet card — src/v2/Behavior.jsx: 'Tu disciplina esta semana'. Mounted entre Quarterly Review y Objetivos. Empático, no punitivo. Cuando hay 0 alerts → small green card 'Disciplina sólida' (positive reinforcement matters as much as warnings). Skeleton mientras carga, hidden silenciosamente si AI denegada / quota agotada.",
       "CACHEADO ~1h en localStorage para no quemar quota cada tab-switch. Severity color-coded: low=neutral, medium=ámbar, high=rojo. Cada alert muestra un sugerencia concreta en pill ('✓ Pausa de 24h antes de la próxima operación', '✓ Esperá una hora antes de la próxima compra').",
       "PITCH para Cohen: 'Robinhood y demás profitan de que su usuario opere más. Nosotros profitamos cuando el usuario se mantiene disciplinado y aporta consistentemente. Esta card hace explícito ese alignment.' Behavioral finance angle, regulatory-friendly, no AR/US broker tiene equivalente.",
@@ -3820,7 +3830,7 @@ const CHANGELOG = [
       "Sixteenth AI surface lands on Wallet between Earnings Watch and Preguntale a SAMAS. Pure narrative — no tap targets, no decisions to make. Card shows a 1-line headline + the quarter's return %; tap → bottom sheet with a 3-4 paragraph AI-written review in plain Spanish, with sections: 'Tu trimestre en una mirada', 'Lo que se movió', 'Actividad', 'Hacia adelante'.",
       "New quarterly-review Edge Function. Reads holdings (current snapshot) + orders (last 90 days, executed only) and computes deterministic stats: value-weighted return %, top 3 winners, top 3 losers, trade count, most-operated ticker, new positions opened, positions closed, sector mix. Stats sent to the LLM as authority; the LLM only writes the prose — numbers can't drift.",
       "Sheet renders the markdown narrative with a tiny in-house h2/p parser (no react-markdown dep — 4 paragraphs of structure don't justify the bundle weight). Stats strip on top: trade count + most-operated ticker. Winners/losers row with green/red chips per ticker.",
-      "Templated fallback writes the same skeleton prose with the same numbers when ANTHROPIC_API_KEY isn't set, so the Cohen demo doesn't break before the budget approval. Hides silently when the user has no positions.",
+      "Templated fallback writes the same skeleton prose with the same numbers when the LLM API key isn't set, so the Cohen demo doesn't break before the budget approval. Hides silently when the user has no positions.",
       "16 AI surfaces total. Killer demo line: 'open Wallet, scroll down, IA writes you a private-banker-quality review of your last 3 months in plain Spanish.'",
     ],
   },
@@ -3850,7 +3860,7 @@ const CHANGELOG = [
       "Fourteenth AI surface — different shape than the others. Instead of a card you tap, this one writes proactive notifications to your inbox + sends a push when actionable signals fire on your portfolio. Open the bell icon → tap \"Generar\" → IA scans your holdings, generates up to 5 fresh insights, drops them into the inbox via realtime so you see them slide in.",
       "Five signal types, all deterministic: concentration (>30% in one ticker), big drawdown (-15% from cost), big gain (+30% from cost), earnings within 0-2 days, and cash-drag for under-built portfolios. Each insight gets a AI-refined title + body; numbers stay deterministic. 24h dedupe per signal+ticker so re-running doesn't spam you.",
       "Tapping a ticker insight in the inbox deep-links into Invest tab → AssetSheet for that ticker (re-uses the samas:harvest-sell channel from 0.2.0). New \"insight\" notification kind has a sparkle icon + accent tint to read distinctly from social/price/aporte rows.",
-      "Push notification sent best-effort: 1 insight = full title+body push; multiple = compact \"N nuevos insights\" combined ping (lock screen stays clean). Cron-scheduling for daily auto-runs is wired but off by default — flip it on with a pg_cron migration once we have ANTHROPIC_API_KEY in production.",
+      "Push notification sent best-effort: 1 insight = full title+body push; multiple = compact \"N nuevos insights\" combined ping (lock screen stays clean). Cron-scheduling for daily auto-runs is wired but off by default — flip it on with a pg_cron migration once we have the LLM API key in production.",
       "14 AI surfaces total. Cohen pitch: open the app → bell shows a red dot → there's already a AI-written insight waiting about your biggest position.",
     ],
   },
@@ -3968,7 +3978,7 @@ const CHANGELOG = [
     bullets: [
       "Sixth AI surface lands on the News tab. Every article now has a \"¿Por qué me importa?\" expand row at the bottom. Tap → calls a new explain-news Edge Function that takes the article + reads your holdings via JWT-scoped RLS, asks the LLM for a 2-3 sentence explanation of how this story relates to YOUR specific portfolio.",
       "When the article references a ticker you actually own, an accent-tinted hits chip ($NVDA · $AAPL etc.) appears and the AI explanation is direct: \"Tu posición en $NVDA podría verse afectada por X.\" When you don't own anything mentioned, the AI explains correlation/sector context honestly instead of forcing relevance.",
-      "Templated server-side fallback when ANTHROPIC_API_KEY isn't set — picks a sensible explanation based on whether any article tickers intersect held tickers. Rotates: direct match / related sector / no exposure.",
+      "Templated server-side fallback when the LLM API key isn't set — picks a sensible explanation based on whether any article tickers intersect held tickers. Rotates: direct match / related sector / no exposure.",
       "NewsCard refactored from a button to a div+role=button so the AI tap-row can stop event propagation cleanly without nested-button HTML. Tapping anywhere else on the card still opens the article URL in Safari.",
     ],
   },
@@ -4060,7 +4070,7 @@ const CHANGELOG = [
     bullets: [
       "New \"Preguntale a SAMAS\" card on Wallet (right under Análisis IA). Tap → 92vh chat sheet slides up. Type a question, hit Send, get an answer that has YOUR portfolio in context. Multi-turn — keep going, follow-ups respect previous turns. Empty state has 3 starter prompts (diversification / performance / next move) so the user can demo without thinking up a question.",
       "Edge Function: supabase/functions/chat-portfolio/index.ts. Reads holdings via JWT-scoped RLS, builds a Spanish system prompt with a JSON dump of the user's positions + value-weighted gain%, sends the trimmed conversation history (last 12 turns) to the LLM with the system prompt. 600 max_tokens for crisp 2-4 sentence replies.",
-      "Templated server-side fallback when ANTHROPIC_API_KEY isn't set — keyword matching against the latest user message (concentración / diversificar / vender / comprar / etc.) plus real portfolio facts. Demoable today, no key required.",
+      "Templated server-side fallback when the LLM API key isn't set — keyword matching against the latest user message (concentración / diversificar / vender / comprar / etc.) plus real portfolio facts. Demoable today, no key required.",
       "UI niceties: thinking dots while waiting, auto-scroll to newest message, Enter sends + Shift+Enter newline, conversation persists across close+reopen until you tap Nueva.",
     ],
   },
@@ -4069,7 +4079,7 @@ const CHANGELOG = [
     title: "AI compose helper — \"Sugerime un post\"",
     bullets: [
       "New ✦ button in the compose toolbar (left of Compartir cartera). Tap → server reads your holdings + last 3 trades via JWT-scoped RLS, asks the LLM to draft a short social-style post (220 char cap) referencing one of your real positions, fills the textarea. Spinner inside the button while it thinks.",
-      "Edge Function: supabase/functions/draft-post/index.ts. Templated fallback when ANTHROPIC_API_KEY isn't set picks your most recent trade or top holding and fills one of several sentence templates with real numbers (gain%, % of book, ticker name) — sounds like a real person before we wire the LLM.",
+      "Edge Function: supabase/functions/draft-post/index.ts. Templated fallback when the LLM API key isn't set picks your most recent trade or top holding and fills one of several sentence templates with real numbers (gain%, % of book, ticker name) — sounds like a real person before we wire the LLM.",
       "If you've already typed something in the textarea, we ask before overwriting. Otherwise the draft fills directly + focuses + auto-expands the compose so you can tweak before posting.",
     ],
   },
@@ -4096,7 +4106,7 @@ const CHANGELOG = [
     title: "AI insight on every asset — tap a ticker, get a take",
     bullets: [
       "Tap any asset (NVDA / GGAL / AAPL / BTC / etc.) → the detail sheet now has an \"Análisis IA\" section. Tap to generate a one-line headline + 3 short bullets (fundamentals / news / valuation) + a thesis statement + a sentiment chip (Alcista / Neutral / Bajista).",
-      "New analyze-asset Edge Function (twin of analyze-portfolio): takes a ticker, calls the LLM, returns the structured response. Server-side templated fallback uses a curated per-ticker thesis library when ANTHROPIC_API_KEY isn't set — AAPL / NVDA / TSLA / GGAL / YPF / etc. each have their own pre-written take so the demo feels real before we wire the real LLM.",
+      "New analyze-asset Edge Function (twin of analyze-portfolio): takes a ticker, calls the LLM, returns the structured response. Server-side templated fallback uses a curated per-ticker thesis library when the LLM API key isn't set — AAPL / NVDA / TSLA / GGAL / YPF / etc. each have their own pre-written take so the demo feels real before we wire the real LLM.",
       "Insights cached per-ticker per-session: re-opening the same asset's sheet doesn't burn another LLM call. Switching to a different ticker resets the panel cleanly.",
       "Visible to every user (not Pro-gated) — AI is the differentiator, Cohen needs to see this on every tap.",
     ],
@@ -4107,7 +4117,7 @@ const CHANGELOG = [
     bullets: [
       "Root-cause fix for the recurring \"bottom nav covers content / sheets\" bug. The samas-tab-fade animation (added in 0.0.81) used translate3d(0,4px,0) for a subtle slide; on iOS WebKit that promotes the wrapper to a persistent compositing layer that behaves like a stacking context, so children with position:fixed couldn't escape past the floating nav at zIndex 40. Switched to opacity-only animation — no transform, no trap. Fixes the AI sheet covering issue Manuel hit, plus any other in-page modal that was subtly being layered wrong.",
       "Belt-and-braces: AI analysis sheet is now portaled to document.body via React.createPortal. Even if some descendant adds a transform later, the sheet renders against the document root and z-index 100 wins.",
-      "AI portfolio analysis works without an AI provider key. The Edge Function detects the missing ANTHROPIC_API_KEY and falls back to a templated analysis built from the caller's actual portfolio data (concentration / win-loss split / sector mix). Shape-identical to the LLM response so the UI doesn't branch. Once you set the secret post-Cohen, real the LLM responses replace the templates with zero code change.",
+      "AI portfolio analysis works without an AI provider key. The Edge Function detects the missing LLM API key and falls back to a templated analysis built from the caller's actual portfolio data (concentration / win-loss split / sector mix). Shape-identical to the LLM response so the UI doesn't branch. Once you set the secret post-Cohen, real the LLM responses replace the templates with zero code change.",
     ],
   },
   {
@@ -4115,7 +4125,7 @@ const CHANGELOG = [
     title: "AI portfolio analysis + compose layout fix",
     bullets: [
       "First real AI feature lands on Wallet: \"Análisis IA\" card. Tap → calls a new analyze-portfolio Edge Function that reads your holdings (RLS-scoped via JWT), passes them to the LLM, and returns a one-line headline + 3 observations + concrete suggestion + concentration callout. Sheet animates up from the bottom with a thinking spinner, then renders the structured response. Result is cached for the session — re-tapping reopens without burning another LLM call.",
-      "Edge Function: supabase/functions/analyze-portfolio/index.ts. Self-contained with the asset universe inline so it doesn't depend on the client bundle. Strict JSON-out prompt with hard length caps. ANTHROPIC_API_KEY env (already used by fetch-news) doubles as the auth here.",
+      "Edge Function: supabase/functions/analyze-portfolio/index.ts. Self-contained with the asset universe inline so it doesn't depend on the client bundle. Strict JSON-out prompt with hard length caps. The LLM API key env (already used by fetch-news) doubles as the auth here.",
       "Compose layout fix (the \"too much space, not centered\" thing): when there's a portfolio / trade / image attached, the textarea no longer expands to 7 rows on focus — stays at 3 so the attachment card sits flush with the placeholder. The huge dead-space-above-the-card visual went away.",
       "Promoted samas-sheet-up + samas-spin + samas-fade-in keyframes to the global Shell stylesheet so any sheet/spinner anywhere can rely on them (was previously scoped to specific component mount-times).",
     ],

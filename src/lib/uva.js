@@ -19,7 +19,7 @@
 //   caches in a public.fx_rates table (or extends the existing
 //   one), and the client reads from there. For the prototype we
 //   hardcode realistic values pinned to the demo's "current date"
-//   (CLAUDE.md says today = 2026-05-01). Swap the constants below
+//   (project notes pin today = 2026-05-01). Swap the constants below
 //   when wiring real data — UI doesn't change.
 //
 // VALUES BELOW are illustrative. Real UVA in mid-2026 will likely
