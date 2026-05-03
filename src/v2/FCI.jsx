@@ -81,6 +81,16 @@ export function FCICard({ T, lang = "es", onSelectAsset }) {
         // metadata for rendering (name, tnaPct, riskLevel, etc).
         const fciTickers = new Set((aa || []).filter((a) => a.category === "FCI").map((a) => a.ticker));
         setHoldings((port?.holdings || []).filter((h) => fciTickers.has(h.ticker)));
+        // 0.4.52 — promote-FCI hand-off from the WelcomeChooser. When
+        // a principiante user taps "Ver fondos sugeridos" we stash a
+        // one-shot flag; on first Wallet mount we drain it and pop the
+        // picker so they land on the suggested funds list directly.
+        try {
+          if (localStorage.getItem("samas_pending_fci_promote") === "1") {
+            localStorage.removeItem("samas_pending_fci_promote");
+            setOpen(true);
+          }
+        } catch (_) {}
       } catch (_e) {
         if (!cancelled) { setAssets([]); setHoldings([]); }
       }
