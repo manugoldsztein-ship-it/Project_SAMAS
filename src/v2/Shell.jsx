@@ -2998,6 +2998,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.52",
+    title: "Promote FCI a principiantes — segundo paso del Welcome",
+    bullets: [
+      "El WelcomeChooser ya pregunta 'Recién empiezo' vs 'Invierto hace un tiempo' pero el principiante caía igual al app default. No estaba tirando del hilo del FCI module que Rolan recomendó como primera plana del Lite.",
+      "FIX — segundo step del WelcomeChooser SOLO si elegiste 'Recién empiezo'. Hero card con 'Tu primer paso · Probá un fondo común', 3 bullets (montos bajos / lo gestiona equipo profesional / lo retirás cuando quieras), CTA 'Ver fondos sugeridos' + link 'Ahora no — explorar la app'.",
+      "HAND-OFF — 'Ver fondos sugeridos' setea localStorage samas_pending_fci_promote=1 y dispara onDone. La FCICard lo drena en su useEffect después de cargar assets y abre el FCIPickerSheet automáticamente al aterrizar en Wallet. One-shot — flag se borra al consumirse.",
+      "Para profesional el flow no cambia: confirm → onDone directo, sin segundo step.",
+    ],
+  },
+  {
     version: "0.4.51",
     title: "Fix path Tutoriales — zigzag visible + texto completed muted",
     bullets: [
