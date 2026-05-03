@@ -18,7 +18,7 @@
 // — keeps the section components focused on rendering.
 // ============================================================
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import ReactDOM from "react-dom";
 import { FONT, fmtMoney, fmtPct } from "./theme.js";
 import { Ico } from "./icons.jsx";
@@ -3173,6 +3173,17 @@ function AporteModal({ T, lang = "es", aporte, onClose, onDone }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const dtd = useDragToDismiss(onClose);
+  const inputRef = useRef(null);
+
+  // 0.4.54 — defer focus so the sheet has time to lay out BEFORE the
+  // keyboard fires. autoFocus on mount + Capacitor's keyboard resize +
+  // 92dvh recalculating mid-animation made the sheet collapse to height 0
+  // on iPhone (black void with just the keyboard visible). Same UX as
+  // autoFocus, just async.
+  useEffect(() => {
+    const t = setTimeout(() => { inputRef.current?.focus(); }, 220);
+    return () => clearTimeout(t);
+  }, []);
 
   async function save() {
     setErr(null);
@@ -3201,11 +3212,14 @@ function AporteModal({ T, lang = "es", aporte, onClose, onDone }) {
       background: "rgba(0,0,0,0.6)",
       display: "flex", alignItems: "flex-end", justifyContent: "center",
     }}>
-      {/* 0.4.50 — convertido de centered modal a bottom sheet:
+      {/* 0.4.50 — convertido de centered modal a bottom sheet
           (a) keyboard ya no tapa parte del form (la sheet sube cuando abre keyboard)
-          (b) drag-to-dismiss now applies. */}
+          (b) drag-to-dismiss now applies.
+          0.4.54 — maxHeight: "92%" (no más "92dvh"). Match al patrón de
+          ModalShell, que sirve a Deposit/Withdraw/CardDetails sin issues.
+          dvh recalculaba mid-keyboard-animation y colapsaba la sheet en iPhone. */}
       <div ref={dtd.ref} style={{
-        width: "100%", maxWidth: 540, maxHeight: "92dvh",
+        width: "100%", maxWidth: 540, maxHeight: "92%",
         background: T.bgElev, color: T.text,
         borderTopLeftRadius: 28, borderTopRightRadius: 28,
         border: `1px solid ${T.border}`, borderBottom: "none",
@@ -3246,7 +3260,7 @@ function AporteModal({ T, lang = "es", aporte, onClose, onDone }) {
           letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 6,
         }}>Monto ({currency})</div>
         <input
-          autoFocus
+          ref={inputRef}
           inputMode="decimal"
           value={amountStr}
           onChange={(e) => setAmountStr(e.target.value.replace(/[^\d,.]/g, ""))}

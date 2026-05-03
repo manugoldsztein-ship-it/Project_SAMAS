@@ -2998,6 +2998,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.54",
+    title: "AporteModal — fix sheet invisible con keyboard arriba",
+    bullets: [
+      "Manuel: 'Abro aporte mensual y me aparece asi' — screenshot del modal con la sheet invisible (black void) entre el tab bar y el keyboard. Solo se veía la wallet detrás (atenuada por el overlay) y el keyboard numérico.",
+      "ROOT CAUSE — combo de dos cosas que solas no rompen: (a) maxHeight: '92dvh' que recalcula con cada cambio del visual viewport y reportaba ~0 mid-animation del keyboard en iOS WebView; (b) autoFocus en el input que disparaba el keyboard ANTES que la sheet terminara de mountarse y settled su layout.",
+      "FIX — match al patrón de ModalShell (Deposit/Withdraw/CardDetails que andan): maxHeight: '92%' en vez de '92dvh', y autoFocus reemplazado por un useEffect con setTimeout 220ms que focusea el input después que la sheet quedó posicionada. Misma UX (keyboard sigue abriéndose solo), sin el race condition.",
+    ],
+  },
+  {
     version: "0.4.53",
     title: "Pre-pitch hygiene — sweep final del provider del LLM en Novedades",
     bullets: [
