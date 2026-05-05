@@ -47,6 +47,7 @@ import { AIQuotaPill } from "./AIQuotaPill.jsx";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { hapticNative } from "../lib/native.js";
 import { useDragToDismiss } from "./useDragToDismiss.js";
+import { useKeyboardInset } from "./useKeyboardInset.js";
 
 export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, isDark, onToggleDark, onOpenSettings, onOpenTutorials, proMode = false, isPlus = false, onOpenProUpsell, lang = "es" }) {
   // ----------- data state -----------
@@ -3173,6 +3174,7 @@ function AporteModal({ T, lang = "es", aporte, onClose, onDone }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const dtd = useDragToDismiss(onClose);
+  const kbInset = useKeyboardInset();
   const inputRef = useRef(null);
 
   // 0.4.54 — defer focus so the sheet has time to lay out BEFORE the
@@ -3208,16 +3210,24 @@ function AporteModal({ T, lang = "es", aporte, onClose, onDone }) {
 
   return (
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
-      position: "fixed", inset: 0, zIndex: 100,
+      position: "fixed",
+      // 0.4.55 — bottom = kbInset so the wrapper ends right at the top
+      // of the keyboard. flex-end pins the sheet there. Replaces inset: 0
+      // which left the sheet behind the keyboard on iPhone.
+      top: 0, left: 0, right: 0, bottom: kbInset,
+      zIndex: 100,
       background: "rgba(0,0,0,0.6)",
       display: "flex", alignItems: "flex-end", justifyContent: "center",
+      transition: "bottom 180ms ease-out",
     }}>
       {/* 0.4.50 — convertido de centered modal a bottom sheet
           (a) keyboard ya no tapa parte del form (la sheet sube cuando abre keyboard)
           (b) drag-to-dismiss now applies.
           0.4.54 — maxHeight: "92%" (no más "92dvh"). Match al patrón de
           ModalShell, que sirve a Deposit/Withdraw/CardDetails sin issues.
-          dvh recalculaba mid-keyboard-animation y colapsaba la sheet en iPhone. */}
+          dvh recalculaba mid-keyboard-animation y colapsaba la sheet en iPhone.
+          0.4.55 — el wrapper ahora usa bottom: kbInset (visualViewport).
+          La sheet vive arriba del keyboard sin depender de unidades viewport. */}
       <div ref={dtd.ref} style={{
         width: "100%", maxWidth: 540, maxHeight: "92%",
         background: T.bgElev, color: T.text,
@@ -3631,11 +3641,17 @@ function TxnRow({ t, T, isLast, visible }) {
 
 function ModalShell({ T, title, onClose, children }) {
   const dtd = useDragToDismiss(onClose);
+  // 0.4.55 — keyboard-aware wrapper so Deposit/Withdraw/CardDetails
+  // don't get covered by the iOS keyboard. See useKeyboardInset.js.
+  const kbInset = useKeyboardInset();
   return (
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
-      position: "fixed", inset: 0, zIndex: 100,
+      position: "fixed",
+      top: 0, left: 0, right: 0, bottom: kbInset,
+      zIndex: 100,
       background: "rgba(0,0,0,0.6)",
       display: "flex", alignItems: "flex-end", justifyContent: "center",
+      transition: "bottom 180ms ease-out",
     }}>
       <div ref={dtd.ref} style={{
         width: "100%", maxWidth: 540, maxHeight: "92%",

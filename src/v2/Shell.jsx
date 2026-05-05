@@ -2998,6 +2998,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.55",
+    title: "Keyboard-aware bottom sheets — el teclado ya no tapa el form",
+    bullets: [
+      "Manuel: 'En aporte mensual el nav bar no está bien y el keyboard tapa todo'. El fix de 0.4.54 (maxHeight 92% + focus deferido) arregló el black-void pero el form seguía atrás del keyboard en iPhone — porque Capacitor está con Keyboard.resize: 'body' y position: fixed sigue refiriéndose al visual viewport completo.",
+      "FIX — nuevo hook useKeyboardInset (visualViewport API) que devuelve la altura del teclado. AporteModal y ModalShell (Deposit/Withdraw/CardDetails) ahora usan bottom: kbInset en vez de inset: 0, así el wrapper termina justo arriba del teclado y la sheet flex-end se acomoda sola.",
+      "Transition de 180ms para que la subida acompañe la animación del keyboard sin saltos. Cuatro sheets cubiertas en una sola change.",
+    ],
+  },
+  {
     version: "0.4.54",
     title: "AporteModal — fix sheet invisible con keyboard arriba",
     bullets: [
