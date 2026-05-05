@@ -1,34 +1,87 @@
-# Project_SAMAS
+# SAMAS
 
-Features to implement:
-## Core Features & Functionality
-Trading Simulator: Includes a compound interest calculator to help users project potential gains.
+The app of the future — for the investors of today.
 
-TradingView Integration: Implementation of advanced charting and technical analysis tools.
+SAMAS is a trading and social prototype built as a single-file Vite + React
+build: simulated portfolio, real-time optional quotes (Finnhub), multi-asset
+coverage of the Argentine market (Acciones, CEDEAR, ETFs, Bonos, ONs, FCI),
+and **19 native AI features** powered by Edge Functions on Supabase.
 
-Social Feed / Forum: A community space inspired by Threads, Twitter, and WallStreetBets.
+<p align="center">
+  <em>Portfolio simulator · Live quotes · AI advisor · AI objectives · AI news sentiment · Pattern detector · Trade journal</em>
+</p>
 
-Trump Accounts: Specific tracking or integration related to high-profile political/financial accounts.
+## Quick start
 
-Multi-language Support: Localization for Spanish, English, Portuguese, Italian, French, German, Chinese, Russian, Japanese, Hebrew, and Arabic. [Most of these are done, need to implement a few more]
+```bash
+npm install
+npm run dev
+```
 
-## AI & Personalization
-AI Implementation: General integration of artificial intelligence across the platform.
+Then open the URL Vite prints (usually `http://localhost:5173`). You can also
+produce a single-file HTML bundle:
 
-Personalized Objectives: AI-driven goal setting tailored to each individual user's profile and behavior.
+```bash
+npm run build      # writes dist/index.html, fully self-contained
+npm run preview    # serve the built file locally
+```
 
-## Strategy & Monetization
-User Acquisition: Using the forum/social features as a "hook" to drive app downloads.
+For iOS:
 
-Ad Revenue: Implementing an ad frequency similar to Twitter/X to monetize "passive" users who only visit to browse the forums.
+```bash
+npm run build:cap
+npx cap sync ios
+npx cap open ios
+```
 
-Brand Identity: Pending tasks for final Name and Logo design. [Name is there, missing logo]
+## AI features
 
-## Technical & Security
-Cybersecurity: General focus on platform security and data protection.
+All AI surfaces are powered server-side via Supabase Edge Functions. The
+provider's API key lives in the Edge Function environment — it never reaches
+the client bundle. Each surface ships with a deterministic templated fallback
+so the app keeps working if the provider is unreachable.
 
-Differentiation: A focus on how to make the platform stand out from existing competitors (USP).
+Highlights:
 
-# Other Comments
+1. **Análisis IA** — one-line headline + observations + concrete suggestion
+   on the Wallet card. Reads holdings via JWT-scoped RLS.
+2. **Preguntale a SAMAS** — multi-turn chat with portfolio context.
+3. **Objetivos personalizados** — 3-step wizard (goal → horizon → risk).
+   Strategy classified deterministically; the LLM only refines the narrative.
+4. **News digest** — 2–3 sentence synthesis of headlines for your top 5
+   weighted holdings.
+5. **Detector de patrones tóxicos** — anti-overtrading nudge.
+6. **Trade Journal** — per-trade reflection + 90-day win-rate recap.
 
-// I'm Retep and I am evil
+…plus stress-test, hypothetical backtest, daily brief, sector rotation,
+position-size suggestion, thesis validation, news explainer, asset analysis,
+quarterly review, tax-loss harvest, proactive insights, watchlist generator,
+post draft, and risk score.
+
+## Configuration
+
+Edge Function secrets live in **Supabase Dashboard → Edge Functions → Manage
+Secrets**. Set `AI_API_KEY` and `FINNHUB_API_KEY` there — they never appear
+in the client bundle.
+
+Without `AI_API_KEY` set, every AI surface uses its templated fallback so
+demos and screenshots keep working.
+
+## What's in this repo
+
+- `src/v2/` — the active app shell (Wallet, Broker, Social, News).
+- `src/lib/i18n.js` — i18n source of truth, 12 locales.
+- `supabase/functions/` — 30 Edge Functions (auth, AI, admin, cron).
+- `supabase/*.sql` — schema migrations (run via Supabase SQL editor).
+
+## Existing integrations
+
+- **Finnhub** — optional live quotes, 60s refresh.
+- **WhatsApp Business API** — phone OTP for signup verification.
+
+## Non-goals
+
+SAMAS is a prototype. The trades it displays are simulated — no order
+routing, no custody, nothing real. Anything the AI says is **educational
+only, not financial advice**. KYC + CNV registration is the broker's
+responsibility, not SAMAS.
