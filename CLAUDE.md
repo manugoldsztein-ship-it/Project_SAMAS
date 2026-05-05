@@ -15,7 +15,7 @@ After every shippable change, post a Discord-friendly patch note exactly in this
 
 ````
 ```
-Patch samas-0.0.X
+Patch samas-0.X.Y
 - bullet describing what changed (terse)
 - second bullet
 - third bullet
@@ -25,7 +25,7 @@ Patch samas-0.0.X
 
 Rules:
 - Wrap in a triple-backtick code fence so Discord doesn't auto-bullet
-- `samas-0.0.X` increments by 1 per shipped patch (current is samas-0.0.50; next is 0.0.51)
+- The patch counter increments by 1 per shipped patch (current is samas-0.4.54; next is 0.4.55). The minor (0.4.x) bumps when a major theme rolls — Manuel does that bump manually, don't pre-empt it
 - Plain `-` bullets, no markdown headers, no bold, no blank lines inside the fence
 - After the fence, list any commands Manuel needs to run, **labeled by destination** (see below)
 
@@ -85,18 +85,27 @@ src/
     native.js                # Capacitor App.appStateChange bridge + onAppStateChange helper
     push.js                  # Capacitor Push Notifications wrapper
     biometric.js             # Capacitor Biometric Auth wrapper
-supabase/                    # SQL migrations. Run via Supabase SQL editor
+supabase/                    # SQL migrations. Run via Supabase SQL editor.
+                             # 30+ files now — list with `ls supabase/*.sql`.
+                             # Highlights below; rest are themed by feature name.
   schema.sql                 # original profiles, txns, otp_codes, etc
-  social.sql                 # social network: profiles_social, posts, likes, replies, follows, reports
-  social_fks.sql             # FKs to profiles_social (PostgREST relational selects need direct FKs)
-  social_messages.sql        # DM tables: dm_threads + dm_messages
-  social_notifications.sql   # AFTER-INSERT triggers (likes/reposts/replies/follows -> notifications)
-  social_university.sql      # profiles_social.university + university_verified, BEFORE INSERT trigger
-  social_cnv_idoneo.sql      # profiles_social.cnv_idoneo (admin-flipped)
-  social_post_images.sql     # posts.image_url + post-images Storage bucket
-  realtime_publication.sql   # supabase_realtime publication adds
-  replies_realtime.sql       # adds replies to publication
-  functions/                 # Edge Functions (fetch-news, send-otp, verify-otp, etc)
+  social*.sql                # social network: posts, likes, replies, follows,
+                             # university, cnv_idoneo, post-images, kinds, FKs
+  samas_plus*.sql            # Plus subscription: is_plus flag, ai_usage_daily,
+                             # consume_ai_quota / get_ai_quota_status / activate_plus RPCs
+  rate_limits*.sql           # IP/user rate-limit table + GC cron (security pass 0.4.16-0.4.18)
+  trade_journal.sql          # per-trade reflection (0.4.29)
+  objectives.sql             # AI-driven goals (0.4.12)
+  recurring_aportes.sql      # monthly contribution scheduler (0.4.7)
+  watchlists.sql / theses.sql / price_alerts.sql / risk_rules.sql
+  device_tokens.sql / notifications.sql / preferences.sql / ui_mode.sql
+  functions/                 # 35+ Edge Functions. Auth (send-otp/verify-otp),
+                             # AI (analyze-asset, analyze-portfolio, chat-portfolio,
+                             # daily-brief, news-digest, trade-coach, behavior-watch,
+                             # objectives-plan, score-risk, draft-post, ...),
+                             # admin (delete-user-account, export-user-data,
+                             # seed-social-demo), cron (check-price-alerts,
+                             # process-recurring-aportes, news-digest)
 ios/                         # Capacitor-generated Xcode project. App.xcworkspace lives here
 capacitor.config.json
 vite.config.js               # vite-plugin-singlefile inlines everything into one HTML file
@@ -131,15 +140,21 @@ This is intentional — it keeps lazy-load boundaries clean and avoids prop-thre
 ### Drill-in overlays in SocialPage
 SocialPage manages 4 overlay states: `profileUserId`, `threadPost`, `tickerFilter`, `followList`. Each renders an `position: absolute, inset: 0` overlay above the current sub-tab. Stack order via z-index (10 / 30 / 32 / 35). The bottom nav hides whenever ANY overlay is active (compose bars fight for the same vertical real estate as the tab bar).
 
-### Pro mode
-Boolean toggle persisted in `samas_v2_pro_mode` localStorage key. Owned by `SamasShellInner` state, plumbed via prop into BrokerShell, MercadoView, AssetSheet, WatchlistView, WalletPage. Pro features should ALWAYS be defensively gated — when `proMode` is false the Pro components don't render. **Don't make non-Pro paths assume the Pro components exist.**
+### Pro mode vs SAMAS Plus — DISTINCT
+These are two different things and confusing them is the #1 way to break this codebase. Read carefully.
 
-Pro features by surface:
-- **Pro Portfolio** (Broker > Portafolio): SectorDonut, RiskMetricsRow, BenchmarkLine
-- **Pro AssetDetail** (Broker > tap any asset): ProAssetChart, RangeBar52w, FundamentalsCard
-- **Pro Mercado** (Broker > Mercado): EarningsWidget, list/heatmap toggle, HeatmapGrid
-- **Pro Wallet** (Wallet tab): CashFlowBars, MonthPnLCard, DividendCard, TaxYearCard
-- **Watchlists v2** (Broker > Watchlist): color tags, reorder arrows, share-to-social
+**Pro mode** (UI density toggle, free):
+- Boolean in `samas_v2_pro_mode` localStorage key. Owned by `SamasShellInner` state, plumbed via prop into BrokerShell, MercadoView, AssetSheet, WatchlistView, WalletPage. Free for everyone — it just shows/hides denser cards.
+- Lite/Pro segmented picker shipped in Settings (samas-0.4.37). Lite is the default.
+- Pro features should ALWAYS be defensively gated — when `proMode` is false the Pro components don't render. **Don't make non-Pro paths assume the Pro components exist.**
+- Pro surfaces: SectorDonut/RiskMetricsRow/BenchmarkLine (Portafolio), ProAssetChart/RangeBar52w/FundamentalsCard (AssetDetail), EarningsWidget/HeatmapGrid (Mercado), MonthPnLCard/DividendCard/TaxYearCard (Wallet — note CashFlowBars was promoted to free in 0.4.15), Watchlists v2 (color tags, reorder, share-to-social).
+
+**SAMAS Plus** (paid AI subscription, US$5/mo):
+- Server-side flag `profiles_social.is_plus`. Source: `supabase/samas_plus.sql`.
+- Free tier: 5 user-initiated AI calls per UTC day. Plus: unlimited.
+- Auto-loaded AI surfaces (Daily Brief, Earnings Watch, Compare Benchmark, Risk Score, Quarterly Review) and safety AI (Trade Coach, Position Sizing) stay free in both tiers — funnel hooks.
+- RPCs: `consume_ai_quota`, `get_ai_quota_status`, `activate_plus`. Pricing screen at samas-0.4.23 with US$5/mo + 7-day trial.
+- The Pro upsell modal in older code is now repurposed as the Plus upsell — opens on `samas:open-pro-upsell` event but routes to the Plus pricing sheet.
 
 ### i18n
 Every user-facing string goes through `tr(key, lang, vars)` from `src/lib/i18n.js`. 12 locales, Spanish (es) is the canonical base — other locales fall back to es when a key is missing. The function is wrapped in try/catch as of 0.0.50 so a malformed call can't crash the app — it returns the key string and console.warns instead.
@@ -156,24 +171,58 @@ Every user-facing string goes through `tr(key, lang, vars)` from `src/lib/i18n.j
 - **University verified** (green check + chip): user picks AR university at signup. BEFORE INSERT trigger on `profiles_social` checks email domain against `is_university_email(uni, email)` allowlist. Auto-flip, no admin needed. Source of truth: `supabase/social_university.sql`.
 - **CNV idóneo** (blue check + chip): admin-only via SQL — no automated check. Manual update against the public CNV registry of registered representatives. Source: `supabase/social_cnv_idoneo.sql`.
 
+### AI architecture
+~19 AI surfaces, all server-side via Supabase Edge Functions. The provider's API key lives in Edge Function env (`AI_API_KEY`) — never in the client bundle. Every surface has a deterministic templated fallback so the app keeps working without the LLM.
+
+Three layers of gating, in order:
+1. **AI consent gate** (samas-0.0.98): first-tap consent dialog. `ensureAIConsent()` short-circuits everything if denied. Revocable from Settings.
+2. **AI master switch** (samas-0.4.11): per-user kill switch in Settings. When OFF, every surface self-hides and skeletons skip mounting.
+3. **Daily quota** (samas-0.2.6): 5 user-initiated calls/day on free tier, unlimited on Plus. Auto-loaded surfaces and safety AI bypass the quota.
+
+User-facing copy MUST anonymize the provider — say "IA" / "SAMAS AI", never the model vendor's name. The 0.4.42 sweep + 0.4.53 hygiene pass enforce this; any future copy that leaks the provider name is a regression.
+
+### Security posture (samas-0.4.16 → 0.4.19, then 0.4.32)
+The security pass is complete. Don't loosen any of this without a good reason:
+- Rate limits on all 21+ AI Edge Functions and auth routes — table `rate_limits` + GC cron. `RATE_LIMITS.AI = 60/min/user`.
+- Body validation on every Edge Function (rejects malformed JSON, oversized payloads).
+- Security headers (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy).
+- Constant-time OTP comparison + hCaptcha scaffolding on auth routes.
+- Sentry error tracking shipped 0.4.32. Off by default — needs `VITE_SENTRY_DSN` to activate.
+
 ---
 
-## Current state (samas-0.0.50 shipped)
+## Current state (samas-0.4.54 shipped)
 
-The Pro UI batch is fully shipped (0.0.42–0.0.47). Pro upsell modal shipped 0.0.49. Latest patch 0.0.50 hardened `tr()` and added component-stack readout to the error boundary.
+The branch has moved a LOT since the 0.0.x era. Major eras, in order:
+- **0.0.x — 0.1.x** — social network, Pro UI batch, Pro upsell, AI consent gate
+- **0.2.x** — SAMAS Plus subscription mechanism (is_plus flag, ai_usage_daily, RPCs, paywall)
+- **0.3.x** — AI tour walkthrough, thesis tracker, privacy-on-share work
+- **0.4.x** — pre-Cohen-pitch push: dead-code sweep, security audit (0.4.16-0.4.19), Cohen-fit changes (crypto removed → CEDEAR exposure 0.4.21, hypothetical portfolio 0.4.22, pricing polish 0.4.23, demo seeding combo 0.4.24, loading skeletons 0.4.25, UVA toggle 0.4.26, stress test 0.4.27, mood-aware AI 0.4.28, Trade Journal 0.4.29, Sentry 0.4.32), FCI module 0.4.34, Education Duolingo-style 0.4.35, Lite/Pro UI mode 0.4.37, drag-to-dismiss sheets 0.4.46, AporteModal bottom-sheet rebuild 0.4.50.
 
-### Open issues
-- **"Can't find variable: lang" runtime crash** — Manuel hit this on launch after pulling 0.0.49. Couldn't reproduce locally; build is clean and every `tr(..., lang)` call site has lang in scope. Most likely a stale WKWebView cache, hence 0.0.50 added defensive try/catch + version footer. **Next step: if it still crashes after a fresh app reinstall, the new error boundary will show the component stack — use that to localize.**
-- **News tab "isn't working"** — original report was vague. 0.0.37 added defensive timeouts, 0.0.48 fixed an English-locale category-filter bug (cat state was using translated label, never matched the data's Spanish keys). Likely resolved but not confirmed by Manuel.
-- **Invest button → monthly contribution menu bug** — Manuel reported "tap Invertir, sometimes Aporte modal opens". Couldn't repro from code review; pending screenshot.
+Latest: **samas-0.4.54** — AporteModal keyboard fix. Latest "pre-pitch hygiene" sweeps are in 0.4.42 (anonymize AI provider in user copy) and 0.4.53 (final sweep on the same).
 
-### What's next on the punch list
-Manuel rejected the structured menu last time and just said "What now". He likes when I just pick and ship. Reasonable batch picks for the next patch:
-- **Seed social demo data** — bake a Settings button that creates ~12 fake users with posts/threads/follows. The social tab will be empty during the Cohen pitch otherwise. Heaviest of these — needs Supabase admin write since fake users need auth.users rows.
-- **Loading skeletons** — replace bare "Cargando…" strings across the app with proper skeleton placeholders. Polish lift.
-- **Account deletion + data export** — App Store hard requirement (Guideline 5.1.1(v)). "Borrar mi cuenta" + "Descargar mis datos" in Settings.
-- **Pro pricing screen** — fake "$5/mes" page reachable from the Pro upsell modal's CTA. Demonstrates monetization concretely for Cohen.
-- **Demo accounts seeded with social activity** for the live demo.
+The big shipped categories on this branch:
+- **AI** — 19+ surfaces (analyze-asset, analyze-portfolio, chat-portfolio, daily-brief, news-digest, trade-coach, behavior-watch, objectives-plan, score-risk, draft-post, position-size, validate-thesis, explain-news, explain-term, fetch-news, sector-rotation, suggest-watchlist, quarterly-review, journal-recap, proactive-insights, rebalance-portfolio, earnings-watch, compare-benchmark)
+- **Monetization** — SAMAS Plus paywall + 7-day trial + value-framing card (0.4.23)
+- **Compliance** — App Store: account deletion (`delete-user-account`) + data export (`export-user-data`) Edge Functions live
+- **Demo readiness** — single-tap "full demo" combo button in Settings (0.4.24) seeds social + portfolio
+- **Security** — full audit pass complete (0.4.16-0.4.19)
+- **Education** — Duolingo-style tutorials path with XP + streak (0.4.35)
+- **Wallet** — Objetivos with AI (0.4.12), Movimientos realtime (0.4.10), recurring aportes (0.4.7), AporteModal as a proper bottom sheet (0.4.50)
+
+### Open issues / unknowns
+Most of the old 0.0.x bugs are presumed resolved on this branch (the lang crash got an explicit hotfix, see `samas-0.0.50` → see Shell.jsx:4382 for "Hotfix: Can't find variable: lang"). New things to be aware of:
+- **0.4.44** fixed an `id does not exist` RPC bug for SAMAS Plus — the consolidated migration `supabase/samas_plus_id_fix.sql` has to actually run in Supabase SQL editor on the live DB. Confirm with Manuel that he's run it before assuming Plus activation works in prod.
+- **Cohen pitch readiness** — recent commits are labeled "pre-pitch hygiene". The pitch may be imminent or just-past. Ask before assuming.
+
+### Default punch list
+Manuel rejects long menus. Just ship. If you need a starter, sensible picks:
+- More polish on Education / FCI / Trade Journal copy + edge cases
+- Empty-state polish across screens (still some bare strings)
+- Fix anything Manuel flags from the device
+- Tighten any AI surface where the templated fallback feels off
+
+The pre-Cohen punch list (loading skeletons, demo seeding, account deletion, pricing screen, demo accounts) is **all shipped**. Don't re-propose those.
 
 ---
 
