@@ -2447,8 +2447,14 @@ function AIChatCard({ T, lang = "es" }) {
             animation: "samas-fade-in 160ms ease-out",
           }}
         >
+          {/* 0.4.55 — height: "92%" en vez de "92vh".
+              vh es % del LAYOUT viewport (siempre = full screen, ignora
+              el keyboard). El parent position:fixed inset:0 trackea el
+              VISUAL viewport (arriba del keyboard). Con height en %, la
+              sheet queda relativa al parent (visual viewport), entonces
+              el input al pie queda sobre el keyboard, no debajo. */}
           <div style={{
-            width: "100%", height: "92vh",
+            width: "100%", height: "92%",
             background: T.surface, color: T.text,
             borderTopLeftRadius: 24, borderTopRightRadius: 24,
             borderTop: `1px solid ${T.border}`,

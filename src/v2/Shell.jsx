@@ -2998,6 +2998,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.55",
+    title: "Chat IA — fix textbox tapado por el keyboard",
+    bullets: [
+      "Manuel: 'al abrir Preguntale a SAMAS el keyboard tapa el textbox'. Screenshot: header + suggested prompts visibles, gap negro grande, keyboard al pie. El input estaba detrás del keyboard.",
+      "ROOT CAUSE — la sheet usaba height: '92vh'. vh mide el LAYOUT viewport (siempre = full screen, ignora el keyboard). Con keyboard arriba, la sheet seguía siendo 92% del full screen y su parte inferior (donde está el input) quedaba debajo del keyboard.",
+      "FIX — cambio a height: '92%'. El parent position:fixed:inset:0 trackea el VISUAL viewport (arriba del keyboard en iOS), entonces 92% del parent = 92% del área visible = el input queda sobre el keyboard.",
+    ],
+  },
+  {
     version: "0.4.54",
     title: "AporteModal — fix sheet invisible con keyboard arriba",
     bullets: [
