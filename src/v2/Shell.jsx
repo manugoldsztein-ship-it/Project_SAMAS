@@ -15,7 +15,7 @@
 import React, { useState, useEffect, useMemo, Suspense, lazy } from "react";
 import ReactDOM from "react-dom";
 import { SAMAS_THEME, FONT } from "./theme.js";
-import { SamasTabBar, Avatar, avatarPropsFor, AVATAR_PALETTE } from "./shared.jsx";
+import { SamasTabBar, Avatar, avatarPropsFor, AVATAR_PALETTE, useModalCount } from "./shared.jsx";
 import { useDragToDismiss } from "./useDragToDismiss.js";
 import { social as socialApi } from "./api/index.js";
 import { WalletPage } from "./Wallet.jsx";
@@ -280,6 +280,14 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
   const inSubShell = tab === "broker" || tab === "social";
   const baseTab = inSubShell ? "wallet" : tab;
 
+  // 0.4.56 — track open modals via window events. Cuando cualquier modal
+  // que llama useModalGuard() se monta, esto sube; cuando se desmonta,
+  // baja. Si > 0 ocultamos el SamasTabBar para que no tape el CTA al
+  // pie de las sheets (Manuel reportó "Ir a Mercado Pago" tapado por
+  // la barra de tabs porque position:fixed del modal queda atrapado en
+  // el stacking context del shell, y el tab bar gana en source order).
+  const modalsOpen = useModalCount();
+
   const renderTab = () => {
     switch (baseTab) {
       case "wallet":
@@ -452,7 +460,7 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
           Hidden while inside a drill-in sub-shell because the sub-shell
           renders its own bottom nav. The base tab bar reappears as the
           user swipes back and the sub-shell exits. */}
-      {!inSubShell && (
+      {!inSubShell && modalsOpen === 0 && (
         <SamasTabBar tab={tab} setTab={setTab} T={T} bottomInset={tabBarBottom} lang={lang} />
       )}
 
@@ -2997,6 +3005,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.4.56",
+    title: "SamasTabBar oculto cuando hay un modal arriba",
+    bullets: [
+      "Manuel: 'el menu cubre la opción Mercado Pago'. Screenshot del DepositModal abierto: el CTA verde 'Ir a Mercado Pago' al pie de la sheet quedaba parcialmente tapado por la barra de tabs.",
+      "ROOT CAUSE — known bug del codebase (ya documentado en useShellEntryDone): position:fixed dentro del shell queda atrapado en el stacking context del padre, así que aunque el modal tenga zIndex:100 y el tab bar zIndex:40, source order le da victoria al tab bar.",
+      "FIX — nuevo par de hooks en shared.jsx: useModalGuard() (cada modal lo llama en mount → dispatcha 'samas:modal-mounted' a window) y useModalCount() (el Shell lo usa para trackear cuántos modales están abiertos). Cuando count > 0 el SamasTabBar no se renderea. Side benefit: el tab bar no es tappable mientras hay un modal arriba, evita clicks fantasma.",
+      "Aplicado a ModalShell (Deposit/Withdraw/CardDetails), AporteModal, y al chat sheet del AIChatCard. Sheets de Shell-level (Settings, EditProfile, Legal, Changelog, ProUpsell) ya están a Shell-level, fuera del stacking trap, así que andan sin tocar.",
+    ],
+  },
   {
     version: "0.4.55",
     title: "Chat IA — fix textbox tapado por el keyboard",

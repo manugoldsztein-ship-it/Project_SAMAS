@@ -24,7 +24,7 @@ import { FONT, fmtMoney, fmtPct } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import {
   Avatar, ChromeBtn, Pill, SectionHead, Sparkline, SAMAS_SPARKS, Skeleton,
-  avatarPropsFor, DisclaimerStrip,
+  avatarPropsFor, DisclaimerStrip, useModalGuard,
 } from "./shared.jsx";
 import { arsToUva, fmtUva, uvaVsHistoryMessage, periodLabel } from "../lib/uva.js";
 import { wallet as walletApi, card as cardApi, broker as brokerApi, notifications as notifApi } from "./api/index.js";
@@ -2343,6 +2343,15 @@ function AIChatCard({ T, lang = "es" }) {
     el.scrollTop = el.scrollHeight;
   }, [messages, busy]);
 
+  // 0.4.56 — hide SamasTabBar while chat is open. Mismo patrón que
+  // useModalGuard pero acá el "modal" vive en el mismo componente
+  // (gateado por `open`), entonces despachamos los events directos.
+  useEffect(() => {
+    if (!open) return;
+    window.dispatchEvent(new Event("samas:modal-mounted"));
+    return () => window.dispatchEvent(new Event("samas:modal-unmounted"));
+  }, [open]);
+
   async function send() {
     const text = input.trim();
     if (!text || busy) return;
@@ -3180,6 +3189,7 @@ function AporteModal({ T, lang = "es", aporte, onClose, onDone }) {
   const [err, setErr] = useState(null);
   const dtd = useDragToDismiss(onClose);
   const inputRef = useRef(null);
+  useModalGuard(); // 0.4.56 — hide SamasTabBar while sheet is open
 
   // 0.4.54 — defer focus so the sheet has time to lay out BEFORE the
   // keyboard fires. autoFocus on mount + Capacitor's keyboard resize +
@@ -3637,6 +3647,7 @@ function TxnRow({ t, T, isLast, visible }) {
 
 function ModalShell({ T, title, onClose, children }) {
   const dtd = useDragToDismiss(onClose);
+  useModalGuard(); // 0.4.56 — hide SamasTabBar while sheet is open
   return (
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
       position: "fixed", inset: 0, zIndex: 100,
