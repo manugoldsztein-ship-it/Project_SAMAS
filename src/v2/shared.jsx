@@ -41,6 +41,49 @@ export function useShellEntryDone(durationMs = 260) {
 }
 
 // ----------------------------------------------------------
+// useModalGuard / useModalCount (samas-0.4.56)
+// ----------------------------------------------------------
+// Modales como DepositModal usan position:fixed pero quedan
+// atrapadas en el stacking context del shell — el SamasTabBar
+// (z-index 40) termina renderizando ARRIBA del modal y tapa el
+// CTA al pie de la sheet (Manuel reportó esto con "Ir a Mercado
+// Pago" tapado por la barra de tabs).
+//
+// PATRÓN:
+//   - Cada modal llama useModalGuard() en su mount → dispara
+//     'samas:modal-mounted' en window. Cleanup dispara
+//     'samas:modal-unmounted' en window.
+//   - Shell.jsx usa useModalCount() para escuchar y trackear
+//     cuántos modales están abiertos. Cuando count > 0 oculta
+//     el SamasTabBar.
+//
+// Side benefit — la barra de tabs no debería ser tappable mientras
+// hay un modal arriba de todas formas (UX), así que esto también
+// previene clicks fantasma.
+// ----------------------------------------------------------
+export function useModalGuard() {
+  useEffect(() => {
+    window.dispatchEvent(new Event("samas:modal-mounted"));
+    return () => window.dispatchEvent(new Event("samas:modal-unmounted"));
+  }, []);
+}
+
+export function useModalCount() {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    const inc = () => setCount((n) => n + 1);
+    const dec = () => setCount((n) => Math.max(0, n - 1));
+    window.addEventListener("samas:modal-mounted", inc);
+    window.addEventListener("samas:modal-unmounted", dec);
+    return () => {
+      window.removeEventListener("samas:modal-mounted", inc);
+      window.removeEventListener("samas:modal-unmounted", dec);
+    };
+  }, []);
+  return count;
+}
+
+// ----------------------------------------------------------
 // Sparkline — single polyline, no axes / labels.
 // ----------------------------------------------------------
 // Used inside cards next to numeric figures. We auto-scale each
