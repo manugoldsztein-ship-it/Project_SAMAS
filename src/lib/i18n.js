@@ -21,7 +21,7 @@
 const V2 = {
   es: {
     // tab bar
-    "tab.wallet":   "Wallet",
+    "tab.wallet":   "Inicio",
     "tab.invest":   "Invertir",
     "tab.social":   "Social",
     "tab.news":     "Noticias",
@@ -80,7 +80,7 @@ const V2 = {
     "ai_tour.c1.title": "17 funciones de IA en SAMAS",
     "ai_tour.c1.body":  "SAMAS no es solo un broker. Es un asesor con inteligencia artificial integrado en cada parte de la app. Te enseño en 30 segundos.",
     "ai_tour.c2.title": "Cada vez que abrís la app, IA te resume tu cartera",
-    "ai_tour.c2.body":  "El brief diario al tope de Wallet te dice cómo está tu cartera, qué se mueve hoy y qué mirar. Sin que toques nada.",
+    "ai_tour.c2.body":  "El brief diario al tope de Inicio te dice cómo está tu cartera, qué se mueve hoy y qué mirar. Sin que toques nada.",
     "ai_tour.c3.title": "Operás más seguro",
     "ai_tour.c3.body":  "Cuando vas a comprar o vender, IA te sugiere cuántas unidades comprar (Conservador / Estándar / Agresivo) y revisa tu orden antes de mandarla.",
     "ai_tour.c4.title": "Te avisa cuando algo importa",
@@ -863,7 +863,7 @@ const V2 = {
   },
 
   en: {
-    "tab.wallet":   "Wallet",
+    "tab.wallet":   "Home",
     "tab.invest":   "Invest",
     "tab.social":   "Social",
     "tab.news":     "News",
@@ -914,7 +914,7 @@ const V2 = {
     "ai_tour.c1.title": "17 AI features in SAMAS",
     "ai_tour.c1.body":  "SAMAS isn't just a broker. It's an AI-powered advisor woven through the app. Let me show you in 30 seconds.",
     "ai_tour.c2.title": "Open the app, AI summarizes your portfolio",
-    "ai_tour.c2.body":  "The daily brief at the top of Wallet tells you how your portfolio is doing, what's moving today, and what to watch. No tapping needed.",
+    "ai_tour.c2.body":  "The daily brief at the top of Home tells you how your portfolio is doing, what's moving today, and what to watch. No tapping needed.",
     "ai_tour.c3.title": "Trade with more confidence",
     "ai_tour.c3.body":  "When you buy or sell, AI suggests how many units (Conservative / Standard / Aggressive) and double-checks your order before it sends.",
     "ai_tour.c4.title": "Hear about what matters",
@@ -1693,7 +1693,7 @@ const V2 = {
   },
 
   pt: {
-    "tab.wallet":   "Carteira",
+    "tab.wallet":   "Início",
     "tab.invest":   "Investir",
     "tab.social":   "Social",
     "tab.news":     "Notícias",
@@ -1902,7 +1902,7 @@ const V2 = {
   },
 
   it: {
-    "tab.wallet":   "Wallet",
+    "tab.wallet":   "Home",
     "tab.invest":   "Investi",
     "tab.social":   "Social",
     "tab.news":     "Notizie",
@@ -2091,7 +2091,7 @@ const V2 = {
   },
 
   fr: {
-    "tab.wallet":   "Portefeuille",
+    "tab.wallet":   "Accueil",
     "tab.invest":   "Investir",
     "tab.social":   "Social",
     "tab.news":     "Actualités",
@@ -2280,7 +2280,7 @@ const V2 = {
   },
 
   de: {
-    "tab.wallet":   "Wallet",
+    "tab.wallet":   "Startseite",
     "tab.invest":   "Investieren",
     "tab.social":   "Social",
     "tab.news":     "News",
@@ -2469,7 +2469,7 @@ const V2 = {
   },
 
   zh: {
-    "tab.wallet":   "钱包",
+    "tab.wallet":   "首页",
     "tab.invest":   "投资",
     "tab.social":   "社区",
     "tab.news":     "新闻",
@@ -2658,7 +2658,7 @@ const V2 = {
   },
 
   ru: {
-    "tab.wallet":   "Кошелёк",
+    "tab.wallet":   "Главная",
     "tab.invest":   "Инвестиции",
     "tab.social":   "Соцсеть",
     "tab.news":     "Новости",
@@ -2847,7 +2847,7 @@ const V2 = {
   },
 
   ja: {
-    "tab.wallet":   "ウォレット",
+    "tab.wallet":   "ホーム",
     "tab.invest":   "投資",
     "tab.social":   "ソーシャル",
     "tab.news":     "ニュース",
@@ -3036,7 +3036,7 @@ const V2 = {
   },
 
   he: {
-    "tab.wallet":   "ארנק",
+    "tab.wallet":   "בית",
     "tab.invest":   "השקעה",
     "tab.social":   "חברתי",
     "tab.news":     "חדשות",
@@ -3225,7 +3225,7 @@ const V2 = {
   },
 
   ar: {
-    "tab.wallet":   "المحفظة",
+    "tab.wallet":   "الرئيسية",
     "tab.invest":   "استثمار",
     "tab.social":   "اجتماعي",
     "tab.news":     "الأخبار",
@@ -3414,7 +3414,7 @@ const V2 = {
   },
 
   ko: {
-    "tab.wallet":   "지갑",
+    "tab.wallet":   "홈",
     "tab.invest":   "투자",
     "tab.social":   "소셜",
     "tab.news":     "뉴스",
