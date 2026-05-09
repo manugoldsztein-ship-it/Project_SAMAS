@@ -3006,6 +3006,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.57",
+    title: "Tab 'Wallet' renombrada a 'Inicio'",
+    bullets: [
+      "Manuel: 'we are not a virtual wallet anymore'. SAMAS dejó de posicionarse como wallet virtual — el tab principal ahora dice 'Inicio' (es), 'Home' (en), y los equivalentes en las otras 10 locales (Início/Startseite/Accueil/首页/Главная/ホーム/בית/الرئيسية/홈).",
+      "Solo cambia el LABEL user-facing. El identificador interno del tab sigue siendo 'wallet' — todos los componentes (WalletPage, useModalGuard, etc.) y los keys de i18n con namespace 'wallet.*' quedan intactos. Cero blast radius en código.",
+      "ai_tour.c2.body también actualizado en es + en para no decir 'al tope de Wallet' después del rename.",
+    ],
+  },
+  {
     version: "0.4.56",
     title: "SamasTabBar oculto cuando hay un modal arriba",
     bullets: [
