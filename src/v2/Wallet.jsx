@@ -385,32 +385,43 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
             {tr("wallet.balance_total", lang)} · {ccy}
           </div>
 
-          {/* 0.4.72 — hero amount: shrunk from 40px → 32px. Less
-              wallet hero, more investment dashboard. La proporción
-              ahora deja respirar las cards de abajo (Brief IA, Chat,
-              Cartera) y la action row queda visualmente al nivel del
-              número, no debajo de un titular gigante. */}
-          <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 8 }}>
-            <span style={{
-              fontFamily: FONT.display, fontSize: 12, color: T.textMute, fontWeight: 600,
-            }}>
-              {ccy === "ARS" ? "$" : ccy === "USD" ? "US$" : ""}
-            </span>
-            <span style={{
-              fontFamily: FONT.display, fontSize: 32, fontWeight: 700, color: T.text,
-              letterSpacing: -1, fontVariantNumeric: "tabular-nums",
-            }}>
-              {balanceValue == null
-                ? "—"
-                : balanceVisible
-                  ? (ccy === "UVA" ? fmtUva(balanceValue) : fmtMoney(balanceValue, ccy))
-                  : "••••••"}
-            </span>
-            {ccy === "UVA" && (
+          {/* 0.4.72 — hero amount: shrunk from 40px → 32px.
+              0.4.76 — sparkline 30d a la derecha del número. Hace que
+              el hero lea como dashboard de bróker en vez de un single
+              giant number. La curva está hardcoded a SAMAS_SPARKS.bull
+              (upward trend) para el demo; cuando se integre histórico
+              real del bróker, se cambia por la serie verdadera. */}
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            gap: 12, marginBottom: 8,
+          }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0 }}>
               <span style={{
-                fontFamily: FONT.mono, fontSize: 11, color: T.textMute, fontWeight: 600,
-                marginLeft: 4,
-              }}>UVA</span>
+                fontFamily: FONT.display, fontSize: 12, color: T.textMute, fontWeight: 600,
+              }}>
+                {ccy === "ARS" ? "$" : ccy === "USD" ? "US$" : ""}
+              </span>
+              <span style={{
+                fontFamily: FONT.display, fontSize: 32, fontWeight: 700, color: T.text,
+                letterSpacing: -1, fontVariantNumeric: "tabular-nums",
+              }}>
+                {balanceValue == null
+                  ? "—"
+                  : balanceVisible
+                    ? (ccy === "UVA" ? fmtUva(balanceValue) : fmtMoney(balanceValue, ccy))
+                    : "••••••"}
+              </span>
+              {ccy === "UVA" && (
+                <span style={{
+                  fontFamily: FONT.mono, fontSize: 11, color: T.textMute, fontWeight: 600,
+                  marginLeft: 4,
+                }}>UVA</span>
+              )}
+            </div>
+            {balanceVisible && balanceValue != null && (
+              <div style={{ flexShrink: 0 }}>
+                <Sparkline data={SAMAS_SPARKS.bull} color={T.accent} w={80} h={32} sw={1.6}/>
+              </div>
             )}
           </div>
 
