@@ -3224,6 +3224,14 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.75",
+    title: "Onboarding slide 1 — rebrand (Wallet → cuenta de inversión)",
+    bullets: [
+      "El primer slide del onboarding decía literalmente 'Wallet en pesos y dólares' — la primera impresión que veía cada usuario nuevo. Ahora dice 'Tu cuenta de inversión' + body con el B2B2C marker: 'Operada a través de un bróker partner — SAMAS es la interfaz.'",
+      "Cierra el loop del rebranding: la primera frase que aparece en el flow de signup ya no menciona 'Wallet'. Slides 2/3/4 (Invertí con coach IA, Aprendé con la comunidad, Tu asistente IA) quedan intactos — ya eran investment-flavored.",
+    ],
+  },
+  {
     version: "0.4.74",
     title: "Rebranding cleanup — locales restantes + onboarding hint",
     bullets: [
