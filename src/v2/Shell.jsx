@@ -3006,6 +3006,14 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.65",
+    title: "Chat IA — input ya no tapado por la QuickType bar",
+    bullets: [
+      "Manuel: 'el teclado tapa el text prompt y el send button'. La barra de predicción de texto del iOS ('No | Y | Si') estaba overlapping con el input. El Capacitor Keyboard plugin reporta keyboardHeight sin incluir la QuickType bar en algunos casos, por eso el input quedaba parcialmente debajo de la barra de predicción.",
+      "FIX — cambio a la visualViewport API (web standard): window.innerHeight - visualViewport.height = altura total bloqueada por el keyboard, incluyendo QuickType. Resultado: el outer del modal queda por encima de TODO el keyboard, el input y el send button visibles enteros.",
+    ],
+  },
+  {
     version: "0.4.64",
     title: "Chat IA — sheet intrinsic-sized (sin dead space)",
     bullets: [
