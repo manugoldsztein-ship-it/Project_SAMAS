@@ -40,7 +40,7 @@ import { hashPin, PinLockScreen } from "./auth/PinLock.jsx";
 const MfaEnrollSection = lazy(() => import("./auth/Mfa.jsx").then((m) => ({ default: m.MfaEnrollSection })));
 const MfaChallengeView = lazy(() => import("./auth/Mfa.jsx").then((m) => ({ default: m.MfaChallengeView })));
 import { fetchNewsForTicker, fetchNewsForTickers, relativeTime } from "./lib/news.js";
-import { isNative as isNativeApp, hapticNative, updateNativeTheme, hideNativeSplash, onAppStateChange, onAppUrlOpen } from "./lib/native.js";
+import { isNative as isNativeApp, hapticNative, updateNativeTheme, hideNativeSplash, onAppStateChange, onAppUrlOpen, initKeyboardCSSVar } from "./lib/native.js";
 import { isPushEnabled, registerPush, setupPushListeners, clearPushLocal } from "./lib/push.js";
 import { LANGUAGES, RTL_LANGS } from "./lib/languages.js";
 // Welcome chooser: shown only on first session when profiles.ui_mode
@@ -6242,6 +6242,9 @@ export default function SAMASApp() {
   useEffect(() => {
     if (sbLoading) return;
     hideNativeSplash().catch(() => {});
+    // 0.4.68 — set up global keyboard CSS variable. Modals consume
+    // --samas-kb-h to position themselves above the keyboard.
+    initKeyboardCSSVar().catch(() => {});
   }, [sbLoading]);
 
   // 0.1.5 — OAuth deep-link handler. When iOS routes a samas://
