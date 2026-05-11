@@ -2502,7 +2502,13 @@ function AIChatCard({ T, lang = "es" }) {
           }}
         >
           <div style={{
-            width: "100%", height: "92%",
+            // 0.4.64 — sheet ahora es intrinsic-sized (maxHeight cap) en
+            // vez de height fija 92%. Cuando el chat está vacío (solo
+            // intro + chips), el sheet se achica a sus contenidos y
+            // queda compacto, pegado al input arriba del keyboard. Sin
+            // dead space al medio. Cuando hay messages el sheet crece
+            // hasta el cap, y messages scroll internamente.
+            width: "100%", maxHeight: "92%",
             background: T.surface, color: T.text,
             borderTopLeftRadius: 24, borderTopRightRadius: 24,
             borderTop: `1px solid ${T.border}`,
@@ -2563,17 +2569,15 @@ function AIChatCard({ T, lang = "es" }) {
               >×</button>
             </div>
 
-            {/* Message list — scrolls. 0.4.63 — justifyContent:flex-end +
-                marginTop:auto on the empty-state block lo apretan al input
-                cuando no hay messages todavía (antes había un gap negro
-                gigante entre los starter chips y el input bar). En active
-                conversation las messages siguen apilándose desde abajo
-                tipo iMessage. */}
+            {/* Message list — scrolls.
+                0.4.64 — flex: 1 1 auto: basis=auto (content size) + grow=1
+                (take extra space when sheet hits maxHeight) + shrink=1
+                (shrink to fit when constrained). Sheet en intrinsic-sized
+                con maxHeight cap; este container crece con contenido y
+                scrollea cuando llega al cap. */}
             <div ref={scrollRef} style={{
-              flex: 1, overflowY: "auto",
+              flex: "1 1 auto", minHeight: 0, overflowY: "auto",
               padding: "14px 16px",
-              display: "flex", flexDirection: "column",
-              justifyContent: "flex-end",
               WebkitOverflowScrolling: "touch",
               overscrollBehavior: "contain",
             }}>

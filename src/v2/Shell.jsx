@@ -3006,6 +3006,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.64",
+    title: "Chat IA — sheet intrinsic-sized (sin dead space)",
+    bullets: [
+      "Manuel: 'still weird' — el fix del 0.4.63 movió los chips al fondo del area pero ahora había dead space ARRIBA (entre el header y los chips). Cambiamos un problema por otro.",
+      "FIX REAL — sheet ahora es intrinsic-sized: maxHeight:92% (cap) en vez de height:92% fijo. Empty state: el sheet se achica a header + intro + chips + input, compacto y pegado al keyboard. Con messages: crece hasta el cap, después scroll interno.",
+      "Messages container ahora usa flex:1 1 auto (basis=content size, grow=1, shrink=1) + minHeight:0 para que el scroll funcione cuando el sheet hits maxHeight.",
+    ],
+  },
+  {
     version: "0.4.63",
     title: "Chat IA — starter chips ahora pegados al input, no flotando arriba",
     bullets: [
