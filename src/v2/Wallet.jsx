@@ -2352,32 +2352,29 @@ function AIChatCard({ T, lang = "es" }) {
     return () => window.dispatchEvent(new Event("samas:modal-unmounted"));
   }, [open]);
 
-  // 0.4.61 — track keyboard height via Capacitor Keyboard plugin.
-  // dvh / 100dvh / vh / 100% — todos fallaron en distintas combinaciones
-  // (input quedaba detrás del keyboard, o el sheet no llegaba al pie).
-  // Esta es la única manera bulletproof en WKWebView con resize:body:
-  // escuchar 'keyboardWillShow' y aplicar bottom: keyboardHeight al
-  // outer del modal.
+  // 0.4.65 — track keyboard height via visualViewport API.
+  // Antes (0.4.61) usaba Capacitor Keyboard plugin con keyboardWillShow,
+  // pero info.keyboardHeight no incluye la QuickType bar (predicción de
+  // texto "No | Y | Si") en iOS — el input quedaba parcialmente tapado
+  // por esa barra. visualViewport.height da el área visible REAL
+  // (excluye toda la altura del teclado incluyendo QuickType), así
+  // window.innerHeight - visualViewport.height = altura total bloqueada
+  // por el keyboard. Web standard, funciona en WKWebView sin deps.
   const [kbHeight, setKbHeight] = useState(0);
   useEffect(() => {
     if (!open) return;
-    let showSub, hideSub;
-    (async () => {
-      try {
-        const { Keyboard } = await import("@capacitor/keyboard");
-        showSub = await Keyboard.addListener("keyboardWillShow", (info) => {
-          setKbHeight(info.keyboardHeight || 0);
-        });
-        hideSub = await Keyboard.addListener("keyboardWillHide", () => {
-          setKbHeight(0);
-        });
-      } catch (_e) {
-        // Web build / non-Capacitor — no keyboard plugin, no-op.
-      }
-    })();
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const h = Math.max(0, window.innerHeight - vv.height);
+      setKbHeight(h);
+    };
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    update(); // initial
     return () => {
-      try { showSub?.remove?.(); } catch (_e) {}
-      try { hideSub?.remove?.(); } catch (_e) {}
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
       setKbHeight(0);
     };
   }, [open]);
