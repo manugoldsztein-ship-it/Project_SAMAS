@@ -3185,7 +3185,7 @@ function OnboardingEmptyState({ onOpenObjectives, onSelectAsset, onDeposit, C })
       <OnboardingRow
         n={3}
         title="Fondear tu cuenta"
-        body="Simulá un deposito para tener saldo antes de operar."
+        body="Simulá un depósito para tener fondos en tu cuenta antes de operar."
         cta="Depositar"
         onClick={onDeposit}
         accent={C.gold}

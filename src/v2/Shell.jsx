@@ -3224,6 +3224,14 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.74",
+    title: "Rebranding cleanup — locales restantes + onboarding hint",
+    bullets: [
+      "10 locales restantes (pt/it/fr/de/zh/ru/ja/he/ar/ko) faltaba la actualización de wallet.balance_total — todavía decían 'SALDO TOTAL' / 'GESAMTSALDO' / etc. Ahora todos los 12 locales muestran el equivalente de PATRIMONIO / NET WORTH.",
+      "Onboarding hint en App.jsx: 'Simulá un depósito para tener saldo antes de operar' → 'Simulá un depósito para tener fondos en tu cuenta antes de operar'. Cierra el loop del rebranding.",
+    ],
+  },
+  {
     version: "0.4.73",
     title: "Settings — 'Tu bróker' card (B2B2C explainer)",
     bullets: [
