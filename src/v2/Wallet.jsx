@@ -2456,14 +2456,16 @@ function AIChatCard({ T, lang = "es" }) {
             animation: "samas-fade-in 160ms ease-out",
           }}
         >
-          {/* 0.4.55 — height: "92%" en vez de "92vh".
-              vh es % del LAYOUT viewport (siempre = full screen, ignora
-              el keyboard). El parent position:fixed inset:0 trackea el
-              VISUAL viewport (arriba del keyboard). Con height en %, la
-              sheet queda relativa al parent (visual viewport), entonces
-              el input al pie queda sobre el keyboard, no debajo. */}
+          {/* 0.4.58 — height: "92dvh" (la idea de 0.4.55 con '92%' estaba
+              mal: position:fixed inset:0 trackea el LAYOUT viewport, NO el
+              visual viewport — el sheet ocupaba 92% del full screen y el
+              input quedaba detrás del keyboard).
+              dvh = dynamic viewport height = excluye el keyboard
+              automáticamente en iOS WebKit. Acá usamos height (no maxHeight)
+              + focus diferido 200ms, así no hay race con dvh recalculando
+              mid-animación (que era lo que rompía AporteModal con maxHeight). */}
           <div style={{
-            width: "100%", height: "92%",
+            width: "100%", height: "92dvh",
             background: T.surface, color: T.text,
             borderTopLeftRadius: 24, borderTopRightRadius: 24,
             borderTop: `1px solid ${T.border}`,
