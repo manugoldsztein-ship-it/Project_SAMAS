@@ -2563,10 +2563,17 @@ function AIChatCard({ T, lang = "es" }) {
               >×</button>
             </div>
 
-            {/* Message list — scrolls. */}
+            {/* Message list — scrolls. 0.4.63 — justifyContent:flex-end +
+                marginTop:auto on the empty-state block lo apretan al input
+                cuando no hay messages todavía (antes había un gap negro
+                gigante entre los starter chips y el input bar). En active
+                conversation las messages siguen apilándose desde abajo
+                tipo iMessage. */}
             <div ref={scrollRef} style={{
               flex: 1, overflowY: "auto",
               padding: "14px 16px",
+              display: "flex", flexDirection: "column",
+              justifyContent: "flex-end",
               WebkitOverflowScrolling: "touch",
               overscrollBehavior: "contain",
             }}>

@@ -3006,6 +3006,14 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.63",
+    title: "Chat IA — starter chips ahora pegados al input, no flotando arriba",
+    bullets: [
+      "Manuel: screenshot del chat con un gap negro gigante entre los starter chips y el input bar. Los chips quedaban en el top del scroll area y el input al pie del sheet, separados por todo el alto del area scrollable.",
+      "FIX — messages container ahora usa display:flex con justifyContent:flex-end. Empty state (intro + chips) se apretan al fondo, justo arriba del input. Flujo visual: ojos pasan de chips a input sin saltar al vacío. En active conversation las messages siguen apilándose desde abajo (estilo iMessage).",
+    ],
+  },
+  {
     version: "0.4.62",
     title: "Launch animation — fix de raíz (icon zoom seamless)",
     bullets: [
