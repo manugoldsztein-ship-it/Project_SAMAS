@@ -3006,6 +3006,14 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.58",
+    title: "Chat IA — fix real del keyboard tapando el input",
+    bullets: [
+      "Manuel reportó (otra vez) que el keyboard tapa el textbox al abrir Preguntale a SAMAS. Mi fix en 0.4.55 (height: '92vh' → '92%') estaba basado en una premisa equivocada: position:fixed inset:0 trackea el LAYOUT viewport, NO el visual viewport. Entonces 92% era 92% del full screen — el input al pie de la sheet seguía detrás del keyboard.",
+      "FIX REAL — height: '92dvh' (dynamic viewport height). dvh sí excluye el keyboard automáticamente en iOS WebKit. La razón por la que evité dvh en 0.4.54 (AporteModal) fue una race con maxHeight recalculando a ~0 mid-animación; acá usamos height fija (no maxHeight) + focus diferido 200ms, así no hay race.",
+    ],
+  },
+  {
     version: "0.4.57",
     title: "Tab 'Wallet' renombrada a 'Inicio'",
     bullets: [
