@@ -3012,6 +3012,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.72",
+    title: "Home — investment cockpit (phases 2/3/4 del rebranding B2B2C)",
+    bullets: [
+      "Phase 2 (hero) — el número de PATRIMONIO bajó de 40px → 32px. Menos 'hero gigante de wallet', más 'dashboard de bróker'. El resto del header respira mejor.",
+      "Phase 3 (B2B2C marker) — nuevo chip debajo de la chip de cambio diario: 'Operado por SAMAS Broker · demo'. Recuerda al usuario que SAMAS es la interfaz/cerebro y los fondos viven en el bróker. Cuando se conecte un bróker real (Cohen, etc.) se pluggea acá el nombre.",
+      "Phase 4 (action row) — reemplazadas las 4 acciones wallet-flavored (Send/Receive/Swap/Deposit, patrón Mercado Pago) por 4 investment actions: Comprar (→ Invertir) / Vender (→ Invertir) / Cargar (deposit modal) / Retirar (withdraw modal). Icons: Up/Down arrows para buy/sell, Plus para fund, paper plane para withdraw.",
+      "Nuevas keys i18n (es + en): wallet.action.buy/sell/fund/withdraw, wallet.broker.label/name/demo_chip.",
+    ],
+  },
+  {
     version: "0.4.71",
     title: "Home page — rebranding wallet → investment cockpit (B2B2C)",
     bullets: [
