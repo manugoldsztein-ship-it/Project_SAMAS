@@ -3006,6 +3006,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.59",
+    title: "LaunchScreen — fix animación de ícono off-center",
+    bullets: [
+      "Manuel reportó que al abrir la app, la animación zoom desde el ícono al launch screen no quedaba centrada en el 'dot'. Bug pre-existente — el storyboard tenía dimensiones hardcoded de iPhone 8 (375x667) sin auto-layout y sin autoresizing, así que en iPhone 17 Pro Max (393x852) el imageView quedaba anclado en la esquina superior-izquierda con el resto del screen blanco.",
+      "FIX — rewrite del LaunchScreen.storyboard con auto-layout constraints (top/leading/trailing/bottom = 0 al superview) + autoresizingMask en la view root. El Splash image (1366x1366 con logo centrado) ahora hace scaleAspectFill al full screen en cualquier device — el logo queda dead-center horizontal, alineado con donde el ícono 'aterriza' después del zoom de iOS.",
+      "Solo toca config iOS native (storyboard), no afecta el web bundle.",
+    ],
+  },
+  {
     version: "0.4.58",
     title: "Chat IA — fix real del keyboard tapando el input",
     bullets: [
