@@ -3224,6 +3224,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.76",
+    title: "Home hero — sparkline 30d a la derecha del PATRIMONIO",
+    bullets: [
+      "Visual nudge para que el hero lea como dashboard de bróker, no como single giant number. PATRIMONIO en la izquierda, mini-sparkline (80x32, SAMAS_SPARKS.bull) en la derecha, en la misma fila.",
+      "Por ahora la curva está hardcoded a un upward trend (bull). Cuando se integre el histórico real del bróker se cambia por la serie verdadera — el componente Sparkline ya está listo para cualquier array.",
+      "Solo aparece cuando balance está visible (no rompe el modo 'ocultar saldo').",
+    ],
+  },
+  {
     version: "0.4.75",
     title: "Onboarding slide 1 — rebrand (Wallet → cuenta de inversión)",
     bullets: [
