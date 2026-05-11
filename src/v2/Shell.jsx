@@ -444,6 +444,12 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
           0%, 100% { box-shadow: 0 4px 12px rgba(22, 199, 132, 0.30), 0 0 0 0 rgba(22, 199, 132, 0.20); }
           50%      { box-shadow: 0 4px 24px rgba(22, 199, 132, 0.55), 0 0 0 6px rgba(22, 199, 132, 0.18); }
         }
+        /* Confetti — pieces falling from the top with slight horizontal
+           drift and rotation. Used in the Tutorials "¡Listo!" screen. */
+        @keyframes samas-confetti {
+          0%   { transform: translate3d(0,0,0) rotate(0deg); opacity: 0.9; }
+          100% { transform: translate3d(var(--samas-confetti-dx, 12px), 110vh, 0) rotate(720deg); opacity: 0; }
+        }
       `}</style>
 
       {/* ---------- scrollable page content ----------
@@ -3005,6 +3011,18 @@ function AIConsentGate({ T, lang = "es" }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.4.69",
+    title: "Tutoriales — Duolingo full (quiz interactivo, stars, lock-gating)",
+    bullets: [
+      "Manuel: 'the tutorials should be more like duolingo'. Antes los tutoriales se 'completaban' apenas tappeabas (auto-XP por solo abrir). Ahora hay que pasar un quiz para que cuente.",
+      "12 preguntas multiple-choice nuevas (2 por tutorial × 6 tutoriales) en tutorialsData.js. Cada tutorial: leer → 'Probá lo que aprendiste' → quiz (Verificar → feedback + explicación → Siguiente). Respuesta correcta avanza; incorrecta = Reintentar la misma pregunta (sin hearts/lives, para no asustar — esto es app financiera, no idioma).",
+      "XP scaling: base + 2 bonus por respuesta correcta al primer intento. Perfect run desbloquea la segunda estrella en el path. completeTutorial(id, base, bonus, perfect) en lib/education.js.",
+      "Done screen: confetti CSS + glyph tier (🌟 perfect, 🎉 good, 👍 pass) + pill 'XP ganados' + haptic. Pure CSS confetti, sin deps.",
+      "Lock-gating entre módulos: módulo 2 se desbloquea cuando completás todo el módulo 1. Lock icon + hint 'Completá [previo] primero' en el header. Antes locked=false hardcoded; ahora derivado del progreso.",
+      "Path nodes: ★★ stars (1 completed, 2 perfect). Tap animation (scale 0.92 on touchstart). Glyph 🔒 cuando locked.",
+    ],
+  },
   {
     version: "0.4.68",
     title: "Chat IA — keyboard offset via global CSS variable",

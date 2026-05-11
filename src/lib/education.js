@@ -80,19 +80,41 @@ function saveStreak(s) {
   try { localStorage.setItem(KEY_STREAK, JSON.stringify(s)); } catch { /* ignore */ }
 }
 
-// Mark a tutorial as completed. Idempotent — re-completing an already-
-// completed tutorial doesn't add XP or move the streak. Returns
-// { gainedXp, streakChanged } so callers can render a celebration.
-export function completeTutorial(tutorialId, xp = 10) {
-  if (!tutorialId) return { gainedXp: 0, streakChanged: false };
+// Mark a tutorial as completed. Idempotent on FIRST completion (XP +
+// streak only awarded once). Subsequent re-completions can improve the
+// best score (perfect run unlocks a star).
+// Returns { gainedXp, streakChanged, newPerfect } so callers can render
+// a celebration.
+//
+// 0.4.69 — added `bonusXp` for quiz-based scoring. Base XP comes from
+// the tutorial's xp field; bonus is +2 per first-try-correct question.
+export function completeTutorial(tutorialId, xp = 10, bonusXp = 0, perfect = false) {
+  if (!tutorialId) return { gainedXp: 0, streakChanged: false, newPerfect: false };
   const t = todayISO();
   const progress = getProgress();
-  const wasCompleted = !!progress.completed[tutorialId];
+  const prior = progress.completed[tutorialId];
+  const wasCompleted = !!prior;
+  const totalXp = xp + (bonusXp || 0);
   let gainedXp = 0;
+  let newPerfect = false;
   if (!wasCompleted) {
     progress.completed[tutorialId] = t;
-    progress.totalXp = (progress.totalXp || 0) + xp;
-    gainedXp = xp;
+    progress.totalXp = (progress.totalXp || 0) + totalXp;
+    if (perfect) {
+      progress.perfectIds = progress.perfectIds || {};
+      progress.perfectIds[tutorialId] = true;
+      newPerfect = true;
+    }
+    gainedXp = totalXp;
+    saveProgress(progress);
+  } else if (perfect && !(progress.perfectIds || {})[tutorialId]) {
+    // First time getting a perfect run on a tutorial already completed
+    // (e.g. user redid it). Award only the bonus + the perfect star.
+    progress.perfectIds = progress.perfectIds || {};
+    progress.perfectIds[tutorialId] = true;
+    progress.totalXp = (progress.totalXp || 0) + (bonusXp || 0);
+    gainedXp = bonusXp || 0;
+    newPerfect = true;
     saveProgress(progress);
   }
 
@@ -109,7 +131,14 @@ export function completeTutorial(tutorialId, xp = 10) {
     saveStreak({ current: next, longest, lastDay: t });
     streakChanged = true;
   }
-  return { gainedXp, streakChanged };
+  return { gainedXp, streakChanged, newPerfect };
+}
+
+// Whether the user got a perfect run (all questions first try) on a
+// tutorial. Used to render the star indicator on the path.
+export function isTutorialPerfect(tutorialId) {
+  const progress = getProgress();
+  return !!(progress.perfectIds || {})[tutorialId];
 }
 
 // Compute the user's overall stats — used by the EducationCard
@@ -127,6 +156,7 @@ export function getEducationStats(allTutorials) {
     streakCurrent: streak.current,
     streakLongest: streak.longest,
     completedSet: new Set(Object.keys(progress.completed)),
+    perfectSet: new Set(Object.keys(progress.perfectIds || {})),
   };
 }
 
