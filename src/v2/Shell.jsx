@@ -3006,6 +3006,14 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.67",
+    title: "Chat IA — revert + QuickType padding hack",
+    bullets: [
+      "Cuarto y final intento. env(keyboard-inset-height) del 0.4.66 retornaba 0 en este WKWebView, sheet quedaba detrás del keyboard.",
+      "FIX — revert al Capacitor Keyboard plugin (0.4.61 approach) que SÍ posicionaba el modal correctamente arriba del keyboard. El issue residual del QuickType bar overlapping el input se compensa con padding-bottom: 48px extra en el input bar cuando hay keyboard. Hacky pero funciona, y no depende de APIs que no funcionan en WKWebView.",
+    ],
+  },
+  {
     version: "0.4.66",
     title: "Chat IA — keyboard handling via env(keyboard-inset-height)",
     bullets: [

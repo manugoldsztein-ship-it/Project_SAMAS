@@ -2352,13 +2352,35 @@ function AIChatCard({ T, lang = "es" }) {
     return () => window.dispatchEvent(new Event("samas:modal-unmounted"));
   }, [open]);
 
-  // 0.4.66 — keyboard handling via CSS env(keyboard-inset-height) (iOS 17+).
-  // Previas attempts (0.4.61 Capacitor plugin, 0.4.65 visualViewport API)
-  // ambos daban valores wrong en distintos contextos. La variable CSS
-  // env(keyboard-inset-height) la setea iOS directamente con la altura
-  // real del keyboard (incluyendo QuickType) — no hay que calcular nada
-  // en JS, no hay race conditions, no hay quirks de WKWebView.
-  // Lo aplicamos como `bottom` en el outer del modal.
+  // 0.4.67 — revert to the Capacitor Keyboard plugin approach (0.4.61).
+  // Probamos visualViewport API (0.4.65) y env(keyboard-inset-height)
+  // (0.4.66) — ambos rompieron el layout en este WKWebView (env() retornaba
+  // 0, sheet quedaba detrás del keyboard). El Capacitor plugin sí funciona;
+  // si el QuickType bar overlapping el input fue un visual issue, lo
+  // arreglamos con un pequeño extra padding-bottom en el input bar.
+  const [kbHeight, setKbHeight] = useState(0);
+  useEffect(() => {
+    if (!open) return;
+    let showSub, hideSub;
+    (async () => {
+      try {
+        const { Keyboard } = await import("@capacitor/keyboard");
+        showSub = await Keyboard.addListener("keyboardWillShow", (info) => {
+          setKbHeight(info.keyboardHeight || 0);
+        });
+        hideSub = await Keyboard.addListener("keyboardWillHide", () => {
+          setKbHeight(0);
+        });
+      } catch (_e) {
+        // Web build — no plugin, no-op.
+      }
+    })();
+    return () => {
+      try { showSub?.remove?.(); } catch (_e) {}
+      try { hideSub?.remove?.(); } catch (_e) {}
+      setKbHeight(0);
+    };
+  }, [open]);
 
   async function send() {
     const text = input.trim();
@@ -2462,12 +2484,12 @@ function AIChatCard({ T, lang = "es" }) {
         <div
           onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
           style={{
-            // 0.4.66 — bottom = env(keyboard-inset-height, 0px). iOS 17+
-            // setea esa CSS variable con la altura real del teclado
-            // (incluyendo QuickType bar). Pure CSS, sin JS measurements.
+            // 0.4.67 — bottom: kbHeight (Capacitor Keyboard plugin reporta
+            // la altura del keyboard sin QuickType). Compensamos el QuickType
+            // con padding-bottom extra en el input bar (ver más abajo).
             position: "fixed",
             top: 0, left: 0, right: 0,
-            bottom: "env(keyboard-inset-height, 0px)",
+            bottom: kbHeight,
             zIndex: 100,
             background: "rgba(0,0,0,0.55)",
             display: "flex", alignItems: "flex-end",
@@ -2596,10 +2618,17 @@ function AIChatCard({ T, lang = "es" }) {
               )}
             </div>
 
-            {/* Input — pinned to the bottom of the sheet. */}
+            {/* Input — pinned to the bottom of the sheet.
+                0.4.67 — when kbHeight > 0 (keyboard up), add 48px extra
+                padding-bottom to compensate for the QuickType predictive
+                bar that the Capacitor Keyboard plugin doesn't include in
+                info.keyboardHeight. When keyboard is closed, fall back to
+                the safe-area inset. */}
             <div style={{
               flexShrink: 0,
-              padding: "10px 14px calc(env(safe-area-inset-bottom) + 14px)",
+              padding: kbHeight > 0
+                ? "10px 14px 48px"
+                : "10px 14px calc(env(safe-area-inset-bottom) + 14px)",
               borderTop: `1px solid ${T.border}`,
               background: T.surface,
               display: "flex", alignItems: "flex-end", gap: 8,
