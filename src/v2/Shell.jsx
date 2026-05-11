@@ -3012,6 +3012,14 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.70",
+    title: "PinLock — sin auto-trigger del Face ID (black box gone)",
+    bullets: [
+      "Manuel: 'there is a black box in the login menu where you put the pin'. Screenshot mostraba el prompt nativo iOS de Face ID renderizado en el top de la pantalla al abrir el PIN screen. El PinLock auto-disparaba authenticateWithBiometric en su useEffect cuando isBiometricEnabled() era true.",
+      "FIX — quitado el auto-trigger. El useEffect ahora solo detecta el tipo de biometría disponible (para mostrar el botón correcto). El usuario dispara Face ID/Touch ID manualmente tappeando 'Usar Face ID' debajo de los dots. Un tap más, sin sorpresa de prompt al abrir la app.",
+    ],
+  },
+  {
     version: "0.4.69",
     title: "Tutoriales — Duolingo full (quiz interactivo, stars, lock-gating)",
     bullets: [

@@ -120,28 +120,22 @@ export function PinLockScreen({ C, storedPinHash, onSavePin, onSuccess, onForgot
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const [biometricType, setBiometricType] = useState("none"); // "face" | "fingerprint" | "iris" | "none"
-  const triedBioRef = useRef(false);
 
-  // On mount in enter mode, if Face ID / Touch ID is enabled and the
-  // device supports it, trigger the prompt automatically. Cancelling
-  // (or any error) just falls through to the PIN pad. We only try
-  // once per mount so the user can't get stuck in a prompt loop.
+  // On mount in enter mode, JUST detect what biometric type is
+  // available — but don't auto-trigger the prompt.
+  //
+  // 0.4.70 — Manuel reportó: el iOS native Face ID prompt aparecía
+  // automáticamente al cargar la PIN screen ("black box" en su
+  // screenshot). Lo sacamos del auto-trigger. El usuario que tenga
+  // Face ID habilitado lo dispara manualmente con el botón "Usar
+  // Face ID" que aparece debajo de los dots — un tap más, sin
+  // sorpresas al abrir la app.
   useEffect(() => {
     if (mode !== "enter") return;
-    if (triedBioRef.current) return;
     let alive = true;
     (async () => {
       const type = await isBiometricAvailable();
-      if (!alive) return;
-      setBiometricType(type);
-      if (type === "none" || !isBiometricEnabled()) return;
-      triedBioRef.current = true;
-      try {
-        const ok = await authenticateWithBiometric("Desbloqueá SAMAS");
-        if (alive && ok) onSuccess();
-      } catch (_) {
-        // Fall through to PIN pad silently.
-      }
+      if (alive) setBiometricType(type);
     })();
     return () => { alive = false; };
   }, [mode]);
