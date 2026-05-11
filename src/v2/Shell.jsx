@@ -3006,6 +3006,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.62",
+    title: "Launch animation — fix de raíz (icon zoom seamless)",
+    bullets: [
+      "Manuel: 'la animación sigue off'. Revisé las imágenes: el AppIcon tiene la S blanca ENORME (~85% del cuadrado) sobre fondo negro, pero el Splash image tiene la MISMA S a ~12% del cuadrado, perdida en el centro. Cuando iOS hace el zoom del ícono al launch screen, la S se 'achica' en vez de quedarse en escala — por eso se siente off-center / wrong.",
+      "FIX (recomendación oficial de Apple) — el LaunchScreen.storyboard ahora es solo background negro (#08090A, matchea theme.bg de SAMAS) sin imageView. El icon zoom de iOS se hace contra fondo negro, sin un logo más chico que cause mismatch visual.",
+      "También cambiamos la config del Capacitor SplashScreen: launchAutoHide:true + backgroundColor:#08090A. Antes mostraba el Splash image (con la S chica) entre el iOS launch y el WebView. Ahora hide automático = transición directa del iOS launch al app UI sin frame intermedio con logo small.",
+    ],
+  },
+  {
     version: "0.4.61",
     title: "Chat IA — keyboard listener real + sin auto-focus",
     bullets: [
