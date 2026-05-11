@@ -570,6 +570,9 @@ function TutorialDetail({ T, lang = "es", tutorial, onClose, onComplete }) {
     setStage("done");
     hapticNative(perfect ? "success" : "tap").catch(() => {});
     if (onComplete) onComplete();
+    // 0.4.77 — refresh other surfaces (EducationCard on Inicio) that
+    // listen for tutorial completion.
+    try { window.dispatchEvent(new Event("samas:tutorial-completed")); } catch (_e) {}
   }
 
   // For tutorials WITHOUT a quiz (legacy fallback) — keep the old
@@ -578,6 +581,7 @@ function TutorialDetail({ T, lang = "es", tutorial, onClose, onComplete }) {
     if (!hasQuiz && tutorial) {
       completeTutorial(tutorial.id, tutorial.xp || 10);
       if (onComplete) onComplete();
+      try { window.dispatchEvent(new Event("samas:tutorial-completed")); } catch (_e) {}
     }
     onClose();
   }

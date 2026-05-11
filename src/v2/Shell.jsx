@@ -3224,6 +3224,14 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.77",
+    title: "Tutorials — dispatch 'samas:tutorial-completed' event",
+    bullets: [
+      "EducationCard (en el home) escuchaba el evento 'samas:tutorial-completed' para refrescar stats (XP / streak / completed count), pero nada lo despachaba. Resultado: la card del home no se actualizaba al terminar un quiz hasta el próximo focus de la window.",
+      "FIX — Tutorials.jsx ahora despacha el evento en finishQuiz (después de pasar el quiz) y en closeLegacy (tutoriales sin quiz). EducationCard refresca las stats inmediatamente.",
+    ],
+  },
+  {
     version: "0.4.76",
     title: "Home hero — sparkline 30d a la derecha del PATRIMONIO",
     bullets: [
