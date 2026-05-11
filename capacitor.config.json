@@ -9,12 +9,12 @@
   },
   "plugins": {
     "SplashScreen": {
-      "launchAutoHide": false,
-      "backgroundColor": "#000000",
+      "launchAutoHide": true,
+      "backgroundColor": "#08090A",
       "showSpinner": false,
       "splashImmersive": true,
       "launchShowDuration": 0,
-      "fadeOutDuration": 200
+      "fadeOutDuration": 100
     },
     "StatusBar": {
       "style": "DARK",
