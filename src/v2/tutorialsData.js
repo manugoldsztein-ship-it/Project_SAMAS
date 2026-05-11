@@ -44,6 +44,30 @@ Tocá **Revisar** y vas a ver el resumen: cantidad, precio, comisión, IVA y tot
 
 Tocá **Confirmar compra**. Si la operación es a mercado, queda ejecutada al toque. Si es a límite, queda pendiente hasta que el precio toque tu objetivo. Vas a ver la pantalla **¡Listo!** y la posición aparece en tu **Portafolio**.
 `.trim(),
+    questions: [
+      {
+        prompt: "¿Dónde encontrás el botón Comprar de un activo?",
+        options: [
+          "En la pestaña Inicio, abajo del balance",
+          "En Invertir → Mercado → tocás un activo y se abre su panel",
+          "En la pestaña Noticias, al lado del titular",
+          "Solo desde Configuración",
+        ],
+        correctIdx: 1,
+        explanation: "Tocás Invertir, después Mercado, después un activo. Eso abre el panel con Comprar / Vender.",
+      },
+      {
+        prompt: "Si dudás cuánta cantidad comprar, ¿qué te muestra SAMAS?",
+        options: [
+          "Te conecta con un asesor humano por chat",
+          "Una tarjeta Sugerencia de tamaño · IA con 3 opciones (Conservador / Estándar / Agresivo)",
+          "Te obliga a una orden a mercado por el mínimo",
+          "Te bloquea hasta que decidas",
+        ],
+        correctIdx: 1,
+        explanation: "La sugerencia se calcula con tu cartera actual y te da 3 tamaños — tocás uno y la cantidad se llena sola.",
+      },
+    ],
   },
   {
     id: "samas_plus",
@@ -77,6 +101,25 @@ Configuración → fila **SAMAS Plus** arriba → tocá **Activar**. Por ahora l
 
 Mismo lugar: Configuración → fila **SAMAS Plus** → **Cancelar**. Volvés a la tier gratuita inmediatamente.
 `.trim(),
+    questions: [
+      {
+        prompt: "¿Cuál es la diferencia entre Pro y Plus?",
+        options: [
+          "Pro es paga, Plus es gratis",
+          "Pro es la vista densa gratis; Plus es la suscripción paga que saca el límite de IA",
+          "Son lo mismo con otro nombre",
+          "Plus desactiva las IAs gratuitas",
+        ],
+        correctIdx: 1,
+        explanation: "Pro = vista densa, sin costo. Plus = US$5/mes, saca el límite de 5 IA por día.",
+      },
+      {
+        prompt: "En la tier gratuita, ¿cuántas consultas IA por día tenés sobre features tappeables?",
+        options: ["1", "3", "5", "Ilimitadas"],
+        correctIdx: 2,
+        explanation: "5 al día. Las IAs que se cargan solas (Brief Diario, Trade Coach, etc.) son gratis siempre.",
+      },
+    ],
   },
   {
     id: "risk_score",
@@ -113,6 +156,30 @@ La lista está ordenada de mayor a menor riesgo. La idea es que la primera fila 
 
 Cada fila se expande con una explicación en castellano de por qué tiene ese score. La IA refina la frase; los números los pone el servidor (la IA no puede inventarlos).
 `.trim(),
+    questions: [
+      {
+        prompt: "Un score de Riesgo entre 1-3 indica:",
+        options: [
+          "Riesgo alto — cripto y volatilidad",
+          "Riesgo bajo — bonos, ETFs amplios, posiciones diversificadas chicas",
+          "Riesgo medio — CEDEARs grandes",
+          "Sin datos suficientes",
+        ],
+        correctIdx: 1,
+        explanation: "Verde (1-3) es bajo riesgo. Amarillo (4-6) es medio. Rojo (7-10) es alto.",
+      },
+      {
+        prompt: "Una posición que ocupa más del 40% de tu cartera, ¿cómo afecta su score de riesgo?",
+        options: [
+          "Lo baja (más concentración = menos riesgo)",
+          "No tiene efecto",
+          "Le suma 2 al score como penalty de concentración",
+          "Lo divide por 2",
+        ],
+        correctIdx: 2,
+        explanation: "Penalty de concentración: >25% suma 1, >40% suma 2. Una posición gigante es más vulnerable a un movimiento adverso.",
+      },
+    ],
   },
   {
     id: "cedear_basics",
@@ -152,6 +219,25 @@ El ratio NO te perjudica — el precio del CEDEAR ya está ajustado. Pero te pue
 - **Spread**: la diferencia entre punta compradora y vendedora puede ser amplia en CEDEARs no líquidos.
 - **Brecha cambiaria**: el "dólar implícito" del CEDEAR puede divergir del MEP — a veces sube, a veces baja.
 `.trim(),
+    questions: [
+      {
+        prompt: "Si AAPL tiene ratio 20:1, ¿qué significa?",
+        options: [
+          "Que cada CEDEAR vale 20 dólares",
+          "Que necesitás 20 CEDEARs para tener exposición a 1 acción de Apple",
+          "Que pagás 20% extra de comisión",
+          "Que el precio sube 20% por día",
+        ],
+        correctIdx: 1,
+        explanation: "El ratio es cuántos CEDEARs equivalen a una acción real. El precio ya está ajustado — no te perjudica, solo confunde si comparás precios sin tenerlo en cuenta.",
+      },
+      {
+        prompt: "Impuesto cedular sobre ganancias en CEDEARs para persona física residente (regla simplificada):",
+        options: ["5%", "15%", "25%", "35%"],
+        correctIdx: 1,
+        explanation: "15% sobre ganancias en moneda extranjera. La retención la maneja el broker (ALyC).",
+      },
+    ],
   },
   {
     id: "thesis_tracker",
@@ -197,6 +283,30 @@ Reduce **el sesgo de confirmación**: en vez de inventar una historia retrospect
 
 Es journaling-meets-validación, y según nuestro relevamiento ningún broker argentino lo ofrece.
 `.trim(),
+    questions: [
+      {
+        prompt: "¿Cuándo es el mejor momento para escribir tu tesis sobre una compra?",
+        options: [
+          "Después de que el precio se haya movido",
+          "ANTES de comprar, cuando todavía pensás con claridad",
+          "Solo si la operación pierde",
+          "Una vez al mes en el journal general",
+        ],
+        correctIdx: 1,
+        explanation: "El momento de claridad sobre por qué comprás algo es antes. Después, la duda contamina el pensamiento.",
+      },
+      {
+        prompt: "¿Cuál de estas es una buena tesis?",
+        options: [
+          "Apple es una buena empresa",
+          "AAPL reporta el viernes y los servicios crecen 14% YoY; si confirma, puede empujar 5%+",
+          "Voy a comprar porque sí",
+          "Lo dijo un YouTuber",
+        ],
+        correctIdx: 1,
+        explanation: "Una buena tesis es específica, falsable y temporal. Si los servicios crecen 8% en lugar de 14%, tu tesis se rompió — eso es claridad.",
+      },
+    ],
   },
   {
     id: "share_privacy",
@@ -248,5 +358,29 @@ Los mensajes directos están **cifrados en reposo** por Supabase (ver el ícono 
 
 NO son end-to-end todavía — administradores de SAMAS con acceso al service role podrían leerlos. Si querés borrar una conversación, tocá el ícono de basura en el header. La conversación se elimina de tu lado; el destinatario sigue viendo su copia hasta que él también la borre.
 `.trim(),
+    questions: [
+      {
+        prompt: "Cuando compartís tu cartera en Social, ¿qué info se publica?",
+        options: [
+          "El monto total en dólares y la cantidad de unidades por activo",
+          "Solo composición porcentual, performance ponderada y lista de tickers — SIN monto ni cost basis",
+          "Todo, incluyendo tu CBU",
+          "Solo el ticker más grande",
+        ],
+        correctIdx: 1,
+        explanation: "SAMAS es privacy-by-default. Compartís decisiones, no montos. Tu cost basis y unidades nunca salen del cliente.",
+      },
+      {
+        prompt: "¿Los DMs en SAMAS son end-to-end encrypted?",
+        options: [
+          "Sí, ni los admins pueden leerlos",
+          "No — cifrados en reposo (icono 🔒), pero admins con service role podrían leerlos",
+          "No están cifrados de ninguna forma",
+          "Solo si pagás Plus",
+        ],
+        correctIdx: 1,
+        explanation: "Cifrado en reposo ≠ E2E. Mejor que plaintext, pero no invisible al equipo SAMAS. Real E2E queda para post-launch.",
+      },
+    ],
   },
 ];
