@@ -2450,22 +2450,24 @@ function AIChatCard({ T, lang = "es" }) {
         <div
           onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
           style={{
-            position: "fixed", inset: 0, zIndex: 100,
+            // 0.4.60 — el OUTER tenía inset:0 que cubre el LAYOUT viewport
+            // (full screen, ignora keyboard). Con flex-end, el inner sheet
+            // quedaba pegado al bottom del full screen = detrás del keyboard.
+            // FIX REAL: outer ahora usa height:100dvh (visual viewport, sin
+            // keyboard). flex-end posiciona al inner sheet al borde inferior
+            // del área VISIBLE = justo arriba del keyboard. El input al pie
+            // del sheet queda visible.
+            position: "fixed",
+            top: 0, left: 0, right: 0,
+            height: "100dvh",
+            zIndex: 100,
             background: "rgba(0,0,0,0.55)",
             display: "flex", alignItems: "flex-end",
             animation: "samas-fade-in 160ms ease-out",
           }}
         >
-          {/* 0.4.58 — height: "92dvh" (la idea de 0.4.55 con '92%' estaba
-              mal: position:fixed inset:0 trackea el LAYOUT viewport, NO el
-              visual viewport — el sheet ocupaba 92% del full screen y el
-              input quedaba detrás del keyboard).
-              dvh = dynamic viewport height = excluye el keyboard
-              automáticamente en iOS WebKit. Acá usamos height (no maxHeight)
-              + focus diferido 200ms, así no hay race con dvh recalculando
-              mid-animación (que era lo que rompía AporteModal con maxHeight). */}
           <div style={{
-            width: "100%", height: "92dvh",
+            width: "100%", height: "92%",
             background: T.surface, color: T.text,
             borderTopLeftRadius: 24, borderTopRightRadius: 24,
             borderTop: `1px solid ${T.border}`,

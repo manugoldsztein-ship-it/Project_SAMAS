@@ -3006,6 +3006,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.60",
+    title: "Chat IA — keyboard fix REAL real (cambio del outer container)",
+    bullets: [
+      "Manuel reportó (tercera vez) que el input del Chat IA queda detrás del keyboard. Mi diagnóstico anterior (0.4.58) era parcial: cambié el SHEET interno a height: 92dvh, pero el problema real era el OUTER container.",
+      "RAÍZ — el outer del modal usaba position:fixed inset:0, que cubre el LAYOUT viewport (full screen, ignora keyboard). Aunque el sheet interno fuera 92dvh (visual viewport, sin keyboard), flex-end lo anclaba al bottom del OUTER = bottom del full screen = detrás del keyboard.",
+      "FIX — outer ahora usa position:fixed con top:0/left:0/right:0/height:100dvh (sin inset:0 y sin bottom). El outer cubre solo el área VISIBLE arriba del keyboard. flex-end posiciona al sheet interno al borde inferior visible → input justo arriba del keyboard, ya no debajo.",
+    ],
+  },
+  {
     version: "0.4.59",
     title: "LaunchScreen — fix animación de ícono off-center",
     bullets: [
