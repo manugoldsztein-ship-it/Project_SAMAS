@@ -2717,7 +2717,7 @@ function RecurringAporteModal({ current, onSave, onClose, C }) {
           </div>
           <div>
             <div style={{ fontSize:15, fontWeight:800, color:C.text }}>Aporte mensual automático</div>
-            <div style={{ fontSize:11, color:C.textMd }}>Acredita el monto elegido a tu saldo el día 1 de cada mes.</div>
+            <div style={{ fontSize:11, color:C.textMd }}>Acredita el monto elegido a tu cuenta el día 1 de cada mes.</div>
           </div>
         </div>
         <div style={{ fontSize:10, fontWeight:700, color:C.textMd, letterSpacing:1, textTransform:"uppercase", marginTop:14, marginBottom:6 }}>Monto (ARS)</div>
