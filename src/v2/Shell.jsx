@@ -3006,6 +3006,14 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.66",
+    title: "Chat IA — keyboard handling via env(keyboard-inset-height)",
+    bullets: [
+      "Tercer intento de keyboard handling. El visualViewport math del 0.4.65 reportaba valores wrong en Capacitor WKWebView (el sheet colapsaba a un sliver arriba del keyboard).",
+      "FIX — usar env(keyboard-inset-height, 0px) en el bottom del outer. iOS 17+ setea esa CSS variable con la altura real del teclado, incluyendo QuickType bar. Pure CSS, sin JS, sin race conditions, sin quirks de WKWebView. Si el iOS no la soporta, fallback a 0 (el modal queda full screen y el keyboard puede tapar parte — degradación aceptable).",
+    ],
+  },
+  {
     version: "0.4.65",
     title: "Chat IA — input ya no tapado por la QuickType bar",
     bullets: [
