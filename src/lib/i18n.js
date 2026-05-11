@@ -866,8 +866,8 @@ const V2 = {
     "onb.back":  "Atrás",
     "onb.next":  "Siguiente",
     // Slide 1 — wallet
-    "onb.s1.title": "Wallet en pesos y dólares",
-    "onb.s1.body":  "MEP en vivo, transferencias desde un solo lugar. ARS y USD en la misma app.",
+    "onb.s1.title": "Tu cuenta de inversión",
+    "onb.s1.body":  "MEP en vivo, ARS y USD lado a lado. Operada a través de un bróker partner — SAMAS es la interfaz.",
     // Slide 2 — broker (refreshed 0.1.2 to mention Coach IA)
     "onb.s2.title": "Invertí con coach IA",
     "onb.s2.body":  "CEDEARs, ETFs, bonos. La IA revisa cada operación contra tu cartera antes de confirmar.",
@@ -1733,8 +1733,8 @@ const V2 = {
     "onb.start": "Get started",
     "onb.back":  "Back",
     "onb.next":  "Next",
-    "onb.s1.title": "Wallet in pesos and dollars",
-    "onb.s1.body":  "Live MEP rate, transfers in one app. ARS and USD side by side.",
+    "onb.s1.title": "Your investment account",
+    "onb.s1.body":  "Live MEP rate, ARS and USD side by side. Run through a broker partner — SAMAS is the interface.",
     "onb.s2.title": "Invest with an AI coach",
     "onb.s2.body":  "CEDEARs, ETFs, bonds. The AI reviews each order against your portfolio before you confirm.",
     "onb.s3.title": "Learn with the community",
