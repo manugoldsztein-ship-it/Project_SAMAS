@@ -2352,32 +2352,13 @@ function AIChatCard({ T, lang = "es" }) {
     return () => window.dispatchEvent(new Event("samas:modal-unmounted"));
   }, [open]);
 
-  // 0.4.65 — track keyboard height via visualViewport API.
-  // Antes (0.4.61) usaba Capacitor Keyboard plugin con keyboardWillShow,
-  // pero info.keyboardHeight no incluye la QuickType bar (predicción de
-  // texto "No | Y | Si") en iOS — el input quedaba parcialmente tapado
-  // por esa barra. visualViewport.height da el área visible REAL
-  // (excluye toda la altura del teclado incluyendo QuickType), así
-  // window.innerHeight - visualViewport.height = altura total bloqueada
-  // por el keyboard. Web standard, funciona en WKWebView sin deps.
-  const [kbHeight, setKbHeight] = useState(0);
-  useEffect(() => {
-    if (!open) return;
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => {
-      const h = Math.max(0, window.innerHeight - vv.height);
-      setKbHeight(h);
-    };
-    vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
-    update(); // initial
-    return () => {
-      vv.removeEventListener("resize", update);
-      vv.removeEventListener("scroll", update);
-      setKbHeight(0);
-    };
-  }, [open]);
+  // 0.4.66 — keyboard handling via CSS env(keyboard-inset-height) (iOS 17+).
+  // Previas attempts (0.4.61 Capacitor plugin, 0.4.65 visualViewport API)
+  // ambos daban valores wrong en distintos contextos. La variable CSS
+  // env(keyboard-inset-height) la setea iOS directamente con la altura
+  // real del keyboard (incluyendo QuickType) — no hay que calcular nada
+  // en JS, no hay race conditions, no hay quirks de WKWebView.
+  // Lo aplicamos como `bottom` en el outer del modal.
 
   async function send() {
     const text = input.trim();
@@ -2481,16 +2462,12 @@ function AIChatCard({ T, lang = "es" }) {
         <div
           onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
           style={{
-            // 0.4.61 — outer cubre TODA la pantalla (inset:0), pero con
-            // bottom dinámico = altura del keyboard. Así:
-            //   keyboard cerrado → bottom:0 → outer cubre full screen
-            //   keyboard abierto → bottom:kbHeight → outer cubre solo
-            //   el área visible arriba del keyboard.
-            // flex-end posiciona el inner sheet al borde inferior del
-            // outer = exactamente arriba del keyboard cuando hay teclado.
+            // 0.4.66 — bottom = env(keyboard-inset-height, 0px). iOS 17+
+            // setea esa CSS variable con la altura real del teclado
+            // (incluyendo QuickType bar). Pure CSS, sin JS measurements.
             position: "fixed",
             top: 0, left: 0, right: 0,
-            bottom: kbHeight,
+            bottom: "env(keyboard-inset-height, 0px)",
             zIndex: 100,
             background: "rgba(0,0,0,0.55)",
             display: "flex", alignItems: "flex-end",
