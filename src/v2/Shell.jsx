@@ -3006,6 +3006,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.61",
+    title: "Chat IA — keyboard listener real + sin auto-focus",
+    bullets: [
+      "Manuel: 'no solo siempre me salta el teclado, sino ahora aparece asi' — screenshot del Chat con el input visible pero contenido del wallet mostrándose por debajo del modal. dvh/vh/% — todos fallaron en distintas combinaciones en WKWebView.",
+      "FIX 1 (layout) — uso del Capacitor Keyboard plugin: escuchar 'keyboardWillShow' / 'keyboardWillHide', trackear kbHeight, y aplicar bottom: kbHeight al outer position:fixed. El outer cubre full screen menos el área del keyboard. flex-end posiciona el sheet justo arriba del keyboard. Más confiable que cualquier truco con vh/dvh.",
+      "FIX 2 (UX) — quitado el auto-focus del input al abrir el chat. Manuel se quejó que el teclado salta solo. Ahora el usuario ve las suggested prompts primero, y el teclado aparece sólo cuando él decide tappear el input. El re-focus después de enviar un mensaje sigue ahí (flow continuo).",
+    ],
+  },
+  {
     version: "0.4.60",
     title: "Chat IA — keyboard fix REAL real (cambio del outer container)",
     bullets: [

@@ -2352,6 +2352,36 @@ function AIChatCard({ T, lang = "es" }) {
     return () => window.dispatchEvent(new Event("samas:modal-unmounted"));
   }, [open]);
 
+  // 0.4.61 — track keyboard height via Capacitor Keyboard plugin.
+  // dvh / 100dvh / vh / 100% — todos fallaron en distintas combinaciones
+  // (input quedaba detrás del keyboard, o el sheet no llegaba al pie).
+  // Esta es la única manera bulletproof en WKWebView con resize:body:
+  // escuchar 'keyboardWillShow' y aplicar bottom: keyboardHeight al
+  // outer del modal.
+  const [kbHeight, setKbHeight] = useState(0);
+  useEffect(() => {
+    if (!open) return;
+    let showSub, hideSub;
+    (async () => {
+      try {
+        const { Keyboard } = await import("@capacitor/keyboard");
+        showSub = await Keyboard.addListener("keyboardWillShow", (info) => {
+          setKbHeight(info.keyboardHeight || 0);
+        });
+        hideSub = await Keyboard.addListener("keyboardWillHide", () => {
+          setKbHeight(0);
+        });
+      } catch (_e) {
+        // Web build / non-Capacitor — no keyboard plugin, no-op.
+      }
+    })();
+    return () => {
+      try { showSub?.remove?.(); } catch (_e) {}
+      try { hideSub?.remove?.(); } catch (_e) {}
+      setKbHeight(0);
+    };
+  }, [open]);
+
   async function send() {
     const text = input.trim();
     if (!text || busy) return;
@@ -2405,7 +2435,11 @@ function AIChatCard({ T, lang = "es" }) {
           onClick={() => {
             setOpen(true);
             hapticNative("tap").catch(() => {});
-            setTimeout(() => inputRef.current?.focus(), 200);
+            // 0.4.61 — quitamos el auto-focus del input al abrir el chat.
+            // Manuel: "siempre me salta el teclado". Mejor que el usuario
+            // vea las suggested prompts primero y tape el input él si quiere.
+            // El focus después de enviar (send()) sigue ahí para flow
+            // continuo de conversación.
           }}
           style={{
             width: "100%", padding: 16, borderRadius: 22,
@@ -2450,20 +2484,21 @@ function AIChatCard({ T, lang = "es" }) {
         <div
           onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
           style={{
-            // 0.4.60 — el OUTER tenía inset:0 que cubre el LAYOUT viewport
-            // (full screen, ignora keyboard). Con flex-end, el inner sheet
-            // quedaba pegado al bottom del full screen = detrás del keyboard.
-            // FIX REAL: outer ahora usa height:100dvh (visual viewport, sin
-            // keyboard). flex-end posiciona al inner sheet al borde inferior
-            // del área VISIBLE = justo arriba del keyboard. El input al pie
-            // del sheet queda visible.
+            // 0.4.61 — outer cubre TODA la pantalla (inset:0), pero con
+            // bottom dinámico = altura del keyboard. Así:
+            //   keyboard cerrado → bottom:0 → outer cubre full screen
+            //   keyboard abierto → bottom:kbHeight → outer cubre solo
+            //   el área visible arriba del keyboard.
+            // flex-end posiciona el inner sheet al borde inferior del
+            // outer = exactamente arriba del keyboard cuando hay teclado.
             position: "fixed",
             top: 0, left: 0, right: 0,
-            height: "100dvh",
+            bottom: kbHeight,
             zIndex: 100,
             background: "rgba(0,0,0,0.55)",
             display: "flex", alignItems: "flex-end",
             animation: "samas-fade-in 160ms ease-out",
+            transition: "bottom 200ms ease-out",
           }}
         >
           <div style={{
