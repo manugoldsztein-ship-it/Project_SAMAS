@@ -612,6 +612,7 @@ function SamasShellInner({ user, isDark = true, isNativeApp = false, onToggleDar
 function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus, onOpenPlusUpsell, onReplayAITour, onOpenTutorials, isDark, onToggleDark, onLogout, onClose, isNativeApp, lang = "es", setLang }) {
   const [show2FA, setShow2FA] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [showBrokerInfo, setShowBrokerInfo] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
   // Server-side social seed (Edge Function) — busy flag so the row
   // shows "Sembrando…" while the function runs and the button can't
@@ -860,6 +861,42 @@ function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus
             lang={lang}
           />
         )}
+
+        {/* Tu bróker row (samas-0.4.73) — explicit B2B2C marker en
+            Settings. Cohen tappea esto y entiende: SAMAS es la capa de
+            software, el bróker es la entidad regulada. La parte más
+            directa del pitch B2B2C. */}
+        <button
+          onClick={() => setShowBrokerInfo(true)}
+          style={{
+            width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 8,
+            background: T.surface, border: `1px solid ${T.border}`,
+            display: "flex", alignItems: "center", gap: 12,
+            cursor: "pointer", textAlign: "left",
+          }}
+        >
+          <div style={{
+            width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+            background: T.accent + "22", color: T.accent,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 21h18M5 21V7l8-4 8 4v14M9 9h.01M9 12h.01M9 15h.01M9 18h.01M14 9h.01M14 12h.01M14 15h.01M14 18h.01"/>
+            </svg>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text }}>
+              {tr("settings.broker.title", lang)}
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+              {tr("settings.broker.row_sub", lang)}
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
 
         {/* UI mode picker (samas-0.4.37) — Lite vs Pro segmented
             control. Manuel pidió: "tiene que ser mas claro si estas
@@ -1544,6 +1581,17 @@ function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus
           T={T}
           lang={lang}
           onClose={() => setShowEditProfile(false)}
+        />
+      )}
+
+      {/* Tu bróker sub-sheet (samas-0.4.73) — the B2B2C explainer
+          opened from the "Tu bróker" row in Settings. Cohen-facing:
+          SAMAS = software, bróker = entidad regulada. */}
+      {showBrokerInfo && (
+        <BrokerInfoSheet
+          T={T}
+          lang={lang}
+          onClose={() => setShowBrokerInfo(false)}
         />
       )}
 
@@ -2715,6 +2763,170 @@ function LegalSheet({ T, lang = "es", kind, onClose }) {
   );
 }
 
+// ----------------------------------------------------------
+// BrokerInfoSheet (samas-0.4.73)
+// ----------------------------------------------------------
+// Cohen-pitch ready B2B2C explainer. Tappable from Settings → Tu
+// bróker. Compact card layout: intro + 3 info blocks (qué hace
+// SAMAS, qué hace el bróker, dónde vive tu plata). Static content,
+// pulled from i18n so future broker partners can swap copy without
+// touching code.
+// ----------------------------------------------------------
+function BrokerInfoSheet({ T, lang = "es", onClose }) {
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 110,
+        background: "rgba(0,0,0,0.7)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 16,
+      }}
+    >
+      <div style={{
+        width: "100%", maxWidth: 540, maxHeight: "92dvh",
+        background: T.bgElev || T.bg, color: T.text,
+        borderRadius: 22, border: `1px solid ${T.border}`,
+        overflow: "hidden", display: "flex", flexDirection: "column",
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: "18px 20px",
+          display: "flex", alignItems: "flex-start", justifyContent: "space-between",
+          borderBottom: `1px solid ${T.border}`, flexShrink: 0,
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "3px 8px", borderRadius: 999,
+              background: T.accent + "22", color: T.accent,
+              fontFamily: FONT.mono, fontSize: 9, fontWeight: 800,
+              letterSpacing: 0.6, textTransform: "uppercase",
+              marginBottom: 8,
+            }}>{tr("settings.broker.sheet.kicker", lang)}</div>
+            <div style={{
+              fontFamily: FONT.display, fontSize: 18, fontWeight: 700,
+              color: T.text, letterSpacing: -0.3, lineHeight: 1.2,
+            }}>
+              {tr("settings.broker.sheet.title", lang)}
+            </div>
+          </div>
+          <button onClick={onClose} aria-label="Cerrar" style={{
+            width: 30, height: 30, borderRadius: 8,
+            background: T.surface, border: `1px solid ${T.border}`,
+            color: T.text, cursor: "pointer", padding: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0, marginLeft: 12,
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{
+          padding: "16px 20px 20px",
+          overflowY: "auto",
+        }}>
+          <p style={{
+            fontFamily: FONT.sans, fontSize: 13, color: T.textMute,
+            lineHeight: 1.6, margin: "0 0 16px",
+          }}>{tr("settings.broker.sheet.intro", lang)}</p>
+
+          <InfoRow T={T}
+            label={tr("settings.broker.sheet.samas_label", lang)}
+            body={tr("settings.broker.sheet.samas_what", lang)}
+            tone="accent"
+            icon={(
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="3"/>
+                <path d="M9 9h.01M15 9h.01M9 15c.5.5 1.5 1 3 1s2.5-.5 3-1"/>
+              </svg>
+            )}
+          />
+          <InfoRow T={T}
+            label={tr("settings.broker.sheet.broker_label", lang)}
+            body={tr("settings.broker.sheet.broker_what", lang)}
+            tone="muted"
+            icon={(
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 21h18M5 21V7l8-4 8 4v14M9 9h.01M9 12h.01M9 15h.01M9 18h.01M14 9h.01M14 12h.01M14 15h.01M14 18h.01"/>
+              </svg>
+            )}
+          />
+
+          {/* Highlighted Q+A — "where does your money live?" — the
+              concrete B2B2C punchline. */}
+          <div style={{
+            marginTop: 16, padding: "14px 16px", borderRadius: 14,
+            background: T.accent + "14",
+            border: `1px solid ${T.accent}55`,
+          }}>
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 13, fontWeight: 800,
+              color: T.accent, marginBottom: 4,
+            }}>{tr("settings.broker.sheet.money_label", lang)}</div>
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 13, color: T.text,
+              lineHeight: 1.55,
+            }}>{tr("settings.broker.sheet.money_what", lang)}</div>
+          </div>
+        </div>
+
+        {/* Sticky close */}
+        <div style={{
+          padding: "12px 18px calc(env(safe-area-inset-bottom) + 16px)",
+          borderTop: `1px solid ${T.border}`,
+          background: T.bgElev || T.bg,
+        }}>
+          <button onClick={onClose} style={{
+            width: "100%", padding: "13px 16px", borderRadius: 14,
+            background: T.accent, border: "none",
+            color: T.accentInk, fontFamily: FONT.sans, fontSize: 14, fontWeight: 800,
+            cursor: "pointer",
+          }}>{tr("settings.broker.sheet.close", lang)}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Small reusable info row — icon + label + body. Used by
+// BrokerInfoSheet to render the "what SAMAS does" / "what the broker
+// does" blocks in a consistent shape.
+function InfoRow({ T, icon, label, body, tone = "muted" }) {
+  const isAccent = tone === "accent";
+  return (
+    <div style={{
+      display: "flex", gap: 12, marginBottom: 12,
+      padding: "12px 14px", borderRadius: 14,
+      background: T.surface, border: `1px solid ${T.border}`,
+    }}>
+      <div style={{
+        width: 32, height: 32, borderRadius: 10, flexShrink: 0,
+        background: isAccent ? T.accent + "22" : T.bg,
+        color: isAccent ? T.accent : T.textMute,
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>{icon}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text,
+          marginBottom: 4,
+        }}>{label}</div>
+        <div style={{
+          fontFamily: FONT.sans, fontSize: 12, color: T.textMute,
+          lineHeight: 1.5,
+        }}>{body}</div>
+      </div>
+    </div>
+  );
+}
+
 // Static prose. Pulled from a one-pager template scoped to a
 // pre-launch fintech prototype — placeholder until legal review.
 // Argentine jurisdiction (CABA) for the SAMAS team's home base.
@@ -3011,6 +3223,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // 12 words per bullet). The point of this screen is iteration
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
+  {
+    version: "0.4.73",
+    title: "Settings — 'Tu bróker' card (B2B2C explainer)",
+    bullets: [
+      "Pitch-ready B2B2C marker en Settings. Cohen tappea la nueva card 'Tu bróker' y se abre una sheet con el explainer concreto: SAMAS = capa de software/AI (interfaz, IA, social, educación, tracking). Bróker = entidad regulada por CNV que custodia + ejecuta + settlement. Tu plata vive en la cuenta del bróker, NO en SAMAS.",
+      "Card: ícono de banco + título 'Tu bróker' + subtitle 'SAMAS Broker · demo · tap para ver'. Insertada después del row 'Plus' y antes del UI Mode segmented.",
+      "Sheet: kicker 'SOBRE TU BRÓKER' + título grande + intro de 2 líneas + 2 info rows (qué hace SAMAS vs qué hace el bróker) + bloque destacado verde con la Q+A 'Dónde vive tu plata' como punchline.",
+      "Copy en es + en. Cuando se conecte un bróker real (Cohen, etc.) se actualiza wallet.broker.name + settings.broker.sheet.broker_what con la entidad concreta.",
+    ],
+  },
   {
     version: "0.4.72",
     title: "Home — investment cockpit (phases 2/3/4 del rebranding B2B2C)",
