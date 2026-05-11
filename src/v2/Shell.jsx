@@ -3012,6 +3012,16 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.71",
+    title: "Home page — rebranding wallet → investment cockpit (B2B2C)",
+    bullets: [
+      "Manuel: 'the home page still feels wallet like, we are now a software company that is b2b2c'. SAMAS dejó de presentarse como wallet — somos software (B2B para brokers, B2C en la experiencia). El usuario tiene su patrimonio en una cuenta de bróker, SAMAS es la interfaz/cerebro.",
+      "Strings renombrados (es + en): BALANCE TOTAL → PATRIMONIO / NET WORTH. Movimientos → Actividad / Activity. Mi cartera → Cartera / Portfolio. Cargar saldo → Cargar fondos / Add funds. 'Sin movimientos' → 'Sin actividad'.",
+      "Copy hardcoded en Wallet.jsx + App.jsx limpiados: 'Cargá plata a SAMAS' → 'Sumá fondos a tu cuenta'. 'Se acredita en tu wallet' → 'Se acredita en tu cuenta'. 'tu saldo' → 'tu cuenta' en el aporte automático.",
+      "Solo language pass — no estructural. La layout y los componentes quedan igual, solo cambia el VOCABULARIO para sonar a broker software, no a wallet virtual.",
+    ],
+  },
+  {
     version: "0.4.70",
     title: "PinLock — sin auto-trigger del Face ID (black box gone)",
     bullets: [

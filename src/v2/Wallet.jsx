@@ -3271,7 +3271,7 @@ function AporteModal({ T, lang = "es", aporte, onClose, onDone }) {
           Aporte mensual
         </div>
         <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute, marginBottom: 16 }}>
-          Cargá un monto fijo cada mes. Se acredita en tu wallet automáticamente el día que elijas.
+          Cargá un monto fijo cada mes. Se acredita en tu cuenta automáticamente el día que elijas.
         </div>
 
         {/* Currency pill */}
@@ -3740,8 +3740,8 @@ function DepositModal({ T, lang = "es", balance, onClose, onDone }) {
   return (
     <ModalShell T={T} title={tr("deposit.title", lang)} onClose={onClose}>
       <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute, marginBottom: 16, lineHeight: 1.5 }}>
-        Cargá plata a SAMAS. Esa misma plata es la que usás para invertir — no hay
-        paso intermedio.
+        Sumá fondos a tu cuenta. Esos fondos son los que después usás para invertir
+        — sin paso intermedio.
       </div>
 
       {/* Currency picker */}
