@@ -3006,6 +3006,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.68",
+    title: "Chat IA — keyboard offset via global CSS variable",
+    bullets: [
+      "0.4.67 todavía estaba quebrado. Hipótesis: el listener del Capacitor Keyboard plugin se registraba al abrir el chat, y había un race entre el listener firing y el keyboard apareciendo. La info.keyboardHeight quedaba en 0 algunas veces.",
+      "FIX — registramos el listener UNA VEZ al boot de la app (lib/native.js → initKeyboardCSSVar) y seteamos `--samas-kb-h` en document.documentElement con la altura del keyboard (+48 para el QuickType). El chat sheet usa `bottom: var(--samas-kb-h, 0px)` — la variable ya está actualizada cuando el modal se abre, sin race condition.",
+      "Bonus: usamos los 4 events (keyboardWillShow + keyboardDidShow + keyboardWillHide + keyboardDidHide) para máxima confiabilidad — si Will no dispara, Did sí.",
+    ],
+  },
+  {
     version: "0.4.67",
     title: "Chat IA — revert + QuickType padding hack",
     bullets: [

@@ -2352,35 +2352,10 @@ function AIChatCard({ T, lang = "es" }) {
     return () => window.dispatchEvent(new Event("samas:modal-unmounted"));
   }, [open]);
 
-  // 0.4.67 — revert to the Capacitor Keyboard plugin approach (0.4.61).
-  // Probamos visualViewport API (0.4.65) y env(keyboard-inset-height)
-  // (0.4.66) — ambos rompieron el layout en este WKWebView (env() retornaba
-  // 0, sheet quedaba detrás del keyboard). El Capacitor plugin sí funciona;
-  // si el QuickType bar overlapping el input fue un visual issue, lo
-  // arreglamos con un pequeño extra padding-bottom en el input bar.
-  const [kbHeight, setKbHeight] = useState(0);
-  useEffect(() => {
-    if (!open) return;
-    let showSub, hideSub;
-    (async () => {
-      try {
-        const { Keyboard } = await import("@capacitor/keyboard");
-        showSub = await Keyboard.addListener("keyboardWillShow", (info) => {
-          setKbHeight(info.keyboardHeight || 0);
-        });
-        hideSub = await Keyboard.addListener("keyboardWillHide", () => {
-          setKbHeight(0);
-        });
-      } catch (_e) {
-        // Web build — no plugin, no-op.
-      }
-    })();
-    return () => {
-      try { showSub?.remove?.(); } catch (_e) {}
-      try { hideSub?.remove?.(); } catch (_e) {}
-      setKbHeight(0);
-    };
-  }, [open]);
+  // 0.4.68 — keyboard offset comes from the global CSS variable
+  // `--samas-kb-h` set by initKeyboardCSSVar() (lib/native.js) at app
+  // boot. Listener is global so the keyboard height is always in sync
+  // when the chat opens — no React state race.
 
   async function send() {
     const text = input.trim();
@@ -2484,12 +2459,11 @@ function AIChatCard({ T, lang = "es" }) {
         <div
           onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
           style={{
-            // 0.4.67 — bottom: kbHeight (Capacitor Keyboard plugin reporta
-            // la altura del keyboard sin QuickType). Compensamos el QuickType
-            // con padding-bottom extra en el input bar (ver más abajo).
+            // 0.4.68 — bottom es la variable CSS global setada por
+            // initKeyboardCSSVar() (incluye los +48 del QuickType).
             position: "fixed",
             top: 0, left: 0, right: 0,
-            bottom: kbHeight,
+            bottom: "var(--samas-kb-h, 0px)",
             zIndex: 100,
             background: "rgba(0,0,0,0.55)",
             display: "flex", alignItems: "flex-end",
@@ -2618,17 +2592,10 @@ function AIChatCard({ T, lang = "es" }) {
               )}
             </div>
 
-            {/* Input — pinned to the bottom of the sheet.
-                0.4.67 — when kbHeight > 0 (keyboard up), add 48px extra
-                padding-bottom to compensate for the QuickType predictive
-                bar that the Capacitor Keyboard plugin doesn't include in
-                info.keyboardHeight. When keyboard is closed, fall back to
-                the safe-area inset. */}
+            {/* Input — pinned to the bottom of the sheet. */}
             <div style={{
               flexShrink: 0,
-              padding: kbHeight > 0
-                ? "10px 14px 48px"
-                : "10px 14px calc(env(safe-area-inset-bottom) + 14px)",
+              padding: "10px 14px calc(env(safe-area-inset-bottom) + 14px)",
               borderTop: `1px solid ${T.border}`,
               background: T.surface,
               display: "flex", alignItems: "flex-end", gap: 8,

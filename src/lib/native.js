@@ -98,6 +98,41 @@ export async function hideNativeSplash() {
 }
 
 // ----------------------------------------------------------
+// initKeyboardCSSVar (samas-0.4.68)
+// ----------------------------------------------------------
+// Setea `--samas-kb-h` en document.documentElement con la altura del
+// keyboard cuando se muestra/oculta. El AIChatCard (y cualquier modal
+// con input) usa esa variable como bottom para posicionarse arriba del
+// keyboard. Es global y se registra una vez al boot — sin race
+// conditions con state de React. Si el plugin no carga (web), es no-op.
+// ----------------------------------------------------------
+let _kbInited = false;
+export async function initKeyboardCSSVar() {
+  if (_kbInited) return;
+  _kbInited = true;
+  if (!isNative) return;
+  try {
+    const { Keyboard } = await import("@capacitor/keyboard");
+    const setVar = (h) => {
+      document.documentElement.style.setProperty("--samas-kb-h", `${h}px`);
+    };
+    setVar(0);
+    Keyboard.addListener("keyboardWillShow", (info) => {
+      // +48 para compensar el QuickType bar que el plugin a veces no
+      // incluye en info.keyboardHeight.
+      setVar((info?.keyboardHeight || 0) + 48);
+    });
+    Keyboard.addListener("keyboardDidShow", (info) => {
+      setVar((info?.keyboardHeight || 0) + 48);
+    });
+    Keyboard.addListener("keyboardWillHide", () => setVar(0));
+    Keyboard.addListener("keyboardDidHide", () => setVar(0));
+  } catch (e) {
+    console.warn("[native] keyboard init:", e);
+  }
+}
+
+// ----------------------------------------------------------
 // Theme update — keep iOS chrome color in sync with app theme.
 // ----------------------------------------------------------
 // Call whenever the user toggles dark/light mode. Updates:
