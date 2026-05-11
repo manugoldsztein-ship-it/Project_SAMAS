@@ -385,15 +385,20 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
             {tr("wallet.balance_total", lang)} · {ccy}
           </div>
 
+          {/* 0.4.72 — hero amount: shrunk from 40px → 32px. Less
+              wallet hero, more investment dashboard. La proporción
+              ahora deja respirar las cards de abajo (Brief IA, Chat,
+              Cartera) y la action row queda visualmente al nivel del
+              número, no debajo de un titular gigante. */}
           <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 8 }}>
             <span style={{
-              fontFamily: FONT.display, fontSize: 13, color: T.textMute, fontWeight: 600,
+              fontFamily: FONT.display, fontSize: 12, color: T.textMute, fontWeight: 600,
             }}>
               {ccy === "ARS" ? "$" : ccy === "USD" ? "US$" : ""}
             </span>
             <span style={{
-              fontFamily: FONT.display, fontSize: 40, fontWeight: 700, color: T.text,
-              letterSpacing: -1.5, fontVariantNumeric: "tabular-nums",
+              fontFamily: FONT.display, fontSize: 32, fontWeight: 700, color: T.text,
+              letterSpacing: -1, fontVariantNumeric: "tabular-nums",
             }}>
               {balanceValue == null
                 ? "—"
@@ -403,7 +408,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
             </span>
             {ccy === "UVA" && (
               <span style={{
-                fontFamily: FONT.mono, fontSize: 12, color: T.textMute, fontWeight: 600,
+                fontFamily: FONT.mono, fontSize: 11, color: T.textMute, fontWeight: 600,
                 marginLeft: 4,
               }}>UVA</span>
             )}
@@ -444,18 +449,52 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
               </span>
             </div>
           )}
+
+          {/* 0.4.72 — B2B2C marker. Recuerda al usuario que SAMAS es
+              software; los fondos viven en el bróker. Por ahora es
+              estático "SAMAS Broker (demo)"; cuando se conecte un
+              bróker real (Cohen, etc.) se pluggea acá el nombre. */}
+          <div style={{
+            marginTop: 10,
+            display: "inline-flex", alignItems: "center", gap: 6,
+            padding: "4px 10px",
+            background: T.surface, border: `1px solid ${T.border}`,
+            borderRadius: 999,
+            fontFamily: FONT.mono, fontSize: 10, fontWeight: 600,
+            color: T.textMute, letterSpacing: 0.3,
+          }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 21h18M5 21V7l8-4 8 4v14M9 9h.01M9 12h.01M9 15h.01M9 18h.01M14 9h.01M14 12h.01M14 15h.01M14 18h.01"/>
+            </svg>
+            <span>
+              {tr("wallet.broker.label", lang)} <strong style={{ color: T.text, fontWeight: 700 }}>{tr("wallet.broker.name", lang)}</strong>
+            </span>
+            <span style={{
+              padding: "1px 5px", borderRadius: 4,
+              background: T.bg, color: T.textMute,
+              fontSize: 8, letterSpacing: 0.5, textTransform: "uppercase",
+            }}>{tr("wallet.broker.demo_chip", lang)}</span>
+          </div>
         </div>
       </div>
 
-      {/* ---------- quick actions ---------- */}
+      {/* ---------- quick actions ----------
+          0.4.72 — reemplazadas las 4 acciones wallet-flavored
+          (Send/Receive/Swap/Deposit, patrón P2P payments app) por
+          las 4 investment actions del cockpit: Comprar / Vender /
+          Cargar / Retirar. Comprar y Vender saltan a Invertir; Cargar
+          y Retirar abren los modales correspondientes.
+          Send/Receive/Swap quedaban como sintomas de wallet virtual
+          — esto es broker software, no Mercado Pago. */}
       <div style={{
         margin: "20px 16px 0",
         display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8,
       }}>
-        <Action T={T} icon={<Ico.Send size={18}/>}   label={tr("wallet.action.send", lang)}  onClick={() => setActiveModal("withdraw")} />
-        <Action T={T} icon={<Ico.Recv size={18}/>}   label={tr("wallet.action.receive", lang)} onClick={() => setActiveModal("deposit")} />
-        <Action T={T} icon={<Ico.Repeat size={18}/>} label={tr("wallet.action.swap", lang)} onClick={() => toast.info(tr("wallet.swap_soon", lang))} />
-        <Action T={T} icon={<Ico.Add size={18}/>}    label={tr("wallet.action.deposit", lang)}  onClick={() => setActiveModal("deposit")} />
+        <Action T={T} icon={<Ico.Up size={18}/>}   label={tr("wallet.action.buy", lang)}      onClick={() => onTab && onTab("broker")} />
+        <Action T={T} icon={<Ico.Down size={18}/>} label={tr("wallet.action.sell", lang)}     onClick={() => onTab && onTab("broker")} />
+        <Action T={T} icon={<Ico.Add size={18}/>}  label={tr("wallet.action.fund", lang)}     onClick={() => setActiveModal("deposit")} />
+        <Action T={T} icon={<Ico.Send size={18}/>} label={tr("wallet.action.withdraw", lang)} onClick={() => setActiveModal("withdraw")} />
       </div>
 
       {/* ---------- FX quotes ---------- */}
