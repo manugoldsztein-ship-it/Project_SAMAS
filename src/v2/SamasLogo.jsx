@@ -21,8 +21,22 @@ import React from "react";
 //   top end    = 50 + 22*cos( 80°), 38 + 22*sin( 80°)
 //   bot start  = 50 + 22*cos(170°), 62 + 22*sin(170°)
 //   bot end    = 50 + 22*cos(260°), 62 + 22*sin(260°)
+//
+// Static rendering: uses the original path directions (no semantic
+// difference, only matters for stroke-trace animation).
 const TOP_PATH = "M 71.66 34.18 A 22 22 0 1 0 53.82 59.66";
 const BOT_PATH = "M 28.34 65.82 A 22 22 0 1 0 46.18 40.34";
+// Animated rendering: same arcs but path REVERSED so the stroke
+// traces from the center (near the dot) outward to the far endpoints.
+// Manuel 0.4.81: "the animation starts at the center and goes to the
+// left". Era porque las paths originales se trazaban counter-clockwise
+// desde sus extremos lejanos (top: upper-right → mid, bot: lower-left
+// → mid), creando una asimetría visual hacia la izquierda. Acá las
+// reverseamos: ambos arcos arrancan desde el centro (cerca del dot) y
+// se expanden simétricamente hacia afuera. El sweep flag se flipea de
+// 0 → 1 para que la curva visible sea la misma.
+const TOP_PATH_TRACE = "M 53.82 59.66 A 22 22 0 1 1 71.66 34.18";
+const BOT_PATH_TRACE = "M 46.18 40.34 A 22 22 0 1 1 28.34 65.82";
 // Arc length ≈ (270/360) * 2π * 22 ≈ 103.7. Use 110 to be safe.
 const ARC_LEN = 110;
 const STROKE_W = 11;
@@ -68,8 +82,13 @@ export function AnimatedLogoMark({
   showRing = false,
   drawDuration = 1100,
 }) {
-  const topProg = Math.max(0, Math.min(1, progress / 0.55));
-  const botProg = Math.max(0, Math.min(1, (progress - 0.45) / 0.55));
+  // 0.4.81 — antes era top primero (0..0.55) y después bottom (0.45..1),
+  // que con paths que trazaban desde los extremos lejanos creaba la
+  // sensación de "se mueve a la izquierda". Ahora ambos arcos están
+  // sincronizados (mismo progress) Y arrancan desde el centro hacia
+  // afuera (TOP_PATH_TRACE + BOT_PATH_TRACE invertidas). El visual:
+  // dot aparece → strokes radian simétricamente hacia los dos extremos.
+  const traceProg = Math.max(0, Math.min(1, progress));
 
   return (
     <svg
@@ -90,23 +109,23 @@ export function AnimatedLogoMark({
       </defs>
 
       <path
-        d={TOP_PATH}
+        d={TOP_PATH_TRACE}
         fill="none" stroke={strokeColor} strokeWidth={STROKE_W}
         strokeLinecap="round" strokeLinejoin="round"
         strokeDasharray={ARC_LEN}
-        strokeDashoffset={ARC_LEN * (1 - topProg)}
+        strokeDashoffset={ARC_LEN * (1 - traceProg)}
         style={{
-          transition: `stroke-dashoffset ${drawDuration * 0.6}ms cubic-bezier(.65,0,.35,1)`,
+          transition: `stroke-dashoffset ${drawDuration}ms cubic-bezier(.65,0,.35,1)`,
         }}
       />
       <path
-        d={BOT_PATH}
+        d={BOT_PATH_TRACE}
         fill="none" stroke={strokeColor} strokeWidth={STROKE_W}
         strokeLinecap="round" strokeLinejoin="round"
         strokeDasharray={ARC_LEN}
-        strokeDashoffset={ARC_LEN * (1 - botProg)}
+        strokeDashoffset={ARC_LEN * (1 - traceProg)}
         style={{
-          transition: `stroke-dashoffset ${drawDuration * 0.6}ms cubic-bezier(.65,0,.35,1)`,
+          transition: `stroke-dashoffset ${drawDuration}ms cubic-bezier(.65,0,.35,1)`,
         }}
       />
 
