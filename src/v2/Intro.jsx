@@ -20,12 +20,18 @@ import { AnimatedLogoMark, playIntroSound } from "./SamasLogo.jsx";
 // cold launch (WebView + WebContent processes), no point making the
 // user wait an extra full second just for a logo. Tap anywhere also
 // dismisses immediately.
+//
+// 0.4.83 — re-secuenciado para matchear el visual narrative del fix
+// del 0.4.81 (paths simétricas desde el centro): dot aparece PRIMERO,
+// strokes radian DESPUÉS hacia afuera, ring pulsa al final. Antes era
+// "strokes desde 30ms + dot a los 400ms" — el dot llegaba tarde y los
+// strokes ya estaban casi dibujados. Ahora el dot abre la escena.
 const TIMINGS = {
-  startTrace:    30,
-  startDot:      400,
-  startRing:     750,
-  startFade:     1200,
-  done:          1700,
+  startDot:      30,
+  startTrace:    320,
+  startRing:     900,
+  startFade:     1350,
+  done:          1850,
 };
 
 export function Intro({ onDone }) {

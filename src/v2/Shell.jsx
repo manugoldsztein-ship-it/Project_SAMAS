@@ -3224,6 +3224,14 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.83",
+    title: "Polish batch — TradeCoach verdict glyph + intro re-secuenciado",
+    bullets: [
+      "TradeCoach (Broker > confirmar orden) — el verdict chip de la IA ahora tiene ✓ / ⚠ / ✕ además del color y el label. Antes era solo color + 'OK / Cuidado / Frenar', ahora hay glyph que da snap visual instantáneo. Verdict chip también ahora un toque más grande (fontSize 10 → 11, padding 3x8 → 4x10) + borde sutil con el color del verdict. Es un killer moment del pitch (IA evalúa cada orden ANTES de confirmar), merece reading-at-glance.",
+      "Intro animation re-secuenciada para matchear el visual narrative del 0.4.81 (paths simétricas desde el centro). Antes los strokes arrancaban a los 30ms y el dot llegaba tarde a los 400ms — los strokes ya estaban casi dibujados cuando aparecía el dot. Ahora dot aparece primero (30ms), strokes radian después (320ms) hacia afuera, ring pulsa al final (900ms). El visual narrativo lee correcto: dot abre, strokes explotan, ring confirma.",
+    ],
+  },
+  {
     version: "0.4.82",
     title: "Fix: black band al pie del PinLock (3 bgs distintos sincronizados)",
     bullets: [
