@@ -144,7 +144,11 @@ export async function initKeyboardCSSVar() {
 //     Style.Light = dark text on light bg)
 export async function updateNativeTheme(isDark) {
   if (typeof document !== "undefined") {
-    const bg = isDark ? "#000000" : "#F7F7F5";
+    // 0.4.82 — antes era "#000000" (pure black) en dark mode, lo que
+    // creaba una banda visible al pie del PinLock donde body bg
+    // (#000) asomaba detrás del PinLock bg (#08090A o #0D1117).
+    // Ahora sincronizado con el canonical T.bg = #08090A del v2 theme.
+    const bg = isDark ? "#08090A" : "#F7F7F5";
     document.documentElement.style.background = bg;
     document.body.style.background = bg;
     const root = document.getElementById("root");
@@ -155,7 +159,7 @@ export async function updateNativeTheme(isDark) {
     const { StatusBar, Style } = await import("@capacitor/status-bar");
     await StatusBar.setStyle({ style: isDark ? Style.Dark : Style.Light });
     if (StatusBar.setBackgroundColor) {
-      await StatusBar.setBackgroundColor({ color: isDark ? "#000000" : "#F7F7F5" });
+      await StatusBar.setBackgroundColor({ color: isDark ? "#08090A" : "#F7F7F5" });
     }
   } catch (e) { console.warn("[native] theme update:", e); }
 }

@@ -69,7 +69,7 @@ function makeTheme(dark) {
   // Official SAMAS palette: #0D1117 navy, #16C784 green, #F7F7F5 off-white,
   // #E5E7EB light gray, #6B7280 medium gray.
   return dark ? {
-    bg:"#0D1117", card:"#161B22", card2:"#1F2630", border:"#2A313C",
+    bg:"#08090A", card:"#161B22", card2:"#1F2630", border:"#2A313C",
     navy:"#0D1117", text:"#F7F7F5", textMd:"#9CA3AF", textLt:"#6B7280",
     red:"#E05555", green:"#16C784", gold:"#C9A84C", goldLt:"#E8C97A",
     accent:"#16C784", creamDk:"#1F2630", isDark:true,

@@ -35,11 +35,16 @@
          We keep left/right insets at #root because for landscape /
          iPhone-with-rounded-corners cases they're cosmetic (they push
          the entire app inward by the corner radius). */
-      body { background: #0F0F0F; }
+      /* 0.4.82 — body + #root usan #08090A (canonical T.bg de v2 theme).
+         Antes era #0F0F0F que era LIGERAMENTE distinto del C.bg
+         (#0D1117) usado por PinLock y del T.bg (#08090A) usado por
+         el resto de la app — creaba una banda negra visible al pie
+         de PinLock donde body bg asomaba detrás del PinLock bg. */
+      body { background: #08090A; }
       #root {
         padding-left: env(safe-area-inset-left);
         padding-right: env(safe-area-inset-right);
-        background: #0F0F0F;
+        background: #08090A;
         box-sizing: border-box;
         position: relative;
       }

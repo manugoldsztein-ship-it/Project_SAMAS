@@ -3224,6 +3224,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.82",
+    title: "Fix: black band al pie del PinLock (3 bgs distintos sincronizados)",
+    bullets: [
+      "Manuel finalmente apuntó al 'black box' real: una BANDA NEGRA al PIE de la pantalla del PinLock, NO el iOS Face ID prompt al top.",
+      "ROOT CAUSE — el codebase tenía TRES tonos de negro distintos: (1) index.html body+#root = #0F0F0F, (2) App.jsx C.bg (usado por PinLock + SupabaseAuth) = #0D1117, (3) v2 theme.js T.bg (usado por el resto) = #08090A. Y para colmo, updateNativeTheme(isDark=true) en lib/native.js OVERRIDEA el body bg a #000000 (pure black) en runtime. El PinLock (#0D1117) tenía un seam visible vs body (#000) en el área del home indicator zone donde el bg asomaba.",
+      "FIX — todos unificados a #08090A (canonical T.bg). index.html body+#root → #08090A. App.jsx C.bg → #08090A. lib/native.js updateNativeTheme → #08090A en lugar de #000000. No más banda visible al pie de PinLock ni en ninguna otra pantalla.",
+    ],
+  },
+  {
     version: "0.4.81",
     title: "Intro logo animation — trazado simétrico desde el centro",
     bullets: [
