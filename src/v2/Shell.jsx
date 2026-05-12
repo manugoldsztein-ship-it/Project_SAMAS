@@ -3224,6 +3224,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.80",
+    title: "Launch animation — splash images flat black (no más jump visual)",
+    bullets: [
+      "Manuel: 'la animación con el dot y la aura sigue sin estar centrada'. Investigué: el AppIcon Y los Splash images tienen el green dot matemáticamente dead-center (centroid 511.5/511.5 sobre canvas 1024 / 2732). El problema era OTRO.",
+      "ROOT CAUSE — visual mismatch: iOS zoomea el ícono (S ocupa ~85% del screen al final del zoom) → después Capacitor SplashScreen mostraba el mismo S+dot pero en un canvas de 2732x2732, así que renderizado a full-screen el S se veía CHICO (~12% del screen). El S 'se achica' entre los dos estados, lee como off-center / wrong.",
+      "FIX — los 6 Splash images (light + dark × 1x/2x/3x) ahora son solid #08090A (mismo color que el LaunchScreen.storyboard y theme.bg). Ya no hay contenido visible en el splash para que cause el visual jump. La transición ahora es: iOS icon zoom → black (storyboard) → black (capacitor splash) → app UI. Suave.",
+    ],
+  },
+  {
     version: "0.4.79",
     title: "PinLock — auto-trigger del Face ID + layout más alto",
     bullets: [
