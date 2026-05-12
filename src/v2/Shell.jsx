@@ -3224,6 +3224,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.81",
+    title: "Intro logo animation — trazado simétrico desde el centro",
+    bullets: [
+      "Manuel: 'la animación está mal, arranca en el centro y se va a la izquierda'. ROOT CAUSE: las paths SVG del logo trazaban counter-clockwise desde sus extremos lejanos (top: upper-right → mid, bot: lower-left → mid). Visualmente lee como 'la animación se mueve hacia la izquierda' porque el primer arco que se traza viene del upper-right.",
+      "FIX 1 — paths invertidas. Nuevas TOP_PATH_TRACE + BOT_PATH_TRACE arrancan desde los puntos cercanos al dot (53.82, 59.66 y 46.18, 40.34) y trazan hacia afuera hacia los extremos lejanos. El sweep flag se flipea para preservar el arco visible.",
+      "FIX 2 — sincronizadas. Antes el top arc trazaba en 0-0.55 y el bottom en 0.45-1 (con un overlap), ahora los dos usan el mismo progress, así que radian SIMÉTRICAMENTE desde el centro hacia los dos lados al mismo tiempo. Visual: dot aparece → strokes explotan hacia afuera (left + right en sync).",
+    ],
+  },
+  {
     version: "0.4.80",
     title: "Launch animation — splash images flat black (no más jump visual)",
     bullets: [
