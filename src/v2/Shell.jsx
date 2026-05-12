@@ -3224,6 +3224,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.78",
+    title: "Fix: PATRIMONIO = cash + cartera (no solo cash)",
+    bullets: [
+      "Manuel: 'porque está diferente el valor del patrimonio vs el valor de la cartera?'. Bug que metí con el rebranding del 0.4.71: cambié el label de 'BALANCE TOTAL' a 'PATRIMONIO' pero el número seguía siendo SOLO el cash en la cuenta. La sección 'Cartera' (totalArs/totalUsd) era un número distinto y más realista del 'patrimonio'.",
+      "FIX — el hero ahora suma cash + posiciones invertidas (portfolio.totalArs/totalUsd, con liveRatio aplicado). Ahora 'PATRIMONIO' es honesto: tu plata en efectivo + tu plata invertida. El UVA compare también suma los dos.",
+      "Bonus: la sparkline del hero ahora usa el sparkBuffer real (live portfolio totals con drift de los tickers), no SAMAS_SPARKS.bull hardcoded. Si el buffer no se hidrató todavía, fallback al bull preset.",
+    ],
+  },
+  {
     version: "0.4.77",
     title: "Tutorials — dispatch 'samas:tutorial-completed' event",
     bullets: [
