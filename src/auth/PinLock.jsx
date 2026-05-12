@@ -121,21 +121,30 @@ export function PinLockScreen({ C, storedPinHash, onSavePin, onSuccess, onForgot
   const [busy, setBusy] = useState(false);
   const [biometricType, setBiometricType] = useState("none"); // "face" | "fingerprint" | "iris" | "none"
 
-  // On mount in enter mode, JUST detect what biometric type is
-  // available — but don't auto-trigger the prompt.
+  // On mount in enter mode, detect biometric type AND auto-trigger
+  // the Face ID prompt if it's enabled.
   //
-  // 0.4.70 — Manuel reportó: el iOS native Face ID prompt aparecía
-  // automáticamente al cargar la PIN screen ("black box" en su
-  // screenshot). Lo sacamos del auto-trigger. El usuario que tenga
-  // Face ID habilitado lo dispara manualmente con el botón "Usar
-  // Face ID" que aparece debajo de los dots — un tap más, sin
-  // sorpresas al abrir la app.
+  // 0.4.79 — Manuel pidió que el auto-trigger vuelva. Lo había sacado
+  // en 0.4.70 pero terminó siendo una regresión: el flujo más rápido
+  // es Face ID instantáneo al abrir la app. Si falla / el user cancela,
+  // cae al PIN pad sin loops.
+  const triedBioRef = useRef(false);
   useEffect(() => {
     if (mode !== "enter") return;
+    if (triedBioRef.current) return;
     let alive = true;
     (async () => {
       const type = await isBiometricAvailable();
-      if (alive) setBiometricType(type);
+      if (!alive) return;
+      setBiometricType(type);
+      if (type === "none" || !isBiometricEnabled()) return;
+      triedBioRef.current = true;
+      try {
+        const ok = await authenticateWithBiometric("Desbloqueá SAMAS");
+        if (alive && ok) onSuccess();
+      } catch (_) {
+        // Cae al PIN pad silenciosamente.
+      }
     })();
     return () => { alive = false; };
   }, [mode]);
@@ -210,8 +219,17 @@ export function PinLockScreen({ C, storedPinHash, onSavePin, onSuccess, onForgot
     <div style={{
       position: "absolute", inset: 0, zIndex: 90,
       background: C.bg,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      padding: 24, boxSizing: "border-box",
+      // 0.4.79 — content top-anchored en vez de center, con padding-top
+      // generoso pero no tanto que deje un "black box" de vacío arriba.
+      // Manuel se quejó del void cuando el auto-trigger del Face ID no
+      // pintaba el iOS prompt arriba. Ahora el SAMAS logo aparece a
+      // ~22% del top en vez de a la mitad.
+      display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "flex-start",
+      paddingTop: "calc(env(safe-area-inset-top) + 22vh)",
+      paddingLeft: 24, paddingRight: 24,
+      paddingBottom: 24,
+      boxSizing: "border-box",
     }}>
       <div style={{
         width: "100%", maxWidth: 340,

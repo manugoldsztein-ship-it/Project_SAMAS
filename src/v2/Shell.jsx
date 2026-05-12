@@ -3224,6 +3224,14 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.79",
+    title: "PinLock — auto-trigger del Face ID + layout más alto",
+    bullets: [
+      "Manuel: 'black box still there, also face id doesn't trigger automatically anymore'. Mi fix del 0.4.70 (sacar el auto-trigger del Face ID) fue una regresión: el flujo más rápido es Face ID instantáneo al abrir la app. Lo revierto.",
+      "Para el 'black box' (el void grande entre el status bar y el SAMAS logo): cambio el layout del PIN screen de center-aligned a top-anchored con padding-top 22vh. El contenido ahora aparece más arriba, sin tanto espacio negro decorativo.",
+    ],
+  },
+  {
     version: "0.4.78",
     title: "Fix: PATRIMONIO = cash + cartera (no solo cash)",
     bullets: [
