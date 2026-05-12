@@ -3641,12 +3641,16 @@ function TradeCoachCard({ T, lang = "es", ticker, side, qty, price }) {
 
   if (hidden) return null;
 
+  // 0.4.83 — glyph + verdict pair on each level. Visual snap para
+  // Cohen — el verdict chip de TradeCoach es uno de los killer
+  // moments del pitch (IA evalúa cada orden ANTES de confirmar).
+  // Antes era solo color + label, ahora también un ✓ / ⚠ / ✕.
   const meta = data ? (() => {
     if (data.verdict === "flag")
-      return { label: tr("broker.coach.flag", lang), color: T.danger, bg: T.dangerSoft, ring: T.danger };
+      return { label: tr("broker.coach.flag", lang),    glyph: "✕", color: T.danger, bg: T.dangerSoft, ring: T.danger };
     if (data.verdict === "caution")
-      return { label: tr("broker.coach.caution", lang), color: "#F59E0B", bg: "rgba(245, 158, 11, 0.12)", ring: "#F59E0B" };
-    return { label: tr("broker.coach.go", lang), color: T.accent, bg: T.accentSoft, ring: T.accent };
+      return { label: tr("broker.coach.caution", lang), glyph: "⚠", color: "#F59E0B", bg: "rgba(245, 158, 11, 0.12)", ring: "#F59E0B" };
+    return { label: tr("broker.coach.go", lang),        glyph: "✓", color: T.accent, bg: T.accentSoft, ring: T.accent };
   })() : null;
 
   return (
@@ -3672,11 +3676,16 @@ function TradeCoachCard({ T, lang = "es", ticker, side, qty, price }) {
         }}>{tr("broker.coach.title", lang)}</div>
         {meta && (
           <div style={{
-            padding: "3px 8px", borderRadius: 999,
+            display: "inline-flex", alignItems: "center", gap: 5,
+            padding: "4px 10px", borderRadius: 999,
             background: meta.bg, color: meta.color,
-            fontFamily: FONT.sans, fontSize: 10, fontWeight: 700,
+            border: `1px solid ${meta.ring}55`,
+            fontFamily: FONT.sans, fontSize: 11, fontWeight: 800,
             textTransform: "uppercase", letterSpacing: 0.5,
-          }}>{meta.label}</div>
+          }}>
+            <span style={{ fontSize: 13, lineHeight: 1, fontWeight: 900 }}>{meta.glyph}</span>
+            <span>{meta.label}</span>
+          </div>
         )}
       </div>
 
