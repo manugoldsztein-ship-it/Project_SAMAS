@@ -3224,6 +3224,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.84",
+    title: "Inicio = Invertir: VALOR DE CARTERA, mismo número en ambas",
+    bullets: [
+      "Manuel: 'porque es diferente el patrimonio vs valor de la cartera? sacar lo del patrimonio'. Verdad — en 0.4.78 había sumado cash + portfolio bajo el label PATRIMONIO en Inicio para 'fix' una discrepancia anterior, pero terminó creando otra: el número de Inicio (cash + invertido) era distinto al de Invertir > Cartera (solo invertido). Confuso.",
+      "FIX — Inicio ahora muestra el MISMO número que Invertir > Cartera: solo el valor invertido (portfolio.totalArs/Usd con liveRatio aplicado). Label cambiado de PATRIMONIO → VALOR DE CARTERA en es. El cash queda implícito (lo que tenés para comprar; se ve cuando tappeás 'Cargar fondos' o equivalente).",
+      "Actualizado en los 12 locales: VALOR DE CARTERA (es) / PORTFOLIO VALUE (en) / VALOR DA CARTEIRA (pt) / VALORE PORTAFOGLIO (it) / VALEUR PORTEFEUILLE (fr) / PORTFOLIO-WERT (de) / 投资组合价值 (zh) / СТОИМОСТЬ ПОРТФЕЛЯ (ru) / ポートフォリオ価値 (ja) / ערך תיק (he) / قيمة المحفظة (ar) / 포트폴리오 가치 (ko).",
+    ],
+  },
+  {
     version: "0.4.83",
     title: "Polish batch — TradeCoach verdict glyph + intro re-secuenciado",
     bullets: [

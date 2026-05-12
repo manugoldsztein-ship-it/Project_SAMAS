@@ -224,30 +224,30 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
   const userName = user?.name?.split(" ")[0] || "Usuario";
   const userInitials = user?.initials || "??";
   const avatarColor = user?.avatarColor || "oklch(0.78 0.16 145)";
-  // PATRIMONIO TOTAL = cash (efectivo en la cuenta) + posiciones
-  // invertidas (portfolio.totalArs / totalUsd). Manuel reportó (0.4.78)
-  // que el número del hero era distinto al de "Cartera" porque solo
-  // estaba mostrando el cash. Para que el label PATRIMONIO sea
-  // honesto, sumamos las dos cosas.
-  // liveRatio aplica al portfolio total (precios live).
+  // VALOR DE CARTERA = posiciones invertidas (portfolio.totalArs /
+  // totalUsd con liveRatio aplicado). Manuel reportó (0.4.84) que el
+  // número del hero en Inicio era distinto al de "Cartera" en Invertir.
+  // En 0.4.78 lo había arreglado sumando cash + portfolio bajo el label
+  // PATRIMONIO, pero terminó siendo más confuso — Inicio mostraba un
+  // número, Invertir mostraba otro. Ahora ambas pantallas muestran lo
+  // mismo: solo el valor invertido. El cash queda fuera (es lo que tenés
+  // disponible para invertir, no parte del "valor de cartera").
   const portfolioArsLive = portfolio
     ? (portfolio.totalArs || 0) * (liveRatio?.ratio || 1)
     : 0;
   const portfolioUsdLive = portfolio
     ? (portfolio.totalUsd || 0) * (liveRatio?.ratio || 1)
     : 0;
-  const cashArs = balance?.ars || 0;
-  const cashUsd = balance?.usd || 0;
-  const balanceValue = balance
-    ? (ccy === "ARS" ? cashArs + portfolioArsLive
-       : ccy === "USD" ? cashUsd + portfolioUsdLive
-       : ccy === "UVA" ? arsToUva(cashArs + portfolioArsLive)
-       : cashArs + portfolioArsLive)
+  const balanceValue = portfolio
+    ? (ccy === "ARS" ? portfolioArsLive
+       : ccy === "USD" ? portfolioUsdLive
+       : ccy === "UVA" ? arsToUva(portfolioArsLive)
+       : portfolioArsLive)
     : null;
-  // UVA compare usa el total ARS (cash + invertido) para que la
-  // comparación "vs 6 meses atrás" refleje patrimonio real, no solo cash.
-  const uvaCompare = ccy === "UVA" && (cashArs + portfolioArsLive) > 0
-    ? uvaVsHistoryMessage(cashArs + portfolioArsLive, "m6")
+  // UVA compare usa solo el valor invertido (consistente con el label
+  // VALOR DE CARTERA).
+  const uvaCompare = ccy === "UVA" && portfolioArsLive > 0
+    ? uvaVsHistoryMessage(portfolioArsLive, "m6")
     : null;
 
   return (
