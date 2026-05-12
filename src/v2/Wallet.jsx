@@ -224,19 +224,30 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
   const userName = user?.name?.split(" ")[0] || "Usuario";
   const userInitials = user?.initials || "??";
   const avatarColor = user?.avatarColor || "oklch(0.78 0.16 145)";
-  // UVA derived from current ARS balance (samas-0.4.26). When ccy
-  // is "UVA", we show the user's nominal ARS in inflation-indexed
-  // units. The hero card also surfaces a "vs 6 meses atrás" line
-  // so the user immediately sees how much real value they've lost
-  // by sitting in nominal pesos.
+  // PATRIMONIO TOTAL = cash (efectivo en la cuenta) + posiciones
+  // invertidas (portfolio.totalArs / totalUsd). Manuel reportó (0.4.78)
+  // que el número del hero era distinto al de "Cartera" porque solo
+  // estaba mostrando el cash. Para que el label PATRIMONIO sea
+  // honesto, sumamos las dos cosas.
+  // liveRatio aplica al portfolio total (precios live).
+  const portfolioArsLive = portfolio
+    ? (portfolio.totalArs || 0) * (liveRatio?.ratio || 1)
+    : 0;
+  const portfolioUsdLive = portfolio
+    ? (portfolio.totalUsd || 0) * (liveRatio?.ratio || 1)
+    : 0;
+  const cashArs = balance?.ars || 0;
+  const cashUsd = balance?.usd || 0;
   const balanceValue = balance
-    ? (ccy === "ARS" ? balance.ars
-       : ccy === "USD" ? balance.usd
-       : ccy === "UVA" ? arsToUva(balance.ars)
-       : balance.ars)
+    ? (ccy === "ARS" ? cashArs + portfolioArsLive
+       : ccy === "USD" ? cashUsd + portfolioUsdLive
+       : ccy === "UVA" ? arsToUva(cashArs + portfolioArsLive)
+       : cashArs + portfolioArsLive)
     : null;
-  const uvaCompare = ccy === "UVA" && balance?.ars > 0
-    ? uvaVsHistoryMessage(balance.ars, "m6")
+  // UVA compare usa el total ARS (cash + invertido) para que la
+  // comparación "vs 6 meses atrás" refleje patrimonio real, no solo cash.
+  const uvaCompare = ccy === "UVA" && (cashArs + portfolioArsLive) > 0
+    ? uvaVsHistoryMessage(cashArs + portfolioArsLive, "m6")
     : null;
 
   return (
@@ -420,7 +431,15 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
             </div>
             {balanceVisible && balanceValue != null && (
               <div style={{ flexShrink: 0 }}>
-                <Sparkline data={SAMAS_SPARKS.bull} color={T.accent} w={80} h={32} sw={1.6}/>
+                {/* 0.4.78 — usamos el sparkBuffer real (live portfolio
+                    totals) en vez del SAMAS_SPARKS.bull hardcoded. Si el
+                    buffer todavía no se hidrató, fallback al bull
+                    preset para que el demo no muestre línea plana. */}
+                <Sparkline
+                  data={sparkBuffer.length >= 2 ? sparkBuffer : SAMAS_SPARKS.bull}
+                  color={T.accent}
+                  w={80} h={32} sw={1.6}
+                />
               </div>
             )}
           </div>
