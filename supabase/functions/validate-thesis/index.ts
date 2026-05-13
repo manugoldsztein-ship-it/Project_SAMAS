@@ -27,6 +27,11 @@
 //     -15..-5% → 'weakened' (drawdown, watch)
 //     < -15%  → 'broken' (rethink the call)
 //
+// LLM PROVIDER (samas-0.4.86)
+//   Calls the shared callLLM() helper in _shared/llm.ts. Provider is
+//   picked by LLM_PROVIDER env var (anthropic | ollama). See the
+//   helper's header for env var details.
+//
 // HOW TO DEPLOY
 //   Mac Terminal: supabase functions deploy validate-thesis \
 //     --project-ref diulqkaorfqccipguiok --no-verify-jwt
@@ -40,6 +45,7 @@ import {
 import {
   readJsonBody, sanitizeString, validationErrorResponse,
 } from "../_shared/validate.ts";
+import { callLLM, parseLLMJson } from "../_shared/llm.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -52,10 +58,6 @@ const corsHeaders = {
   "Referrer-Policy": "no-referrer",
   "X-Frame-Options": "DENY",
 };
-
-const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
-const ANTHROPIC_MODEL =
-  Deno.env.get("ANTHROPIC_MODEL") ?? "claude-haiku-4-5-20251001";
 
 const ASSETS: Record<string, { name: string; category: string; currency: string; price: number; changePct: number; }> = {
   AAPL:  { name: "Apple",            category: "CEDEAR", currency: "USD", price: 215.40, changePct:  1.84 },
@@ -85,13 +87,6 @@ const ASSETS: Record<string, { name: string; category: string; currency: string;
   EQUITY:  { name: "SAMAS Renta Variable", category: "FCI", currency: "USD", price: 128.95, changePct: 0.84 },
   GD30:  { name: "Global 2030",      category: "BONO",   currency: "USD", price: 56.10,  changePct:  0.35 },
 };
-
-function fetchTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
-  return new Promise<Response>((resolve, reject) => {
-    const id = setTimeout(() => reject(new Error("timeout")), timeoutMs);
-    fetch(url, init).then((r) => { clearTimeout(id); resolve(r); }).catch((e) => { clearTimeout(id); reject(e); });
-  });
-}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -244,60 +239,46 @@ serve(async (req) => {
     let reason = "";
     let suggestion = "";
 
-    if (ANTHROPIC_API_KEY) {
-      const userPrompt = [
-        `Sos SAMAS, asistente de inversiones para retail argentino. El usuario escribió esta tesis cuando compró ${ticker} (${asset.name}, ${asset.category}) hace ${daysOld} días:`,
-        ``,
-        `>>> "${thesisRow.thesis_text}" <<<`,
-        ``,
-        `Datos actuales:`,
-        `- Precio actual: ${asset.price} ${asset.currency}`,
-        `- Movimiento desde la compra: ${priceMoveSinceCreated == null ? "—" : `${priceMoveSinceCreated.toFixed(2)}%`}`,
-        `- Variación diaria hoy: ${asset.changePct.toFixed(2)}%`,
-        `- Categoría: ${asset.category}`,
-        ``,
-        articles.length > 0 ? `Titulares recientes:\n${JSON.stringify(articles, null, 2)}` : `Sin titulares recientes en cache.`,
-        ``,
-        `Devolvé un JSON con esta forma EXACTA, sin markdown:`,
-        `{`,
-        `  "verdict":    "holds" | "weakened" | "broken",`,
-        `  "reason":     "1-2 oraciones, ≤180 caracteres",`,
-        `  "suggestion": "1 oración accionable, ≤140 caracteres"`,
-        `}`,
-        ``,
-        `Reglas:`,
-        `- Voseo (vos), profesional, sereno. Cero hype, cero emojis.`,
-        `- 'holds' = la tesis sigue funcionando o no hay datos en contra todavía`,
-        `- 'weakened' = drawdown moderado o señales mixtas; vale revisar`,
-        `- 'broken' = la tesis está rota; los supuestos no se sostienen contra los datos`,
-        `- Mencioná al menos un dato concreto (% move, titular, días) en reason.`,
-        `- En suggestion no des advice de "buy/sell" directa — usá lenguaje como "considerá", "revisá", "evaluá".`,
-      ].join("\n");
+    const userPrompt = [
+      `Sos SAMAS, asistente de inversiones para retail argentino. El usuario escribió esta tesis cuando compró ${ticker} (${asset.name}, ${asset.category}) hace ${daysOld} días:`,
+      ``,
+      `>>> "${thesisRow.thesis_text}" <<<`,
+      ``,
+      `Datos actuales:`,
+      `- Precio actual: ${asset.price} ${asset.currency}`,
+      `- Movimiento desde la compra: ${priceMoveSinceCreated == null ? "—" : `${priceMoveSinceCreated.toFixed(2)}%`}`,
+      `- Variación diaria hoy: ${asset.changePct.toFixed(2)}%`,
+      `- Categoría: ${asset.category}`,
+      ``,
+      articles.length > 0 ? `Titulares recientes:\n${JSON.stringify(articles, null, 2)}` : `Sin titulares recientes en cache.`,
+      ``,
+      `Devolvé un JSON con esta forma EXACTA, sin markdown:`,
+      `{`,
+      `  "verdict":    "holds" | "weakened" | "broken",`,
+      `  "reason":     "1-2 oraciones, ≤180 caracteres",`,
+      `  "suggestion": "1 oración accionable, ≤140 caracteres"`,
+      `}`,
+      ``,
+      `Reglas:`,
+      `- Voseo (vos), profesional, sereno. Cero hype, cero emojis.`,
+      `- 'holds' = la tesis sigue funcionando o no hay datos en contra todavía`,
+      `- 'weakened' = drawdown moderado o señales mixtas; vale revisar`,
+      `- 'broken' = la tesis está rota; los supuestos no se sostienen contra los datos`,
+      `- Mencioná al menos un dato concreto (% move, titular, días) en reason.`,
+      `- En suggestion no des advice de "buy/sell" directa — usá lenguaje como "considerá", "revisá", "evaluá".`,
+    ].join("\n");
 
-      try {
-        const r = await fetchTimeout("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "x-api-key": ANTHROPIC_API_KEY,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            model: ANTHROPIC_MODEL, max_tokens: 500,
-            messages: [{ role: "user", content: userPrompt }],
-          }),
-        }, 12000);
-        if (r.ok) {
-          const json = await r.json();
-          const text = json?.content?.[0]?.text || "";
-          const stripped = text.replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
-          const parsed = JSON.parse(stripped);
-          const v = String(parsed.verdict || "").toLowerCase();
-          if (["holds", "weakened", "broken"].includes(v)) verdict = v;
-          reason = String(parsed.reason || "").slice(0, 250);
-          suggestion = String(parsed.suggestion || "").slice(0, 200);
-        }
-      } catch (_e) { /* fall through */ }
+    const llm = await callLLM({ user: userPrompt, maxTokens: 500, timeoutMs: 12000 });
+    if (llm) {
+      const parsed = parseLLMJson<{
+        verdict?: string; reason?: string; suggestion?: string;
+      }>(llm.text);
+      if (parsed) {
+        const v = String(parsed.verdict || "").toLowerCase();
+        if (["holds", "weakened", "broken"].includes(v)) verdict = v;
+        reason = String(parsed.reason || "").slice(0, 250);
+        suggestion = String(parsed.suggestion || "").slice(0, 200);
+      }
     }
 
     if (!reason) {

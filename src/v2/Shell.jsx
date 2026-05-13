@@ -3224,6 +3224,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.86",
+    title: "Edge Functions — explain-term, validate-thesis, analyze-portfolio migradas a callLLM()",
+    bullets: [
+      "Continuación del 0.4.85: el shared helper ya estaba en su lugar y trade-coach migrado como piloto, pero quedaban ~29 funciones reimplementando el mismo bloque de fetch + parse + fallback. Cada una con su propia copia de fetchTimeout(), su propio ANTHROPIC_API_KEY/ANTHROPIC_MODEL globals, y su propia lógica para strippear ```json fences. Migrarlas a medida que las toquemos = el plan declarado.",
+      "FIX — 3 funciones migradas en esta tanda: explain-term (glossary AI, el botón ? en cualquier pantalla), validate-thesis (verdict de la tesis del usuario en AssetSheet) y analyze-portfolio (análisis de cartera en Wallet). En cada una se borra el global ANTHROPIC_API_KEY/ANTHROPIC_MODEL, el helper fetchTimeout() local (~6 LOC × 3), el bloque de fetch directo a /v1/messages (~15 LOC × 3) y el parseo manual con regex de fences (~3 LOC × 3). Total: ~75 LOC menos. Cada función ahora hace `await callLLM({ user, maxTokens, timeoutMs })` y deja que el helper decida provider.",
+      "Cambio de comportamiento en analyze-portfolio: antes devolvía 502 cuando el provider respondía con error HTTP. Ahora cae al templated analysis (mismo response shape, mismo deterministic build a partir de los números reales de la cartera del caller) igual que trade-coach. Mejor UX — la UI ve siempre una respuesta válida en lugar de un error opaco. explain-term y validate-thesis ya tenían fallback templated así que ahí no cambia nada observable.",
+    ],
+  },
+  {
     version: "0.4.85",
     title: "Edge Functions — helper callLLM() compartido + provider switcheable",
     bullets: [

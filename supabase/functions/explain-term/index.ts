@@ -23,6 +23,11 @@
 //     generatedAt: string,
 //   }
 //
+// LLM PROVIDER (samas-0.4.86)
+//   Calls the shared callLLM() helper in _shared/llm.ts. Provider is
+//   picked by LLM_PROVIDER env var (anthropic | ollama). See the
+//   helper's header for env var details.
+//
 // HOW TO DEPLOY
 //   Mac Terminal: supabase functions deploy explain-term \
 //     --project-ref diulqkaorfqccipguiok --no-verify-jwt
@@ -36,6 +41,7 @@ import {
 import {
   readJsonBody, sanitizeString, validationErrorResponse,
 } from "../_shared/validate.ts";
+import { callLLM, parseLLMJson } from "../_shared/llm.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -48,10 +54,6 @@ const corsHeaders = {
   "Referrer-Policy": "no-referrer",
   "X-Frame-Options": "DENY",
 };
-
-const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
-const ANTHROPIC_MODEL =
-  Deno.env.get("ANTHROPIC_MODEL") ?? "claude-haiku-4-5-20251001";
 
 // Templated glossary — covers the most common AR retail terms so
 // the demo works without an Anthropic key. Keys are normalized
@@ -196,13 +198,6 @@ function normalize(s: string): string {
   return s.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").trim();
 }
 
-function fetchTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
-  return new Promise<Response>((resolve, reject) => {
-    const id = setTimeout(() => reject(new Error("timeout")), timeoutMs);
-    fetch(url, init).then((r) => { clearTimeout(id); resolve(r); }).catch((e) => { clearTimeout(id); reject(e); });
-  });
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -253,25 +248,6 @@ serve(async (req) => {
     }
 
     // --- LLM path (or templated) ---
-    if (!ANTHROPIC_API_KEY) {
-      const norm = normalize(term);
-      const hit = TEMPLATED[norm];
-      if (hit) {
-        return new Response(JSON.stringify({
-          term, ...hit,
-          generatedAt: new Date().toISOString(),
-        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
-      // Unknown term, no API key → soft fallback
-      return new Response(JSON.stringify({
-        term,
-        definition: `No tengo una definición precargada para "${term}". Activá la API de Claude para que SAMAS pueda explicar cualquier término.`,
-        example: "",
-        related: [],
-        generatedAt: new Date().toISOString(),
-      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
     const userPrompt = [
       `Sos SAMAS, asistente de inversiones para retail argentino. Un usuario te pregunta qué significa un término financiero. Respondé en castellano voseo argentino, claro y concreto.`,
       ``,
@@ -297,31 +273,20 @@ serve(async (req) => {
     let definition = "";
     let example = "";
     let related: string[] = [];
-    try {
-      const r = await fetchTimeout("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          model: ANTHROPIC_MODEL, max_tokens: 600,
-          messages: [{ role: "user", content: userPrompt }],
-        }),
-      }, 12000);
-      if (r.ok) {
-        const json = await r.json();
-        const text = json?.content?.[0]?.text || "";
-        const stripped = text.replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
-        const parsed = JSON.parse(stripped);
+
+    const llm = await callLLM({ user: userPrompt, maxTokens: 600, timeoutMs: 12000 });
+    if (llm) {
+      const parsed = parseLLMJson<{
+        definition?: string; example?: string; related?: unknown;
+      }>(llm.text);
+      if (parsed) {
         definition = String(parsed.definition || "").slice(0, 360);
         example = String(parsed.example || "").slice(0, 240);
         if (Array.isArray(parsed.related)) {
           related = parsed.related.map((s: unknown) => String(s).slice(0, 60)).slice(0, 3);
         }
       }
-    } catch (_e) { /* fall through to templated */ }
+    }
 
     if (!definition) {
       const norm = normalize(term);
@@ -330,6 +295,10 @@ serve(async (req) => {
         definition = hit.definition;
         example = hit.example;
         related = hit.related;
+      } else if (!llm) {
+        // Soft fallback when no LLM provider is configured. Provider-neutral
+        // wording (samas-0.4.42 sweep).
+        definition = `No tengo una definición precargada para "${term}". Activá el proveedor de IA para que SAMAS pueda explicar cualquier término.`;
       } else {
         definition = `No pude generar una definición para "${term}" en este momento. Probá de nuevo en un rato.`;
       }

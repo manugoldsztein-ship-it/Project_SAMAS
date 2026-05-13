@@ -24,6 +24,15 @@
 //   the filtering), we still return early on a missing/invalid
 //   token.
 //
+// LLM PROVIDER (samas-0.4.86)
+//   Calls the shared callLLM() helper in _shared/llm.ts. Provider is
+//   picked by LLM_PROVIDER env var (anthropic | ollama). See the
+//   helper's header for env var details. NOTE: the previous version
+//   returned 502 when the API call itself failed; now it falls back
+//   to the templated analysis (same as the no-provider path), which
+//   matches trade-coach and gives the UI a sensible response every
+//   time.
+//
 // HOW TO DEPLOY
 //   Mac Terminal: supabase functions deploy analyze-portfolio
 // ============================================================
@@ -34,6 +43,7 @@ import {
   consumeRateLimit, RATE_LIMITS, buildBucket, getRequestIp, rateLimit429,
   makeAdminClient,
 } from "../_shared/rate-limit.ts";
+import { callLLM, parseLLMJson } from "../_shared/llm.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,10 +56,6 @@ const corsHeaders = {
   "Referrer-Policy": "no-referrer",
   "X-Frame-Options": "DENY",
 };
-
-const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
-const ANTHROPIC_MODEL =
-  Deno.env.get("ANTHROPIC_MODEL") ?? "claude-haiku-4-5-20251001";
 
 // Asset universe — duplicated here intentionally so the function is
 // self-contained and doesn't depend on any client bundle. Stays in
@@ -96,13 +102,6 @@ const ASSETS: Record<string, {
 // the function — the small drift between this and the real MEP
 // doesn't change the analysis qualitatively).
 const ARS_TO_USD = 1 / 1245;
-
-function fetchTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
-  return new Promise<Response>((resolve, reject) => {
-    const id = setTimeout(() => reject(new Error("timeout")), timeoutMs);
-    fetch(url, init).then((r) => { clearTimeout(id); resolve(r); }).catch((e) => { clearTimeout(id); reject(e); });
-  });
-}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -234,24 +233,19 @@ serve(async (req) => {
       JSON.stringify(portfolioJson, null, 2),
     ].join("\n");
 
-    // --- Claude call (with templated fallback) ---
-    // If ANTHROPIC_API_KEY isn't set, build the response from a
-    // template populated with the caller's real portfolio numbers.
-    // Same shape as the LLM response, so the UI doesn't need to
-    // branch. Useful during the pre-Cohen demo phase when we don't
-    // want to spend on API calls yet — flip the env on later and
-    // real Claude responses replace these without code changes.
-    if (!ANTHROPIC_API_KEY) {
-      console.log("[analyze-portfolio] no API key — returning templated analysis");
+    // --- LLM path (with templated fallback) ---
+    // Templated analysis: deterministic, uses the caller's real
+    // portfolio numbers, same response shape as the LLM path so the
+    // UI doesn't need to branch. Used when callLLM returns null or
+    // returns an unparseable response.
+    const buildTemplated = () => {
       const top = ranked[0];
       const topPct = totalUsd > 0 ? (top.valueUsd / totalUsd) * 100 : 0;
-      // Sector mix (CEDEAR / ACCION / BONO / ETF / COMMOD)
       const sectorMap: Record<string, number> = {};
       for (const r of ranked) {
         sectorMap[r.category] = (sectorMap[r.category] || 0) + r.valueUsd;
       }
       const topSector = Object.entries(sectorMap).sort((a, b) => b[1] - a[1])[0];
-      const sectorPct = totalUsd > 0 ? (topSector[1] / totalUsd) * 100 : 0;
       const sectorLabel: Record<string, string> = {
         CEDEAR: "CEDEARs", ACCION: "acciones argentinas",
         BONO: "bonos", ETF: "ETFs", COMMOD: "commodities",
@@ -281,69 +275,41 @@ serve(async (req) => {
       const suggestion = topPct > 40
         ? `Considerá reducir ${top.ticker} a menos del 30% del book para bajar riesgo de concentración.`
         : `Mantené revisando earnings y eventos macro de ${sectorName} para defender la asignación actual.`;
-      return new Response(JSON.stringify({
-        headline:      headline.slice(0, 200),
-        bullets:       bullets.map((b) => b.slice(0, 200)),
-        suggestion:    suggestion.slice(0, 240),
+      return {
+        headline: headline.slice(0, 200),
+        bullets: bullets.map((b) => b.slice(0, 200)),
+        suggestion: suggestion.slice(0, 240),
         concentration: `${top.ticker} (${topPct.toFixed(0)}%)`,
-        generatedAt:   new Date().toISOString(),
-      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+      };
+    };
 
-    const r = await fetchTimeout("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: ANTHROPIC_MODEL,
-        max_tokens: 800,
-        messages: [{ role: "user", content: userPrompt }],
-      }),
-    }, 15000);
-
-    if (!r.ok) {
-      const txt = await r.text().catch(() => "");
-      console.warn(`[analyze-portfolio] anthropic ${r.status}:`, txt.slice(0, 300));
-      return new Response(JSON.stringify({ error: "AI unavailable" }), {
-        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const respondJson = (body: Record<string, unknown>) =>
+      new Response(JSON.stringify({ ...body, generatedAt: new Date().toISOString() }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+
+    const llm = await callLLM({ user: userPrompt, maxTokens: 800, timeoutMs: 15000 });
+    if (!llm) {
+      console.log("[analyze-portfolio] no LLM result — returning templated analysis");
+      return respondJson(buildTemplated());
     }
-    const json = await r.json();
-    const text = json?.content?.[0]?.text || "";
-    // Strip optional markdown fences and parse the JSON.
-    const stripped = text.replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
-    let parsed: {
+    const parsed = parseLLMJson<{
       headline?: string;
       bullets?: string[];
       suggestion?: string;
       concentration?: string;
-    };
-    try {
-      parsed = JSON.parse(stripped);
-    } catch {
-      console.warn("[analyze-portfolio] non-JSON response:", text.slice(0, 200));
-      // Fallback: stuff the raw text into headline so the UI still
-      // renders something instead of a hard error.
-      parsed = {
-        headline: text.slice(0, 80),
-        bullets: [],
-        suggestion: "",
-        concentration: ranked[0]?.ticker || "",
-      };
+    }>(llm.text);
+    if (!parsed) {
+      console.warn("[analyze-portfolio] non-JSON response:", llm.text.slice(0, 200));
+      return respondJson(buildTemplated());
     }
 
-    return new Response(JSON.stringify({
-      headline:     String(parsed.headline || "").slice(0, 200),
-      bullets:      Array.isArray(parsed.bullets) ? parsed.bullets.map((b) => String(b).slice(0, 200)).slice(0, 5) : [],
-      suggestion:   String(parsed.suggestion || "").slice(0, 240),
+    return respondJson({
+      headline:      String(parsed.headline || "").slice(0, 200),
+      bullets:       Array.isArray(parsed.bullets) ? parsed.bullets.map((b) => String(b).slice(0, 200)).slice(0, 5) : [],
+      suggestion:    String(parsed.suggestion || "").slice(0, 240),
       concentration: String(parsed.concentration || ranked[0]?.ticker || "").slice(0, 60),
-      generatedAt:  new Date().toISOString(),
-    }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("[analyze-portfolio] threw:", (e as Error).message);
