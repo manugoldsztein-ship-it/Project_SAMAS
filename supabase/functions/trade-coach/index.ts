@@ -16,9 +16,14 @@
 //   }
 //
 // FALLBACK
-//   When ANTHROPIC_API_KEY isn't set, we run a heuristic on the
-//   numbers (concentration deltas, sector mix, sufficient capital)
-//   and return a sensible verdict. Same response shape.
+//   When no LLM provider is configured (or the call fails), we run
+//   a heuristic on the numbers (concentration deltas, sector mix,
+//   sufficient capital) and return a sensible verdict. Same shape.
+//
+// LLM PROVIDER (samas-0.4.85)
+//   This function calls the shared callLLM() helper in _shared/llm.ts.
+//   Provider is picked by LLM_PROVIDER env var (anthropic | ollama).
+//   See _shared/llm.ts header for all env vars.
 //
 // HOW TO DEPLOY
 //   Mac Terminal: supabase functions deploy trade-coach
@@ -32,6 +37,7 @@ import {
 import {
   readJsonBody, sanitizeString, validationErrorResponse,
 } from "../_shared/validate.ts";
+import { callLLM, parseLLMJson } from "../_shared/llm.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -44,10 +50,6 @@ const corsHeaders = {
   "Referrer-Policy": "no-referrer",
   "X-Frame-Options": "DENY",
 };
-
-const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
-const ANTHROPIC_MODEL =
-  Deno.env.get("ANTHROPIC_MODEL") ?? "claude-haiku-4-5-20251001";
 
 // Asset metadata — mirror of broker.js ASSETS, kept in sync by hand.
 const ASSETS: Record<string, { name: string; category: string; currency: string; price: number; }> = {
@@ -80,13 +82,6 @@ const ASSETS: Record<string, { name: string; category: string; currency: string;
 };
 
 const ARS_TO_USD = 1 / 1245;
-
-function fetchTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
-  return new Promise<Response>((resolve, reject) => {
-    const id = setTimeout(() => reject(new Error("timeout")), timeoutMs);
-    fetch(url, init).then((r) => { clearTimeout(id); resolve(r); }).catch((e) => { clearTimeout(id); reject(e); });
-  });
-}
 
 type EnrichedHolding = {
   ticker: string; name: string; category: string;
@@ -263,14 +258,6 @@ serve(async (req) => {
     enriched.forEach((h) => { h.pctOfBook = totalUsd > 0 ? (h.valueUsd / totalUsd) * 100 : 0; });
 
     // --- LLM path (or templated) ---
-    if (!ANTHROPIC_API_KEY) {
-      console.log("[trade-coach] no API key — templated verdict");
-      const tmpl = templatedCoach({ ticker, side, qty, price, holdings: enriched });
-      return new Response(JSON.stringify({ ...tmpl, generatedAt: new Date().toISOString() }), {
-        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     const meta = ASSETS[ticker];
     const tradeUsd = meta?.currency === "ARS" ? qty * price * ARS_TO_USD : qty * price;
     const portfolioJson = enriched.map((h) => ({
@@ -305,36 +292,16 @@ serve(async (req) => {
       enriched.length > 0 ? JSON.stringify(portfolioJson, null, 2) : "(cartera vacía)",
     ].join("\n");
 
-    const r = await fetchTimeout("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: ANTHROPIC_MODEL,
-        max_tokens: 400,
-        messages: [{ role: "user", content: userPrompt }],
-      }),
-    }, 12000);
-
-    if (!r.ok) {
-      const txt = await r.text().catch(() => "");
-      console.warn(`[trade-coach] anthropic ${r.status}:`, txt.slice(0, 300));
+    const llm = await callLLM({ user: userPrompt, maxTokens: 400, timeoutMs: 12000 });
+    if (!llm) {
       const tmpl = templatedCoach({ ticker, side, qty, price, holdings: enriched });
       return new Response(JSON.stringify({ ...tmpl, generatedAt: new Date().toISOString() }), {
         status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const json = await r.json();
-    const text = json?.content?.[0]?.text || "";
-    const stripped = text.replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
-    let parsed: { verdict?: string; headline?: string; reason?: string };
-    try {
-      parsed = JSON.parse(stripped);
-    } catch {
-      console.warn("[trade-coach] non-JSON response:", text.slice(0, 200));
+    const parsed = parseLLMJson<{ verdict?: string; headline?: string; reason?: string }>(llm.text);
+    if (!parsed) {
+      console.warn("[trade-coach] non-JSON response:", llm.text.slice(0, 200));
       const tmpl = templatedCoach({ ticker, side, qty, price, holdings: enriched });
       return new Response(JSON.stringify({ ...tmpl, generatedAt: new Date().toISOString() }), {
         status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },

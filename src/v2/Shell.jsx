@@ -3224,6 +3224,15 @@ function AIConsentGate({ T, lang = "es" }) {
 // velocity at a glance, not exhaustive release notes.
 const CHANGELOG = [
   {
+    version: "0.4.85",
+    title: "Edge Functions — helper callLLM() compartido + provider switcheable",
+    bullets: [
+      "Hasta 0.4.84 cada Edge Function de IA (trade-coach, validate-thesis, analyze-portfolio, ... ~30 functions) reimplementaba el mismo bloque: leer la API key del LLM, armar el body para /v1/messages, fetch con timeout, parsear content[0].text del JSON de respuesta. Si quería retunear algo (model default, timeout, agregar un provider alternativo), tenía que hacer 30 ediciones casi idénticas.",
+      "FIX — nuevo helper compartido supabase/functions/_shared/llm.ts con dos exports: callLLM({ system?, user, maxTokens?, timeoutMs? }) → { text, provider, model } | null, y parseLLMJson() que despeja ```json fences (los modelos locales los aman aunque el prompt diga 'sin markdown'). Provider se elige por env var LLM_PROVIDER=anthropic|ollama. Ollama via OLLAMA_BASE_URL (Cloudflare Tunnel a la PC de casa, por ejemplo) usa el endpoint OpenAI-compatible /v1/chat/completions. Si no hay ningún provider configurado, callLLM devuelve null y el caller cae al fallback templated/heurístico como antes.",
+      "Piloto — trade-coach migrado a callLLM(). Mismo response shape, misma lógica de fallback, ~60 LOC menos. El resto de las funciones se migran a medida que las toquemos (no big-bang). Para activar Ollama: setear LLM_PROVIDER=ollama + OLLAMA_BASE_URL + OLLAMA_MODEL en Supabase Function secrets, redeploy. Para volver a Anthropic: borrar LLM_PROVIDER o setear =anthropic.",
+    ],
+  },
+  {
     version: "0.4.84",
     title: "Inicio = Invertir: VALOR DE CARTERA, mismo número en ambas",
     bullets: [
