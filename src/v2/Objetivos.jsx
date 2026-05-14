@@ -153,7 +153,6 @@ function ObjetivoCardActive({ T, lang, obj, onEdit, onDelete }) {
   const plan = obj.plan || {};
   const strategy = obj.strategy || plan.strategy;
   const horizonY = (obj.horizon_months / 12).toFixed(obj.horizon_months % 12 === 0 ? 0 : 1);
-  const monthly = plan.monthlyAporte;
   const palette = (s) => ({
     conservadora: T.textMute,
     moderada:     T.accent,
@@ -238,22 +237,9 @@ function ObjetivoCardActive({ T, lang, obj, onEdit, onDelete }) {
         </div>
       )}
 
-      {/* Monthly aporte hint */}
-      {monthly && (
-        <div style={{
-          padding: "8px 12px", borderRadius: 10, marginBottom: 10,
-          background: T.accentSoft, border: `1px solid ${T.accent}33`,
-          display: "flex", justifyContent: "space-between", alignItems: "baseline",
-        }}>
-          <span style={{
-            fontFamily: FONT.mono, fontSize: 10, fontWeight: 700,
-            color: T.accent, letterSpacing: 0.5, textTransform: "uppercase",
-          }}>{tr("objetivos.aporte_label", lang)}</span>
-          <span style={{
-            fontFamily: FONT.mono, fontSize: 14, fontWeight: 800, color: T.accent,
-          }}>{monthly.currency === "USD" ? "US$" : "$"}{fmtMoney(monthly.amount, monthly.currency)}/mes</span>
-        </div>
-      )}
+      {/* Monthly aporte hint removed samas-0.4.88 — el feature de aporte
+          recurrente salió, así que mostrar un sugerido sin lugar donde
+          plug-in-earlo era ruido. */}
 
       {/* Narrative */}
       {plan.narrative && (
@@ -657,26 +643,7 @@ function ObjetivoPlanPreview({ T, lang, plan, horizonMonths }) {
         </div>
       )}
 
-      {/* Monthly aporte */}
-      {plan.monthlyAporte && (
-        <div style={{
-          padding: "12px 14px", borderRadius: 14, marginBottom: 14,
-          background: T.accentSoft, border: `1px solid ${T.accent}33`,
-        }}>
-          <div style={{
-            fontFamily: FONT.mono, fontSize: 9, fontWeight: 700,
-            color: T.accent, letterSpacing: 0.6, textTransform: "uppercase",
-            marginBottom: 4,
-          }}>{tr("objetivos.preview.aporte_label", lang)}</div>
-          <div style={{
-            fontFamily: FONT.mono, fontSize: 22, fontWeight: 800, color: T.accent,
-          }}>
-            {plan.monthlyAporte.currency === "USD" ? "US$" : "$"}
-            {fmtMoney(plan.monthlyAporte.amount, plan.monthlyAporte.currency)}
-            <span style={{ fontSize: 12, color: T.textMute, marginLeft: 4 }}>/mes</span>
-          </div>
-        </div>
-      )}
+      {/* Monthly aporte preview removed samas-0.4.88 — same as above. */}
 
       {/* Milestones — range version (samas-0.4.15). The Edge Function
           returns expectedLow / expectedValue (base) / expectedHigh

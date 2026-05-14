@@ -53,9 +53,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
   const [balance, setBalance] = useState(null);
   const [fx, setFx] = useState(null);
   const [card, setCard] = useState(null);
-  const [txns, setTxns] = useState([]);
   const [portfolio, setPortfolio] = useState(null);
-  const [aporte, setAporte] = useState(null);
 
   // Live drift on the portfolio total — proportional ratio derived
   // from the underlying assets ticking. Multiply portfolio.totalArs
@@ -100,7 +98,7 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
   useEffect(() => {
     if (!proMode && ccy === "UVA") setCcy("USD");
   }, [proMode, ccy]);
-  const [activeModal, setActiveModal] = useState(null); // "deposit" | "withdraw" | "card" | "aporte" | "inbox" | "txns_all" | null
+  const [activeModal, setActiveModal] = useState(null); // "deposit" | "withdraw" | "card" | "inbox" | null
   // AI master switch state (samas-0.4.11) — drives whether the ?
   // Explain button + AI cards render. Listens for the
   // samas:ai-disabled-changed broadcast so a Settings flip
@@ -164,16 +162,13 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
     if (walletRefreshInFlight.current) return walletRefreshInFlight.current;
     const p = (async () => {
       try {
-        const [b, f, c, t, p, a] = await Promise.all([
+        const [b, f, c, p] = await Promise.all([
           walletApi.getBalance(),
           brokerApi.getFx(),
           cardApi.getCard(),
-          walletApi.getTransactions({ limit: 5 }),
           brokerApi.getPortfolio(),
-          walletApi.getRecurringAporte(),
         ]);
-        setBalance(b); setFx(f); setCard(c); setTxns(t); setPortfolio(p);
-        setAporte(a);
+        setBalance(b); setFx(f); setCard(c); setPortfolio(p);
       } catch (e) {
         console.error("[wallet] load:", e);
       } finally {
@@ -781,90 +776,11 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
           históricos. */}
       {proMode && <StressTestCard T={T} lang={lang} portfolio={portfolio} />}
 
-      {/* ---------- aporte mensual ---------- */}
-      <div style={{ margin: "28px 16px 0" }}>
-        <SectionHead T={T} title={tr("wallet.section.aporte", lang)} />
-        <button
-          onClick={() => setActiveModal("aporte")}
-          style={{
-            width: "100%", marginTop: 12, padding: 16, borderRadius: 22,
-            background: aporte ? T.accentSoft : T.surface,
-            border: `1px solid ${aporte ? T.accent + "55" : T.border}`,
-            display: "flex", alignItems: "center", gap: 14, cursor: "pointer",
-            textAlign: "left",
-          }}
-        >
-          <div style={{
-            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
-            background: T.bg, border: `1px solid ${T.border}`,
-            color: T.accent,
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <polyline points="12 6 12 12 16 14"/>
-            </svg>
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            {aporte ? (
-              <>
-                <div style={{
-                  fontFamily: FONT.sans, fontSize: 11, color: T.textMute,
-                  letterSpacing: 0.6, fontWeight: 700, textTransform: "uppercase", marginBottom: 2,
-                }}>{tr("aporte.title", lang)}</div>
-                <div style={{ fontFamily: FONT.display, fontSize: 16, fontWeight: 700, color: T.text }}>
-                  {aporte.currency === "ARS" ? "$" : "US$"}{fmtMoney(aporte.amount, aporte.currency)}
-                  {" "}<span style={{ color: T.textMute, fontWeight: 500 }}>·</span>{" "}
-                  <span style={{ color: T.accent }}>{nextLabel(aporte.nextAt)}</span>
-                </div>
-                <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
-                  Día {aporte.dayOfMonth} de cada mes
-                  {aporte.lastAt ? ` · Último: ${shortDate(aporte.lastAt)}` : ""}
-                  {" · Tocá para ajustar"}
-                </div>
-              </>
-            ) : (
-              <>
-                <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 700, color: T.text }}>
-                  {tr("aporte.title", lang)}
-                </div>
-                <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute, marginTop: 2 }}>
-                  Cargá un monto fijo cada mes y ahorrá sin pensarlo.
-                </div>
-              </>
-            )}
-          </div>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.textMute}
-            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="9 18 15 12 9 6"/>
-          </svg>
-        </button>
-      </div>
-
-      {/* ---------- movimientos ---------- */}
-      <div style={{ margin: "28px 16px 0" }}>
-        <SectionHead
-          T={T}
-          title={tr("wallet.section.txns", lang)}
-          action={tr("wallet.see_all", lang)}
-          onAction={() => setActiveModal("txns_all")}
-        />
-        <div style={{
-          marginTop: 12, borderRadius: 22, background: T.surface,
-          border: `1px solid ${T.border}`, overflow: "hidden",
-        }}>
-          {txns.length === 0 ? (
-            <div style={{ padding: 20, textAlign: "center", color: T.textMute, fontFamily: FONT.sans, fontSize: 13 }}>
-              Aún no hay movimientos.
-            </div>
-          ) : (
-            txns.map((t, i) => (
-              <TxnRow key={t.id} t={t} T={T} isLast={i === txns.length - 1} visible={balanceVisible} />
-            ))
-          )}
-        </div>
-      </div>
+      {/* Aporte mensual + Actividad sections removed samas-0.4.88 — Manuel
+          quiso depurar el Wallet hacia un portfolio tracker limpio estilo
+          Ledger. La feature de aporte recurrente + la lista de movimientos
+          salieron del Wallet. Transactions de Broker siguen siendo la
+          fuente de verdad del historial. */}
 
       {/* ---------- Lite → Pro discoverability hint (samas-0.4.41) ----------
           Lite es default, y Settings está al pie. Para un user nuevo
@@ -948,10 +864,6 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
       )}
 
       {/* ---------- modals ---------- */}
-      {activeModal === "txns_all" && (
-        <TxnsAllSheet T={T} lang={lang} balanceVisible={balanceVisible}
-          onClose={() => setActiveModal(null)} />
-      )}
       {activeModal === "deposit" && (
         <DepositModal T={T} lang={lang} balance={balance}
           onClose={() => setActiveModal(null)}
@@ -966,11 +878,6 @@ export function WalletPage({ T, onTab, user, balanceVisible, setBalanceVisible, 
         <CardDetailsModal T={T} lang={lang} card={card}
           onClose={() => setActiveModal(null)}
           onCardChange={(updated) => setCard((c) => ({ ...c, ...updated }))} />
-      )}
-      {activeModal === "aporte" && (
-        <AporteModal T={T} lang={lang} aporte={aporte}
-          onClose={() => setActiveModal(null)}
-          onDone={() => { setActiveModal(null); refresh(); }} />
       )}
       {activeModal === "inbox" && (
         <NotificationsInbox T={T} lang={lang}
@@ -3266,183 +3173,6 @@ function relativeWhen(ts) {
 }
 
 // ----------------------------------------------------------
-// Aporte mensual — modal to set / edit / cancel a recurring monthly
-// deposit. Saves via walletApi.setRecurringAporte. The schedule is
-// purely local for now (mock); production needs a server-side cron.
-// ----------------------------------------------------------
-function AporteModal({ T, lang = "es", aporte, onClose, onDone }) {
-  const [amountStr, setAmountStr] = useState(String(aporte?.amount || ""));
-  const [currency, setCurrency] = useState(aporte?.currency || "ARS");
-  const [day, setDay] = useState(aporte?.dayOfMonth || 1);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState(null);
-  const dtd = useDragToDismiss(onClose);
-  const inputRef = useRef(null);
-  useModalGuard(); // 0.4.56 — hide SamasTabBar while sheet is open
-
-  // 0.4.54 — defer focus so the sheet has time to lay out BEFORE the
-  // keyboard fires. autoFocus on mount + Capacitor's keyboard resize +
-  // 92dvh recalculating mid-animation made the sheet collapse to height 0
-  // on iPhone (black void with just the keyboard visible). Same UX as
-  // autoFocus, just async.
-  useEffect(() => {
-    const t = setTimeout(() => { inputRef.current?.focus(); }, 220);
-    return () => clearTimeout(t);
-  }, []);
-
-  async function save() {
-    setErr(null);
-    const amount = parseFloat(amountStr.replace(",", "."));
-    if (!amount || amount <= 0) { setErr("Ingresá un monto válido."); return; }
-    setBusy(true);
-    try {
-      await walletApi.setRecurringAporte({ amount, currency, dayOfMonth: day });
-      onDone();
-    } catch (e) { setErr(e.message); setBusy(false); }
-  }
-
-  async function cancel() {
-    if (!aporte) { onClose(); return; }
-    if (!window.confirm("¿Cancelar el aporte mensual?")) return;
-    setBusy(true);
-    try {
-      await walletApi.cancelRecurringAporte();
-      onDone();
-    } catch (e) { setErr(e.message); setBusy(false); }
-  }
-
-  return (
-    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
-      position: "fixed", inset: 0, zIndex: 100,
-      background: "rgba(0,0,0,0.6)",
-      display: "flex", alignItems: "flex-end", justifyContent: "center",
-    }}>
-      {/* 0.4.50 — convertido de centered modal a bottom sheet
-          (a) keyboard ya no tapa parte del form (la sheet sube cuando abre keyboard)
-          (b) drag-to-dismiss now applies.
-          0.4.54 — maxHeight: "92%" (no más "92dvh"). Match al patrón de
-          ModalShell, que sirve a Deposit/Withdraw/CardDetails sin issues.
-          dvh recalculaba mid-keyboard-animation y colapsaba la sheet en iPhone. */}
-      <div ref={dtd.ref} style={{
-        width: "100%", maxWidth: 540, maxHeight: "92%",
-        background: T.bgElev, color: T.text,
-        borderTopLeftRadius: 28, borderTopRightRadius: 28,
-        border: `1px solid ${T.border}`, borderBottom: "none",
-        padding: "12px 20px calc(env(safe-area-inset-bottom) + 20px)",
-        overflowY: "auto",
-        ...dtd.dragStyle,
-      }}>
-        {/* Drag handle */}
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}>
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: T.border }}/>
-        </div>
-        <div style={{ fontFamily: FONT.display, fontSize: 20, fontWeight: 700, color: T.text, marginBottom: 4 }}>
-          Aporte mensual
-        </div>
-        <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute, marginBottom: 16 }}>
-          Cargá un monto fijo cada mes. Se acredita en tu cuenta automáticamente el día que elijas.
-        </div>
-
-        {/* Currency pill */}
-        <div style={{
-          display: "flex", gap: 4, padding: 4, marginBottom: 12,
-          background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12,
-        }}>
-          {["ARS", "USD"].map((c) => (
-            <button key={c} onClick={() => setCurrency(c)} style={{
-              flex: 1, padding: "8px 0", borderRadius: 8,
-              background: currency === c ? T.bg : "transparent",
-              border: currency === c ? `1px solid ${T.border}` : "1px solid transparent",
-              color: currency === c ? T.text : T.textMute,
-              fontFamily: FONT.mono, fontSize: 12, fontWeight: 700, letterSpacing: 0.4, cursor: "pointer",
-            }}>{c}</button>
-          ))}
-        </div>
-
-        {/* Amount input */}
-        <div style={{
-          fontFamily: FONT.sans, fontSize: 11, color: T.textMute, fontWeight: 600,
-          letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 6,
-        }}>Monto ({currency})</div>
-        <input
-          ref={inputRef}
-          inputMode="decimal"
-          value={amountStr}
-          onChange={(e) => setAmountStr(e.target.value.replace(/[^\d,.]/g, ""))}
-          placeholder={currency === "ARS" ? "50000" : "200"}
-          style={{
-            width: "100%", boxSizing: "border-box",
-            padding: "14px 16px", borderRadius: 14, marginBottom: 16,
-            background: T.surface, border: `1px solid ${T.border}`,
-            color: T.text, fontFamily: FONT.mono, fontSize: 18, fontWeight: 700,
-            outline: "none",
-          }}
-        />
-
-        {/* Day of month */}
-        <div style={{
-          fontFamily: FONT.sans, fontSize: 11, color: T.textMute, fontWeight: 600,
-          letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 6,
-        }}>Día del mes</div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-          {[1, 5, 10, 15, 20, 25, 28].map((d) => {
-            const active = d === day;
-            return (
-              <button key={d} onClick={() => setDay(d)} style={{
-                padding: "8px 14px", borderRadius: 999,
-                background: active ? T.accentSoft : T.surface,
-                border: `1px solid ${active ? T.accent : T.border}`,
-                color: active ? T.accent : T.textMute,
-                fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, cursor: "pointer",
-              }}>{d}</button>
-            );
-          })}
-        </div>
-
-        {err && <div style={{ marginBottom: 12, color: T.danger, fontFamily: FONT.sans, fontSize: 12 }}>{err}</div>}
-
-        <div style={{ display: "flex", gap: 10 }}>
-          {aporte && (
-            <button onClick={cancel} disabled={busy} style={{
-              flex: 1, padding: 14, borderRadius: 14,
-              background: "transparent", border: `1px solid ${T.danger}55`,
-              color: T.danger, fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
-              cursor: busy ? "default" : "pointer",
-            }}>Cancelar aporte</button>
-          )}
-          <button onClick={save} disabled={busy} style={{
-            flex: 1.4, padding: 14, borderRadius: 14,
-            background: T.accent, color: T.accentInk,
-            fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, border: "none",
-            cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
-          }}>{busy ? "Guardando..." : (aporte ? "Actualizar" : "Programar")}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// "Próximo aporte" relative date — "mañana", "en 5 días", or formatted.
-function nextLabel(ts) {
-  if (!ts) return "";
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const target = new Date(ts); target.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((target - today) / (24 * 3600 * 1000));
-  if (diffDays <= 0) return "hoy";
-  if (diffDays === 1) return "mañana";
-  if (diffDays <= 7) return `en ${diffDays} días`;
-  return target.toLocaleDateString("es-AR", { day: "numeric", month: "short" });
-}
-
-// Compact "{day} {monthAbbrev}" formatter for the "Último aporte" line.
-// Used when the user has had at least one credit fire — surfaces the
-// fact that the schedule is alive and well.
-function shortDate(ts) {
-  if (!ts) return "";
-  return new Date(ts).toLocaleDateString("es-AR", { day: "numeric", month: "short" });
-}
-
-// ----------------------------------------------------------
 // Action — quick-action button.
 // ----------------------------------------------------------
 function Action({ T, icon, label, onClick }) {
@@ -3537,198 +3267,10 @@ function CardPreview({ T, card, onClick }) {
   );
 }
 
-// ----------------------------------------------------------
-// TxnRow — single transaction line.
-// ----------------------------------------------------------
-// ----------------------------------------------------------
-// TxnsAllSheet (samas-0.4.10) — full transactions history
-// ----------------------------------------------------------
-// Bottom sheet opened from Wallet's Movimientos "Ver todos" link.
-// Replaces the dead "Filtrar" link that used to sit there with no
-// onClick. Pulls up to 200 most recent rows from public.transactions
-// and renders them grouped by day (Hoy / Ayer / DD MMM).
-function TxnsAllSheet({ T, lang = "es", balanceVisible, onClose }) {
-  const [items, setItems] = useState(null); // null=loading, [] = empty
-  const dtd = useDragToDismiss(onClose);
-  useEffect(() => {
-    let alive = true;
-    walletApi.getTransactions({ limit: 200 })
-      .then((r) => { if (alive) setItems(r); })
-      .catch((e) => {
-        console.error("[txns-all] load:", e);
-        if (alive) setItems([]);
-      });
-    return () => { alive = false; };
-  }, []);
-
-  // Group by day for visual scanability — same pattern as the
-  // Notifications inbox (Hoy / Antes).
-  const groups = React.useMemo(() => {
-    if (!items) return null;
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const yest = today.getTime() - 24 * 60 * 60 * 1000;
-    const buckets = new Map(); // labelKey → array
-    for (const t of items) {
-      let label;
-      if (t.at >= today.getTime()) label = tr("wallet.today", lang);
-      else if (t.at >= yest) label = tr("wallet.yesterday", lang);
-      else {
-        const d = new Date(t.at);
-        label = d.toLocaleDateString("es-AR", { day: "2-digit", month: "short" });
-      }
-      const arr = buckets.get(label) || [];
-      arr.push(t);
-      buckets.set(label, arr);
-    }
-    return [...buckets.entries()];
-  }, [items, lang]);
-
-  return (
-    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
-      position: "fixed", inset: 0, zIndex: 100,
-      background: "rgba(0,0,0,0.6)",
-      display: "flex", alignItems: "flex-end", justifyContent: "center",
-    }}>
-      <div ref={dtd.ref} style={{
-        width: "100%", maxWidth: 540, maxHeight: "92dvh",
-        minHeight: "60dvh",
-        background: T.bgElev, color: T.text,
-        borderTopLeftRadius: 28, borderTopRightRadius: 28,
-        border: `1px solid ${T.border}`, borderBottom: "none",
-        display: "flex", flexDirection: "column", overflow: "hidden",
-        ...dtd.dragStyle,
-      }}>
-        {/* Drag handle */}
-        <div style={{ display: "flex", justifyContent: "center", paddingTop: 14 }}>
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: T.border }}/>
-        </div>
-        {/* Header */}
-        <div style={{
-          padding: "14px 20px 10px", display: "flex",
-          justifyContent: "space-between", alignItems: "center",
-        }}>
-          <div style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text }}>
-            {tr("wallet.section.txns", lang)}
-          </div>
-          <button onClick={onClose} style={{
-            background: "transparent", border: "none",
-            color: T.textMute, fontFamily: FONT.sans, fontSize: 14, fontWeight: 600,
-            cursor: "pointer",
-          }}>{tr("wallet.txns_all.close", lang)}</button>
-        </div>
-        {/* Body */}
-        <div style={{
-          flex: 1, overflowY: "auto",
-          padding: "0 16px 24px",
-        }}>
-          {items === null ? (
-            <div style={{ padding: "16px 0 0" }}>
-              <div style={{
-                background: T.surface, border: `1px solid ${T.border}`,
-                borderRadius: 14, overflow: "hidden",
-              }}>
-                {[0, 1, 2, 3, 4].map((i) => (
-                  <div key={i} style={{
-                    padding: "14px 16px",
-                    borderBottom: i === 4 ? "none" : `1px solid ${T.border}`,
-                    display: "flex", gap: 12, alignItems: "center",
-                  }}>
-                    <Skeleton T={T} width={38} height={38} borderRadius={12} />
-                    <div style={{ flex: 1 }}>
-                      <Skeleton T={T} height={14} width="55%" marginBottom={6} />
-                      <Skeleton T={T} height={11} width="40%" />
-                    </div>
-                    <Skeleton T={T} width={70} height={14} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : items.length === 0 ? (
-            <div style={{
-              padding: "40px 20px", textAlign: "center",
-              fontFamily: FONT.sans, color: T.textMute,
-            }}>
-              <div style={{ fontFamily: FONT.display, fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 4 }}>
-                {tr("wallet.txns_all.empty_title", lang)}
-              </div>
-              <div style={{ fontSize: 12, lineHeight: 1.5 }}>
-                {tr("wallet.txns_all.empty_sub", lang)}
-              </div>
-            </div>
-          ) : (
-            (groups || []).map(([label, rows]) => (
-              <div key={label} style={{ marginTop: 16 }}>
-                <div style={{
-                  fontFamily: FONT.mono, fontSize: 10, fontWeight: 700,
-                  color: T.textMute, letterSpacing: 0.6, textTransform: "uppercase",
-                  marginBottom: 6, padding: "0 4px",
-                }}>{label}</div>
-                <div style={{
-                  background: T.surface, border: `1px solid ${T.border}`,
-                  borderRadius: 14, overflow: "hidden",
-                }}>
-                  {rows.map((t, i) => (
-                    <TxnRow key={t.id} t={t} T={T}
-                      isLast={i === rows.length - 1}
-                      visible={balanceVisible} />
-                  ))}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TxnRow({ t, T, isLast, visible }) {
-  const isIn = t.type === "in";
-  const isSwap = t.type === "swap";
-  const sign = isIn ? "+" : isSwap ? "" : "−";
-  const amountColor = isIn ? T.accent : T.text;
-
-  let bg = T.surfaceHi;
-  let icon = <Ico.Up size={16}/>;
-  if (isIn)        { bg = T.accentSoft; icon = <Ico.Down size={16}/>; }
-  else if (isSwap) {                    icon = <Ico.Repeat size={16}/>; }
-  else if (t.cat === "invest") {        icon = <Ico.Chart size={16}/>; }
-
-  return (
-    <div style={{
-      display: "flex", alignItems: "center", padding: "14px 16px", gap: 12,
-      borderBottom: isLast ? "none" : `1px solid ${T.border}`,
-    }}>
-      <div style={{
-        width: 38, height: 38, borderRadius: 12, background: bg,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        color: isIn ? T.accent : T.textMute,
-      }}>{icon}</div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text,
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-        }}>{t.who}</div>
-        <div style={{
-          fontFamily: FONT.sans, fontSize: 12, color: T.textMute,
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-        }}>{t.note} · {t.atLabel}</div>
-      </div>
-      <div style={{ textAlign: "right" }}>
-        <div style={{
-          fontFamily: FONT.mono, fontSize: 14, fontWeight: 700, color: amountColor,
-        }}>
-          {visible
-            ? `${sign}${t.ccy === "ARS" ? "$" : "US$"}${fmtMoney(t.amount, t.ccy)}`
-            : "••••"}
-        </div>
-        <div style={{
-          fontFamily: FONT.mono, fontSize: 10, color: T.textDim, letterSpacing: 0.4,
-        }}>{t.ccy}</div>
-      </div>
-    </div>
-  );
-}
+// TxnsAllSheet + TxnRow removed samas-0.4.88 — la sección Actividad del
+// Wallet desapareció junto con Aporte mensual. Si el historial de
+// movimientos vuelve, vive bajo Invertir (Broker tiene su propia view
+// de transacciones).
 
 // ============================================================
 // MODALS

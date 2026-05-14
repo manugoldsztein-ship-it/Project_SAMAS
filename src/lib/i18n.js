@@ -41,7 +41,7 @@ const V2 = {
     "settings.ui_mode.title":     "UI activa",
     "settings.ui_mode.lite":      "Lite",
     "settings.ui_mode.pro":       "Pro",
-    "settings.ui_mode.sub_lite":  "Vista simple: balance, cartera, objetivos, AI Chat y aporte mensual. Ideal para empezar.",
+    "settings.ui_mode.sub_lite":  "Vista simple: balance, cartera, objetivos y AI Chat. Ideal para empezar.",
     "settings.ui_mode.sub_pro":   "Todo lo de Lite + flujo de fondos, métricas, stress test, simulación hipotética, diario de trading, UVA, fondos en primera plana y análisis IA.",
     "settings.plus.title":            "SAMAS Plus",
     "settings.plus.active":           "Activo",
@@ -958,7 +958,7 @@ const V2 = {
     "settings.ui_mode.title":     "Active UI",
     "settings.ui_mode.lite":      "Lite",
     "settings.ui_mode.pro":       "Pro",
-    "settings.ui_mode.sub_lite":  "Simple view: balance, portfolio, goals, AI Chat and monthly contribution. Ideal to start.",
+    "settings.ui_mode.sub_lite":  "Simple view: balance, portfolio, goals and AI Chat. Ideal to start.",
     "settings.ui_mode.sub_pro":   "Everything in Lite + cash flow, metrics, stress test, hypothetical simulation, trade journal, UVA, funds front-page and AI analysis.",
 
     // Pro portfolio dashboard (samas-0.0.42)
