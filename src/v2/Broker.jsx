@@ -2403,11 +2403,14 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
     }}>
       <div style={{
         width: "100%", maxWidth: 540,
-        // dvh shrinks with the iOS keyboard; capping at 92dvh keeps a
-        // small backdrop strip visible (so the user knows they can tap
-        // outside to close) and lets the content scroll internally
-        // when the keyboard pushes up.
-        maxHeight: "92dvh",
+        // samas-0.4.92 — calc explícito que resta --samas-kb-h (la CSS
+        // var que samas-0.4.68 mantiene sincronizada con el keyboard
+        // plugin). 92dvh solo no alcanzaba: en iOS WebKit + Capacitor
+        // resize:body, dvh a veces queda atrás del keyboardWillShow
+        // event y la sheet termina con un black gap entre su bottom
+        // y el top del teclado. Esta fórmula da prioridad al kb var
+        // si hay teclado, sino cae a dvh sin pasar de 92dvh.
+        maxHeight: "calc(100dvh - var(--samas-kb-h, 8dvh))",
         background: T.bgElev, color: T.text,
         borderTopLeftRadius: 28, borderTopRightRadius: 28,
         border: `1px solid ${T.border}`, borderBottom: "none",
@@ -2429,7 +2432,10 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
         `}</style>
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "20px 20px 8px",
+          // samas-0.4.92 — respeta safe-area-top así el ticker name no
+          // queda detrás del status bar de iOS en sheets que ocupan
+          // toda la altura.
+          padding: "calc(env(safe-area-inset-top) + 16px) 20px 8px",
         }}>
           {/* Header identity — ticker + name only. Logo dropped in
               0.0.66 to match the Apple-Stocks-style detail page where
