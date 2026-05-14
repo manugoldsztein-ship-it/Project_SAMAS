@@ -2821,7 +2821,12 @@ function AddAssetModal({ T, assets, excludeTickers = [], listName, onClose, onPi
     });
   }, [assets, excludeTickers, query]);
 
-  return (
+  // Portal to document.body — same trap as the compare-assets sheet above
+  // (samas-0.0.87): the BrokerShell root's translateX entry animation
+  // promotes it to a GPU compositing layer that traps position:fixed
+  // children, so the broker subnav (zIndex: 40) ends up rendered ON TOP
+  // of this sheet's header — title + search input disappear behind it.
+  return ReactDOM.createPortal(
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
       position: "fixed", inset: 0, zIndex: 110,
       background: "rgba(0,0,0,0.6)",
@@ -2903,7 +2908,8 @@ function AddAssetModal({ T, assets, excludeTickers = [], listName, onClose, onPi
           cursor: "pointer",
         }}>Cancelar</button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -2924,7 +2930,10 @@ function WatchlistPicker({ T, ticker, watchlists, lang = "es", onClose, onChange
     setBusyId(null);
   }
 
-  return (
+  // Portal to document.body — same BrokerShell stacking-context trap as
+  // AddAssetModal above. Without this, the broker subnav header sits
+  // on top of the "Agregar {ticker} a una lista" title.
+  return ReactDOM.createPortal(
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
       position: "fixed", inset: 0, zIndex: 110,
       background: "rgba(0,0,0,0.6)",
@@ -2996,7 +3005,8 @@ function WatchlistPicker({ T, ticker, watchlists, lang = "es", onClose, onChange
           cursor: "pointer",
         }}>{tr("settings.done", lang)}</button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
