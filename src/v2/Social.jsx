@@ -2960,8 +2960,10 @@ function TopTradersCarousel({ T, lang, onOpenProfile }) {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  if (traders === null) return null;
-  if (traders.length === 0) return null; // sin traders todavía → no mostrar header vacío
+  // Header siempre rendea — así Manuel (y cualquiera con una DB
+  // vacía) ve que el feature existe y entiende qué falta.
+  const isLoading = traders === null;
+  const isEmpty = !isLoading && traders.length === 0;
 
   return (
     <>
@@ -2971,7 +2973,34 @@ function TopTradersCarousel({ T, lang, onOpenProfile }) {
           color: T.text, letterSpacing: -0.2,
         }}>{tr("copy.feed.top_traders", lang)}</div>
       </div>
-      <div style={{
+      {isEmpty && (
+        <div style={{
+          margin: "10px 16px 4px", padding: 16, borderRadius: 18,
+          background: T.surface, border: `1px dashed ${T.border}`,
+          textAlign: "center",
+        }}>
+          <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 4 }}>
+            Sin traders todavía
+          </div>
+          <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute, lineHeight: 1.4 }}>
+            Cuando otros usuarios se registren van a aparecer acá rankeados por retorno.
+            Para el demo: andá a <b>Ajustes → Sembrar red social demo</b> y carga 12 traders de prueba.
+          </div>
+        </div>
+      )}
+      {isLoading && (
+        <div style={{ padding: "10px 16px 4px", display: "flex", gap: 10 }}>
+          {[0,1,2].map((i) => (
+            <div key={i} style={{
+              flexShrink: 0, width: 176, height: 168,
+              borderRadius: 18, background: T.surface,
+              border: `1px solid ${T.border}`,
+              opacity: 0.5,
+            }}/>
+          ))}
+        </div>
+      )}
+      {!isLoading && !isEmpty && <div style={{
         display: "flex", gap: 10, padding: "10px 16px 4px",
         overflowX: "auto", WebkitOverflowScrolling: "touch",
         scrollbarWidth: "none",
@@ -3028,7 +3057,7 @@ function TopTradersCarousel({ T, lang, onOpenProfile }) {
             </div>
           );
         })}
-      </div>
+      </div>}
       {copyTarget && (
         <CopySheet
           T={T}
