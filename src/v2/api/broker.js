@@ -25,6 +25,25 @@
 
 import { jitter, maybeFail, relativeStamp } from "./_mock.js";
 import { supabase } from "../../lib/supabase.js";
+import * as finnhub from "../../lib/finnhub.js";
+
+// Merge Finnhub real-time quotes into a list of assets. Tickers que
+// Finnhub no cubre (BCBA / ARS / SAMAS funds / bonds) se quedan con
+// el price + changePct mockeados de ASSETS. Falla silenciosamente:
+// si Finnhub rate-limita o el ticker no devuelve quote, el row keeps
+// its mock price — la UI nunca rompe.
+async function enrichWithLiveQuotes(assets) {
+  const liveTickers = assets
+    .filter((a) => finnhub.isFinnhubTicker(a.ticker))
+    .map((a) => a.ticker);
+  if (liveTickers.length === 0) return assets;
+  const quotes = await finnhub.getQuotes(liveTickers);
+  return assets.map((a) => {
+    const q = quotes.get(a.ticker);
+    if (!q) return a;
+    return { ...a, price: q.price, changePct: q.changePct, live: true };
+  });
+}
 
 // ----------------------------------------------------------
 // Auth helper — every Supabase-backed broker call needs the
@@ -182,10 +201,13 @@ let state = loadState();
  * @returns {Promise<Array<Asset>>}
  */
 export async function getAssets({ category } = {}) {
-  await jitter();
   let list = ASSETS;
   if (category) list = list.filter((a) => a.category === category);
-  return list.map((a) => ({ ...a }));
+  // Real-time prices via Finnhub para los US-listed; AR + funds SAMAS
+  // se quedan con los precios mockeados. enrichWithLiveQuotes hace
+  // su propio batch + 30s cache, así que multiple callers comparten
+  // una sola fetch por ticker.
+  return enrichWithLiveQuotes(list.map((a) => ({ ...a })));
 }
 
 /**
@@ -193,15 +215,19 @@ export async function getAssets({ category } = {}) {
  * Production: GET /quotes/{ticker}, polled every few seconds.
  */
 export async function getQuote(ticker) {
-  await jitter(150, 350);
   const a = ASSETS.find((x) => x.ticker === ticker);
   if (!a) throw new Error("Ticker no encontrado: " + ticker);
+  // Finnhub para US-listed (con 30s cache + inflight dedup adentro);
+  // resto sigue siendo mock. Si Finnhub no devuelve quote (rate limit,
+  // off-hours weirdness), cae al mock price del ASSETS row.
+  const live = await finnhub.getQuote(ticker);
   return {
     ticker: a.ticker,
-    price: a.price,
-    changePct: a.changePct,
+    price: live?.price ?? a.price,
+    changePct: live?.changePct ?? a.changePct,
     currency: a.currency,
-    at: Date.now(),
+    at: live?.at ?? Date.now(),
+    live: !!live,
   };
 }
 
@@ -230,11 +256,20 @@ export async function getPortfolio() {
     .eq("user_id", userId);
   if (error) throw new Error(`Error al cargar holdings: ${error.message}`);
 
+  // 0.4.89: precios live via Finnhub para los US-listed. Batch en
+  // paralelo + 30s cache. Cualquier holding que Finnhub no cubra
+  // (AR/BCBA, SAMAS funds, bonds) cae al precio mockeado de ASSETS.
+  const holdingTickers = (rows || [])
+    .map((h) => h.ticker)
+    .filter((t) => finnhub.isFinnhubTicker(t));
+  const liveQuotes = await finnhub.getQuotes(holdingTickers);
+
   const mepRate = state.fx.mep.value;
   const enriched = (rows || []).map((h) => {
     const a = ASSETS.find((x) => x.ticker === h.ticker);
     if (!a) return null;
-    const price = a.price;
+    const live = liveQuotes.get(h.ticker);
+    const price = live?.price ?? a.price;
     const value = h.qty * price;
     const cost = h.qty * h.avg_cost;
     const gainAbs = value - cost;
@@ -242,7 +277,7 @@ export async function getPortfolio() {
     return {
       ticker: h.ticker, qty: Number(h.qty), avgCost: Number(h.avg_cost),
       currency: a.currency, name: a.name, category: a.category,
-      price, value, gainAbs, gainPct,
+      price, value, gainAbs, gainPct, live: !!live,
     };
   }).filter(Boolean);
 
