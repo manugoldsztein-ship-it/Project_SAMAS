@@ -16,9 +16,10 @@
 // ============================================================
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import ReactDOM from "react-dom";
 import { FONT } from "./theme.js";
 import { Ico } from "./icons.jsx";
-import { social as socialApi, messages as messagesApi, broker as brokerApi } from "./api/index.js";
+import { social as socialApi, messages as messagesApi, broker as brokerApi, copyTrade as copyTradeApi } from "./api/index.js";
 import { useEdgeSwipeBack } from "./useEdgeSwipeBack.js";
 import { usePullToRefresh } from "./usePullToRefresh.jsx";
 import { setRefreshHandler, callRefreshFor } from "./refreshRegistry.js";
@@ -1029,6 +1030,17 @@ function FeedView({ T, lang = "es", user = null, onOpenProfile, onOpenThread, on
 
   return (
     <div style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 96px)" }}>
+      {/* Top traders carousel (samas-0.4.90) — only on the default
+          "For you" tab. Discovery surface para Copy Trade: avatar +
+          retorno headline + Copiar inline. Tap el card → ProfileView. */}
+      {tab === "for_you" && (
+        <TopTradersCarousel
+          T={T}
+          lang={lang}
+          onOpenProfile={onOpenProfile}
+        />
+      )}
+
       {/* Top tabs — horizontally scrollable so the 5 tabs fit on
           narrow phones without crushing labels. The strip itself is
           a contained pill; tabs are min-width auto so each tab sizes
@@ -2452,8 +2464,13 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
   const [profile, setProfile] = useState(null); // person being viewed (me or peer)
   const [posts, setPosts] = useState([]);
   const [saved, setSaved] = useState([]);
-  const [view, setView] = useState("posts");   // "posts" | "saved" — only relevant when self
+  const [view, setView] = useState("posts");   // "posts" | "saved" | "copying" — only relevant when self
   const [followBusy, setFollowBusy] = useState(false);
+  // 0.4.90 — copy trade state
+  const [copyStatus, setCopyStatus] = useState({ isCopying: false });
+  const [leaderStats, setLeaderStats] = useState(null);  // peer view: leader's headline stats
+  const [myCopies, setMyCopies] = useState([]);          // self view: list of leaders I'm copying
+  const [showCopySheet, setShowCopySheet] = useState(false);
 
   const isSelf = !profileUserId || (me && me.id === profileUserId);
 
@@ -2497,6 +2514,28 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
   }, [profileUserId]);
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
+
+  // 0.4.90 — copy trade state load. For peers: am I copying them + their
+  // headline stats. For self: list of leaders I'm currently copying.
+  const loadCopyState = useCallback(async () => {
+    try {
+      if (!profile) return;
+      if (!isSelf) {
+        const [status, stats] = await Promise.all([
+          copyTradeApi.getCopyStatus(profile.id),
+          copyTradeApi.getCopyStats(profile.id),
+        ]);
+        setCopyStatus(status || { isCopying: false });
+        setLeaderStats(stats);
+      } else {
+        const copies = await copyTradeApi.getMyCopies();
+        setMyCopies(copies || []);
+      }
+    } catch (e) {
+      console.warn("[copy] state load:", e?.message || e);
+    }
+  }, [profile, isSelf]);
+  useEffect(() => { loadCopyState(); }, [loadCopyState]);
 
   async function toggleFollow() {
     if (!profile || isSelf || followBusy) return;
@@ -2721,40 +2760,99 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
         </div>
       </div>
 
-      {/* Action row — Follow + DM only for peer view */}
+      {/* Action row — Copy + Follow + DM only for peer view */}
       {!isSelf && (
-        <div style={{ display: "flex", gap: 8, padding: "0 16px 16px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "0 16px 16px" }}>
+          {/* Primary CTA — Copy trade (samas-0.4.90). Sits above Follow
+              porque la story del pitch a Cohen es copy trade-first;
+              Follow queda como un opt-in más ligero. */}
           <button
-            onClick={toggleFollow}
-            disabled={followBusy}
+            onClick={() => setShowCopySheet(true)}
             style={{
-              flex: 1, padding: "10px 14px", borderRadius: 999,
-              background: profile.followedByMe ? "transparent" : T.accent,
-              border: `1px solid ${profile.followedByMe ? T.border : T.accent}`,
-              color: profile.followedByMe ? T.text : T.accentInk,
+              width: "100%", padding: "12px 14px", borderRadius: 999,
+              background: copyStatus.isCopying ? T.accentSoft : T.accent,
+              border: `1px solid ${copyStatus.isCopying ? T.accent + "55" : T.accent}`,
+              color: copyStatus.isCopying ? T.accent : T.accentInk,
               fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
-              cursor: followBusy ? "default" : "pointer",
-              opacity: followBusy ? 0.6 : 1,
+              cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
             }}
-          >{profile.followedByMe ? "Siguiendo" : "Seguir"}</button>
-          {onMessage && (
-            <button
-              onClick={() => onMessage(profile.id)}
-              aria-label="Mensaje"
-              style={{
-                width: 42, height: 42, borderRadius: 999,
-                background: "transparent", border: `1px solid ${T.border}`,
-                color: T.text, cursor: "pointer", padding: 0,
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}
-            >
-              <Ico.Send size={16}/>
-            </button>
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+            {copyStatus.isCopying
+              ? tr("copy.copying", lang, { pct: copyStatus.allocationPct })
+              : tr("copy.button", lang)}
+          </button>
+
+          {/* Headline stats — only render when we have them (peer view). */}
+          {leaderStats && (
+            <div style={{
+              display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6,
+              padding: "10px 12px", borderRadius: 14,
+              background: T.surface, border: `1px solid ${T.border}`,
+            }}>
+              <StatCell T={T} label={tr("copy.stats.return", lang)}
+                value={`${leaderStats.returnPct > 0 ? "+" : ""}${leaderStats.returnPct}%`}
+                tone={leaderStats.returnPct >= 0 ? "up" : "down"} />
+              <StatCell T={T} label={tr("copy.stats.win_rate", lang)}
+                value={`${leaderStats.winRate}%`} />
+              <StatCell T={T} label={tr("copy.stats.trades", lang)}
+                value={String(leaderStats.tradesCount)} />
+              <StatCell T={T} label={tr("copy.stats.copiers", lang)}
+                value={String(leaderStats.copiers)} />
+            </div>
           )}
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={toggleFollow}
+              disabled={followBusy}
+              style={{
+                flex: 1, padding: "10px 14px", borderRadius: 999,
+                background: "transparent",
+                border: `1px solid ${T.border}`,
+                color: T.text,
+                fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+                cursor: followBusy ? "default" : "pointer",
+                opacity: followBusy ? 0.6 : 1,
+              }}
+            >{profile.followedByMe ? "Siguiendo" : "Seguir"}</button>
+            {onMessage && (
+              <button
+                onClick={() => onMessage(profile.id)}
+                aria-label="Mensaje"
+                style={{
+                  width: 42, height: 42, borderRadius: 999,
+                  background: "transparent", border: `1px solid ${T.border}`,
+                  color: T.text, cursor: "pointer", padding: 0,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >
+                <Ico.Send size={16}/>
+              </button>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Posts / Saved toggle — self only */}
+      {/* Copy sheet — wired to start / update / stop copying. */}
+      {showCopySheet && !isSelf && (
+        <CopySheet
+          T={T}
+          lang={lang}
+          leader={profile}
+          status={copyStatus}
+          onClose={() => setShowCopySheet(false)}
+          onDone={async () => { setShowCopySheet(false); await loadCopyState(); }}
+        />
+      )}
+
+      {/* Posts / Saved / Copiando toggle — self only. "Copiando" added
+          samas-0.4.90 so users tienen un home para sus copy trades. */}
       {isSelf && (
         <div style={{
           display: "flex", gap: 4, padding: 4, margin: "0 16px",
@@ -2763,6 +2861,7 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
           {[
             { id: "posts", label: "Mis posts" },
             { id: "saved", label: "Guardados" },
+            { id: "copying", label: tr("copy.profile.tab", lang) },
           ].map((v) => {
             const active = v.id === view;
             return (
@@ -2779,7 +2878,25 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
       )}
 
       <div style={{ margin: "16px" }}>
-        {list.length === 0 ? (
+        {isSelf && view === "copying" ? (
+          myCopies.length === 0 ? (
+            <div style={{
+              padding: 30, textAlign: "center",
+              color: T.textMute, fontFamily: FONT.sans, fontSize: 13,
+            }}>
+              <div style={{ color: T.text, fontWeight: 700, marginBottom: 4 }}>
+                {tr("copy.profile.empty_title", lang)}
+              </div>
+              {tr("copy.profile.empty_sub", lang)}
+            </div>
+          ) : (
+            myCopies.map((c) => (
+              <CopyRow key={c.leaderId} T={T} lang={lang} copy={c}
+                onTap={() => onOpenProfile && onOpenProfile(c.leaderId)}
+                onStopped={loadCopyState} />
+            ))
+          )
+        ) : list.length === 0 ? (
           <div style={{
             padding: 30, textAlign: "center",
             color: T.textMute, fontFamily: FONT.sans, fontSize: 13,
@@ -2807,6 +2924,306 @@ function ProfileView({ T, lang = "es", user = null, profileUserId = null, onBack
         )}
       </div>
     </div>
+  );
+}
+
+// ============================================================
+// Copy Trade helpers (samas-0.4.90)
+// ============================================================
+
+// TopTradersCarousel — horizontal scroll de los top N traders del
+// leaderboard. Cada card: avatar + nombre + retorno (verde si +,
+// rojo si -) + botón Copiar inline. Tap en el cuerpo abre el
+// profile. Tap en Copiar abre la CopySheet sin salir del feed.
+function TopTradersCarousel({ T, lang, onOpenProfile }) {
+  const [traders, setTraders] = useState(null); // null=loading, []=empty
+  const [copyTarget, setCopyTarget] = useState(null);
+  const [copyStatuses, setCopyStatuses] = useState({}); // leaderId → { isCopying, allocationPct }
+
+  const load = useCallback(async () => {
+    try {
+      const list = await copyTradeApi.getTopTraders({ limit: 10 });
+      setTraders(list || []);
+      // Best-effort fetch de mi copy status para los traders visibles.
+      const statuses = {};
+      await Promise.all((list || []).map(async (t) => {
+        try {
+          const s = await copyTradeApi.getCopyStatus(t.leaderId);
+          if (s?.isCopying) statuses[t.leaderId] = s;
+        } catch {}
+      }));
+      setCopyStatuses(statuses);
+    } catch (e) {
+      console.warn("[copy] top traders:", e?.message || e);
+      setTraders([]);
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  if (traders === null) return null;
+  if (traders.length === 0) return null; // sin traders todavía → no mostrar header vacío
+
+  return (
+    <>
+      <div style={{ margin: "16px 16px 0", display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+        <div style={{
+          fontFamily: FONT.display, fontSize: 14, fontWeight: 800,
+          color: T.text, letterSpacing: -0.2,
+        }}>{tr("copy.feed.top_traders", lang)}</div>
+      </div>
+      <div style={{
+        display: "flex", gap: 10, padding: "10px 16px 4px",
+        overflowX: "auto", WebkitOverflowScrolling: "touch",
+        scrollbarWidth: "none",
+      }}>
+        <style>{`.samas-traders-row::-webkit-scrollbar { display: none; }`}</style>
+        {traders.map((t) => {
+          const { initials, color } = avatarPropsFor(
+            { handle: t.handle, displayName: t.displayName, avatarColor: t.avatarColor },
+            T.accent,
+          );
+          const status = copyStatuses[t.leaderId];
+          const isCopying = !!status?.isCopying;
+          return (
+            <div key={t.leaderId} style={{
+              flexShrink: 0, width: 176,
+              padding: 14, borderRadius: 18,
+              background: T.surface, border: `1px solid ${T.border}`,
+              display: "flex", flexDirection: "column", gap: 8,
+            }}>
+              <button onClick={() => onOpenProfile && onOpenProfile(t.leaderId)} style={{
+                background: "transparent", border: "none", padding: 0, cursor: "pointer",
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 8, color: T.text,
+              }}>
+                <Avatar T={T} initials={initials} color={color} size={48}/>
+                <div style={{
+                  fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text,
+                  textAlign: "center", lineHeight: 1.2,
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  maxWidth: "100%",
+                }}>{t.displayName}</div>
+                <div style={{
+                  fontFamily: FONT.mono, fontSize: 16, fontWeight: 800,
+                  color: t.stats.returnPct >= 0 ? T.accent : (T.danger || "#EF4444"),
+                }}>
+                  {t.stats.returnPct >= 0 ? "+" : ""}{t.stats.returnPct}%
+                </div>
+                <div style={{
+                  fontFamily: FONT.mono, fontSize: 10, color: T.textMute,
+                }}>
+                  WR {t.stats.winRate}% · {t.stats.tradesCount} ops
+                </div>
+              </button>
+              <button onClick={() => setCopyTarget(t)} style={{
+                width: "100%", padding: "8px 0", borderRadius: 999,
+                background: isCopying ? T.accentSoft : T.accent,
+                border: `1px solid ${isCopying ? T.accent + "55" : T.accent}`,
+                color: isCopying ? T.accent : T.accentInk,
+                fontFamily: FONT.sans, fontSize: 12, fontWeight: 700, cursor: "pointer",
+              }}>
+                {isCopying
+                  ? tr("copy.copying", lang, { pct: status.allocationPct })
+                  : tr("copy.button", lang)}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      {copyTarget && (
+        <CopySheet
+          T={T}
+          lang={lang}
+          leader={{ id: copyTarget.leaderId, displayName: copyTarget.displayName }}
+          status={copyStatuses[copyTarget.leaderId] || { isCopying: false }}
+          onClose={() => setCopyTarget(null)}
+          onDone={async () => { setCopyTarget(null); await load(); }}
+        />
+      )}
+    </>
+  );
+}
+
+function StatCell({ T, label, value, tone }) {
+  const color = tone === "up" ? T.accent
+              : tone === "down" ? (T.danger || "#EF4444")
+              : T.text;
+  return (
+    <div style={{ textAlign: "center", minWidth: 0 }}>
+      <div style={{
+        fontFamily: FONT.mono, fontSize: 9, fontWeight: 700,
+        color: T.textMute, letterSpacing: 0.4, textTransform: "uppercase",
+        marginBottom: 2, whiteSpace: "nowrap",
+        overflow: "hidden", textOverflow: "ellipsis",
+      }}>{label}</div>
+      <div style={{
+        fontFamily: FONT.mono, fontSize: 13, fontWeight: 800, color,
+        whiteSpace: "nowrap",
+      }}>{value}</div>
+    </div>
+  );
+}
+
+// CopySheet — bottom sheet that lets the user pick % allocation +
+// start / update / stop a copy relationship. Portaled to body to
+// dodge the social-shell stacking trap (same iOS WebKit issue as the
+// broker sheets — translateX entry animation creates a containing
+// block for position:fixed children).
+function CopySheet({ T, lang, leader, status, onClose, onDone }) {
+  const [pct, setPct] = useState(status?.allocationPct || 25);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const isUpdate = !!status?.isCopying;
+
+  async function save() {
+    setErr(null); setBusy(true);
+    try {
+      await copyTradeApi.startCopying({ leaderId: leader.id, allocationPct: pct });
+      await onDone();
+    } catch (e) {
+      setErr(e?.message || String(e));
+      setBusy(false);
+    }
+  }
+
+  async function stop() {
+    if (!window.confirm(tr("copy.modal.confirm_stop", lang))) return;
+    setErr(null); setBusy(true);
+    try {
+      await copyTradeApi.stopCopying(leader.id);
+      await onDone();
+    } catch (e) {
+      setErr(e?.message || String(e));
+      setBusy(false);
+    }
+  }
+
+  return ReactDOM.createPortal(
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
+      position: "fixed", inset: 0, zIndex: 110,
+      background: "rgba(0,0,0,0.6)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+    }}>
+      <div style={{
+        width: "100%", maxWidth: 540, maxHeight: "85dvh",
+        background: T.bgElev, color: T.text,
+        borderTopLeftRadius: 28, borderTopRightRadius: 28,
+        border: `1px solid ${T.border}`, borderBottom: "none",
+        padding: "16px 20px calc(env(safe-area-inset-bottom) + 20px)",
+        display: "flex", flexDirection: "column", overflow: "hidden",
+      }}>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: T.border }}/>
+        </div>
+        <div style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: T.text, marginBottom: 4 }}>
+          {tr("copy.modal.title", lang, { name: leader.displayName })}
+        </div>
+        <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute, marginBottom: 16, lineHeight: 1.4 }}>
+          {tr("copy.modal.sub", lang)}
+        </div>
+
+        <div style={{
+          fontFamily: FONT.sans, fontSize: 11, color: T.textMute, fontWeight: 600,
+          letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 8,
+        }}>{tr("copy.modal.allocation", lang)}</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+          {[10, 25, 50, 75, 100].map((v) => {
+            const active = v === pct;
+            return (
+              <button key={v} onClick={() => setPct(v)} style={{
+                flex: 1, minWidth: 56,
+                padding: "10px 0", borderRadius: 999,
+                background: active ? T.accentSoft : T.surface,
+                border: `1px solid ${active ? T.accent : T.border}`,
+                color: active ? T.accent : T.textMute,
+                fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, cursor: "pointer",
+              }}>{v}%</button>
+            );
+          })}
+        </div>
+        <div style={{
+          fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginBottom: 14,
+        }}>{tr("copy.modal.allocation_hint", lang)}</div>
+
+        {err && <div style={{ marginBottom: 12, color: T.danger || "#EF4444", fontFamily: FONT.sans, fontSize: 12 }}>{err}</div>}
+
+        <div style={{ display: "flex", gap: 10 }}>
+          {isUpdate && (
+            <button onClick={stop} disabled={busy} style={{
+              flex: 1, padding: 14, borderRadius: 14,
+              background: "transparent", border: `1px solid ${(T.danger || "#EF4444") + "55"}`,
+              color: T.danger || "#EF4444", fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+              cursor: busy ? "default" : "pointer",
+            }}>{tr("copy.modal.stop", lang)}</button>
+          )}
+          <button onClick={save} disabled={busy} style={{
+            flex: 1.4, padding: 14, borderRadius: 14,
+            background: T.accent, color: T.accentInk,
+            fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, border: "none",
+            cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
+          }}>{busy ? "..." : (isUpdate ? tr("copy.modal.update", lang) : tr("copy.modal.save", lang))}</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// CopyRow — single row in the self profile's "Copiando" tab. Tap
+// opens the leader's profile; the "..." button opens the picker
+// so the user can change % / stop without leaving their profile.
+function CopyRow({ T, lang, copy, onTap, onStopped }) {
+  const [showSheet, setShowSheet] = useState(false);
+  const { initials, color } = avatarPropsFor(
+    { handle: copy.handle, displayName: copy.displayName, avatarColor: copy.avatarColor },
+    T.accent,
+  );
+  return (
+    <>
+      <div style={{
+        display: "flex", alignItems: "center", gap: 12,
+        padding: "12px 14px", borderRadius: 16, marginBottom: 8,
+        background: T.surface, border: `1px solid ${T.border}`,
+      }}>
+        <button onClick={onTap} aria-label={copy.displayName} style={{
+          background: "transparent", border: "none", padding: 0, cursor: "pointer",
+          display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0,
+        }}>
+          <Avatar T={T} initials={initials} color={color} size={40}/>
+          <div style={{ textAlign: "left", flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontFamily: FONT.sans, fontSize: 14, fontWeight: 700, color: T.text,
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }}>{copy.displayName}</div>
+            <div style={{
+              fontFamily: FONT.mono, fontSize: 11, color: T.textMute,
+            }}>
+              {copy.allocationPct}% · {copy.stats?.returnPct >= 0 ? "+" : ""}{copy.stats?.returnPct}%
+            </div>
+          </div>
+        </button>
+        <button onClick={() => setShowSheet(true)} aria-label="Editar copia" style={{
+          width: 32, height: 32, borderRadius: 999,
+          background: T.bg, border: `1px solid ${T.border}`,
+          color: T.text, cursor: "pointer", padding: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/>
+          </svg>
+        </button>
+      </div>
+      {showSheet && (
+        <CopySheet
+          T={T}
+          lang={lang}
+          leader={{ id: copy.leaderId, displayName: copy.displayName }}
+          status={{ isCopying: true, allocationPct: copy.allocationPct }}
+          onClose={() => setShowSheet(false)}
+          onDone={async () => { setShowSheet(false); await onStopped(); }}
+        />
+      )}
+    </>
   );
 }
 
