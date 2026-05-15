@@ -23,6 +23,27 @@ import { supabase } from "./supabase.js";
 
 const HOST_ORG_NAME = "SAMAS (host)";
 
+// Pick a readable foreground over an arbitrary brand background.
+// Relative-luminance heuristic — darks get white ink, lights get black.
+export function pickInkFor(hex) {
+  if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return "#FFFFFF";
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const L = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return L > 0.58 ? "#08090A" : "#FFFFFF";
+}
+
+// 6 brand-color presets matching common ALyC palettes.
+export const BRAND_SWATCHES = [
+  "#5b8def", // default SAMAS-host blue
+  "#1d4ed8", // navy (Cohen-ish)
+  "#0f766e", // teal
+  "#7c3aed", // violet
+  "#dc2626", // red
+  "#16a34a", // green
+];
+
 async function getHostOrgId() {
   const { data, error } = await supabase
     .from("orgs")
@@ -175,6 +196,36 @@ export async function addCuenta({ clienteId, numero, currency = "ARS" }) {
     if (error.code === "23505") throw new Error("Ya existe una cuenta con ese número y moneda.");
     throw new Error(`No se pudo crear cuenta: ${error.message}`);
   }
+  return data;
+}
+
+// Update branding on the productor's org. Only admin/back_office can
+// do this thanks to the standard RLS-by-default behavior on update +
+// the future role-aware policy. For now we let the DB return the
+// permission error and surface it.
+const BRAND_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+export async function updateOrgBranding({ brandColor, logoUrl }) {
+  const productor = await getMyProductor();
+  if (!productor) throw new Error("Activá modo Productor primero.");
+  if (productor.role !== "admin" && productor.role !== "back_office") {
+    throw new Error("Sólo admin / back-office puede cambiar la marca.");
+  }
+  const patch = {};
+  if (brandColor != null) {
+    if (!BRAND_COLOR_RE.test(brandColor)) throw new Error("Color inválido (usar #RRGGBB).");
+    patch.brand_color = brandColor;
+  }
+  if (logoUrl != null) {
+    patch.logo_url = logoUrl.trim() || null;
+  }
+  if (Object.keys(patch).length === 0) return null;
+  const { data, error } = await supabase
+    .from("orgs")
+    .update(patch)
+    .eq("id", productor.org_id)
+    .select("id, name, brand_color, logo_url")
+    .single();
+  if (error) throw new Error(`No se pudo actualizar marca: ${error.message}`);
   return data;
 }
 

@@ -125,11 +125,24 @@ alter table public.cuentas               enable row level security;
 alter table public.compliance_documents  enable row level security;
 
 -- orgs: any authenticated user can see active orgs (needed so
--- productores can pick their ALyC on signup). No writes from the
--- client — only service_role manages org rows.
+-- productores can pick their ALyC on signup). admin / back_office
+-- members of the org can update brand_color + logo_url for
+-- white-label branding (samas-0.4.95).
 drop policy if exists "orgs_select_active" on public.orgs;
 create policy "orgs_select_active" on public.orgs
   for select using (active = true);
+
+drop policy if exists "orgs_update_branding_by_org_admin" on public.orgs;
+create policy "orgs_update_branding_by_org_admin" on public.orgs
+  for update using (
+    exists (
+      select 1 from public.productores p
+      where p.user_id = auth.uid()
+        and p.org_id = orgs.id
+        and p.role in ('admin', 'back_office')
+        and p.active = true
+    )
+  );
 
 -- productores: a user sees their own productor row. back_office /
 -- admin within the same org also see siblings.

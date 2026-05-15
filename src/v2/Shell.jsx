@@ -56,6 +56,7 @@ import { activatePlus, cancelPlus, getAIQuotaStatus, parseContract, handleAIErro
 import {
   getMyProductor, activateProductor, listClientes, addCliente,
   getClienteWithCuentas, addCuenta, listClienteDocs, normalizeCuit,
+  updateOrgBranding, pickInkFor, BRAND_SWATCHES,
 } from "../lib/productor.js";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { LivePricesProvider } from "./livePrices.jsx";
@@ -5846,6 +5847,16 @@ function ProductorSheet({ T, lang = "es", onClose }) {
   const [showAdd, setShowAdd] = useState(false);
   const [selectedCliente, setSelectedCliente] = useState(null);
 
+  // White-label theme variant (samas-0.4.95). When the productor's
+  // org has a brand_color set, derive a theme where accent → brand
+  // and pass it down to all productor-facing sheets. Retail surfaces
+  // keep the SAMAS green untouched.
+  const brandColor = productor?.org?.brand_color || null;
+  const Tbranded = useMemo(() => {
+    if (!brandColor) return T;
+    return { ...T, accent: brandColor, accentInk: pickInkFor(brandColor) };
+  }, [T, brandColor]);
+
   async function reload() {
     setLoading(true);
     setErr(null);
@@ -5950,8 +5961,8 @@ function ProductorSheet({ T, lang = "es", onClose }) {
               </div>
               <button onClick={onActivate} disabled={activating} style={{
                 padding: "10px 18px", borderRadius: 12,
-                background: activating ? T.surfaceHi : T.accent,
-                color: activating ? T.textMute : T.accentInk,
+                background: activating ? T.surfaceHi : Tbranded.accent,
+                color: activating ? T.textMute : Tbranded.accentInk,
                 border: "none", cursor: activating ? "default" : "pointer",
                 fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
               }}>{activating ? "Activando…" : "Activar"}</button>
@@ -5960,17 +5971,28 @@ function ProductorSheet({ T, lang = "es", onClose }) {
 
           {!loading && productor && (
             <>
+              {/* Branding section (samas-0.4.95) — org info + admin
+                  color picker. White-label demo surface for Cohen. */}
+              <BrandingSection
+                T={T}
+                Tbranded={Tbranded}
+                productor={productor}
+                onChanged={(updatedOrg) => {
+                  setProductor((prev) => prev ? { ...prev, org: { ...prev.org, ...updatedOrg } } : prev);
+                }}
+              />
+
               {/* Add cliente button / form */}
               {!showAdd ? (
                 <button onClick={() => setShowAdd(true)} style={{
                   width: "100%", padding: "10px 14px", borderRadius: 12, marginBottom: 12,
-                  background: T.accent + "22", color: T.accent,
-                  border: `1px dashed ${T.accent}55`, cursor: "pointer",
+                  background: Tbranded.accent + "22", color: Tbranded.accent,
+                  border: `1px dashed ${Tbranded.accent}55`, cursor: "pointer",
                   fontFamily: FONT.sans, fontSize: 13, fontWeight: 600,
                 }}>+ Agregar cliente</button>
               ) : (
                 <AddClienteForm
-                  T={T}
+                  T={Tbranded}
                   onCancel={() => setShowAdd(false)}
                   onSaved={async (c) => {
                     setShowAdd(false);
@@ -6001,7 +6023,7 @@ function ProductorSheet({ T, lang = "es", onClose }) {
                           {c.cuit}
                         </div>
                       </div>
-                      <KycChip T={T} status={c.kyc_status}/>
+                      <KycChip T={Tbranded} status={c.kyc_status}/>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="9 18 15 12 9 6"/>
                       </svg>
@@ -6014,14 +6036,139 @@ function ProductorSheet({ T, lang = "es", onClose }) {
         </div>
       </div>
 
-      {/* Drill-in: ClienteDetailSheet */}
+      {/* Drill-in: ClienteDetailSheet (receives the branded theme so
+          the whole productor surface re-skins to the ALyC's color). */}
       {selectedCliente && (
         <ClienteDetailSheet
-          T={T}
+          T={Tbranded}
           lang={lang}
           clienteSummary={selectedCliente}
           onClose={() => setSelectedCliente(null)}
         />
+      )}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------
+// BrandingSection (samas-0.4.95) — white-label preview.
+// Shows org logo (or initial), name, current brand color.
+// admin / back_office can pick a new color from swatches or
+// type a custom #RRGGBB. Save persists via updateOrgBranding
+// (server-side gated via RLS).
+// ----------------------------------------------------------
+function BrandingSection({ T, Tbranded, productor, onChanged }) {
+  const [editing, setEditing] = useState(false);
+  const [color, setColor] = useState(productor?.org?.brand_color || BRAND_SWATCHES[0]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const canEdit = productor?.role === "admin" || productor?.role === "back_office";
+  const orgName = productor?.org?.name || "—";
+  const initial = orgName.replace(/[^A-Za-z0-9]/g, "").slice(0, 1).toUpperCase() || "?";
+
+  async function save() {
+    if (busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const updated = await updateOrgBranding({ brandColor: color });
+      onChanged?.(updated);
+      setEditing(false);
+    } catch (e) {
+      setErr(e?.message || "No se pudo guardar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{
+      padding: 14, borderRadius: 14, marginBottom: 14,
+      background: T.surface, border: `1px solid ${T.border}`,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{
+          width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+          background: Tbranded.accent, color: Tbranded.accentInk,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontFamily: FONT.display, fontSize: 18, fontWeight: 800,
+        }}>{initial}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.text }}>
+            {orgName}
+          </div>
+          <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2,
+            display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{
+              display: "inline-block", width: 10, height: 10, borderRadius: 3,
+              background: Tbranded.accent, border: `1px solid ${T.border}`,
+            }}/>
+            <span style={{ fontFamily: FONT.mono || FONT.sans }}>{Tbranded.accent}</span>
+            <span>·</span>
+            <span>{productor?.role}</span>
+          </div>
+        </div>
+        {canEdit && !editing && (
+          <button onClick={() => setEditing(true)} style={{
+            padding: "6px 12px", borderRadius: 8,
+            background: T.bgElev, color: T.text,
+            border: `1px solid ${T.border}`, cursor: "pointer",
+            fontFamily: FONT.sans, fontSize: 11.5, fontWeight: 600,
+          }}>Cambiar marca</button>
+        )}
+      </div>
+
+      {editing && (
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.border}` }}>
+          <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginBottom: 8 }}>
+            Elegí un color de marca (los presets cubren los típicos ALyC argentinos).
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+            {BRAND_SWATCHES.map((sw) => {
+              const active = sw.toLowerCase() === color.toLowerCase();
+              return (
+                <button key={sw} onClick={() => setColor(sw)} aria-label={sw} style={{
+                  width: 36, height: 36, borderRadius: 10,
+                  background: sw, cursor: "pointer",
+                  border: active ? `2px solid ${T.text}` : `1px solid ${T.border}`,
+                  boxShadow: active ? `0 0 0 2px ${T.bg}` : "none",
+                }}/>
+              );
+            })}
+          </div>
+          <div style={{ display: "flex", gap: 8, marginBottom: err ? 10 : 0 }}>
+            <input value={color} onChange={(e) => setColor(e.target.value)}
+              placeholder="#RRGGBB"
+              style={{
+                flex: 1, padding: "10px 12px", borderRadius: 10,
+                background: T.bgElev, color: T.text,
+                border: `1px solid ${T.border}`,
+                fontFamily: FONT.mono || FONT.sans, fontSize: 13,
+                boxSizing: "border-box", outline: "none",
+              }}
+            />
+            <button onClick={save} disabled={busy} style={{
+              padding: "10px 14px", borderRadius: 10,
+              background: busy ? T.surfaceHi : color,
+              color: busy ? T.textMute : pickInkFor(color),
+              border: "none", cursor: busy ? "default" : "pointer",
+              fontFamily: FONT.sans, fontSize: 12.5, fontWeight: 700,
+            }}>{busy ? "Guardando…" : "Guardar"}</button>
+            <button onClick={() => { setEditing(false); setErr(null); }} disabled={busy} style={{
+              padding: "10px 14px", borderRadius: 10,
+              background: T.bgElev, color: T.text,
+              border: `1px solid ${T.border}`, cursor: "pointer",
+              fontFamily: FONT.sans, fontSize: 12.5, fontWeight: 600,
+            }}>Cancelar</button>
+          </div>
+          {err && (
+            <div style={{
+              padding: "8px 10px", borderRadius: 8,
+              background: T.dangerSoft, color: T.danger,
+              fontFamily: FONT.sans, fontSize: 11.5,
+            }}>{err}</div>
+          )}
+        </div>
       )}
     </div>
   );
