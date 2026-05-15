@@ -2258,6 +2258,10 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
     setClosing(true);
     setTimeout(() => { if (rawOnDone) rawOnDone(); }, 220);
   };
+  // Drag-down-to-dismiss (samas-0.4.97). AssetSheet was the last
+  // major sheet without it — Manuel expected scroll-down-from-top
+  // to close, matching the rest of the v2 sheets.
+  const dtd = useDragToDismiss(onClose);
   // Asset sheet has 3 modes via a top tab: Trade / Alerta / Stop loss.
   // Each renders its own form below the price header.
   const [mode, setMode] = useState("trade");
@@ -2401,7 +2405,7 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
       transition: "background 220ms ease",
       display: "flex", alignItems: "flex-end", justifyContent: "center",
     }}>
-      <div style={{
+      <div ref={dtd.ref} style={{
         width: "100%", maxWidth: 540,
         // samas-0.4.92 — calc explícito que resta --samas-kb-h (la CSS
         // var que samas-0.4.68 mantiene sincronizada con el keyboard
@@ -2421,8 +2425,17 @@ function AssetSheet({ T, asset, holding = null, onClose: rawOnClose, onDone: raw
         // dismisses (closing flag). Combined with the backdrop fade
         // it feels native iOS sheet.
         animation: closing ? "none" : "samas-sheet-up 220ms cubic-bezier(.2,.8,.2,1)",
-        transform: closing ? "translateY(100%)" : "translateY(0)",
-        transition: closing ? "transform 220ms cubic-bezier(.4,0,.6,1)" : undefined,
+        // Transform precedence (samas-0.4.97):
+        //  1. closing → slide off-screen with cubic-bezier
+        //  2. user dragging → follow the finger via dtd.dragStyle
+        //  3. resting → translateY(0), no transition
+        transform: closing
+          ? "translateY(100%)"
+          : (dtd.dragStyle.transform || "translateY(0)"),
+        transition: closing
+          ? "transform 220ms cubic-bezier(.4,0,.6,1)"
+          : dtd.dragStyle.transition,
+        touchAction: dtd.dragStyle.touchAction,
       }}>
         <style>{`
           @keyframes samas-sheet-up {
