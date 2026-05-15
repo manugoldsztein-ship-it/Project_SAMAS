@@ -52,7 +52,7 @@ import { seedSocialDemo } from "../lib/seedSocial.js";
 import { hapticNative } from "../lib/native.js";
 import { deleteAccount, exportData } from "../lib/account.js";
 import { grantAIConsent, denyAIConsent, hasAIConsent, revokeAIConsent, isAIDisabled, setAIDisabled } from "../lib/aiConsent.js";
-import { activatePlus, cancelPlus, getAIQuotaStatus } from "../lib/ai.js";
+import { activatePlus, cancelPlus, getAIQuotaStatus, parseContract, handleAIError } from "../lib/ai.js";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { LivePricesProvider } from "./livePrices.jsx";
 
@@ -613,6 +613,9 @@ function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus
   const [show2FA, setShow2FA] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showBrokerInfo, setShowBrokerInfo] = useState(false);
+  // Compliance sheet (samas-0.4.93) — beta B2B wedge from the Cohen
+  // meeting: paste a contract, get parsed fields + compliance flags.
+  const [showCompliance, setShowCompliance] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
   // Server-side social seed (Edge Function) — busy flag so the row
   // shows "Sembrando…" while the function runs and the button can't
@@ -891,6 +894,44 @@ function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus
             </div>
             <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
               {tr("settings.broker.row_sub", lang)}
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
+
+        {/* Compliance row (samas-0.4.93) — B2B wedge tras la reunión
+            con Cohen. Productor pega el texto de un contrato → IA
+            devuelve campos parseados + flags. Marcado beta porque
+            la productor-role gating se hace en un patch siguiente. */}
+        <button
+          onClick={() => setShowCompliance(true)}
+          style={{
+            width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 8,
+            background: T.surface, border: `1px solid ${T.border}`,
+            display: "flex", alignItems: "center", gap: 12,
+            cursor: "pointer", textAlign: "left",
+          }}
+        >
+          <div style={{
+            width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+            background: T.accent + "22", color: T.accent,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <polyline points="9 14 11 16 15 12"/>
+            </svg>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text }}>
+              Cumplimiento (beta)
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+              Analiza contratos y T&C con IA — pegá texto, recibí flags
             </div>
           </div>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1592,6 +1633,17 @@ function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus
           T={T}
           lang={lang}
           onClose={() => setShowBrokerInfo(false)}
+        />
+      )}
+
+      {/* Compliance sub-sheet (samas-0.4.93) — Cohen meeting B2B
+          wedge: parse-contract Edge Function fronted by a simple
+          textarea + result panel. Hidden behind a beta label. */}
+      {showCompliance && (
+        <ComplianceSheet
+          T={T}
+          lang={lang}
+          onClose={() => setShowCompliance(false)}
         />
       )}
 
@@ -5393,6 +5445,327 @@ function TinyLoader({ T }) {
         animation: "samas-spin 700ms linear infinite",
       }}/>
       <style>{`@keyframes samas-spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+// ============================================================
+// ComplianceSheet (samas-0.4.93) — B2B wedge from the Cohen meeting.
+// Productor pastes a contract / T&C, LLM returns parsed fields +
+// compliance flags. Beta surface — productor-role gating arrives
+// in a follow-up patch once JWT claims are wired.
+// ============================================================
+function ComplianceSheet({ T, lang = "es", onClose }) {
+  const [text, setText] = useState("");
+  const [hint, setHint] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [result, setResult] = useState(null);
+  const dtd = useDragToDismiss(onClose);
+
+  const HINTS = [
+    { id: "",                     label: "Auto-detectar" },
+    { id: "prestamo",             label: "Préstamo" },
+    { id: "garantia",             label: "Garantía" },
+    { id: "cuenta_comitente",     label: "Cta. comitente" },
+    { id: "termino_condiciones",  label: "T&C" },
+  ];
+
+  async function run() {
+    if (busy) return;
+    const t = (text || "").trim();
+    if (t.length < 40) {
+      setErr("Pegá al menos un párrafo (40+ caracteres).");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    setResult(null);
+    try {
+      const data = await parseContract({ text: t, hint: hint || undefined });
+      setResult(data);
+    } catch (e) {
+      if (!handleAIError(e)) setErr(e?.message || "No se pudo analizar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
+      position: "fixed", inset: 0, zIndex: 120,
+      background: "rgba(0,0,0,0.7)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+    }}>
+      <div ref={dtd.ref} {...dtd.dragHandlers} style={{
+        width: "100%", maxWidth: 620, maxHeight: "94dvh",
+        background: T.bgElev, color: T.text,
+        borderTopLeftRadius: 22, borderTopRightRadius: 22,
+        border: `1px solid ${T.border}`, borderBottom: "none",
+        display: "flex", flexDirection: "column",
+        animation: "samas-sheet-up 220ms cubic-bezier(.2,.8,.2,1)",
+        ...dtd.dragStyle,
+      }}>
+        <style>{`
+          @keyframes samas-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        `}</style>
+
+        {/* Header */}
+        <div style={{
+          padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between",
+          borderBottom: `1px solid ${T.border}`,
+        }}>
+          <div>
+            <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700 }}>
+              Cumplimiento
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+              Análisis IA de contratos y T&C (beta)
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            width: 32, height: 32, borderRadius: 16, border: `1px solid ${T.border}`,
+            background: T.surface, color: T.text, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }} aria-label="Cerrar">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Body — scrollable */}
+        <div style={{ padding: "16px 20px", overflowY: "auto", flex: 1 }}>
+          {/* Kind hint chips */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+            {HINTS.map((h) => {
+              const active = h.id === hint;
+              return (
+                <button key={h.id || "auto"} onClick={() => setHint(h.id)} style={{
+                  padding: "6px 12px", borderRadius: 999, cursor: "pointer",
+                  fontFamily: FONT.sans, fontSize: 12, fontWeight: 600,
+                  border: `1px solid ${active ? T.accent : T.border}`,
+                  background: active ? T.accent + "22" : T.surface,
+                  color: active ? T.accent : T.textMute,
+                }}>{h.label}</button>
+              );
+            })}
+          </div>
+
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Pegá el texto completo del contrato o T&C…"
+            rows={9}
+            style={{
+              width: "100%", padding: 12, borderRadius: 12,
+              background: T.surface, color: T.text,
+              border: `1px solid ${T.border}`,
+              fontFamily: FONT.mono || FONT.sans, fontSize: 12, lineHeight: 1.45,
+              resize: "vertical", boxSizing: "border-box", outline: "none",
+            }}
+          />
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute }}>
+              {text.length.toLocaleString()} chars · máx 30.000
+            </div>
+            <button
+              onClick={run}
+              disabled={busy || text.trim().length < 40}
+              style={{
+                padding: "10px 18px", borderRadius: 12,
+                background: busy ? T.surfaceHi : T.accent,
+                color: busy ? T.textMute : T.accentInk,
+                border: "none", cursor: busy ? "default" : "pointer",
+                fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+                opacity: text.trim().length < 40 ? 0.5 : 1,
+              }}
+            >{busy ? "Analizando…" : "Analizar"}</button>
+          </div>
+
+          {err && (
+            <div style={{
+              marginTop: 12, padding: "10px 12px", borderRadius: 10,
+              background: T.dangerSoft, color: T.danger,
+              fontFamily: FONT.sans, fontSize: 12,
+            }}>{err}</div>
+          )}
+
+          {result && <ComplianceResult T={T} data={result} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------
+// ComplianceResult — renders the parsed-contract JSON as cards:
+// summary, parties, amount + dates, key terms, compliance flags.
+// ----------------------------------------------------------
+function ComplianceResult({ T, data }) {
+  const KIND_LABEL = {
+    prestamo: "Préstamo",
+    garantia: "Garantía",
+    cuenta_comitente: "Cuenta comitente",
+    termino_condiciones: "Términos y condiciones",
+    otro: "Otro / sin clasificar",
+  };
+  const SEVERITY_COLOR = {
+    high: T.danger,
+    medium: T.warn,
+    low: T.accent,
+  };
+
+  return (
+    <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* Summary + kind */}
+      <div style={{
+        padding: 14, borderRadius: 14,
+        background: T.surface, border: `1px solid ${T.border}`,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+          <span style={{
+            padding: "3px 8px", borderRadius: 999,
+            background: T.accent + "22", color: T.accent,
+            fontFamily: FONT.sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+            textTransform: "uppercase",
+          }}>{KIND_LABEL[data.kind] || data.kind}</span>
+        </div>
+        <div style={{ fontFamily: FONT.sans, fontSize: 13, lineHeight: 1.5, color: T.text }}>
+          {data.summary || "Sin resumen."}
+        </div>
+      </div>
+
+      {/* Compliance flags — most important card, surface first */}
+      {Array.isArray(data.compliance_flags) && data.compliance_flags.length > 0 && (
+        <div style={{
+          padding: 14, borderRadius: 14,
+          background: T.surface, border: `1px solid ${T.border}`,
+        }}>
+          <div style={{ fontFamily: FONT.sans, fontSize: 11, fontWeight: 700, color: T.textMute,
+            letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 10 }}>
+            Flags de cumplimiento ({data.compliance_flags.length})
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {data.compliance_flags.map((f, i) => (
+              <div key={i} style={{
+                padding: "10px 12px", borderRadius: 10,
+                background: (SEVERITY_COLOR[f.severity] || T.accent) + "15",
+                border: `1px solid ${(SEVERITY_COLOR[f.severity] || T.border)}55`,
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                  <span style={{
+                    padding: "2px 7px", borderRadius: 6,
+                    background: SEVERITY_COLOR[f.severity] || T.textMute,
+                    color: T.bg,
+                    fontFamily: FONT.sans, fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+                    textTransform: "uppercase",
+                  }}>{f.severity}</span>
+                  {f.rule && (
+                    <span style={{ fontFamily: FONT.mono || FONT.sans, fontSize: 10, color: T.textMute }}>
+                      {f.rule}
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontFamily: FONT.sans, fontSize: 12.5, lineHeight: 1.45, color: T.text }}>
+                  {f.issue}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Parties + amount + dates row */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        {/* Parties */}
+        <div style={{
+          padding: 14, borderRadius: 14,
+          background: T.surface, border: `1px solid ${T.border}`,
+        }}>
+          <div style={{ fontFamily: FONT.sans, fontSize: 11, fontWeight: 700, color: T.textMute,
+            letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 10 }}>
+            Partes
+          </div>
+          {Array.isArray(data.parties) && data.parties.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {data.parties.map((p, i) => (
+                <div key={i}>
+                  <div style={{ fontFamily: FONT.sans, fontSize: 12.5, fontWeight: 600, color: T.text }}>
+                    {p.name || "—"}
+                  </div>
+                  <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+                    {p.role || "—"}{p.cuit ? ` · ${p.cuit}` : ""}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textDim }}>
+              No identificadas.
+            </div>
+          )}
+        </div>
+
+        {/* Amount + dates */}
+        <div style={{
+          padding: 14, borderRadius: 14,
+          background: T.surface, border: `1px solid ${T.border}`,
+        }}>
+          <div style={{ fontFamily: FONT.sans, fontSize: 11, fontWeight: 700, color: T.textMute,
+            letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 10 }}>
+            Monto y fechas
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div>
+              <div style={{ fontFamily: FONT.sans, fontSize: 10, color: T.textDim }}>Monto</div>
+              <div style={{ fontFamily: FONT.mono || FONT.sans, fontSize: 13, fontWeight: 600, color: T.text }}>
+                {data.amount
+                  ? `${data.amount.value.toLocaleString()} ${data.amount.currency}`
+                  : "—"}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontFamily: FONT.sans, fontSize: 10, color: T.textDim }}>Firma</div>
+              <div style={{ fontFamily: FONT.mono || FONT.sans, fontSize: 13, color: T.text }}>
+                {data.dates?.signed || "—"}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontFamily: FONT.sans, fontSize: 10, color: T.textDim }}>Vencimiento</div>
+              <div style={{ fontFamily: FONT.mono || FONT.sans, fontSize: 13, color: T.text }}>
+                {data.dates?.expires || "—"}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Key terms */}
+      {Array.isArray(data.key_terms) && data.key_terms.length > 0 && (
+        <div style={{
+          padding: 14, borderRadius: 14,
+          background: T.surface, border: `1px solid ${T.border}`,
+        }}>
+          <div style={{ fontFamily: FONT.sans, fontSize: 11, fontWeight: 700, color: T.textMute,
+            letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 10 }}>
+            Términos clave
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {data.key_terms.map((t, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute, flexShrink: 0 }}>
+                  {t.term}
+                </div>
+                <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.text, textAlign: "right" }}>
+                  {t.value}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

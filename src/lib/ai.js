@@ -976,6 +976,48 @@ export async function journalReflect(journalId) {
   return data;
 }
 
+/**
+ * parseContract({ text, hint? }) — POST /functions/v1/parse-contract
+ *
+ * Productor pega el texto de un contrato (préstamo, garantía, cuenta
+ * comitente, T&C) y el servidor devuelve JSON estructurado +
+ * flags de cumplimiento. Pivot Cohen (2026-05-15) — cuña B2B.
+ *
+ * Returns:
+ *   {
+ *     kind:             string,
+ *     parties:          Array<{ name, role, cuit }>,
+ *     amount:           { value, currency } | null,
+ *     dates:            { signed, expires },
+ *     key_terms:        Array<{ term, value }>,
+ *     compliance_flags: Array<{ severity, issue, rule }>,
+ *     summary:          string,
+ *     generatedAt:      string,
+ *   }
+ *
+ * Consume cuota AI estándar — back-office uso intensivo debería ir
+ * a Plus o a un tier dedicado más adelante.
+ */
+export async function parseContract({ text, hint } = {}) {
+  if (!text || !text.trim()) throw new Error("Pegá el texto del contrato.");
+  if (text.length < 40) throw new Error("Texto muy corto — al menos 40 caracteres.");
+  await gateOnConsent();
+  await gateOnQuota();
+  const { data, error } = await supabase.functions.invoke("parse-contract", {
+    body: { text, hint },
+  });
+  if (error) {
+    let detail = "";
+    try {
+      const body = await error?.context?.json?.();
+      if (body?.error) detail = `: ${body.error}`;
+    } catch (_) { /* fall through */ }
+    throw new Error(`Análisis de contrato falló${detail || ": " + (error.message || "error desconocido")}`);
+  }
+  if (data?.error) throw new Error(`Análisis de contrato falló: ${data.error}`);
+  return data;
+}
+
 // analyzeAsset consumes quota — deep AI analysis on a single asset,
 // triggered by user tapping "Análisis IA" in the AssetSheet.
 export async function analyzeAsset(ticker) {
