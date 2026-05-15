@@ -146,16 +146,32 @@ create policy "orgs_update_branding_by_org_admin" on public.orgs
 
 -- productores: a user sees their own productor row. back_office /
 -- admin within the same org also see siblings.
+--
+-- IMPORTANT: the org-staff check cannot reference productores
+-- directly from a policy ON productores — Postgres re-applies the
+-- same RLS to the inner subquery and infinite-recurses. Solution:
+-- a SECURITY DEFINER helper that bypasses RLS for the role lookup.
+create or replace function public.my_role_in_org(target_org uuid)
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select role from public.productores
+  where user_id = auth.uid()
+    and org_id = target_org
+    and active = true
+  limit 1;
+$$;
+
+grant execute on function public.my_role_in_org(uuid) to authenticated;
+
 drop policy if exists "productores_select_self_or_org_staff" on public.productores;
 create policy "productores_select_self_or_org_staff" on public.productores
   for select using (
     user_id = auth.uid()
-    or exists (
-      select 1 from public.productores p
-      where p.user_id = auth.uid()
-        and p.org_id = productores.org_id
-        and p.role in ('back_office', 'admin')
-    )
+    or public.my_role_in_org(productores.org_id) in ('back_office', 'admin')
   );
 
 -- clientes: productor sees own; back_office sees org-wide; admin sees all.
