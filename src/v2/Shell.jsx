@@ -53,6 +53,10 @@ import { hapticNative } from "../lib/native.js";
 import { deleteAccount, exportData } from "../lib/account.js";
 import { grantAIConsent, denyAIConsent, hasAIConsent, revokeAIConsent, isAIDisabled, setAIDisabled } from "../lib/aiConsent.js";
 import { activatePlus, cancelPlus, getAIQuotaStatus, parseContract, handleAIError } from "../lib/ai.js";
+import {
+  getMyProductor, activateProductor, listClientes, addCliente,
+  getClienteWithCuentas, addCuenta, listClienteDocs, normalizeCuit,
+} from "../lib/productor.js";
 import { reauthWithPassword } from "../lib/reauth.js";
 import { LivePricesProvider } from "./livePrices.jsx";
 
@@ -616,6 +620,9 @@ function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus
   // Compliance sheet (samas-0.4.93) — beta B2B wedge from the Cohen
   // meeting: paste a contract, get parsed fields + compliance flags.
   const [showCompliance, setShowCompliance] = useState(false);
+  // Productor back-office sheet (samas-0.4.94) — productor sees their
+  // clientes by CUIT, drills into cuentas + compliance history.
+  const [showProductor, setShowProductor] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
   // Server-side social seed (Edge Function) — busy flag so the row
   // shows "Sembrando…" while the function runs and the button can't
@@ -894,6 +901,44 @@ function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus
             </div>
             <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
               {tr("settings.broker.row_sub", lang)}
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
+
+        {/* Productor row (samas-0.4.94) — entrada al back-office:
+            lista de clientes por CUIT + cuentas + historial de
+            documentos parseados. Beta. */}
+        <button
+          onClick={() => setShowProductor(true)}
+          style={{
+            width: "100%", padding: "12px 14px", borderRadius: 14, marginBottom: 8,
+            background: T.surface, border: `1px solid ${T.border}`,
+            display: "flex", alignItems: "center", gap: 12,
+            cursor: "pointer", textAlign: "left",
+          }}
+        >
+          <div style={{
+            width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+            background: T.accent + "22", color: T.accent,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text }}>
+              Modo Productor (beta)
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+              Tu cartera de clientes — CUIT, cuentas, cumplimiento
             </div>
           </div>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1644,6 +1689,17 @@ function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus
           T={T}
           lang={lang}
           onClose={() => setShowCompliance(false)}
+        />
+      )}
+
+      {/* Productor sub-sheet (samas-0.4.94) — back-office: lista de
+          clientes + drill-in a ClienteDetail con cuentas e historial
+          de compliance. */}
+      {showProductor && (
+        <ProductorSheet
+          T={T}
+          lang={lang}
+          onClose={() => setShowProductor(false)}
         />
       )}
 
@@ -5455,7 +5511,7 @@ function TinyLoader({ T }) {
 // compliance flags. Beta surface — productor-role gating arrives
 // in a follow-up patch once JWT claims are wired.
 // ============================================================
-function ComplianceSheet({ T, lang = "es", onClose }) {
+function ComplianceSheet({ T, lang = "es", onClose, clienteId = null, clienteName = null }) {
   const [text, setText] = useState("");
   const [hint, setHint] = useState("");
   const [busy, setBusy] = useState(false);
@@ -5482,7 +5538,11 @@ function ComplianceSheet({ T, lang = "es", onClose }) {
     setErr(null);
     setResult(null);
     try {
-      const data = await parseContract({ text: t, hint: hint || undefined });
+      const data = await parseContract({
+        text: t,
+        hint: hint || undefined,
+        clienteId: clienteId || undefined,
+      });
       setResult(data);
     } catch (e) {
       if (!handleAIError(e)) setErr(e?.message || "No se pudo analizar.");
@@ -5520,7 +5580,7 @@ function ComplianceSheet({ T, lang = "es", onClose }) {
               Cumplimiento
             </div>
             <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
-              Análisis IA de contratos y T&C (beta)
+              {clienteName ? `Cliente: ${clienteName}` : "Análisis IA de contratos y T&C (beta)"}
             </div>
           </div>
           <button onClick={onClose} style={{
@@ -5766,6 +5826,586 @@ function ComplianceResult({ T, data }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================
+// ProductorSheet (samas-0.4.94) — B2B back-office entry point.
+// Lists clientes by CUIT, supports inline add, drills into
+// ClienteDetailSheet on tap. Shows an activation CTA when the
+// caller doesn't yet have a productores row.
+// ============================================================
+function ProductorSheet({ T, lang = "es", onClose }) {
+  const dtd = useDragToDismiss(onClose);
+  const [loading, setLoading] = useState(true);
+  const [productor, setProductor] = useState(null);
+  const [clientes, setClientes] = useState([]);
+  const [err, setErr] = useState(null);
+  const [activating, setActivating] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [selectedCliente, setSelectedCliente] = useState(null);
+
+  async function reload() {
+    setLoading(true);
+    setErr(null);
+    try {
+      const p = await getMyProductor();
+      setProductor(p);
+      if (p) setClientes(await listClientes());
+      else setClientes([]);
+    } catch (e) {
+      setErr(e?.message || "No se pudo cargar.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { reload(); }, []);
+
+  async function onActivate() {
+    if (activating) return;
+    setActivating(true);
+    try {
+      await activateProductor();
+      await reload();
+    } catch (e) {
+      setErr(e?.message || "No se pudo activar.");
+    } finally {
+      setActivating(false);
+    }
+  }
+
+  return (
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
+      position: "fixed", inset: 0, zIndex: 120,
+      background: "rgba(0,0,0,0.7)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+    }}>
+      <div ref={dtd.ref} {...dtd.dragHandlers} style={{
+        width: "100%", maxWidth: 620, maxHeight: "94dvh",
+        background: T.bgElev, color: T.text,
+        borderTopLeftRadius: 22, borderTopRightRadius: 22,
+        border: `1px solid ${T.border}`, borderBottom: "none",
+        display: "flex", flexDirection: "column",
+        animation: "samas-sheet-up 220ms cubic-bezier(.2,.8,.2,1)",
+        ...dtd.dragStyle,
+      }}>
+        <style>{`
+          @keyframes samas-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        `}</style>
+
+        {/* Header */}
+        <div style={{
+          padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between",
+          borderBottom: `1px solid ${T.border}`,
+        }}>
+          <div>
+            <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700 }}>
+              Modo Productor
+            </div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+              {productor?.org?.name ? `Bajo ${productor.org.name}` : "Tu cartera de clientes (beta)"}
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            width: 32, height: 32, borderRadius: 16, border: `1px solid ${T.border}`,
+            background: T.surface, color: T.text, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }} aria-label="Cerrar">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: "16px 20px", overflowY: "auto", flex: 1 }}>
+          {loading && (
+            <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute, padding: "20px 0" }}>
+              Cargando…
+            </div>
+          )}
+
+          {err && (
+            <div style={{
+              padding: "10px 12px", borderRadius: 10, marginBottom: 12,
+              background: T.dangerSoft, color: T.danger,
+              fontFamily: FONT.sans, fontSize: 12,
+            }}>{err}</div>
+          )}
+
+          {!loading && !productor && (
+            <div style={{
+              padding: 16, borderRadius: 14,
+              background: T.surface, border: `1px solid ${T.border}`,
+            }}>
+              <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
+                Activá modo Productor
+              </div>
+              <div style={{ fontFamily: FONT.sans, fontSize: 12.5, color: T.textMute, lineHeight: 1.5, marginBottom: 12 }}>
+                Esto te crea una ficha de productor bajo SAMAS (host). Después podés agregar clientes con su CUIT,
+                cargar sus cuentas comitentes y analizar contratos por cliente.
+              </div>
+              <button onClick={onActivate} disabled={activating} style={{
+                padding: "10px 18px", borderRadius: 12,
+                background: activating ? T.surfaceHi : T.accent,
+                color: activating ? T.textMute : T.accentInk,
+                border: "none", cursor: activating ? "default" : "pointer",
+                fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+              }}>{activating ? "Activando…" : "Activar"}</button>
+            </div>
+          )}
+
+          {!loading && productor && (
+            <>
+              {/* Add cliente button / form */}
+              {!showAdd ? (
+                <button onClick={() => setShowAdd(true)} style={{
+                  width: "100%", padding: "10px 14px", borderRadius: 12, marginBottom: 12,
+                  background: T.accent + "22", color: T.accent,
+                  border: `1px dashed ${T.accent}55`, cursor: "pointer",
+                  fontFamily: FONT.sans, fontSize: 13, fontWeight: 600,
+                }}>+ Agregar cliente</button>
+              ) : (
+                <AddClienteForm
+                  T={T}
+                  onCancel={() => setShowAdd(false)}
+                  onSaved={async (c) => {
+                    setShowAdd(false);
+                    setClientes((prev) => [c, ...prev]);
+                  }}
+                />
+              )}
+
+              {/* Clientes list */}
+              {clientes.length === 0 ? (
+                <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textDim, padding: "12px 4px" }}>
+                  No tenés clientes todavía. Agregá el primero arriba.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {clientes.map((c) => (
+                    <button key={c.id} onClick={() => setSelectedCliente(c)} style={{
+                      width: "100%", padding: "12px 14px", borderRadius: 12,
+                      background: T.surface, border: `1px solid ${T.border}`,
+                      display: "flex", alignItems: "center", gap: 12,
+                      cursor: "pointer", textAlign: "left",
+                    }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: FONT.sans, fontSize: 13.5, fontWeight: 600, color: T.text }}>
+                          {c.display_name}
+                        </div>
+                        <div style={{ fontFamily: FONT.mono || FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+                          {c.cuit}
+                        </div>
+                      </div>
+                      <KycChip T={T} status={c.kyc_status}/>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="9 18 15 12 9 6"/>
+                      </svg>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Drill-in: ClienteDetailSheet */}
+      {selectedCliente && (
+        <ClienteDetailSheet
+          T={T}
+          lang={lang}
+          clienteSummary={selectedCliente}
+          onClose={() => setSelectedCliente(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function KycChip({ T, status }) {
+  const COLOR = {
+    pending:   { bg: T.warn,    label: "Pendiente" },
+    in_review: { bg: T.accent,  label: "En revisión" },
+    approved:  { bg: T.accent,  label: "Aprobado" },
+    rejected:  { bg: T.danger,  label: "Rechazado" },
+  };
+  const c = COLOR[status] || COLOR.pending;
+  return (
+    <span style={{
+      padding: "3px 8px", borderRadius: 999,
+      background: c.bg + "22", color: c.bg,
+      fontFamily: FONT.sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+      textTransform: "uppercase",
+    }}>{c.label}</span>
+  );
+}
+
+function AddClienteForm({ T, onCancel, onSaved }) {
+  const [displayName, setDisplayName] = useState("");
+  const [cuit, setCuit] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function save() {
+    if (busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const c = await addCliente({ cuit, displayName, email, phone });
+      onSaved(c);
+    } catch (e) {
+      setErr(e?.message || "No se pudo crear.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const input = (props) => (
+    <input {...props} style={{
+      width: "100%", padding: "10px 12px", borderRadius: 10,
+      background: T.surface, color: T.text,
+      border: `1px solid ${T.border}`,
+      fontFamily: FONT.sans, fontSize: 13,
+      boxSizing: "border-box", outline: "none",
+    }}/>
+  );
+
+  return (
+    <div style={{
+      padding: 14, borderRadius: 14, marginBottom: 12,
+      background: T.surface, border: `1px solid ${T.border}`,
+      display: "flex", flexDirection: "column", gap: 8,
+    }}>
+      <div style={{ fontFamily: FONT.sans, fontSize: 11, fontWeight: 700, color: T.textMute,
+        letterSpacing: 0.4, textTransform: "uppercase" }}>
+        Nuevo cliente
+      </div>
+      {input({ placeholder: "Nombre / razón social", value: displayName, onChange: (e) => setDisplayName(e.target.value), maxLength: 200 })}
+      {input({ placeholder: "CUIT (11 dígitos)", value: cuit, onChange: (e) => setCuit(e.target.value), inputMode: "numeric", maxLength: 13 })}
+      {input({ placeholder: "Email (opcional)", value: email, onChange: (e) => setEmail(e.target.value), type: "email" })}
+      {input({ placeholder: "Teléfono (opcional)", value: phone, onChange: (e) => setPhone(e.target.value), inputMode: "tel" })}
+      {err && (
+        <div style={{
+          padding: "8px 10px", borderRadius: 8,
+          background: T.dangerSoft, color: T.danger,
+          fontFamily: FONT.sans, fontSize: 11.5,
+        }}>{err}</div>
+      )}
+      <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+        <button onClick={save} disabled={busy || !displayName.trim() || !cuit.trim()} style={{
+          flex: 1, padding: "10px 14px", borderRadius: 10,
+          background: busy ? T.surfaceHi : T.accent,
+          color: busy ? T.textMute : T.accentInk,
+          border: "none", cursor: busy ? "default" : "pointer",
+          fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+          opacity: (!displayName.trim() || !cuit.trim()) ? 0.5 : 1,
+        }}>{busy ? "Guardando…" : "Guardar"}</button>
+        <button onClick={onCancel} disabled={busy} style={{
+          padding: "10px 14px", borderRadius: 10,
+          background: T.surface, color: T.text,
+          border: `1px solid ${T.border}`, cursor: "pointer",
+          fontFamily: FONT.sans, fontSize: 13, fontWeight: 600,
+        }}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// ClienteDetailSheet (samas-0.4.94) — drill into a single cliente:
+// header con CUIT + KYC, cuentas (con add), historial de compliance.
+// "Analizar contrato" abre ComplianceSheet con cliente_id preset.
+// ============================================================
+function ClienteDetailSheet({ T, lang = "es", clienteSummary, onClose }) {
+  const dtd = useDragToDismiss(onClose);
+  const [cliente, setCliente] = useState(null);
+  const [docs, setDocs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState(null);
+  const [showAddCuenta, setShowAddCuenta] = useState(false);
+  const [showCompliance, setShowCompliance] = useState(false);
+
+  async function reload() {
+    setLoading(true);
+    try {
+      const [c, d] = await Promise.all([
+        getClienteWithCuentas(clienteSummary.id),
+        listClienteDocs(clienteSummary.id),
+      ]);
+      setCliente(c);
+      setDocs(d);
+    } catch (e) {
+      setErr(e?.message || "No se pudo cargar.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { reload(); }, [clienteSummary?.id]);
+
+  return (
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
+      position: "fixed", inset: 0, zIndex: 130,
+      background: "rgba(0,0,0,0.7)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+    }}>
+      <div ref={dtd.ref} {...dtd.dragHandlers} style={{
+        width: "100%", maxWidth: 620, maxHeight: "94dvh",
+        background: T.bgElev, color: T.text,
+        borderTopLeftRadius: 22, borderTopRightRadius: 22,
+        border: `1px solid ${T.border}`, borderBottom: "none",
+        display: "flex", flexDirection: "column",
+        animation: "samas-sheet-up 220ms cubic-bezier(.2,.8,.2,1)",
+        ...dtd.dragStyle,
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between",
+          borderBottom: `1px solid ${T.border}`,
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: T.text,
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {clienteSummary?.display_name || cliente?.display_name || "—"}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+              <span style={{ fontFamily: FONT.mono || FONT.sans, fontSize: 11, color: T.textMute }}>
+                {clienteSummary?.cuit || cliente?.cuit || "—"}
+              </span>
+              <KycChip T={T} status={clienteSummary?.kyc_status || cliente?.kyc_status}/>
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            width: 32, height: 32, borderRadius: 16, border: `1px solid ${T.border}`,
+            background: T.surface, color: T.text, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+          }} aria-label="Cerrar">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: "16px 20px", overflowY: "auto", flex: 1 }}>
+          {loading && (
+            <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute, padding: "20px 0" }}>
+              Cargando…
+            </div>
+          )}
+
+          {err && (
+            <div style={{
+              padding: "10px 12px", borderRadius: 10, marginBottom: 12,
+              background: T.dangerSoft, color: T.danger,
+              fontFamily: FONT.sans, fontSize: 12,
+            }}>{err}</div>
+          )}
+
+          {!loading && cliente && (
+            <>
+              {/* Action: analyze contract for this cliente */}
+              <button onClick={() => setShowCompliance(true)} style={{
+                width: "100%", padding: "12px 14px", borderRadius: 12, marginBottom: 14,
+                background: T.accent, color: T.accentInk,
+                border: "none", cursor: "pointer",
+                fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+              }}>Analizar contrato para este cliente</button>
+
+              {/* Cuentas */}
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                  <div style={{ fontFamily: FONT.sans, fontSize: 11, fontWeight: 700, color: T.textMute,
+                    letterSpacing: 0.4, textTransform: "uppercase" }}>
+                    Cuentas comitentes
+                  </div>
+                  {!showAddCuenta && (
+                    <button onClick={() => setShowAddCuenta(true)} style={{
+                      padding: "4px 10px", borderRadius: 8,
+                      background: T.accent + "22", color: T.accent,
+                      border: "none", cursor: "pointer",
+                      fontFamily: FONT.sans, fontSize: 11, fontWeight: 600,
+                    }}>+ Agregar</button>
+                  )}
+                </div>
+
+                {showAddCuenta && (
+                  <AddCuentaForm
+                    T={T}
+                    clienteId={cliente.id}
+                    onCancel={() => setShowAddCuenta(false)}
+                    onSaved={(cu) => {
+                      setShowAddCuenta(false);
+                      setCliente((prev) => prev ? { ...prev, cuentas: [cu, ...(prev.cuentas || [])] } : prev);
+                    }}
+                  />
+                )}
+
+                {(cliente.cuentas || []).length === 0 && !showAddCuenta ? (
+                  <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textDim }}>
+                    Sin cuentas todavía.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {(cliente.cuentas || []).map((cu) => (
+                      <div key={cu.id} style={{
+                        padding: "10px 12px", borderRadius: 10,
+                        background: T.surface, border: `1px solid ${T.border}`,
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                      }}>
+                        <div style={{ fontFamily: FONT.mono || FONT.sans, fontSize: 13, color: T.text }}>
+                          {cu.numero}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{
+                            padding: "2px 7px", borderRadius: 6,
+                            background: T.bgElev, color: T.textMute,
+                            fontFamily: FONT.sans, fontSize: 10, fontWeight: 600,
+                          }}>{cu.currency}</span>
+                          <span style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute }}>
+                            {cu.status}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Compliance history */}
+              <div>
+                <div style={{ fontFamily: FONT.sans, fontSize: 11, fontWeight: 700, color: T.textMute,
+                  letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 8 }}>
+                  Historial de cumplimiento ({docs.length})
+                </div>
+                {docs.length === 0 ? (
+                  <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textDim }}>
+                    Sin documentos analizados todavía.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {docs.map((d) => (
+                      <div key={d.id} style={{
+                        padding: "10px 12px", borderRadius: 10,
+                        background: T.surface, border: `1px solid ${T.border}`,
+                      }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                          <div style={{ fontFamily: FONT.sans, fontSize: 12, fontWeight: 600, color: T.text }}>
+                            {d.kind}
+                          </div>
+                          <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute }}>
+                            {new Date(d.created_at).toLocaleDateString("es-AR")}
+                          </div>
+                        </div>
+                        <div style={{ fontFamily: FONT.sans, fontSize: 11.5, color: T.textMute }}>
+                          {d.flag_count} flag{d.flag_count === 1 ? "" : "s"}
+                          {d.max_severity !== "none" ? ` · severidad ${d.max_severity}` : ""}
+                        </div>
+                        {d.parsed?.summary && (
+                          <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.text, marginTop: 6, lineHeight: 1.4 }}>
+                            {d.parsed.summary}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Compliance sub-sheet preset to this cliente */}
+      {showCompliance && cliente && (
+        <ComplianceSheet
+          T={T}
+          lang={lang}
+          clienteId={cliente.id}
+          clienteName={cliente.display_name}
+          onClose={() => { setShowCompliance(false); reload(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function AddCuentaForm({ T, clienteId, onCancel, onSaved }) {
+  const [numero, setNumero] = useState("");
+  const [currency, setCurrency] = useState("ARS");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function save() {
+    if (busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const cu = await addCuenta({ clienteId, numero, currency });
+      onSaved(cu);
+    } catch (e) {
+      setErr(e?.message || "No se pudo crear.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{
+      padding: 12, borderRadius: 12, marginBottom: 8,
+      background: T.surface, border: `1px solid ${T.border}`,
+      display: "flex", flexDirection: "column", gap: 8,
+    }}>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input value={numero} onChange={(e) => setNumero(e.target.value)} placeholder="Número de cuenta" style={{
+          flex: 1, padding: "10px 12px", borderRadius: 10,
+          background: T.bgElev, color: T.text,
+          border: `1px solid ${T.border}`,
+          fontFamily: FONT.mono || FONT.sans, fontSize: 13,
+          boxSizing: "border-box", outline: "none",
+        }}/>
+        <select value={currency} onChange={(e) => setCurrency(e.target.value)} style={{
+          padding: "10px 12px", borderRadius: 10,
+          background: T.bgElev, color: T.text,
+          border: `1px solid ${T.border}`,
+          fontFamily: FONT.sans, fontSize: 13, outline: "none",
+        }}>
+          <option value="ARS">ARS</option>
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+        </select>
+      </div>
+      {err && (
+        <div style={{
+          padding: "8px 10px", borderRadius: 8,
+          background: T.dangerSoft, color: T.danger,
+          fontFamily: FONT.sans, fontSize: 11.5,
+        }}>{err}</div>
+      )}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={save} disabled={busy || !numero.trim()} style={{
+          flex: 1, padding: "8px 14px", borderRadius: 10,
+          background: busy ? T.surfaceHi : T.accent,
+          color: busy ? T.textMute : T.accentInk,
+          border: "none", cursor: busy ? "default" : "pointer",
+          fontFamily: FONT.sans, fontSize: 12.5, fontWeight: 700,
+          opacity: !numero.trim() ? 0.5 : 1,
+        }}>{busy ? "Guardando…" : "Guardar"}</button>
+        <button onClick={onCancel} disabled={busy} style={{
+          padding: "8px 14px", borderRadius: 10,
+          background: T.bgElev, color: T.text,
+          border: `1px solid ${T.border}`, cursor: "pointer",
+          fontFamily: FONT.sans, fontSize: 12.5, fontWeight: 600,
+        }}>Cancelar</button>
+      </div>
     </div>
   );
 }

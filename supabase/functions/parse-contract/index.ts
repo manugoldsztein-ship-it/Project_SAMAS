@@ -133,6 +133,20 @@ serve(async (req) => {
     const hintRaw = typeof body?.hint === "string" ? body.hint.toLowerCase().trim() : "";
     const hint = (VALID_KINDS as readonly string[]).includes(hintRaw) ? hintRaw : "";
 
+    // Optional cliente_id (samas-0.4.94): only honor it if the caller's
+    // RLS-scoped read of `clientes` returns the row. Anyone trying to
+    // sneak a foreign cliente_id in via the body gets it dropped here.
+    let clienteId: string | null = null;
+    const reqClienteId = typeof body?.clienteId === "string" ? body.clienteId : "";
+    if (reqClienteId && /^[0-9a-f-]{36}$/i.test(reqClienteId)) {
+      const { data: ok } = await userClient
+        .from("clientes")
+        .select("id")
+        .eq("id", reqClienteId)
+        .maybeSingle();
+      if (ok?.id) clienteId = ok.id;
+    }
+
     const userPrompt = [
       `Sos un asistente de cumplimiento normativo para un ALyC argentino (Agente de`,
       `Liquidación y Compensación, regulado por CNV). Tu trabajo es leer un documento`,
@@ -197,6 +211,7 @@ serve(async (req) => {
       );
       await adminClient.from("compliance_documents").insert({
         user_id: user.id,
+        cliente_id: clienteId,
         kind: parsed.kind,
         source_text: rawText.slice(0, 8000),
         parsed: parsed,

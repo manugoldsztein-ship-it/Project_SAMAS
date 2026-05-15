@@ -998,13 +998,13 @@ export async function journalReflect(journalId) {
  * Consume cuota AI estándar — back-office uso intensivo debería ir
  * a Plus o a un tier dedicado más adelante.
  */
-export async function parseContract({ text, hint } = {}) {
+export async function parseContract({ text, hint, clienteId } = {}) {
   if (!text || !text.trim()) throw new Error("Pegá el texto del contrato.");
   if (text.length < 40) throw new Error("Texto muy corto — al menos 40 caracteres.");
   await gateOnConsent();
   await gateOnQuota();
   const { data, error } = await supabase.functions.invoke("parse-contract", {
-    body: { text, hint },
+    body: { text, hint, clienteId },
   });
   if (error) {
     let detail = "";
