@@ -42,6 +42,7 @@ import { toast } from "./toast.jsx";
 import { t as tr } from "../lib/i18n.js";
 import { analyzeAsset, tradeCoach, suggestWatchlist, rebalancePortfolio, scoreRisk, positionSize, saveThesis, getActiveThesis, validateThesis, sectorRotation } from "../lib/ai.js";
 import { recordBuyJournal, closeJournalOnSell } from "../lib/journal.js";
+import { cohenConfigured, getComitentes, previewOrder, executeOrder } from "../lib/cohen.js";
 
 // Sub-tabs metadata — drives both the bottom nav and the content
 // switch in the top-level <BrokerShell/> render.
@@ -1800,10 +1801,235 @@ function ConfirmModal({ T, title, message, confirmLabel = "Confirmar", danger, o
 }
 
 // ----------------------------------------------------------
+// ============================================================
+// NLOrderSheet — natural-language order entry via Cohen service.
+// User types a free-text order (e.g. "Comprá 100 QQQ a mercado"),
+// hits Preview to see what Claude parsed, then Execute to send it.
+// ============================================================
+function NLOrderSheet({ T, onClose }) {
+  const dtd = useDragToDismiss(onClose);
+  const [comitentes, setComitentes] = useState([]);
+  const [comitenteId, setComitenteId] = useState(null);
+  const [orderText, setOrderText] = useState("");
+  const [parsed, setParsed] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    getComitentes().then((list) => {
+      setComitentes(list || []);
+      if (list?.length === 1) setComitenteId(list[0].id);
+    }).catch(() => {});
+  }, []);
+
+  async function handlePreview() {
+    if (busy || !orderText.trim() || !comitenteId) return;
+    setBusy(true); setErr(null); setParsed(null); setDone(false);
+    try {
+      const data = await previewOrder({ order: orderText.trim(), comitenteId });
+      setParsed(data);
+    } catch (e) { setErr(e?.message || "No se pudo interpretar la orden."); }
+    finally { setBusy(false); }
+  }
+
+  async function handleExecute() {
+    if (busy || !parsed || !comitenteId) return;
+    setBusy(true); setErr(null);
+    try {
+      await executeOrder({ order: orderText.trim(), comitenteId });
+      setDone(true);
+    } catch (e) { setErr(e?.message || "No se pudo ejecutar la orden."); }
+    finally { setBusy(false); }
+  }
+
+  const SIDE_COLOR = { COMPRA: "#60E56B", VENTA: "#FF5F5B" };
+
+  return (
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
+      position: "fixed", inset: 0, zIndex: 200,
+      background: "rgba(0,0,0,0.75)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+    }}>
+      <div ref={dtd.ref} {...dtd.dragHandlers} style={{
+        width: "100%", maxWidth: 620, maxHeight: "92dvh",
+        background: "#111", color: "#fff",
+        borderTopLeftRadius: 22, borderTopRightRadius: 22,
+        border: "1px solid #2a2a2a", borderBottom: "none",
+        display: "flex", flexDirection: "column",
+        animation: "samas-sheet-up 220ms cubic-bezier(.2,.8,.2,1)",
+        ...dtd.dragStyle,
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between",
+          borderBottom: "1px solid #2a2a2a",
+        }}>
+          <div>
+            <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700 }}>Orden con IA</div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: "#888", marginTop: 2 }}>
+              Describí la operación en lenguaje natural
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            width: 32, height: 32, borderRadius: 16, border: "1px solid #333",
+            background: "#1a1a1a", color: "#fff", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <div style={{ padding: "16px 20px", overflowY: "auto", flex: 1 }}>
+          {/* Comitente picker */}
+          {comitentes.length > 1 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontFamily: FONT.sans, fontSize: 11, color: "#888", marginBottom: 6 }}>Cuenta</div>
+              <select
+                value={comitenteId || ""}
+                onChange={(e) => setComitenteId(Number(e.target.value))}
+                style={{
+                  width: "100%", padding: "9px 12px", borderRadius: 10,
+                  background: "#1a1a1a", color: "#fff", border: "1px solid #333",
+                  fontFamily: FONT.sans, fontSize: 13, outline: "none",
+                }}
+              >
+                <option value="">Seleccioná una cuenta</option>
+                {comitentes.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name || `Comitente ${c.id}`}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Order text input */}
+          <div style={{ fontFamily: FONT.sans, fontSize: 11, color: "#888", marginBottom: 6 }}>Orden</div>
+          <textarea
+            value={orderText}
+            onChange={(e) => { setOrderText(e.target.value); setParsed(null); setDone(false); }}
+            placeholder={"Ej: \"Comprá 100 acciones de QQQ a mercado\"\n\"Vendé 50 lotes de AL30 a $800 en 48hs\""}
+            rows={4}
+            style={{
+              width: "100%", padding: 12, borderRadius: 12,
+              background: "#1a1a1a", color: "#fff", border: "1px solid #333",
+              fontFamily: FONT.sans, fontSize: 13, lineHeight: 1.5,
+              resize: "none", boxSizing: "border-box", outline: "none",
+              marginBottom: 12,
+            }}
+          />
+
+          <button
+            onClick={handlePreview}
+            disabled={busy || !orderText.trim() || !comitenteId}
+            style={{
+              width: "100%", padding: "12px", borderRadius: 12, marginBottom: 14,
+              background: (busy || !orderText.trim() || !comitenteId) ? "#2a2a2a" : "#60E56B",
+              color: (busy || !orderText.trim() || !comitenteId) ? "#888" : "#000",
+              border: "none", cursor: (busy || !orderText.trim() || !comitenteId) ? "default" : "pointer",
+              fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+            }}
+          >{busy && !parsed ? "Interpretando…" : "Interpretar orden"}</button>
+
+          {err && (
+            <div style={{
+              padding: "10px 12px", borderRadius: 10, marginBottom: 12,
+              background: "#FF5F5B22", color: "#FF5F5B", fontFamily: FONT.sans, fontSize: 12,
+            }}>{err}</div>
+          )}
+
+          {/* ParsedOrder preview card */}
+          {parsed && !done && (
+            <div style={{
+              padding: 16, borderRadius: 14, marginBottom: 14,
+              background: "#1a1a1a", border: "1px solid #2a2a2a",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <span style={{
+                  padding: "3px 10px", borderRadius: 999,
+                  background: SIDE_COLOR[parsed.tipoOperacion] + "22",
+                  color: SIDE_COLOR[parsed.tipoOperacion] || "#60E56B",
+                  fontFamily: FONT.sans, fontSize: 11, fontWeight: 800,
+                  letterSpacing: 0.4, textTransform: "uppercase",
+                }}>{parsed.tipoOperacion}</span>
+                <span style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 800 }}>{parsed.ticker}</span>
+                {parsed.moneda && (
+                  <span style={{ fontFamily: FONT.sans, fontSize: 11, color: "#888" }}>{parsed.moneda}</span>
+                )}
+              </div>
+
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginBottom: 12 }}>
+                {parsed.cantidad != null && (
+                  <div>
+                    <div style={{ fontFamily: FONT.sans, fontSize: 10, color: "#888", textTransform: "uppercase" }}>Cantidad</div>
+                    <div style={{ fontFamily: FONT.display, fontSize: 16, fontWeight: 700 }}>{parsed.cantidad}</div>
+                  </div>
+                )}
+                {parsed.precio != null ? (
+                  <div>
+                    <div style={{ fontFamily: FONT.sans, fontSize: 10, color: "#888", textTransform: "uppercase" }}>Precio</div>
+                    <div style={{ fontFamily: FONT.display, fontSize: 16, fontWeight: 700 }}>{parsed.precio}</div>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ fontFamily: FONT.sans, fontSize: 10, color: "#888", textTransform: "uppercase" }}>Tipo</div>
+                    <div style={{ fontFamily: FONT.display, fontSize: 16, fontWeight: 700 }}>Mercado</div>
+                  </div>
+                )}
+                {parsed.plazo && (
+                  <div>
+                    <div style={{ fontFamily: FONT.sans, fontSize: 10, color: "#888", textTransform: "uppercase" }}>Plazo</div>
+                    <div style={{ fontFamily: FONT.display, fontSize: 16, fontWeight: 700 }}>{parsed.plazo}</div>
+                  </div>
+                )}
+              </div>
+
+              {parsed.confirmation && (
+                <div style={{ fontFamily: FONT.sans, fontSize: 12.5, color: "#aaa", lineHeight: 1.5, marginBottom: 14 }}>
+                  {parsed.confirmation}
+                </div>
+              )}
+
+              <button
+                onClick={handleExecute}
+                disabled={busy}
+                style={{
+                  width: "100%", padding: "12px", borderRadius: 12,
+                  background: busy ? "#2a2a2a" : "#60E56B",
+                  color: busy ? "#888" : "#000",
+                  border: "none", cursor: busy ? "default" : "pointer",
+                  fontFamily: FONT.sans, fontSize: 14, fontWeight: 800,
+                }}
+              >{busy ? "Ejecutando…" : "Confirmar y ejecutar"}</button>
+            </div>
+          )}
+
+          {done && (
+            <div style={{
+              padding: 16, borderRadius: 14, textAlign: "center",
+              background: "#60E56B22", border: "1px solid #60E56B44",
+            }}>
+              <div style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 800, color: "#60E56B", marginBottom: 6 }}>
+                Orden enviada
+              </div>
+              <div style={{ fontFamily: FONT.sans, fontSize: 13, color: "#aaa" }}>
+                La operación fue enviada a Cohen.
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Órdenes — list of submitted orders, with cancel button on open ones.
 // ----------------------------------------------------------
 function OrdenesView({ T, orders, alerts, stops, holdings, onRefresh }) {
   const [busyKey, setBusyKey] = useState(null);
+  const [showNLOrder, setShowNLOrder] = useState(false);
   // Filter the four sections by status. "Todas" shows the full
   // structured view (default). Other tabs collapse to a single section.
   const [filter, setFilter] = useState("all");
@@ -1845,11 +2071,23 @@ function OrdenesView({ T, orders, alerts, stops, holdings, onRefresh }) {
       <div style={{
         padding: "16px",
         paddingBottom: "calc(env(safe-area-inset-bottom) + 96px)",
-        // minHeight 100% of the scroll container so flex centering works.
         minHeight: "calc(100vh - 200px)",
         display: "flex", flexDirection: "column",
       }}>
-        <SectionHead T={T} title="Órdenes" action="0 activas" />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <SectionHead T={T} title="Órdenes" action="0 activas" />
+          {cohenConfigured && (
+            <button onClick={() => setShowNLOrder(true)} style={{
+              padding: "7px 14px", borderRadius: 999, flexShrink: 0,
+              background: T.accent + "22", color: T.accent,
+              border: `1px solid ${T.accent}55`, cursor: "pointer",
+              fontFamily: FONT.sans, fontSize: 12, fontWeight: 700,
+            }}>Orden con IA</button>
+          )}
+        </div>
+        {showNLOrder && (
+          <NLOrderSheet T={T} onClose={() => { setShowNLOrder(false); onRefresh(); }} />
+        )}
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <div style={{
             padding: "40px 28px", borderRadius: 22,
@@ -1879,9 +2117,21 @@ function OrdenesView({ T, orders, alerts, stops, holdings, onRefresh }) {
 
   return (
     <div style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 96px)" }}>
-      <div style={{ margin: "16px" }}>
+      <div style={{ margin: "16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <SectionHead T={T} title="Órdenes" action={`${totalActive} activas`} />
+        {cohenConfigured && (
+          <button onClick={() => setShowNLOrder(true)} style={{
+            padding: "7px 14px", borderRadius: 999, flexShrink: 0,
+            background: T.accent + "22", color: T.accent,
+            border: `1px solid ${T.accent}55`, cursor: "pointer",
+            fontFamily: FONT.sans, fontSize: 12, fontWeight: 700,
+          }}>Orden con IA</button>
+        )}
       </div>
+
+      {showNLOrder && (
+        <NLOrderSheet T={T} onClose={() => { setShowNLOrder(false); onRefresh(); }} />
+      )}
 
       {/* Filter pills — segmented control across all order/alert types. */}
       <div style={{

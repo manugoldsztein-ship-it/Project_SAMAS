@@ -54,6 +54,12 @@ import { deleteAccount, exportData } from "../lib/account.js";
 import { grantAIConsent, denyAIConsent, hasAIConsent, revokeAIConsent, isAIDisabled, setAIDisabled } from "../lib/aiConsent.js";
 import { activatePlus, cancelPlus, getAIQuotaStatus, parseContract, handleAIError } from "../lib/ai.js";
 import {
+  cohenConfigured,
+  analyzeContract as cohenAnalyzeContract,
+  getMonitoringReport,
+  listCredentials, createCredential, deleteCredential, testCredentialToken,
+} from "../lib/cohen.js";
+import {
   getMyProductor, activateProductor, listClientes, addCliente,
   getClienteWithCuentas, addCuenta, listClienteDocs, normalizeCuit,
   updateOrgBranding, pickInkFor, BRAND_SWATCHES,
@@ -984,6 +990,11 @@ function SettingsSheet({ T, user, proMode, setProMode, isPlus = false, setIsPlus
             <polyline points="9 18 15 12 9 6"/>
           </svg>
         </button>
+
+        {/* Cohen broker credentials — only shown when the service is configured */}
+        {cohenConfigured && (
+          <CohenCredentialsRow T={T} user={user} />
+        )}
 
         {/* UI mode picker (samas-0.4.37) — Lite vs Pro segmented
             control. Manuel pidió: "tiene que ser mas claro si estas
@@ -5339,6 +5350,177 @@ function UIModeSegmented({ T, lang, proMode, setProMode }) {
   );
 }
 
+// ============================================================
+// CohenCredentialsRow — inline credential management for the
+// Cohen broker service. Shows linked accounts, lets the user
+// add/test/remove them. Visible only when VITE_COHEN_API_BASE
+// is set (cohenConfigured === true).
+// ============================================================
+function CohenCredentialsRow({ T, user }) {
+  const [open, setOpen] = useState(false);
+  const [creds, setCreds] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState({ bankName: "cohen", username: "", password: "", totpSecret: "" });
+  const [busy, setBusy] = useState(null);
+  const [err, setErr] = useState(null);
+
+  async function load() {
+    if (!user?.id) return;
+    setLoading(true);
+    try { setCreds(await listCredentials(user.id)); }
+    catch (e) { setErr(e?.message); }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { if (open) load(); }, [open]);
+
+  async function handleAdd(e) {
+    e.preventDefault();
+    if (!form.username || !form.password) return;
+    setBusy("add"); setErr(null);
+    try {
+      await createCredential(user.id, form);
+      setAdding(false);
+      setForm({ bankName: "cohen", username: "", password: "", totpSecret: "" });
+      await load();
+    } catch (ex) { setErr(ex?.message); }
+    finally { setBusy(null); }
+  }
+
+  async function handleDelete(credId) {
+    setBusy(`del:${credId}`); setErr(null);
+    try { await deleteCredential(user.id, credId); await load(); }
+    catch (ex) { setErr(ex?.message); }
+    finally { setBusy(null); }
+  }
+
+  async function handleTest(credId) {
+    setBusy(`test:${credId}`); setErr(null);
+    try {
+      await testCredentialToken(user.id, credId);
+      toast.success("Token OK — credenciales válidas");
+    } catch (ex) { setErr(ex?.message || "Token fallido"); }
+    finally { setBusy(null); }
+  }
+
+  const inp = (props) => (
+    <input {...props} style={{
+      width: "100%", padding: "9px 12px", borderRadius: 10,
+      border: `1px solid ${T.border}`, background: T.surface, color: T.text,
+      fontFamily: FONT.sans, fontSize: 13, boxSizing: "border-box", outline: "none",
+      marginBottom: 8,
+    }}/>
+  );
+
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <button onClick={() => setOpen((v) => !v)} style={{
+        width: "100%", padding: "12px 14px", borderRadius: 14,
+        background: T.surface, border: `1px solid ${T.border}`,
+        display: "flex", alignItems: "center", gap: 12,
+        cursor: "pointer", textAlign: "left",
+      }}>
+        <div style={{
+          width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+          background: T.accent + "22", color: T.accent,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="7" width="20" height="14" rx="2"/>
+            <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+          </svg>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: FONT.sans, fontSize: 14, fontWeight: 600, color: T.text }}>
+            Cuenta en broker
+          </div>
+          <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+            Credenciales Cohen para órdenes en vivo
+          </div>
+        </div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMute}
+          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+          style={{ transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{
+          padding: "12px 14px", borderRadius: "0 0 14px 14px",
+          background: T.surface, border: `1px solid ${T.border}`, borderTop: "none",
+          marginTop: -4,
+        }}>
+          {loading && (
+            <div style={{ fontFamily: FONT.sans, fontSize: 12, color: T.textMute, paddingBottom: 8 }}>
+              Cargando…
+            </div>
+          )}
+
+          {err && (
+            <div style={{
+              padding: "8px 10px", borderRadius: 8, marginBottom: 8,
+              background: T.dangerSoft, color: T.danger, fontFamily: FONT.sans, fontSize: 12,
+            }}>{err}</div>
+          )}
+
+          {creds.map((c) => (
+            <div key={c.id} style={{
+              display: "flex", alignItems: "center", gap: 8, marginBottom: 8,
+              padding: "10px 12px", borderRadius: 10,
+              background: T.bgElev, border: `1px solid ${T.border}`,
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 600 }}>{c.username}</div>
+                <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute }}>{c.bankName}</div>
+              </div>
+              <button onClick={() => handleTest(c.id)} disabled={!!busy} style={{
+                padding: "5px 10px", borderRadius: 8,
+                background: T.accent + "22", color: T.accent,
+                border: "none", cursor: "pointer", fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+              }}>{busy === `test:${c.id}` ? "…" : "Test"}</button>
+              <button onClick={() => handleDelete(c.id)} disabled={!!busy} style={{
+                padding: "5px 10px", borderRadius: 8,
+                background: T.dangerSoft, color: T.danger,
+                border: "none", cursor: "pointer", fontFamily: FONT.sans, fontSize: 11, fontWeight: 700,
+              }}>{busy === `del:${c.id}` ? "…" : "Quitar"}</button>
+            </div>
+          ))}
+
+          {!adding ? (
+            <button onClick={() => setAdding(true)} style={{
+              width: "100%", padding: "9px", borderRadius: 10, marginTop: 4,
+              background: "transparent", color: T.accent,
+              border: `1px dashed ${T.accent}`, cursor: "pointer",
+              fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+            }}>+ Agregar cuenta Cohen</button>
+          ) : (
+            <form onSubmit={handleAdd} style={{ marginTop: 4 }}>
+              {inp({ placeholder: "Usuario Cohen", value: form.username, onChange: (e) => setForm((f) => ({ ...f, username: e.target.value })) })}
+              {inp({ type: "password", placeholder: "Contraseña", value: form.password, onChange: (e) => setForm((f) => ({ ...f, password: e.target.value })) })}
+              {inp({ placeholder: "TOTP secret (Base32) — opcional", value: form.totpSecret, onChange: (e) => setForm((f) => ({ ...f, totpSecret: e.target.value })) })}
+              <div style={{ display: "flex", gap: 8 }}>
+                <button type="submit" disabled={busy === "add" || !form.username || !form.password} style={{
+                  flex: 1, padding: "9px", borderRadius: 10,
+                  background: T.accent, color: T.accentInk, border: "none", cursor: "pointer",
+                  fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+                }}>{busy === "add" ? "Guardando…" : "Guardar"}</button>
+                <button type="button" onClick={() => setAdding(false)} style={{
+                  flex: 1, padding: "9px", borderRadius: 10,
+                  background: T.surface, color: T.textMute, border: `1px solid ${T.border}`, cursor: "pointer",
+                  fontFamily: FONT.sans, fontSize: 13,
+                }}>Cancelar</button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SettingsToggle({ T, title, subtitle, value, onChange }) {
   return (
     <button onClick={() => onChange(!value)} style={{
@@ -5513,8 +5695,11 @@ function TinyLoader({ T }) {
 // in a follow-up patch once JWT claims are wired.
 // ============================================================
 function ComplianceSheet({ T, lang = "es", onClose, clienteId = null, clienteName = null }) {
+  // "texto" = paste text (Supabase edge function), "pdf" = file upload (Cohen service)
+  const [mode, setMode] = useState(cohenConfigured ? "pdf" : "texto");
   const [text, setText] = useState("");
   const [hint, setHint] = useState("");
+  const [pdfFile, setPdfFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [result, setResult] = useState(null);
@@ -5530,20 +5715,19 @@ function ComplianceSheet({ T, lang = "es", onClose, clienteId = null, clienteNam
 
   async function run() {
     if (busy) return;
-    const t = (text || "").trim();
-    if (t.length < 40) {
-      setErr("Pegá al menos un párrafo (40+ caracteres).");
-      return;
-    }
     setBusy(true);
     setErr(null);
     setResult(null);
     try {
-      const data = await parseContract({
-        text: t,
-        hint: hint || undefined,
-        clienteId: clienteId || undefined,
-      });
+      let data;
+      if (mode === "pdf") {
+        if (!pdfFile) { setErr("Seleccioná un PDF."); setBusy(false); return; }
+        data = await cohenAnalyzeContract(pdfFile);
+      } else {
+        const t = (text || "").trim();
+        if (t.length < 40) { setErr("Pegá al menos un párrafo (40+ caracteres)."); setBusy(false); return; }
+        data = await parseContract({ text: t, hint: hint || undefined, clienteId: clienteId || undefined });
+      }
       setResult(data);
     } catch (e) {
       if (!handleAIError(e)) setErr(e?.message || "No se pudo analizar.");
@@ -5598,49 +5782,100 @@ function ComplianceSheet({ T, lang = "es", onClose, clienteId = null, clienteNam
 
         {/* Body — scrollable */}
         <div style={{ padding: "16px 20px", overflowY: "auto", flex: 1 }}>
-          {/* Kind hint chips */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
-            {HINTS.map((h) => {
-              const active = h.id === hint;
-              return (
-                <button key={h.id || "auto"} onClick={() => setHint(h.id)} style={{
-                  padding: "6px 12px", borderRadius: 999, cursor: "pointer",
-                  fontFamily: FONT.sans, fontSize: 12, fontWeight: 600,
-                  border: `1px solid ${active ? T.accent : T.border}`,
-                  background: active ? T.accent + "22" : T.surface,
-                  color: active ? T.accent : T.textMute,
-                }}>{h.label}</button>
-              );
-            })}
+          {/* Mode toggle: PDF (Cohen service) vs Texto (edge function) */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+            {(cohenConfigured ? ["pdf", "texto"] : ["texto"]).map((m) => (
+              <button key={m} onClick={() => { setMode(m); setErr(null); setResult(null); }} style={{
+                padding: "6px 14px", borderRadius: 999, cursor: "pointer",
+                fontFamily: FONT.sans, fontSize: 12, fontWeight: 700,
+                border: `1px solid ${mode === m ? T.accent : T.border}`,
+                background: mode === m ? T.accent + "22" : T.surface,
+                color: mode === m ? T.accent : T.textMute,
+              }}>{m === "pdf" ? "PDF" : "Texto"}</button>
+            ))}
           </div>
 
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Pegá el texto completo del contrato o T&C…"
-            rows={9}
-            style={{
-              width: "100%", padding: 12, borderRadius: 12,
-              background: T.surface, color: T.text,
-              border: `1px solid ${T.border}`,
-              fontFamily: FONT.mono || FONT.sans, fontSize: 12, lineHeight: 1.45,
-              resize: "vertical", boxSizing: "border-box", outline: "none",
-            }}
-          />
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
-            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute }}>
-              {text.length.toLocaleString()} chars · máx 30.000
+          {mode === "pdf" ? (
+            /* PDF upload mode — calls /api/contract/analyze */
+            <div style={{
+              border: `2px dashed ${pdfFile ? T.accent : T.border}`,
+              borderRadius: 14, padding: "24px 16px", textAlign: "center",
+              background: T.surface, cursor: "pointer", marginBottom: 12,
+            }} onClick={() => document.getElementById("samas-pdf-input").click()}>
+              <input
+                id="samas-pdf-input"
+                type="file"
+                accept="application/pdf"
+                style={{ display: "none" }}
+                onChange={(e) => { setPdfFile(e.target.files?.[0] || null); setResult(null); }}
+              />
+              {pdfFile ? (
+                <div>
+                  <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 700, color: T.accent }}>
+                    {pdfFile.name}
+                  </div>
+                  <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 4 }}>
+                    {(pdfFile.size / 1024).toFixed(0)} KB · toca para cambiar
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontFamily: FONT.sans, fontSize: 13, color: T.textMute }}>
+                    Seleccioná un PDF
+                  </div>
+                  <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 4 }}>
+                    Contrato, T&C, prospecto — cualquier documento
+                  </div>
+                </div>
+              )}
             </div>
+          ) : (
+            /* Text paste mode — calls parse-contract edge function */
+            <>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                {HINTS.map((h) => {
+                  const active = h.id === hint;
+                  return (
+                    <button key={h.id || "auto"} onClick={() => setHint(h.id)} style={{
+                      padding: "6px 12px", borderRadius: 999, cursor: "pointer",
+                      fontFamily: FONT.sans, fontSize: 12, fontWeight: 600,
+                      border: `1px solid ${active ? T.accent : T.border}`,
+                      background: active ? T.accent + "22" : T.surface,
+                      color: active ? T.accent : T.textMute,
+                    }}>{h.label}</button>
+                  );
+                })}
+              </div>
+              <textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="Pegá el texto completo del contrato o T&C…"
+                rows={9}
+                style={{
+                  width: "100%", padding: 12, borderRadius: 12,
+                  background: T.surface, color: T.text,
+                  border: `1px solid ${T.border}`,
+                  fontFamily: FONT.mono || FONT.sans, fontSize: 12, lineHeight: 1.45,
+                  resize: "vertical", boxSizing: "border-box", outline: "none",
+                }}
+              />
+              <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 4 }}>
+                {text.length.toLocaleString()} chars · máx 30.000
+              </div>
+            </>
+          )}
+
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
             <button
               onClick={run}
-              disabled={busy || text.trim().length < 40}
+              disabled={busy || (mode === "pdf" ? !pdfFile : text.trim().length < 40)}
               style={{
                 padding: "10px 18px", borderRadius: 12,
                 background: busy ? T.surfaceHi : T.accent,
                 color: busy ? T.textMute : T.accentInk,
                 border: "none", cursor: busy ? "default" : "pointer",
                 fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
-                opacity: text.trim().length < 40 ? 0.5 : 1,
+                opacity: (mode === "pdf" ? !pdfFile : text.trim().length < 40) ? 0.5 : 1,
               }}
             >{busy ? "Analizando…" : "Analizar"}</button>
           </div>
@@ -6278,6 +6513,7 @@ function ClienteDetailSheet({ T, lang = "es", clienteSummary, onClose }) {
   const [err, setErr] = useState(null);
   const [showAddCuenta, setShowAddCuenta] = useState(false);
   const [showCompliance, setShowCompliance] = useState(false);
+  const [showMonitoring, setShowMonitoring] = useState(false);
 
   async function reload() {
     setLoading(true);
@@ -6366,6 +6602,15 @@ function ClienteDetailSheet({ T, lang = "es", clienteSummary, onClose }) {
                 border: "none", cursor: "pointer",
                 fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
               }}>Analizar contrato para este cliente</button>
+
+              {cohenConfigured && (
+                <button onClick={() => setShowMonitoring(true)} style={{
+                  width: "100%", padding: "12px 14px", borderRadius: 12, marginBottom: 14,
+                  background: T.surface, color: T.text,
+                  border: `1px solid ${T.border}`, cursor: "pointer",
+                  fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+                }}>Monitoreo de transacciones</button>
+              )}
 
               {/* Cuentas */}
               <div style={{ marginBottom: 14 }}>
@@ -6481,6 +6726,170 @@ function ClienteDetailSheet({ T, lang = "es", clienteSummary, onClose }) {
           onClose={() => { setShowCompliance(false); reload(); }}
         />
       )}
+
+      {/* Monitoring sub-sheet */}
+      {showMonitoring && cliente && (
+        <MonitoringSheet
+          T={T}
+          comitenteId={cliente.id}
+          clienteName={cliente.display_name}
+          onClose={() => setShowMonitoring(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// MonitoringSheet — AI compliance scan of a comitente's txns
+// ============================================================
+function MonitoringSheet({ T, comitenteId, clienteName, onClose }) {
+  const dtd = useDragToDismiss(onClose);
+  const today = new Date().toISOString().slice(0, 10);
+  const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const [desde, setDesde] = useState(monthAgo);
+  const [hasta, setHasta] = useState(today);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [report, setReport] = useState(null);
+
+  const RISK_COLOR = { LOW: "#60E56B", MEDIUM: "#FAB72A", HIGH: "#FF5F5B" };
+
+  async function run() {
+    if (busy || !desde || !hasta) return;
+    setBusy(true); setErr(null); setReport(null);
+    try {
+      const data = await getMonitoringReport(comitenteId, desde, hasta);
+      setReport(data);
+    } catch (e) {
+      setErr(e?.message || "No se pudo analizar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const inputStyle = {
+    padding: "9px 12px", borderRadius: 10, border: `1px solid ${T.border}`,
+    background: T.surface, color: T.text, fontFamily: FONT.sans, fontSize: 13,
+    boxSizing: "border-box", outline: "none",
+  };
+
+  return (
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
+      position: "fixed", inset: 0, zIndex: 140,
+      background: "rgba(0,0,0,0.7)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+    }}>
+      <div ref={dtd.ref} {...dtd.dragHandlers} style={{
+        width: "100%", maxWidth: 620, maxHeight: "92dvh",
+        background: T.bgElev, color: T.text,
+        borderTopLeftRadius: 22, borderTopRightRadius: 22,
+        border: `1px solid ${T.border}`, borderBottom: "none",
+        display: "flex", flexDirection: "column",
+        animation: "samas-sheet-up 220ms cubic-bezier(.2,.8,.2,1)",
+        ...dtd.dragStyle,
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between",
+          borderBottom: `1px solid ${T.border}`,
+        }}>
+          <div>
+            <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700 }}>Monitoreo</div>
+            <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginTop: 2 }}>
+              {clienteName || `Comitente ${comitenteId}`}
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            width: 32, height: 32, borderRadius: 16, border: `1px solid ${T.border}`,
+            background: T.surface, color: T.text, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <div style={{ padding: "16px 20px", overflowY: "auto", flex: 1 }}>
+          <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginBottom: 4 }}>Desde</div>
+              <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} style={{ ...inputStyle, width: "100%" }}/>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginBottom: 4 }}>Hasta</div>
+              <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} style={{ ...inputStyle, width: "100%" }}/>
+            </div>
+          </div>
+
+          <button onClick={run} disabled={busy} style={{
+            width: "100%", padding: "12px", borderRadius: 12, marginBottom: 14,
+            background: busy ? T.surfaceHi : T.accent, color: busy ? T.textMute : T.accentInk,
+            border: "none", cursor: busy ? "default" : "pointer",
+            fontFamily: FONT.sans, fontSize: 13, fontWeight: 700,
+          }}>{busy ? "Analizando…" : "Analizar transacciones"}</button>
+
+          {err && (
+            <div style={{
+              padding: "10px 12px", borderRadius: 10, marginBottom: 12,
+              background: T.dangerSoft, color: T.danger, fontFamily: FONT.sans, fontSize: 12,
+            }}>{err}</div>
+          )}
+
+          {report && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {/* Risk level header */}
+              <div style={{
+                padding: 14, borderRadius: 14,
+                background: T.surface, border: `1px solid ${T.border}`,
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+              }}>
+                <div>
+                  <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute, marginBottom: 4 }}>Nivel de riesgo</div>
+                  <div style={{ fontFamily: FONT.display, fontSize: 22, fontWeight: 800,
+                    color: RISK_COLOR[report.riskLevel] || T.accent }}>
+                    {report.riskLevel === "LOW" ? "Bajo" : report.riskLevel === "MEDIUM" ? "Medio" : "Alto"}
+                  </div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontFamily: FONT.sans, fontSize: 11, color: T.textMute }}>Movimientos</div>
+                  <div style={{ fontFamily: FONT.display, fontSize: 20, fontWeight: 700 }}>{report.totalMovimientos}</div>
+                </div>
+              </div>
+
+              {/* AI summary */}
+              {report.aiSummary && (
+                <div style={{ padding: 14, borderRadius: 14, background: T.surface, border: `1px solid ${T.border}` }}>
+                  <div style={{ fontFamily: FONT.sans, fontSize: 11, fontWeight: 700, color: T.textMute,
+                    letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 8 }}>Resumen IA</div>
+                  <div style={{ fontFamily: FONT.sans, fontSize: 13, lineHeight: 1.5 }}>{report.aiSummary}</div>
+                </div>
+              )}
+
+              {/* Alerts */}
+              {Array.isArray(report.alerts) && report.alerts.length > 0 && (
+                <div style={{ padding: 14, borderRadius: 14, background: T.surface, border: `1px solid ${T.border}` }}>
+                  <div style={{ fontFamily: FONT.sans, fontSize: 11, fontWeight: 700, color: T.textMute,
+                    letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 10 }}>
+                    Alertas ({report.alerts.length})
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {report.alerts.map((a, i) => (
+                      <div key={i} style={{
+                        padding: "10px 12px", borderRadius: 10,
+                        background: T.dangerSoft, border: `1px solid ${T.danger}44`,
+                        fontFamily: FONT.sans, fontSize: 12.5, lineHeight: 1.45, color: T.text,
+                      }}>{a}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

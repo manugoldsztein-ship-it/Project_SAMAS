@@ -1,40 +1,44 @@
 // ============================================================
-// COHEN — client for the samas-cohen-api bridge service
+// COHEN — client for the mtalazzar/SAMAS bridge service
 // ============================================================
-// samas-cohen-api is a separate backend (Java / Spring Boot) that
-// wraps Cohen's "Api Connect" broker platform. The app never talks
-// to Cohen directly — it calls this service, which validates the
-// Supabase JWT, attaches Cohen's own bearer token, and returns
-// clean SAMAS-shaped JSON.
+// Java/Spring Boot service that wraps Cohen's broker API.
+// Auth: the service is an OAuth2 resource server — it validates
+// the Supabase JWT from localStorage exactly like the Supabase
+// edge-function clients (news.js, ai.js).
 //
-// Base URL comes from VITE_COHEN_API_BASE (e.g. http://localhost:8080
-// for a local run, or the Fly.io URL once the service is deployed).
-// While it is unset every call throws — this module stays dormant
-// until the service is reachable, so importing it changes nothing.
+// Base URL: VITE_COHEN_API_BASE (e.g. http://100.x.x.x:8080)
+// All calls throw when the env var is unset — module stays dormant.
 //
-// Endpoints (all require the user's Supabase session):
-//   getComitentes()                  -> GET  /v1/comitentes
-//   getPositions(comitenteId)        -> GET  /v1/positions
-//   getMovements(comitenteId, opts)  -> GET  /v1/movements
-//   getPerformance(comitenteId, per) -> GET  /v1/performance
-//   getPnl(comitenteId, date)        -> GET  /v1/pnl
-//   getInstrument(id)                -> GET  /v1/instruments/{id}
-//   getOrderTypes()                  -> GET  /v1/orders/types
-//   placeOrder(order)                -> POST /v1/orders
+// Endpoints wired:
+//   Account:
+//     getComitentes()                                      GET  /api/account/comitentes
+//     getPositions(comitenteId)                            GET  /api/account/positions/{id}
+//     getPosition(comitenteId, fecha?)                     GET  /api/account/position/{id}
+//     getTenencia(comitenteId, fecha?)                     GET  /api/account/tenencia/{id}
+//     getEvolution(comitenteId, fechaDesde, fechaHasta)    GET  /api/account/evolution/{id}
+//   Orders (natural-language):
+//     previewOrder({ order, comitenteId, monedaId? })      POST /api/orders/preview
+//     executeOrder({ order, comitenteId, monedaId? })      POST /api/orders/execute
+//   Contract analysis:
+//     analyzeContract(file)                                POST /api/contract/analyze
+//   Onboarding (no auth):
+//     startOnboarding(req)                                 POST /api/onboarding/start
+//   Transaction monitoring:
+//     getMonitoringReport(comitenteId, desde, hasta)       GET  /api/monitoring/{id}
+//   Bank credentials:
+//     listCredentials(userId)                              GET  /api/users/{uid}/credentials
+//     createCredential(userId, req)                        POST /api/users/{uid}/credentials
+//     updateCredential(userId, credId, req)                PUT  /api/users/{uid}/credentials/{cid}
+//     deleteCredential(userId, credId)                     DELETE /api/users/{uid}/credentials/{cid}
+//     testCredentialToken(userId, credId)                  POST /api/users/{uid}/credentials/{cid}/token
 // ============================================================
 
 import { SUPABASE_URL } from "./supabase";
 
 const COHEN_API_BASE = (import.meta.env.VITE_COHEN_API_BASE || "").replace(/\/+$/, "");
 
-// True once VITE_COHEN_API_BASE is set. Callers can branch on this to
-// keep the existing (simulated) broker as the fallback.
 export const cohenConfigured = !!COHEN_API_BASE;
 
-// Read the Supabase access token straight from localStorage — same
-// SDK-bypass pattern as news.js (supabase.auth.getSession() hangs
-// intermittently on this build). The service validates this JWT
-// against Supabase's JWKS, so a fresh token is all it needs.
 async function authToken() {
   try {
     const ref = (SUPABASE_URL.match(/https:\/\/([^.]+)\./) || [])[1];
@@ -57,36 +61,34 @@ async function fetchTimeout(url, opts = {}, ms = 15000) {
   }
 }
 
-// Core request helper: attaches the bearer token, decodes JSON, and
-// turns a non-2xx into a thrown Error carrying the service's
-// ProblemDetail message when there is one.
-async function cohenFetch(path, { method = "GET", body } = {}) {
-  if (!COHEN_API_BASE) {
-    throw new Error("Cohen API no configurada (falta VITE_COHEN_API_BASE).");
+async function cohenFetch(path, { method = "GET", body, skipAuth = false } = {}) {
+  if (!COHEN_API_BASE) throw new Error("Cohen API no configurada (falta VITE_COHEN_API_BASE).");
+
+  const headers = {};
+  if (!skipAuth) {
+    const token = await authToken();
+    if (!token) throw new Error("No hay sesión activa.");
+    headers["Authorization"] = `Bearer ${token}`;
   }
-  const token = await authToken();
-  if (!token) throw new Error("No hay sesión activa.");
+  if (body && !(body instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
+  }
 
   const resp = await fetchTimeout(`${COHEN_API_BASE}${path}`, {
     method,
-    headers: {
-      "Authorization": `Bearer ${token}`,
-      ...(body ? { "Content-Type": "application/json" } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
+    headers,
+    body: body instanceof FormData ? body : (body ? JSON.stringify(body) : undefined),
   });
 
   if (!resp.ok) {
-    // The service returns RFC-7807 ProblemDetail JSON on errors.
     const detail = await resp.json().catch(() => null);
-    const msg = detail?.detail || detail?.title || `HTTP ${resp.status}`;
+    const msg = detail?.detail || detail?.title || detail?.message || `HTTP ${resp.status}`;
     throw new Error(`Cohen: ${msg}`);
   }
   if (resp.status === 204) return null;
   return resp.json();
 }
 
-// Build a ?query=string from an object, dropping empty values.
 function qs(params) {
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -96,58 +98,132 @@ function qs(params) {
   return s ? `?${s}` : "";
 }
 
-// --- Accounts -------------------------------------------------
+// --- Account --------------------------------------------------
 
-// The brokerage accounts (comitentes) the signed-in user can see.
+// Brokerage accounts (comitentes) visible to the signed-in user.
 // -> [{ id, name, active }]
 export async function getComitentes() {
-  return cohenFetch("/v1/comitentes");
+  return cohenFetch("/api/account/comitentes");
 }
 
-// --- Portfolio ------------------------------------------------
-
-// Current holdings for a comitente.
+// Full valued position list (listGeneral) for a comitente.
 // -> [{ ticker, description, quantity, price, marketValue, currency, instrumentType }]
 export async function getPositions(comitenteId) {
-  return cohenFetch(`/v1/positions${qs({ comitenteId })}`);
+  return cohenFetch(`/api/account/positions/${encodeURIComponent(comitenteId)}`);
 }
 
-// Movement / transaction history. opts: { from, to, instrumentId }, all optional.
-// -> [{ id, date, description, ticker, amount, quantity, price, balance, currency, type }]
-export async function getMovements(comitenteId, opts = {}) {
-  return cohenFetch(`/v1/movements${qs({ comitenteId, ...opts })}`);
+// Summarised position snapshot. fecha = "yyyy-MM-dd", defaults to today.
+// -> { ... position summary fields ... }
+export async function getPosition(comitenteId, fecha = "") {
+  return cohenFetch(`/api/account/position/${encodeURIComponent(comitenteId)}${qs({ fecha })}`);
 }
 
-// Portfolio evolution + monthly returns. periodo is Cohen's 0-5 period enum.
-// -> { evolution: [...], monthlyReturns: [...] }
-export async function getPerformance(comitenteId, periodo) {
-  return cohenFetch(`/v1/performance${qs({ comitenteId, periodo })}`);
+// Tenencia (asset breakdown) at a given date.
+export async function getTenencia(comitenteId, fecha = "") {
+  return cohenFetch(`/api/account/tenencia/${encodeURIComponent(comitenteId)}${qs({ fecha })}`);
 }
 
-// Realized + unrealized P&L. date (yyyy-MM-dd) optional, defaults to today.
-// -> { currency, realized: [...], unrealized: [...] }
-export async function getPnl(comitenteId, date) {
-  return cohenFetch(`/v1/pnl${qs({ comitenteId, date })}`);
+// Portfolio evolution between two dates.
+// -> { evolution: [...], ... }
+export async function getEvolution(comitenteId, fechaDesde, fechaHasta) {
+  return cohenFetch(`/api/account/evolution/${encodeURIComponent(comitenteId)}${qs({ fechaDesde, fechaHasta })}`);
 }
 
-// --- Instruments ----------------------------------------------
+// --- Orders (natural language) --------------------------------
 
-// Detail for one instrument by Cohen instrument id.
-// -> { symbol, description, isin, type, currency }
-export async function getInstrument(id) {
-  return cohenFetch(`/v1/instruments/${encodeURIComponent(id)}`);
+// Parse a free-text order; does NOT execute. Shows the user what
+// the system understood before they confirm.
+// req: { order: string, comitenteId: number, monedaId?: number }
+// -> { tipoOperacion, ticker, cantidad, precio, plazo, moneda, rawOrder, confirmation }
+export async function previewOrder(req) {
+  return cohenFetch("/api/orders/preview", { method: "POST", body: req });
 }
 
-// --- Orders ---------------------------------------------------
-
-// Available order types (market / limit / ...).
-// -> [{ id, code, description, fixCode }]
-export async function getOrderTypes() {
-  return cohenFetch("/v1/orders/types");
+// Parse and immediately execute the order via Cohen's API.
+// Same shape as previewOrder — returns execution result.
+export async function executeOrder(req) {
+  return cohenFetch("/api/orders/execute", { method: "POST", body: req });
 }
 
-// Place a buy/sell. order: { currencyId, symbol, quantity, price, sell }.
-// -> { ok, messages: [...] }
-export async function placeOrder(order) {
-  return cohenFetch("/v1/orders", { method: "POST", body: order });
+// --- Contract analysis ----------------------------------------
+
+// Upload a PDF file, get a structured analysis from Claude.
+// Returns a shape compatible with the existing ComplianceResult component.
+export async function analyzeContract(file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const raw = await cohenFetch("/api/contract/analyze", { method: "POST", body: fd });
+  // Normalize ContractAnalysisResult → ComplianceResult shape
+  return {
+    kind: raw.contractType || "otro",
+    summary: raw.plainSummary || raw.subject || "",
+    parties: raw.parties || "",
+    key_terms: raw.keyTerms || [],
+    compliance_flags: (raw.risks || []).map((r) => ({ severity: "medium", issue: r, rule: null })),
+    obligations: raw.obligations || [],
+    dates: raw.expirationDate || null,
+    amount: null,
+  };
+}
+
+// --- Onboarding -----------------------------------------------
+
+// Submit DNI photos for AI-powered KYC. No auth required.
+// req: { dniFronteBase64, dniDorsoBase64, mediaType?, selfieBase64?, email, password, telefono }
+// -> { status: "APPROVED"|"REJECTED"|"MANUAL_REVIEW", message, extractedName?, comitenteId? }
+export async function startOnboarding(req) {
+  return cohenFetch("/api/onboarding/start", { method: "POST", body: req, skipAuth: true });
+}
+
+// --- Transaction monitoring -----------------------------------
+
+// AI compliance scan of a comitente's movements over a date range.
+// -> { comitenteId, fechaDesde, fechaHasta, totalMovimientos, totalVolumen,
+//      riskLevel: "LOW"|"MEDIUM"|"HIGH", alerts: string[], aiSummary }
+export async function getMonitoringReport(comitenteId, fechaDesde, fechaHasta) {
+  return cohenFetch(
+    `/api/monitoring/${encodeURIComponent(comitenteId)}${qs({ fechaDesde, fechaHasta })}`
+  );
+}
+
+// --- Bank credentials -----------------------------------------
+
+// List all linked broker credentials for a user.
+// -> [{ id, userId, bankName, username }]
+export async function listCredentials(userId) {
+  return cohenFetch(`/api/users/${encodeURIComponent(userId)}/credentials`);
+}
+
+// Link a new broker account.
+// req: { bankName, username, password, totpSecret?, code? }
+// -> { id, userId, bankName, username }
+export async function createCredential(userId, req) {
+  return cohenFetch(`/api/users/${encodeURIComponent(userId)}/credentials`, {
+    method: "POST", body: req,
+  });
+}
+
+// Update stored credentials (e.g. password rotation).
+export async function updateCredential(userId, credentialId, req) {
+  return cohenFetch(
+    `/api/users/${encodeURIComponent(userId)}/credentials/${encodeURIComponent(credentialId)}`,
+    { method: "PUT", body: req }
+  );
+}
+
+// Remove a linked credential.
+export async function deleteCredential(userId, credentialId) {
+  return cohenFetch(
+    `/api/users/${encodeURIComponent(userId)}/credentials/${encodeURIComponent(credentialId)}`,
+    { method: "DELETE" }
+  );
+}
+
+// Test that a stored credential can obtain a live broker token.
+// -> { token: string }
+export async function testCredentialToken(userId, credentialId) {
+  return cohenFetch(
+    `/api/users/${encodeURIComponent(userId)}/credentials/${encodeURIComponent(credentialId)}/token`,
+    { method: "POST" }
+  );
 }
