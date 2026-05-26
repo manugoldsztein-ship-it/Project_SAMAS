@@ -1,0 +1,41 @@
+{
+  "name": "project-samas",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "SAMAS client demo — trading platform prototype",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:cap": "VITE_CAPACITOR=1 vite build",
+    "cap:sync": "VITE_CAPACITOR=1 vite build && cap sync ios",
+    "cap:open": "cap open ios",
+    "cap:assets": "capacitor-assets generate --ios",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@aparajita/capacitor-biometric-auth": "^10.0.0",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/browser": "^8.0.3",
+    "@capacitor/core": "^8.3.1",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/ios": "^8.3.1",
+    "@capacitor/keyboard": "^8.0.2",
+    "@capacitor/preferences": "^8.0.1",
+    "@capacitor/push-notifications": "^8.0.3",
+    "@capacitor/splash-screen": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.2",
+    "@sentry/react": "^8.55.2",
+    "@supabase/supabase-js": "^2.104.1",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.3.1",
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.0",
+    "vite-plugin-singlefile": "^2.0.2"
+  }
+}

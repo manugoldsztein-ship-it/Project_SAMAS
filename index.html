@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>SAMAS — Client Demo</title>
+    <meta name="description" content="SAMAS — simulador, cotizaciones y plan de inversion con IA." />
+    <meta name="theme-color" content="#0D1117" />
+    <!-- iOS add-to-home-screen: ask the browser to hide chrome and keep a
+         native-like standalone appearance. No service worker is used since
+         the app is a vite-plugin-singlefile build (already self-contained). -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="SAMAS" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E📈%3C/text%3E%3C/svg%3E" />
+    <style>
+      html, body, #root {
+        margin: 0; padding: 0;
+        height: 100%;
+        overflow: hidden;
+        overscroll-behavior: none;
+      }
+      html { -webkit-text-size-adjust: 100%; }
+      /* #root fills the entire screen edge-to-edge. We DO NOT pad with
+         safe-area-inset-top/bottom here — that responsibility lives on
+         the chrome elements themselves (header adds inset-top to its
+         padding-top; bottom nav adds inset-bottom to its padding-bottom).
+         Doing it that way means the chrome BACKGROUND extends to the
+         very edges of the screen (under the status bar, under the home
+         indicator), while the chrome CONTENT sits in the safe area.
+         That's the modern iOS edge-to-edge pattern.
+
+         We keep left/right insets at #root because for landscape /
+         iPhone-with-rounded-corners cases they're cosmetic (they push
+         the entire app inward by the corner radius). */
+      /* 0.4.82 — body + #root usan #08090A (canonical T.bg de v2 theme).
+         Antes era #0F0F0F que era LIGERAMENTE distinto del C.bg
+         (#0D1117) usado por PinLock y del T.bg (#08090A) usado por
+         el resto de la app — creaba una banda negra visible al pie
+         de PinLock donde body bg asomaba detrás del PinLock bg. */
+      body { background: #08090A; }
+      #root {
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
+        background: #08090A;
+        box-sizing: border-box;
+        position: relative;
+      }
+      /* Global box-sizing so width:100% + padding doesn't blow past the
+         viewport. Fixes content overflowing the right edge on real
+         iPhones — the fake-iPhone preview frame in the browser was
+         wide enough to hide the bug, but on a real device the content
+         clipped because some inner divs added padding ON TOP of width:100%. */
+      *, *::before, *::after { box-sizing: border-box; }
+      /* iOS auto-zooms when the user taps an input whose font-size
+         is below 16px. Set 16px as the floor on every form control
+         so the page never jumps. The viewport meta has user-scalable
+         turned off too as a belt-and-suspenders. */
+      input, textarea, select { font-size: 16px; }
+      /* Disable double-tap zoom on tappable elements — on iOS the
+         300ms wait for a possible second tap also creates a delay
+         that feels laggy. */
+      html { touch-action: manipulation; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
